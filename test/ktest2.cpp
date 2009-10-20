@@ -1,3 +1,5 @@
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.2 2009-10-20 17:25:53 regan Exp $
+//
 /***************************************************************************
  *   Copyright (C) 2009 by Craig Furman   *
  *   cfurman@phoenix   *
@@ -24,10 +26,10 @@
 #endif
 
 #include <iostream>
- 
+
 #include <cstdlib>
 #include <cstring>
- 
+
 #include "ReadSet.h"
 
 using namespace std;
@@ -35,7 +37,7 @@ using namespace std;
 
 int main(int argc, char *argv[]) {
     cerr << "Hello, world! " << endl;
-    
+
     ReadSet store;
 
     store.appendFastq(argv[1]);
@@ -51,3 +53,10 @@ int main(int argc, char *argv[]) {
 
     cerr << "And even 0 length Reads work!: " << s.getQuals() << s.getFasta() << s.getName() << s.getLength()<< endl;
 }
+
+//
+// $Log: ktest2.cpp,v $
+// Revision 1.2  2009-10-20 17:25:53  regan
+// added CVS tags
+//
+//

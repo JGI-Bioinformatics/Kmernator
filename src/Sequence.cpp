@@ -1,3 +1,6 @@
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.2 2009-10-20 17:25:50 regan Exp $
+//
+
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -49,7 +52,7 @@ static void uncompressSequence(const unsigned char *in , int num_bases, char *ba
       char base = btable[(*in >> i) & 3];
       *bases++ = base;
       num_bases--;
-    } 
+    }
     in++;
   }
   *bases = '\0';
@@ -57,7 +60,7 @@ static void uncompressSequence(const unsigned char *in , int num_bases, char *ba
 
 
 
- 
+
 std::string TwoBitSequence::getFasta(const NCBI2NA_Type *NCBI2NA, SequenceLengthType length)
 {
   char buffer[length+1];
@@ -77,7 +80,7 @@ std::string TwoBitSequence::getFasta(const NCBI2NA_Type *NCBI2NA, SequenceLength
 static const std::tr1::shared_ptr<unsigned char> nullSequence(new unsigned char [0]);
 
 
- 
+
 
  Sequence::Sequence()
  {
@@ -119,7 +122,7 @@ void Sequence::setSequence(std::string fasta, unsigned int extraBytes)
    memcpy(get2NASequence(), buffer, get2NASequenceLength());
 
    memcpy(_getMarkupBaseCount(),&markupBasesSize,sizeof(markupBasesSize));
-   BaseLocationType *ptr = _getMarkupBases(); 
+   BaseLocationType *ptr = _getMarkupBases();
    for (SequenceLengthType i = 0 ; i < markupBasesSize;i++) {
      memcpy(ptr++,&markupBases[i],sizeof(BaseLocationType));
    }
@@ -138,7 +141,7 @@ string Sequence::getFasta()
 {
 
   string fasta = TwoBitSequence::getFasta(get2NASequence(),get2NASequenceLength());
-  
+
   SequenceLengthType markupBasesSize  = *_getMarkupBaseCount();
   if (markupBasesSize > 0) {
     BaseLocationType *markupBases = _getMarkupBases();
@@ -151,7 +154,7 @@ string Sequence::getFasta()
 NCBI2NA_Type *Sequence::get2NASequence()
 {
    return _data.get();
-   
+
 }
 SequenceLengthType *Sequence::_getMarkupBaseCount()
 {
@@ -202,9 +205,9 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes )
 {
    if ( fasta.length() != qualBytes.length())
       throw new std::invalid_argument("fasta length != qual length for name = " + name);
- 
+
    Sequence::setSequence(fasta,qualBytes.length() + (name.length() + 1) );
-  
+
    memcpy(_getQual(), qualBytes.c_str(), _length);
    strcpy(_getName(), name.c_str());
 }
@@ -226,5 +229,11 @@ string Read::toFastq()
   return  string ('@' + getName() + "\n" + getFasta() + "\n+\n" + getQuals() + "\n" )  ;
 }
 
+//
+// $Log: Sequence.cpp,v $
+// Revision 1.2  2009-10-20 17:25:50  regan
+// added CVS tags
+//
+//
 
 

@@ -1,3 +1,5 @@
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.2 2009-10-20 17:25:50 regan Exp $
+//
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
 
@@ -14,9 +16,9 @@ class TwoBitSequence // yee hah!
 {
 private:
   TwoBitSequence();
-  
+
 public:
- 
+
    static std::string getFasta(const NCBI2NA_Type *NCBI2NA, SequenceLengthType length);
    static void reverseComplement(const NCBI2NA_Type *in, const NCBI2NA_Type *out, SequenceLengthType length);
 };
@@ -26,7 +28,7 @@ public:
 typedef std::pair<char,SequenceLengthType>  BaseLocationType;
 typedef std::vector<BaseLocationType> BaseLocationVectorType;
 
-class Sequence 
+class Sequence
 {
 
 protected:
@@ -51,15 +53,15 @@ public:
   Sequence(std::string fasta);
 
   ~Sequence();
-  
+
   void  setSequence( std::string fasta);
-  
+
   SequenceLengthType getLength();
   std::string getFasta();
 
   SequenceLengthType get2NASequenceLength();
   NCBI2NA_Type *get2NASequence();
- 
+
 };
 
 
@@ -78,19 +80,26 @@ private:
 
   char * _getQual();
   char * _getName();
- 
+
 public:
 
   Read():Sequence(){ };
   Read(std::string name, std::string fasta, std::string qualBytes);
-      
+
   void  setRead(std::string name, std::string fasta, std::string qualBytes);
-  
+
   std::string getName();
   std::string getQuals();
-  
+
 
   std::string toFastq();
 };
 
 #endif
+
+//
+// $Log: Sequence.h,v $
+// Revision 1.2  2009-10-20 17:25:50  regan
+// added CVS tags
+//
+//

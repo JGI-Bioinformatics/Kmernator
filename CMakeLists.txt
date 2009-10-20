@@ -1,5 +1,9 @@
-# KoMer CmakeLists.txt
-PROJECT( KoMer )
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.2 2009-10-20 17:25:49 regan Exp $
+#
+# KoMer/CmakeLists.txt
+#
+
+project( KoMer )
 cmake_minimum_required(VERSION 2.6)
 
 find_package ( Boost 1.40.0 )
@@ -13,7 +17,13 @@ else()
 endif()
 set(Boost_USE_STATIC_LIBS ON)
 
-ADD_SUBDIRECTORY( src )
+add_subdirectory( src )
 
-ADD_SUBDIRECTORY( test )
+add_subdirectory( test )
 
+#
+# $Log: CMakeLists.txt,v $
+# Revision 1.2  2009-10-20 17:25:49  regan
+# added CVS tags
+#
+#

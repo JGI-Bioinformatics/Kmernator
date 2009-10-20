@@ -1,3 +1,6 @@
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.2 2009-10-20 17:25:50 regan Exp $
+//
+
 #include <exception>
 #include <stdexcept>
 #include <iostream>
@@ -9,7 +12,7 @@
 #include "ReadSet.h"
 
 using  namespace std;
- 
+
 
 std::ifstream::pos_type _fileSize(ifstream &f)
 {
@@ -55,13 +58,13 @@ void ReadSet::appendFastq(string fastqFilePath)
 {
  try {
     ifstream ifs(fastqFilePath.c_str());
- 
+
     if (ifs.fail()) {
        throw  std::invalid_argument("Could not open : " + fastqFilePath) ;
     }
     unsigned long fileSize = _fileSize(ifs);
     unsigned long lineCount = 0;
-    
+
     char name[1024];
     char bases[MAX_SEQUENCE_LENGTH+1];
     char qualname[1024];
@@ -82,7 +85,7 @@ void ReadSet::appendFastq(string fastqFilePath)
         char *tab = strchr(name+1,'\t');
         if (tab !=NULL)
             tab = '\0';
-        
+
         ifs.getline(bases,sizeof (bases));
         if (strlen(bases) == 0)
               throw  std::invalid_argument(fileErrorMsg("Missing bases", fastqFilePath, lineCount));
@@ -90,22 +93,22 @@ void ReadSet::appendFastq(string fastqFilePath)
         ifs.getline(qualname,sizeof (qualname));
         if (strlen(qualname) == 0 || qualname[0] != '+')
               throw  std::invalid_argument(fileErrorMsg("Missing '+'", fastqFilePath, lineCount));
-        
+
         ifs.getline(quals,sizeof (quals));
         if (strlen(quals) == 0)
               throw  std::invalid_argument(fileErrorMsg("Missing quals", fastqFilePath, lineCount));
-       
+
          if (lineCount == 0)  // Estimate set size
          {
              //_my.seqs.reserve(1+ _my.seqs.size() + fileSize/((unsigned long)ifs.tellg() - 10UL));
              cerr << "Capacity : " << _my.seqs.capacity()<< endl;
         }
-         
+
          lineCount += 4;
-         
+
         _my.seqs.push_back( Read(name+1 , bases, quals));
 
-        
+
     }
     ifs.close();
   } catch (...) {
@@ -116,10 +119,17 @@ void ReadSet::appendFastq(string fastqFilePath)
 ReadSetSizeType ReadSet::getSize()
 {
   return _my.seqs.size();
-} 
-     
+}
+
 Read &ReadSet::getRead(ReadSetSizeType index)
 {
   return _my.seqs[index];
 }
+
+//
+// $Log: ReadSet.cpp,v $
+// Revision 1.2  2009-10-20 17:25:50  regan
+// added CVS tags
+//
+//
 
