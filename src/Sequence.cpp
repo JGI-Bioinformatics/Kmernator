@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.2 2009-10-20 17:25:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.3 2009-10-20 20:56:27 cfurman Exp $
 //
 
 #include <cstring>
@@ -108,7 +108,7 @@ void Sequence::setSequence(std::string fasta, unsigned int extraBytes)
    reset();
    _length = fasta.length();
 
-   unsigned char *buffer = new unsigned char[get2NASequenceLength()];
+   unsigned char buffer[get2NASequenceLength()];
    BaseLocationVectorType markupBases = compressSequence(fasta.c_str(),buffer);
    SequenceLengthType markupBasesSize = markupBases.size();
    try {
@@ -127,7 +127,6 @@ void Sequence::setSequence(std::string fasta, unsigned int extraBytes)
      memcpy(ptr++,&markupBases[i],sizeof(BaseLocationType));
    }
 
-   delete [] buffer;
 }
 
 
@@ -140,7 +139,7 @@ void Sequence::reset()
 string Sequence::getFasta()
 {
 
-  string fasta = TwoBitSequence::getFasta(get2NASequence(),get2NASequenceLength());
+  string fasta = TwoBitSequence::getFasta(get2NASequence() ,getLength());
 
   SequenceLengthType markupBasesSize  = *_getMarkupBaseCount();
   if (markupBasesSize > 0) {
@@ -231,6 +230,9 @@ string Read::toFastq()
 
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.3  2009-10-20 20:56:27  cfurman
+// Got it to compile!
+//
 // Revision 1.2  2009-10-20 17:25:50  regan
 // added CVS tags
 //
