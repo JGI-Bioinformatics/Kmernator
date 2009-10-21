@@ -1,26 +1,39 @@
-#include "Sequence.h"
+#ifndef _KMER_H
+#define _KMER_H
+
+#include "TwoBitSequence.h"
 
 
-template <unsigned char BYTES>
-class _kmer  
+#ifndef MAX_KMER_SIZE
+#define MAX_KMER_SIZE 32
+#endif
+
+class Kmer
 {
-  typedef unsigned char MerArrayType[BYTES];
+  typedef unsigned char MerArrayType[MAX_KMER_SIZE/4];
   MerArrayType _mer;
 public:
 
-   _kmer(NCBI2NA_Type *seq)
+   Kmer(NCBI2NA_Type *twoBit, SequenceLengthType offset )
    {
-     memcpy(_mer,seq,BYTES);
+     memcpy(_mer,twoBit+offset/4,sizeof (_mer));
+     
+     memm
    }
 
-   int compare(const _kmer<BYTES> &other)
+   int compare(const Kmer &other)
    {
-     return memcmp(_mer,other._mer,BYTES);
+     return memcmp(_mer,other._mer,sizeof(_mer));
    };
-   
-   bool operator ==(const _kmer<BYTES> &other)
+
+   bool operator ==(const Kmer &other)
    {
       return compare(other) == 0;
+   }
+
+   Kmer reverseComplement()
+   {
+
    }
 
 //    static MerArrayType reverseComplement(MerArrayType &mer)
@@ -30,8 +43,19 @@ public:
 //    }
 };
 
+std::vector<Kmer> generateKmers(NCBI2NA_Type *twoBit,SequenceLengthType length)
+{
+   std::vector<Kmer> mers;
+   mers.reserve(length-MAX_KMER_SIZE/4 + 1)
+   
+   memcpy(&mers[0],twoBit, MAX_KMER_SIZE/4);
 
-typedef _kmer<4> Kmer16;
-typedef _kmer<5> Kmer20;
-typedef _kmer<6> Kmer24;
-typedef _kmer<7> Kmer28;
+   for(int i = 1 ; i <  mers.size(); i++)
+   {
+     mers[i] <<= mers[i-1] ;
+     mers[i] |= 
+   }
+
+}
+
+#endif

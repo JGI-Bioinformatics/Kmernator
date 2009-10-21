@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.2 2009-10-20 17:25:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.3 2009-10-21 00:00:58 cfurman Exp $
 //
 
 #ifndef _READ_SET_H
@@ -23,10 +23,31 @@ public:
     Read &getRead(ReadSetSizeType index);
 
 };
+
+
+class ReadIndexScore
+{
+public:
+   ReadSetSizeType readIndex;
+   float score; 
+};
+
+
+class KmerReadSetStats
+{
+public:
+   float  kmerScore;
+   std::vector<ReadIndexScore> linkedReads;
+};
+
+typedef  std::tr1::unordered_map<Kmer, KmerReadSetStats> KmerReadSetStatsMap;
 #endif
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.3  2009-10-21 00:00:58  cfurman
+// working on kmers....
+//
 // Revision 1.2  2009-10-20 17:25:50  regan
 // added CVS tags
 //

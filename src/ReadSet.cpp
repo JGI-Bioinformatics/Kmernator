@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.2 2009-10-20 17:25:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.3 2009-10-21 00:00:58 cfurman Exp $
 //
 
 #include <exception>
@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "ReadSet.h"
+
+#define MAX_LINE_LENGTH 1024*1024
 
 using  namespace std;
 
@@ -66,9 +68,9 @@ void ReadSet::appendFastq(string fastqFilePath)
     unsigned long lineCount = 0;
 
     char name[1024];
-    char bases[MAX_SEQUENCE_LENGTH+1];
+    char bases[MAX_LINE_LENGTH+1];
     char qualname[1024];
-    char quals[MAX_SEQUENCE_LENGTH+1];
+    char quals[MAX_LINE_LENGTH+1];
     while (!ifs.eof()) {
 
         ifs.getline(name,sizeof (name));
@@ -87,16 +89,17 @@ void ReadSet::appendFastq(string fastqFilePath)
             tab = '\0';
 
         ifs.getline(bases,sizeof (bases));
-        if (strlen(bases) == 0)
-              throw  std::invalid_argument(fileErrorMsg("Missing bases", fastqFilePath, lineCount));
+        unsigned long basesSize = strlen(bases);
+        if (basesSize == 0 || basesSize > MAX_LINE_LENGTH-1)
+              throw  std::invalid_argument(fileErrorMsg("Missing bases or too many", fastqFilePath, lineCount));
 
         ifs.getline(qualname,sizeof (qualname));
         if (strlen(qualname) == 0 || qualname[0] != '+')
               throw  std::invalid_argument(fileErrorMsg("Missing '+'", fastqFilePath, lineCount));
 
         ifs.getline(quals,sizeof (quals));
-        if (strlen(quals) == 0)
-              throw  std::invalid_argument(fileErrorMsg("Missing quals", fastqFilePath, lineCount));
+        if (strlen(quals) != basesSize)
+              throw  std::invalid_argument(fileErrorMsg("Wrong number of quals", fastqFilePath, lineCount));
 
          if (lineCount == 0)  // Estimate set size
          {
@@ -128,6 +131,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.3  2009-10-21 00:00:58  cfurman
+// working on kmers....
+//
 // Revision 1.2  2009-10-20 17:25:50  regan
 // added CVS tags
 //

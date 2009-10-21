@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.3 2009-10-20 20:56:25 cfurman Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.4 2009-10-21 00:02:00 cfurman Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -29,9 +29,14 @@ endif()
 add_subdirectory( src )
 
 add_subdirectory( test )
+enable_testing()
+add_test(my_test ${CMAKE_CURRENT_BINARY_DIR}/test/ktest2 ${CMAKE_CURRENT_SOURCE_DIR}/test/10.fastq)
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.4  2009-10-21 00:02:00  cfurman
+# working on kmers....
+#
 # Revision 1.3  2009-10-20 20:56:25  cfurman
 # Got it to compile!
 #

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.3 2009-10-20 20:56:27 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.4 2009-10-21 00:00:58 cfurman Exp $
 //
 
 #include <cstring>
@@ -11,68 +11,6 @@
 using namespace std;
 
 
-static unsigned char compressBase(char base)
-{
-  switch (base) {
-    case 'A' : return 0;
-    case 'C' : return 1;
-    case 'G' : return 2;
-    case 'T' : return 3;
-    default :  return 255;
-  }
-}
-
-static BaseLocationVectorType compressSequence(const char *bases,  unsigned char *out)
-{
-  BaseLocationVectorType otherBases;
-  SequenceLengthType offset = 0;
-  while (bases[offset] != '\0') {
-    unsigned char c = 0;
-    for (int i = 6; i >= 0  && *bases; i-= 2) {
-      unsigned char cbase = compressBase(bases[offset]);
-      if (cbase == 255)
-      {
-         otherBases.push_back(BaseLocationType(bases[offset],offset));
-         cbase = 0;
-      }
-      offset++;
-      c |= cbase <<  i;
-    }
-    *out++ = c;
-  }
-
-  return otherBases;
-}
-
-static void uncompressSequence(const unsigned char *in , int num_bases, char *bases)
-{
-  static char btable[4] = { 'A','C','G','T'};
-  while(num_bases) {
-    for (int i = 6; i >= 0  && num_bases; i-= 2) {
-      char base = btable[(*in >> i) & 3];
-      *bases++ = base;
-      num_bases--;
-    }
-    in++;
-  }
-  *bases = '\0';
-}
-
-
-
-
-std::string TwoBitSequence::getFasta(const NCBI2NA_Type *NCBI2NA, SequenceLengthType length)
-{
-  char buffer[length+1];
-  uncompressSequence(NCBI2NA,length, buffer);
-
-  return string(buffer);
-}
-
- void TwoBitSequence::reverseComplement(const NCBI2NA_Type *in, const NCBI2NA_Type *out, SequenceLengthType length)
-{
-  throw;
-}
 
 
 
@@ -109,7 +47,7 @@ void Sequence::setSequence(std::string fasta, unsigned int extraBytes)
    _length = fasta.length();
 
    unsigned char buffer[get2NASequenceLength()];
-   BaseLocationVectorType markupBases = compressSequence(fasta.c_str(),buffer);
+   BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(fasta.c_str(),buffer);
    SequenceLengthType markupBasesSize = markupBases.size();
    try {
      unsigned int size =  get2NASequenceLength() + sizeof(SequenceLengthType)+
@@ -230,6 +168,9 @@ string Read::toFastq()
 
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.4  2009-10-21 00:00:58  cfurman
+// working on kmers....
+//
 // Revision 1.3  2009-10-20 20:56:27  cfurman
 // Got it to compile!
 //

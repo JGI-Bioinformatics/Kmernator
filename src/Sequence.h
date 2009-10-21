@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.2 2009-10-20 17:25:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.3 2009-10-21 00:00:58 cfurman Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -8,25 +8,7 @@
 
 #include <tr1/memory>
 
-#define MAX_SEQUENCE_LENGTH 1024*1024
-
-typedef unsigned int SequenceLengthType;
-typedef unsigned char NCBI2NA_Type;
-class TwoBitSequence // yee hah!
-{
-private:
-  TwoBitSequence();
-
-public:
-
-   static std::string getFasta(const NCBI2NA_Type *NCBI2NA, SequenceLengthType length);
-   static void reverseComplement(const NCBI2NA_Type *in, const NCBI2NA_Type *out, SequenceLengthType length);
-};
-
-
-
-typedef std::pair<char,SequenceLengthType>  BaseLocationType;
-typedef std::vector<BaseLocationType> BaseLocationVectorType;
+#include "TwoBitSequence.h"
 
 class Sequence
 {
@@ -99,6 +81,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.3  2009-10-21 00:00:58  cfurman
+// working on kmers....
+//
 // Revision 1.2  2009-10-20 17:25:50  regan
 // added CVS tags
 //
