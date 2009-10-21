@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.1 2009-10-21 06:51:34 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.2 2009-10-21 18:44:20 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -72,12 +72,16 @@ void TwoBitSequence::initReverseComplementTable()
 NCBI2NA_Type TwoBitSequence::bitShiftTable[256*256*3];
 void TwoBitSequence::initBitShiftTable()   
 {
-  for(unsigned int i=0; i<65536; i++) {
+  for(unsigned short i=0; i!=65535; i++) {
   	const NCBI2NA_Type *ptr = (NCBI2NA_Type *) &i;
   	TwoBitSequence::bitShiftTable[i*3]   = ((*ptr)<<2 & 0xfc) | ((*(ptr+1))>>6 & 0x03);
   	TwoBitSequence::bitShiftTable[i*3+1] = ((*ptr)<<4 & 0xf0) | ((*(ptr+1))>>4 & 0x0f);
   	TwoBitSequence::bitShiftTable[i*3+2] = ((*ptr)<<6 & 0xc0) | ((*(ptr+1))>>2 & 0x3f);
   }
+  unsigned short i=65535;
+  TwoBitSequence::bitShiftTable[i*3]   = ((*ptr)<<2 & 0xfc) | ((*(ptr+1))>>6 & 0x03);
+  TwoBitSequence::bitShiftTable[i*3+1] = ((*ptr)<<4 & 0xf0) | ((*(ptr+1))>>4 & 0x0f);
+  TwoBitSequence::bitShiftTable[i*3+2] = ((*ptr)<<6 & 0xc0) | ((*(ptr+1))>>2 & 0x3f);
 }
 
 BaseLocationVectorType TwoBitSequence::compressSequence(const char *bases,  unsigned char *out)
@@ -137,6 +141,9 @@ void TwoBitSequence::reverseComplement(const NCBI2NA_Type *in, NCBI2NA_Type *out
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.2  2009-10-21 18:44:20  regan
+// checkpoint
+//
 // Revision 1.1  2009-10-21 06:51:34  regan
 // bug fixes
 // build lookup tables for twobitsequence
