@@ -1,9 +1,11 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.3 2009-10-21 00:00:58 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.4 2009-10-21 06:51:34 regan Exp $
 //
 
 #ifndef _READ_SET_H
 #define _READ_SET_H
 #include <string>
+#include <tr1/unordered_map>
+#include "Kmer.h"
 #include "Sequence.h"
 
 
@@ -40,11 +42,16 @@ public:
    std::vector<ReadIndexScore> linkedReads;
 };
 
-typedef  std::tr1::unordered_map<Kmer, KmerReadSetStats> KmerReadSetStatsMap;
+typedef std::tr1::unordered_map<Kmer, KmerReadSetStats> KmerReadSetStatsMap;
+
 #endif
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.4  2009-10-21 06:51:34  regan
+// bug fixes
+// build lookup tables for twobitsequence
+//
 // Revision 1.3  2009-10-21 00:00:58  cfurman
 // working on kmers....
 //

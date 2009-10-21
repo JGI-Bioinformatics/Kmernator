@@ -1,5 +1,6 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.4 2009-10-21 00:02:02 cfurman Exp $
- 
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.5 2009-10-21 06:51:37 regan Exp $
+//
+
 #include <iostream>
 
 #include <cstdlib>
@@ -10,20 +11,16 @@
 #include "../src/ReadSet.h"
 #include "../src/Kmer.h"
 
-
 using namespace std;
-
-
-
 
 int main(int argc, char *argv[]) {
 
 
-    KmerReadSetStatsMap kmap;
+    //KmerReadSetStatsMap kmap;
 
-    Kmer my_mer("ACTGGTTT");
+    //Kmer my_mer("ACTGGTTT");
 
-    kmap[my_mer] = KmerReadSetStats(10.1,sdasdasdasdas);
+    //kmap[my_mer] = KmerReadSetStats(10.1,sdasdasdasdas);
     
     cerr << "Hello, world! " << endl;
 
@@ -45,6 +42,10 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.5  2009-10-21 06:51:37  regan
+// bug fixes
+// build lookup tables for twobitsequence
+//
 // Revision 1.4  2009-10-21 00:02:02  cfurman
 // working on kmers....
 //

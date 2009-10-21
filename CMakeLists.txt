@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.4 2009-10-21 00:02:00 cfurman Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.5 2009-10-21 06:51:33 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -23,10 +23,12 @@ else()
   add_subdirectory( ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 EXCLUDE_FROM_ALL)
   add_custom_target( boost_subset ALL)
   add_dependencies( boost_subset boost_mpi-mt-static boost_regex-mt-static )
+  include_directories( ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 )
 endif()
 
 
 add_subdirectory( src )
+link_directories( src )
 
 add_subdirectory( test )
 enable_testing()
@@ -34,6 +36,10 @@ add_test(my_test ${CMAKE_CURRENT_BINARY_DIR}/test/ktest2 ${CMAKE_CURRENT_SOURCE_
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.5  2009-10-21 06:51:33  regan
+# bug fixes
+# build lookup tables for twobitsequence
+#
 # Revision 1.4  2009-10-21 00:02:00  cfurman
 # working on kmers....
 #

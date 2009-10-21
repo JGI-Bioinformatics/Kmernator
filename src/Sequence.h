@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.3 2009-10-21 00:00:58 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.4 2009-10-21 06:51:34 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -36,7 +36,7 @@ public:
 
   ~Sequence();
 
-  void  setSequence( std::string fasta);
+  void  setSequence(std::string fasta);
 
   SequenceLengthType getLength();
   std::string getFasta();
@@ -73,7 +73,6 @@ public:
   std::string getName();
   std::string getQuals();
 
-
   std::string toFastq();
 };
 
@@ -81,6 +80,10 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.4  2009-10-21 06:51:34  regan
+// bug fixes
+// build lookup tables for twobitsequence
+//
 // Revision 1.3  2009-10-21 00:00:58  cfurman
 // working on kmers....
 //
