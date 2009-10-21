@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.6 2009-10-21 18:44:20 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.7 2009-10-21 18:58:44 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -116,11 +116,19 @@ public:
       	// 0 base shift
       	memcpy(ptr+i, twoBit + i/4, container.getTwoBitLength());
       	
-      	for (int bitShift=1; bitShift < 4; bitShift++) {
-          if (i+bitShift < numKmers) {
-      	    for(SequenceLengthType bytes=0; bytes < container.getTwoBitLength(), bytes++)
-      	      *(((NCBI2NA_Type*)(ptr+i+bitShift)) + bytes) = TwoBitSequence::bitShiftTable[ *((unsigned short*)(twoBit+i/4)) +bitShift-1]
-      	  }
+      	NCBI2NA_Type *ref = twoBit+i/4;
+      	if (i+1 < numKmers) {
+      	  unsigned short twoByte = *( (unsigned short*)ref );
+      	
+      	  for (int bitShift=1; bitShift < 4; bitShift++) {
+            if (i+bitShift < numKmers) {
+      	      for(SequenceLengthType bytes=0; bytes < container.getTwoBitLength(), bytes++) {
+      	      	NCBI2NA_Type *kmer = (NCBI2NA_Type*) ptr+i+bitShift;
+      	      	NCBI2NA_Type *kmerByte = kmer+bytes;
+      	        *(kmerByte) = TwoBitSequence::bitShiftTable[ twoByte + (bitShift-1)];
+      	      }
+      	    }
+          }
       	}
       }
       return ptr;
@@ -131,6 +139,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.7  2009-10-21 18:58:44  regan
+// checkpoint
+//
 // Revision 1.6  2009-10-21 18:44:20  regan
 // checkpoint
 //
