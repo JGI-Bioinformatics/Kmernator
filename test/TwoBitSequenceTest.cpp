@@ -1,9 +1,15 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.1 2009-10-22 07:04:03 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.2 2009-10-22 20:49:18 cfurman Exp $
 //
 
 #include "TwoBitSequence.h"
 #define BOOST_TEST_MODULE TwoBitSequenceTest
 #include <boost/test/unit_test.hpp>
+
+const char fastaA[]  = "AAAA";
+const char fastaC[]  = "CCCC";
+const char fastaG[]  = "GGGG";
+const char fastaT[]  = "TTTT";
+
 
 const char fasta1[] = "ACGTCGTAGTACTACG";
 const char rev1[]   = "CGTAGTACTACGACGT";
@@ -18,6 +24,69 @@ const char n2[]     = "NCGTANTACTACGACGTGCCA";
 const char n3[]     = "NCGTANTACTNCGACGTGCCAG";
 const char n4[]     = "NCGTANTACTNCGACNTGCCAGT";
 const char n5[]     = "NCGTANTACTNCGACNTGCCAGTN";
+
+
+TwoBitEncoding in[1024],out[1024],test[1024];
+char fasta[1024];
+
+#define BIT_SHIFT(basesIn, targetBases, baseShift)\
+    TwoBitSequence::compressSequence(basesIn, in);\
+    out[0] = TwoBitSequence::bitShiftTable[(unsigned short)*in+baseShift-1];\
+    TwoBitSequence::uncompressSequence(out,4,fasta);\
+    BOOST_CHECK_EQUAL(targetBases,fasta);
+
+void testBitShift()
+{
+   BIT_SHIFT("AAAAAAAA",fastaA,1);
+   BIT_SHIFT("AAAAAAAA",fastaA,2);
+   BIT_SHIFT("AAAAAAAA",fastaA,3);
+
+   BIT_SHIFT("CCCCCCCC",fastaC,1);
+   BIT_SHIFT("CCCCCCCC",fastaC,2);
+   BIT_SHIFT("CCCCCCCC",fastaC,3);
+      
+   BIT_SHIFT("GGGGGGGG",fastaG,1);
+   BIT_SHIFT("GGGGGGGG",fastaG,2);
+   BIT_SHIFT("GGGGGGGG",fastaG,3);
+
+   BIT_SHIFT("TTTTTTTT",fastaT,1);
+   BIT_SHIFT("TTTTTTTT",fastaT,2);
+   BIT_SHIFT("TTTTTTTT",fastaT,3);
+
+   BIT_SHIFT("ACGTACGT","CGTA",1);
+   BIT_SHIFT("ACGTACGT","GTAC",2);
+   BIT_SHIFT("ACGTACGT","TACG",3);
+   
+}
+
+
+#define REV_COMP(fwd,rev) \
+  TwoBitSequence::compressSequence(fwd, in);\
+  TwoBitSequence::compressSequence(rev, test); \
+  TwoBitSequence::reverseComplement(in,out,std::strlen(fwd));\
+  BOOST_CHECK_EQUAL( memcmp(out,test,TwoBitSequence::fastaLengthToTwoBitLength(std::strlen(fwd))), 0);\
+  TwoBitSequence::uncompressSequence(out, std::strlen(fwd), fasta);\
+  BOOST_CHECK_EQUAL(rev,fasta);
+
+
+
+void testReverseComplement()
+{
+
+  REV_COMP(fastaA,fastaT);
+  REV_COMP(fastaC,fastaG);
+  REV_COMP(fastaG,fastaC);
+  REV_COMP(fastaT,fastaA);
+  
+  REV_COMP(fasta1,rev1);
+  REV_COMP(fasta2,rev2);
+  REV_COMP(fasta3,rev3);
+  REV_COMP(fasta4,rev4);
+  
+  TwoBitSequence::reverseComplement(out,test,std::strlen(fasta1));
+  BOOST_CHECK_EQUAL( memcmp(in,test,TwoBitSequence::fastaLengthToTwoBitLength(std::strlen(fasta1))), 0);
+}
+
 
 void testCompressUncompress()
 {
@@ -121,12 +190,17 @@ void testMarkup()
 
 BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 {
+    testBitShift();
 	testCompressUncompress();
-	testMarkup();
+    testMarkup();
+    testReverseComplement();
 }
 
 //
 // $Log: TwoBitSequenceTest.cpp,v $
+// Revision 1.2  2009-10-22 20:49:18  cfurman
+// tests added
+//
 // Revision 1.1  2009-10-22 07:04:03  regan
 // added a few unit tests
 // minor refactor

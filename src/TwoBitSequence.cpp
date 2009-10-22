@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.5 2009-10-22 07:04:06 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.6 2009-10-22 20:49:15 cfurman Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -35,10 +35,11 @@ TwoBitSequence::TwoBitSequence()
   7: 10000000
   */
 TwoBitEncoding TwoBitSequence::bitMasks[8];
-void TwoBitSequence::initBitMasks() {
-  TwoBitSequence::bitMasks[0] = 0x01;
+void TwoBitSequence::initBitMasks()
+{
+  bitMasks[0] = 0x01;
   for(int i=1; i<8; i++)
-    TwoBitSequence::bitMasks[i] = TwoBitSequence::bitMasks[i-1]<<1;
+    bitMasks[i] = bitMasks[i-1]<<1;
 }
 
 
@@ -56,11 +57,10 @@ void TwoBitSequence::initReverseComplementTable()
 {
   for(TwoBitEncoding i=0; i<255; i++) {
   	TwoBitEncoding complement = ~i;
-    TwoBitSequence::reverseComplementTable[i] = 0x00;
-    for(int j=0; j<4; j++)
-      TwoBitSequence::reverseComplementTable[i] |= (complement<<(7-2*j)) & TwoBitSequence::bitMasks[7-j];
-    for(int j=4; j<8; j++)
-       TwoBitSequence::reverseComplementTable[i] |= (complement>>(2*(j-4)+1)) & TwoBitSequence::bitMasks[7-j];
+    reverseComplementTable[i] = ((complement << 6) & (0x03 << 6)) |
+                                ((complement << 2) & (0x03 << 4)) |
+                                ((complement >> 2) & (0x03 << 2)) |
+                                ((complement >> 6) & (0x03 << 0)) ;
   }
 }
 
@@ -76,7 +76,7 @@ void TwoBitSequence::initBitShiftTable()
   unsigned short i=0;
   do {
   	const TwoBitEncoding *ptr = (TwoBitEncoding *) &i;
-  	TwoBitSequence::bitShiftTable[i*3]   = ((*ptr)<<2 & 0xfc) | ((*(ptr+1))>>6 & 0x03);
+  	TwoBitSequence::bitShiftTable[i*3+0] = ((*ptr)<<2 & 0xfc) | ((*(ptr+1))>>6 & 0x03);
   	TwoBitSequence::bitShiftTable[i*3+1] = ((*ptr)<<4 & 0xf0) | ((*(ptr+1))>>4 & 0x0f);
   	TwoBitSequence::bitShiftTable[i*3+2] = ((*ptr)<<6 & 0xc0) | ((*(ptr+1))>>2 & 0x3f);
   } while(++i != 0);
@@ -143,10 +143,10 @@ std::string TwoBitSequence::getFasta(const TwoBitEncoding *in, SequenceLengthTyp
 
 void TwoBitSequence::reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length)
 {
-  SequenceLengthType twoBitLength = (length+3)/4;
+  SequenceLengthType twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(length);
   out+=twoBitLength;
   for(SequenceLengthType i = 0; i<twoBitLength; i++)
-    *out-- = TwoBitSequence::reverseComplementTable[*in++];
+    *(--out) = TwoBitSequence::reverseComplementTable[*in++];
 }
 
 
@@ -154,6 +154,9 @@ KmerSizer KmerSizer::singleton = KmerSizer(21,0);
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.6  2009-10-22 20:49:15  cfurman
+// tests added
+//
 // Revision 1.5  2009-10-22 07:04:06  regan
 // added a few unit tests
 // minor refactor

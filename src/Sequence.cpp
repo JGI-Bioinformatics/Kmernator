@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.6 2009-10-22 07:04:06 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.7 2009-10-22 20:49:15 cfurman Exp $
 //
 
 #include <cstring>
@@ -104,7 +104,7 @@ SequenceLengthType Sequence::getLength()
 
 SequenceLengthType Sequence::getTwoBitEncodingSequenceLength()
 {
-  return (getLength() + 3)/4;
+  return TwoBitSequence::fastaLengthToTwoBitLength(getLength());;
 }
 
 
@@ -161,6 +161,9 @@ string Read::toFastq()
 
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.7  2009-10-22 20:49:15  cfurman
+// tests added
+//
 // Revision 1.6  2009-10-22 07:04:06  regan
 // added a few unit tests
 // minor refactor

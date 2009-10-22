@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.5 2009-10-22 07:04:06 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.6 2009-10-22 20:49:16 cfurman Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -38,6 +38,11 @@ public:
    static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
    static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length, unsigned char bases)
    { throw; }
+
+    static SequenceLengthType fastaLengthToTwoBitLength(SequenceLengthType fastaLength)
+    {
+       return (fastaLength + 3)/4;
+    }
 };
 
 class KmerSizer
@@ -63,7 +68,7 @@ public:
   {
     singleton._sequenceLength = sequenceLength;
     singleton._extraBytes = extraBytes;
-    singleton._twoBitLength =  (singleton._sequenceLength+3)/4;
+    singleton._twoBitLength =  TwoBitSequence::fastaLengthToTwoBitLength(singleton._sequenceLength);
     singleton._totalSize = singleton._twoBitLength + extraBytes;
   }
 
@@ -93,6 +98,9 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.6  2009-10-22 20:49:16  cfurman
+// tests added
+//
 // Revision 1.5  2009-10-22 07:04:06  regan
 // added a few unit tests
 // minor refactor
