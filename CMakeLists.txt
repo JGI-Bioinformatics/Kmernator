@@ -1,10 +1,11 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.5 2009-10-21 06:51:33 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.6 2009-10-22 07:04:01 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
 
 project( KoMer )
 cmake_minimum_required(VERSION 2.6)
+enable_testing()
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
@@ -15,6 +16,7 @@ set(Booost_USE_SINGLETHREADED OFF)
 find_package ( Boost 1.40.0 COMPONENTS regex mpi)
 if(Boost_FOUND)
   include_directories(${BOOST_INCLUDE_DIRS})
+  link_directories(${BOOST_LIB_DIRS})
 else()
   if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2)
     message("Unpacking Distro Version of Boost")
@@ -22,20 +24,27 @@ else()
   endif()
   add_subdirectory( ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 EXCLUDE_FROM_ALL)
   add_custom_target( boost_subset ALL)
-  add_dependencies( boost_subset boost_mpi-mt-static boost_regex-mt-static )
+  add_dependencies( boost_subset boost_mpi-mt-static 
+                                 boost_regex-mt-static 
+                                 boost_test_exec_monitor-mt-static
+                                 boost_unit_test_framework-mt-static)
   include_directories( ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 )
+  link_directories( ${CMAKE_CURRENT_BINARY_DIR}/lib )
 endif()
 
-
+include_directories( src )
 add_subdirectory( src )
 link_directories( src )
 
 add_subdirectory( test )
-enable_testing()
-add_test(my_test ${CMAKE_CURRENT_BINARY_DIR}/test/ktest2 ${CMAKE_CURRENT_SOURCE_DIR}/test/10.fastq)
+
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.6  2009-10-22 07:04:01  regan
+# added a few unit tests
+# minor refactor
+#
 # Revision 1.5  2009-10-21 06:51:33  regan
 # bug fixes
 # build lookup tables for twobitsequence

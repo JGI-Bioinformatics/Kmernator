@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.4 2009-10-22 01:39:43 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.5 2009-10-22 07:04:06 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -10,7 +10,8 @@ static unsigned char compressBase(char base)
     case 'C' : return 1;
     case 'G' : return 2;
     case 'T' : return 3;
-    default :  return 255;
+    case '\0': return 254;
+    default  :  return 255;
   }
 }
 
@@ -89,6 +90,9 @@ BaseLocationVectorType TwoBitSequence::compressSequence(const char *bases,  TwoB
     TwoBitEncoding c = 0;
     for (int i = 6; i >= 0  && *bases; i-= 2) {
       TwoBitEncoding cbase = compressBase(bases[offset]);
+      if (cbase == 254)
+      	break;
+      
       if (cbase == 255)
       {
          otherBases.push_back(BaseLocationType(bases[offset],offset));
@@ -117,6 +121,17 @@ void TwoBitSequence::uncompressSequence(const TwoBitEncoding *in , int num_bases
   *bases = '\0';
 }
 
+void TwoBitSequence::applyMarkup(char *bases, BaseLocationVectorType markupBases) {
+  for(BaseLocationVectorType::iterator ptr = markupBases.begin(); ptr != markupBases.end() ; ptr++)
+    bases[ptr->second] = ptr->first;
+}
+void TwoBitSequence::applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, BaseLocationType *markupBases)
+{
+  if (markupBasesSize > 0) {
+    for (BaseLocationType *ptr = markupBases; ptr < markupBases+markupBasesSize; ptr++)
+        bases[ptr->second] = ptr->first;
+  }
+}
 
 std::string TwoBitSequence::getFasta(const TwoBitEncoding *in, SequenceLengthType length)
 {
@@ -139,6 +154,10 @@ KmerSizer KmerSizer::singleton = KmerSizer(21,0);
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.5  2009-10-22 07:04:06  regan
+// added a few unit tests
+// minor refactor
+//
 // Revision 1.4  2009-10-22 01:39:43  cfurman
 // bug fix in kmer.h
 //

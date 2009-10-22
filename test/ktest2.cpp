@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.6 2009-10-22 01:39:46 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.7 2009-10-22 07:04:03 regan Exp $
 //
 
 #include <iostream>
@@ -8,8 +8,8 @@
 
 #include <tr1/unordered_map>
 
-#include "../src/ReadSet.h"
-#include "../src/Kmer.h"
+#include "ReadSet.h"
+#include "Kmer.h"
 
 using namespace std;
 
@@ -48,6 +48,10 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.7  2009-10-22 07:04:03  regan
+// added a few unit tests
+// minor refactor
+//
 // Revision 1.6  2009-10-22 01:39:46  cfurman
 // bug fix in kmer.h
 //

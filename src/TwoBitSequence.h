@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.4 2009-10-22 01:39:44 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.5 2009-10-22 07:04:06 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -29,9 +29,11 @@ public:
    static TwoBitEncoding bitShiftTable[256*256*3];
    
 public:
-   static BaseLocationVectorType compressSequence(const char *bases,  unsigned char *out);
-   static void uncompressSequence(const unsigned char *in , int num_bases, char *bases);
-
+   static BaseLocationVectorType compressSequence(const char *bases,  TwoBitEncoding *out);
+   static void uncompressSequence(const TwoBitEncoding *in , int num_bases, char *bases);
+   static void applyMarkup(char *bases, BaseLocationVectorType markupBases);
+   static void applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, BaseLocationType *markupBases);
+   
    static std::string getFasta(const TwoBitEncoding *NCBI2NA, SequenceLengthType length);
    static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
    static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length, unsigned char bases)
@@ -91,6 +93,10 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.5  2009-10-22 07:04:06  regan
+// added a few unit tests
+// minor refactor
+//
 // Revision 1.4  2009-10-22 01:39:44  cfurman
 // bug fix in kmer.h
 //

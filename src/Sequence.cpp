@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.5 2009-10-22 00:07:43 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.6 2009-10-22 07:04:06 regan Exp $
 //
 
 #include <cstring>
@@ -59,7 +59,7 @@ void Sequence::setSequence(std::string fasta, unsigned int extraBytes)
 
    memcpy(getTwoBitSequence(), buffer, getTwoBitEncodingSequenceLength());
 
-   memcpy(_getMarkupBaseCount(),&markupBasesSize,sizeof(markupBasesSize));
+   memcpy(_getMarkupBasesCount(),&markupBasesSize,sizeof(markupBasesSize));
    BaseLocationType *ptr = _getMarkupBases();
    for (SequenceLengthType i = 0 ; i < markupBasesSize;i++) {
      memcpy(ptr++,&markupBases[i],sizeof(BaseLocationType));
@@ -78,13 +78,7 @@ string Sequence::getFasta()
 {
 
   string fasta = TwoBitSequence::getFasta(getTwoBitSequence() ,getLength());
-
-  SequenceLengthType markupBasesSize  = *_getMarkupBaseCount();
-  if (markupBasesSize > 0) {
-    BaseLocationType *markupBases = _getMarkupBases();
-    for (BaseLocationType *ptr = markupBases; ptr < markupBases+markupBasesSize; ptr++)
-        fasta[ptr->second] = ptr->first;
-  }
+  TwoBitSequence::applyMarkup(fasta, *_getMarkupBasesCount(), _getMarkupBases());
 
   return fasta;
 }
@@ -93,14 +87,14 @@ TwoBitEncoding *Sequence::getTwoBitSequence()
    return _data.get();
 
 }
-SequenceLengthType *Sequence::_getMarkupBaseCount()
+SequenceLengthType *Sequence::_getMarkupBasesCount()
 {
   return  (SequenceLengthType *)(getTwoBitSequence() + getTwoBitEncodingSequenceLength());
 }
 
 BaseLocationType *Sequence::_getMarkupBases()
 {
-   return (BaseLocationType *)(_getMarkupBaseCount()+1);
+   return (BaseLocationType *)(_getMarkupBasesCount()+1);
 }
 
 SequenceLengthType Sequence::getLength()
@@ -127,7 +121,7 @@ Read::Read(std::string name, std::string fasta, std::string qualBytes)
 
 char * Read::_getQual()
 {
-  return (char *)(_getMarkupBases() + *_getMarkupBaseCount());
+  return (char *)(_getMarkupBases() + *_getMarkupBasesCount());
 }
 
 char * Read::_getName()
@@ -167,6 +161,10 @@ string Read::toFastq()
 
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.6  2009-10-22 07:04:06  regan
+// added a few unit tests
+// minor refactor
+//
 // Revision 1.5  2009-10-22 00:07:43  cfurman
 // more kmer related classes added
 //

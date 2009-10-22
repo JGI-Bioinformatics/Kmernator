@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.5 2009-10-22 00:07:43 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.6 2009-10-22 07:04:06 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -23,7 +23,7 @@ protected:
 */
   std::tr1::shared_ptr<unsigned char> _data;
 
-  SequenceLengthType *_getMarkupBaseCount();
+  SequenceLengthType *_getMarkupBasesCount();
   BaseLocationType   *_getMarkupBases();
 
   void reset();
@@ -80,6 +80,10 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.6  2009-10-22 07:04:06  regan
+// added a few unit tests
+// minor refactor
+//
 // Revision 1.5  2009-10-22 00:07:43  cfurman
 // more kmer related classes added
 //
