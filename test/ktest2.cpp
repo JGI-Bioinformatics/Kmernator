@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.5 2009-10-21 06:51:37 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.6 2009-10-22 01:39:46 cfurman Exp $
 //
 
 #include <iostream>
@@ -14,13 +14,6 @@
 using namespace std;
 
 int main(int argc, char *argv[]) {
-
-
-    //KmerReadSetStatsMap kmap;
-
-    //Kmer my_mer("ACTGGTTT");
-
-    //kmap[my_mer] = KmerReadSetStats(10.1,sdasdasdasdas);
     
     cerr << "Hello, world! " << endl;
 
@@ -38,10 +31,26 @@ int main(int argc, char *argv[]) {
     Read s;
 
     cerr << "And even 0 length Reads work!: " << s.getQuals() << s.getFasta() << s.getName() << s.getLength()<< endl;
+
+    KmerSizer::set(44);
+    for (int i=0 ; i < store.getSize(); i++)
+    {
+       KmerArray kmers(store.getRead(i).getTwoBitSequence(),store.getRead(i).getLength());
+       for (int j=0; j < kmers.size(); j++)
+       {
+          cout << "Read " << i << " kmer "<< j << ' '
+               << kmers[j].toFasta() << endl;
+       }
+       cout << "----------------" << endl;
+    }
 }
+
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.6  2009-10-22 01:39:46  cfurman
+// bug fix in kmer.h
+//
 // Revision 1.5  2009-10-21 06:51:37  regan
 // bug fixes
 // build lookup tables for twobitsequence

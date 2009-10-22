@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.3 2009-10-22 00:07:43 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.4 2009-10-22 01:39:44 cfurman Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -38,11 +38,62 @@ public:
    { throw; }
 };
 
+class KmerSizer
+{
+private:
+    static KmerSizer singleton;
 
+private:
+   
+   KmerSizer(SequenceLengthType sequenceLength, unsigned long extraBytes) {
+     set(sequenceLength,extraBytes);
+  }
+
+
+  SequenceLengthType _sequenceLength;
+  unsigned long _extraBytes;
+  
+  SequenceLengthType _twoBitLength;
+  unsigned long _totalSize;
+public:
+
+  static void set(SequenceLengthType sequenceLength, unsigned long extraBytes=0)
+  {
+    singleton._sequenceLength = sequenceLength;
+    singleton._extraBytes = extraBytes;
+    singleton._twoBitLength =  (singleton._sequenceLength+3)/4;
+    singleton._totalSize = singleton._twoBitLength + extraBytes;
+  }
+
+  static SequenceLengthType getSequenceLength()  {
+    return singleton._sequenceLength;
+  }
+  static unsigned long getExtraBytes()  {
+    return singleton._extraBytes;
+  }
+  static SequenceLengthType getTwoBitLength()   { 
+    return singleton._twoBitLength;
+  }
+  static unsigned long getTotalSize()  {
+    return singleton._totalSize;
+  }
+//   int compare(const void *l, const void *r) const {
+//     return memcmp(l, r, _twoBitLength);
+//   }
+//   void *nextKmer(const void *kmer) const {
+//     return (TwoBitEncoding*)kmer + _totalSize;
+//   }
+//   void *kmerAt(const void *kmer, unsigned long idx) const {
+//     return (TwoBitEncoding*)kmer + _totalSize * idx;
+//  }
+};
 #endif
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.4  2009-10-22 01:39:44  cfurman
+// bug fix in kmer.h
+//
 // Revision 1.3  2009-10-22 00:07:43  cfurman
 // more kmer related classes added
 //

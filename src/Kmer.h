@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.8 2009-10-22 00:07:43 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.9 2009-10-22 01:39:43 cfurman Exp $
 //
 
 #ifndef _KMER_H
@@ -7,43 +7,7 @@
 
 #include "TwoBitSequence.h"
 
-class KmerSizer
-{
-private:
-  SequenceLengthType _sequenceLength;
-  unsigned long _extraBytes;
-  
-  SequenceLengthType _twoBitLength;
-  unsigned long _totalSize;
-public:
-  KmerSizer(SequenceLengthType sequenceLength, unsigned long extraBytes) {
-  	_sequenceLength = sequenceLength;
-  	_extraBytes = extraBytes;
-  	_twoBitLength =  (_sequenceLength+3)/4;
-  	_totalSize = _twoBitLength + extraBytes;
-  }
-  SequenceLengthType getSequenceLength() const {
-  	return _sequenceLength;
-  }
-  unsigned long getExtraBytes() const {
-  	return _extraBytes;
-  }
-  SequenceLengthType getTwoBitLength() const { 
-  	return _twoBitLength;
-  }
-  unsigned long getTotalSize() const {
-  	return _totalSize;
-  }
-  int compare(const void *l, const void *r) const {
-  	return memcmp(l, r, _twoBitLength);
-  }
-  void *nextKmer(const void *kmer) const {
-  	return (TwoBitEncoding*)kmer + _totalSize;
-  }
-  void *kmerAt(const void *kmer, unsigned long idx) const {
-  	return (TwoBitEncoding*)kmer + _totalSize * idx;
-  }
-};
+
 
 #ifndef MAX_KMER_SIZE
 #define MAX_KMER_SIZE 1024
@@ -60,29 +24,25 @@ class Kmer
 private:
    Kmer(); // never construct, just use as cast
    
-   static KmerSizer sizer;
    TwoBitEncoding _data[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
    
 public:
-
+/*
    static void setKmerSizer(const KmerSizer &kmerSizer) {
    	  if (kmerSizer.getTwoBitLength() > MAX_KMER_SIZE) {
    	  	throw;
    	  }
    	  sizer = KmerSizer(kmerSizer.getSequenceLength(), kmerSizer.getExtraBytes());
-   }
-   static unsigned long getByteSize() {
-   	  return sizer.getTotalSize();
-   }
+   }*/
    
    int compare(const Kmer &other) const
    {
-     return memcmp(_data, other._data, sizer.getTwoBitLength());
+     return memcmp(_data, other._data, KmerSizer::getTwoBitLength());
    }
 
    Kmer &operator=(const Kmer &other)
    {
-      memcpy(_data, other._data, sizer.getTwoBitLength());
+      memcpy(_data, other._data, KmerSizer::getTwoBitLength());
       return *this;
    }
 
@@ -115,22 +75,33 @@ public:
       other = *this;
       *this = temp;
    }
-   
-   
+
+   TwoBitEncoding *getTwoBitSequence() const
+   {
+     return (TwoBitEncoding *)_data;
+   }
+
    void reverseComplement(Kmer &output) const
    {
-     TwoBitSequence::reverseComplement((TwoBitEncoding*)&_data, (TwoBitEncoding*)&output._data, sizer.getSequenceLength());
+     TwoBitSequence::reverseComplement((TwoBitEncoding*)&_data, (TwoBitEncoding*)&output._data, KmerSizer::getSequenceLength());
    }
 
-   static SequenceLengthType getLength()   
-   {
-     return sizer.getSequenceLength();
+   static SequenceLengthType getLength() {
+     return KmerSizer::getSequenceLength();
    }
 
-   static SequenceLengthType getTwoBitLength()
-   {
-     return sizer.getTwoBitLength(); 
+   static SequenceLengthType getTwoBitLength() {
+     return KmerSizer::getTwoBitLength();
    }
+   static unsigned long getByteSize() {
+      return KmerSizer::getTotalSize();
+   }
+
+   std::string toFasta() const
+   {
+      return TwoBitSequence::getFasta(getTwoBitSequence(), getLength());
+   }
+   
 };
 
 class KmerPtr
@@ -154,7 +125,7 @@ public:
    Kmer & operator*() const  { return *_me; }
    Kmer * operator->() const { return _me;  }
 
-   KmerPtr &operator=(void *right)       { return *this = (Kmer *)right; }
+   KmerPtr &operator=(void *right)       { _me = (Kmer *)right; return *this; }
 
    KmerPtr  operator+ (unsigned long right) const { return KmerPtr((Kmer *)((char *)_me + right * Kmer::getByteSize())); }
    KmerPtr  operator- (unsigned long right) const { return *this + (-right); }
@@ -239,11 +210,13 @@ public:
   }
     
 
-  KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length)
+  KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length):
+  _size(0),
+  _begin(NULL)
   {
-      SequenceLengthType numKmers = length - Kmer::getLength() + 1;
-      resize(numKmers);
-      build(twoBit,length);
+    SequenceLengthType numKmers = length - Kmer::getLength() + 1;
+    resize(numKmers);
+    build(twoBit,length);
   }
 
 
@@ -272,7 +245,7 @@ public:
             }
           }
         }
-      };
+      }
     }
     
 };
@@ -287,6 +260,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.9  2009-10-22 01:39:43  cfurman
+// bug fix in kmer.h
+//
 // Revision 1.8  2009-10-22 00:07:43  cfurman
 // more kmer related classes added
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.3 2009-10-22 00:07:43 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.4 2009-10-22 01:39:43 cfurman Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -135,9 +135,13 @@ void TwoBitSequence::reverseComplement(const TwoBitEncoding *in, TwoBitEncoding 
 }
 
 
+KmerSizer KmerSizer::singleton = KmerSizer(21,0);
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.4  2009-10-22 01:39:43  cfurman
+// bug fix in kmer.h
+//
 // Revision 1.3  2009-10-22 00:07:43  cfurman
 // more kmer related classes added
 //
