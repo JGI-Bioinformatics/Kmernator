@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.4 2009-10-21 06:51:34 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.5 2009-10-22 00:07:43 cfurman Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -41,8 +41,8 @@ public:
   SequenceLengthType getLength();
   std::string getFasta();
 
-  SequenceLengthType get2NASequenceLength();
-  NCBI2NA_Type *get2NASequence();
+  SequenceLengthType getTwoBitEncodingSequenceLength();
+  TwoBitEncoding *getTwoBitSequence();
 
 };
 
@@ -80,6 +80,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.5  2009-10-22 00:07:43  cfurman
+// more kmer related classes added
+//
 // Revision 1.4  2009-10-21 06:51:34  regan
 // bug fixes
 // build lookup tables for twobitsequence

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.4 2009-10-21 00:00:58 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.5 2009-10-22 00:07:43 cfurman Exp $
 //
 
 #include <cstring>
@@ -15,7 +15,7 @@ using namespace std;
 
 
 /*----------------------------- SEQUENCE -------------------------------------------*/
-static const std::tr1::shared_ptr<unsigned char> nullSequence(new unsigned char [0]);
+static const std::tr1::shared_ptr<TwoBitEncoding> nullSequence(new TwoBitEncoding [0]);
 
 
 
@@ -46,18 +46,18 @@ void Sequence::setSequence(std::string fasta, unsigned int extraBytes)
    reset();
    _length = fasta.length();
 
-   unsigned char buffer[get2NASequenceLength()];
+   unsigned char buffer[getTwoBitEncodingSequenceLength()];
    BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(fasta.c_str(),buffer);
    SequenceLengthType markupBasesSize = markupBases.size();
    try {
-     unsigned int size =  get2NASequenceLength() + sizeof(SequenceLengthType)+
+     unsigned int size =  getTwoBitEncodingSequenceLength() + sizeof(SequenceLengthType)+
                           markupBasesSize*sizeof(BaseLocationVectorType) + extraBytes;
      _data = std::tr1::shared_ptr<unsigned char>(new unsigned char[size]);
    } catch (...) {
      throw new std::runtime_error("Cannot allocate memory in Sequence::setSequence()");
    }
 
-   memcpy(get2NASequence(), buffer, get2NASequenceLength());
+   memcpy(getTwoBitSequence(), buffer, getTwoBitEncodingSequenceLength());
 
    memcpy(_getMarkupBaseCount(),&markupBasesSize,sizeof(markupBasesSize));
    BaseLocationType *ptr = _getMarkupBases();
@@ -77,7 +77,7 @@ void Sequence::reset()
 string Sequence::getFasta()
 {
 
-  string fasta = TwoBitSequence::getFasta(get2NASequence() ,getLength());
+  string fasta = TwoBitSequence::getFasta(getTwoBitSequence() ,getLength());
 
   SequenceLengthType markupBasesSize  = *_getMarkupBaseCount();
   if (markupBasesSize > 0) {
@@ -88,14 +88,14 @@ string Sequence::getFasta()
 
   return fasta;
 }
-NCBI2NA_Type *Sequence::get2NASequence()
+TwoBitEncoding *Sequence::getTwoBitSequence()
 {
    return _data.get();
 
 }
 SequenceLengthType *Sequence::_getMarkupBaseCount()
 {
-  return  (SequenceLengthType *)(get2NASequence() + get2NASequenceLength());
+  return  (SequenceLengthType *)(getTwoBitSequence() + getTwoBitEncodingSequenceLength());
 }
 
 BaseLocationType *Sequence::_getMarkupBases()
@@ -107,12 +107,11 @@ SequenceLengthType Sequence::getLength()
 {
   return _length;
 }
-SequenceLengthType Sequence::get2NASequenceLength()
+
+SequenceLengthType Sequence::getTwoBitEncodingSequenceLength()
 {
   return (getLength() + 3)/4;
 }
-
-
 
 
 /*------------------------------------ READ ----------------------------------------*/
@@ -168,6 +167,9 @@ string Read::toFastq()
 
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.5  2009-10-22 00:07:43  cfurman
+// more kmer related classes added
+//
 // Revision 1.4  2009-10-21 00:00:58  cfurman
 // working on kmers....
 //
