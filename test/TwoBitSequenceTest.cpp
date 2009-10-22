@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.2 2009-10-22 20:49:18 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.3 2009-10-22 21:46:47 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -31,7 +31,7 @@ char fasta[1024];
 
 #define BIT_SHIFT(basesIn, targetBases, baseShift)\
     TwoBitSequence::compressSequence(basesIn, in);\
-    out[0] = TwoBitSequence::bitShiftTable[(unsigned short)*in+baseShift-1];\
+    out[0] = TwoBitSequence::bitShiftTable[((unsigned long)*((unsigned short*)in))*3ul+baseShift-1];\
     TwoBitSequence::uncompressSequence(out,4,fasta);\
     BOOST_CHECK_EQUAL(targetBases,fasta);
 
@@ -198,6 +198,9 @@ BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 
 //
 // $Log: TwoBitSequenceTest.cpp,v $
+// Revision 1.3  2009-10-22 21:46:47  regan
+// fixed ushort to ulong conversion problems
+//
 // Revision 1.2  2009-10-22 20:49:18  cfurman
 // tests added
 //

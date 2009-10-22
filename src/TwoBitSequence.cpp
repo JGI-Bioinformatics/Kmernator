@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.6 2009-10-22 20:49:15 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.7 2009-10-22 21:46:49 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -76,9 +76,9 @@ void TwoBitSequence::initBitShiftTable()
   unsigned short i=0;
   do {
   	const TwoBitEncoding *ptr = (TwoBitEncoding *) &i;
-  	TwoBitSequence::bitShiftTable[i*3+0] = ((*ptr)<<2 & 0xfc) | ((*(ptr+1))>>6 & 0x03);
-  	TwoBitSequence::bitShiftTable[i*3+1] = ((*ptr)<<4 & 0xf0) | ((*(ptr+1))>>4 & 0x0f);
-  	TwoBitSequence::bitShiftTable[i*3+2] = ((*ptr)<<6 & 0xc0) | ((*(ptr+1))>>2 & 0x3f);
+  	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = ((*ptr)<<2 & 0xfc) | ((*(ptr+1))>>6 & 0x03);
+  	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+1ul] = ((*ptr)<<4 & 0xf0) | ((*(ptr+1))>>4 & 0x0f);
+  	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+2ul] = ((*ptr)<<6 & 0xc0) | ((*(ptr+1))>>2 & 0x3f);
   } while(++i != 0);
 }
 
@@ -154,6 +154,9 @@ KmerSizer KmerSizer::singleton = KmerSizer(21,0);
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.7  2009-10-22 21:46:49  regan
+// fixed ushort to ulong conversion problems
+//
 // Revision 1.6  2009-10-22 20:49:15  cfurman
 // tests added
 //
