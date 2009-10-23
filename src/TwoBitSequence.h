@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.8 2009-10-23 01:24:53 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.9 2009-10-23 23:22:41 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -36,7 +36,7 @@ public:
    
    static std::string getFasta(const TwoBitEncoding *in, SequenceLengthType length);
    static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
-   static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases);
+   static void shiftLeft(const void *in, void *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases, bool hasExtraByte = false);
 
 
     static SequenceLengthType fastaLengthToTwoBitLength(SequenceLengthType fastaLength)
@@ -98,6 +98,9 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.9  2009-10-23 23:22:41  regan
+// checkpoint
+//
 // Revision 1.8  2009-10-23 01:24:53  cfurman
 // ReadSet test created
 //

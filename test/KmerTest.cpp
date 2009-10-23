@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.4 2009-10-23 21:54:48 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.5 2009-10-23 23:22:44 regan Exp $
 //
  
 
@@ -88,7 +88,7 @@ void testKmerPtr(SequenceLengthType size)
 {
   unsigned char bitshift = size % 4;
   kmerBytesJump = (size+3) /4;
-  cout << "Executing testKmerPtr(" <<  size << "); kmerBytesJump == " << kmerBytesJump << endl;
+  cerr << "Executing testKmerPtr(" <<  size << "); kmerBytesJump == " << kmerBytesJump << endl;
   //verify initial conditions
   BOOST_CHECK_EQUAL( kptr1.get(), kmer1);
   BOOST_CHECK_EQUAL( kptr2.get(), kmer2);
@@ -209,9 +209,45 @@ void testKmerPtr(SequenceLengthType size)
   BOOST_CHECK_EQUAL( kptr3.get(), kmer3);  
 }
 
+#define SS2(str, offset, len) str.substr(offset, len)
+
+void testKmerArray(SequenceLengthType size)
+{
+  kmerBytesJump = (size+3) /4;
+  BOOST_MESSAGE( "Executing testKmerArray(" );
+  BOOST_MESSAGE( size );
+  BOOST_MESSAGE( ") kmerBytesJump == " );
+  BOOST_MESSAGE( kmerBytesJump );	
+  std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+  SET_KMERS(A.c_str(), B.c_str(), C.c_str());
+  KmerSizer::set(size);
+  
+  KmerArray kmersA(twoBit1, A.length());
+  KmerArray kmersB(twoBit2, B.length());
+  KmerArray kmersC(twoBit3, C.length());
+  
+  BOOST_MESSAGE( "Starting A" );
+  for (int i=0; i< A.length() - size +1; i++) {
+    BOOST_MESSAGE( i );
+    BOOST_CHECK_EQUAL( kmersA[i].toFasta(), SS2(A,i,size));
+  }
+  BOOST_MESSAGE( "Starting B" );
+  for (int i=0; i< B.length() - size +1; i++) {
+  	BOOST_MESSAGE( i );
+    BOOST_CHECK_EQUAL( kmersB[i].toFasta(), SS2(B,i,size));
+  }
+  BOOST_MESSAGE( "Starting C" );
+  for (int i=0; i< C.length() - size +1; i++) {
+  	BOOST_MESSAGE( i );
+    BOOST_CHECK_EQUAL( kmersC[i].toFasta(), SS2(C,i,size));
+  }
+  
+}
+
 BOOST_AUTO_TEST_CASE( KmerSetTest )
 {
   testKmerCompare();
+  
   testKmerPtr(1);
   testKmerPtr(2);
   testKmerPtr(3);
@@ -221,10 +257,24 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
   testKmerPtr(7);
   testKmerPtr(8);
   testKmerPtr(9);
+
+  testKmerArray(1);
+  testKmerArray(2);
+  testKmerArray(3);
+  testKmerArray(4);
+  testKmerArray(5);
+  testKmerArray(6);
+  testKmerArray(7);
+  testKmerArray(8);
+  testKmerArray(9);
+  
 }
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.5  2009-10-23 23:22:44  regan
+// checkpoint
+//
 // Revision 1.4  2009-10-23 21:54:48  regan
 // checkpoint
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.9 2009-10-23 01:24:53 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.10 2009-10-23 23:22:41 regan Exp $
 //
 
 #include <cstring>
@@ -174,8 +174,11 @@ void TwoBitSequence::reverseComplement(const TwoBitEncoding *in, TwoBitEncoding 
     BOOST_CHECK_EQUAL(targetBases,fasta);
 
 
-void TwoBitSequence::shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases)
+void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases, bool hasExtraByte)
 {
+    TwoBitEncoding *in = (TwoBitEncoding*) twoBitIn;  
+    TwoBitEncoding *out = (TwoBitEncoding*) twoBitOut;  
+    
     if (shiftAmountInBases == 0 && (in != out)) {
        memcpy(out,in,twoBitLength);
        return;
@@ -183,11 +186,15 @@ void TwoBitSequence::shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, Se
     
     if (shiftAmountInBases > 3)
       throw;
-      
+    
     in+= twoBitLength;
     out += twoBitLength;
     
-    unsigned short buffer = *(--in);
+    unsigned short buffer;
+    if (hasExtraByte)
+       buffer = *((unsigned short *)--in);
+    else
+       buffer = *(--in);
      
     for (SequenceLengthType i = 0; i < twoBitLength; i++) {
        TwoBitEncoding byte = bitShiftTable[(unsigned long)buffer*3ul+shiftAmountInBases-1];
@@ -202,6 +209,9 @@ KmerSizer KmerSizer::singleton = KmerSizer(21,0);
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.10  2009-10-23 23:22:41  regan
+// checkpoint
+//
 // Revision 1.9  2009-10-23 01:24:53  cfurman
 // ReadSet test created
 //

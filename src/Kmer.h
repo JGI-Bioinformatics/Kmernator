@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.14 2009-10-23 21:54:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.15 2009-10-23 23:22:41 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -211,6 +211,12 @@ public:
        throw; 
     return _begin[index];
   }
+  Kmer &operator[](unsigned long index)
+  {
+    if (index >= _size)
+       throw; 
+    return _begin[index];
+  }
 
   const Kmer &get(unsigned long index) const
   {
@@ -250,34 +256,7 @@ public:
   }
 
 
-   void build(TwoBitEncoding *twoBit, SequenceLengthType length)
-   {
-      SequenceLengthType numKmers = length - Kmer::getLength() + 1;
-      if (_size != numKmers)
-        throw;
-        
-      KmerArray &kmers = *this;  
-      for(SequenceLengthType i=0; i < numKmers ; i+=4) {
-        // 0 base shift
-   //     memcpy(&kmers[i], twoBit + i/4, Kmer::getTwoBitLength());
-        
-        TwoBitEncoding *ref = twoBit+i/4;
-        if (i+1 < numKmers) {
-          unsigned short twoByte = *( (unsigned short*)ref );
-        
-          for (int bitShift=1; bitShift < 4; bitShift++) {
-            if (i+bitShift < numKmers) {
-              for(SequenceLengthType bytes=0; bytes < Kmer::getTwoBitLength(); bytes++) {
-            //    TwoBitEncoding *kmer = (TwoBitEncoding*)((void *) &kmers[i + bitShift]);
-            //    TwoBitEncoding *kmerByte = kmer+bytes;
-            //    *(kmerByte) = TwoBitSequence::bitShiftTable[ twoByte + (bitShift-1)];
-              }
-            }
-          }
-        }
-      }
-    }
-    
+   void build(TwoBitEncoding *twoBit, SequenceLengthType length);
 };
 
 
@@ -290,6 +269,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.15  2009-10-23 23:22:41  regan
+// checkpoint
+//
 // Revision 1.14  2009-10-23 21:54:46  regan
 // checkpoint
 //
