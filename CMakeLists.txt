@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.7 2009-10-23 07:06:55 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.8 2009-10-23 21:14:25 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -36,12 +36,15 @@ include_directories( src )
 add_subdirectory( src )
 link_directories( src )
 
-execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 add_subdirectory( test )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.8  2009-10-23 21:14:25  regan
+# fixed test data
+#
 # Revision 1.7  2009-10-23 07:06:55  regan
 # more unit testing
 #   ReadSetTest
