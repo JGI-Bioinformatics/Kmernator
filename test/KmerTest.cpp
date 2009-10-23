@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.3 2009-10-23 20:32:52 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.4 2009-10-23 21:54:48 regan Exp $
 //
  
 
@@ -134,8 +134,26 @@ void testKmerPtr(SequenceLengthType size)
   SET_KMERS(A.c_str(), B.c_str(), C.c_str());
   KmerSizer::set(size);
   
+  
   // check KmerPtr
- //   BOOST_CHECK_EQUAL( SS(A,0,size), (*a++).toFasta());
+
+  BOOST_CHECK( *a     == a[0] );
+  BOOST_CHECK( *(a+0) == a[0] ); 
+  BOOST_CHECK( *(a+1) == a[1] ); 
+  
+  BOOST_CHECK( *b     == b[0] );
+  BOOST_CHECK( *(b+0) == b[0] ); 
+  BOOST_CHECK( *(b+1) == b[1] ); 
+  
+  BOOST_CHECK( *c     == c[0] );
+  BOOST_CHECK( *(c+0) == c[0] ); 
+  BOOST_CHECK( *(c+1) == c[1] ); 
+    
+  KmerPtr copy = a;
+  BOOST_CHECK( a == copy );
+  BOOST_CHECK( copy == a );
+
+
   BOOST_CHECK_EQUAL( SS(A,0,size), a++->toFasta());
   BOOST_CHECK_EQUAL( SS(A,0,size), (--a)->toFasta());
   
@@ -207,6 +225,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.4  2009-10-23 21:54:48  regan
+// checkpoint
+//
 // Revision 1.3  2009-10-23 20:32:52  cfurman
 // more kmer changes
 //

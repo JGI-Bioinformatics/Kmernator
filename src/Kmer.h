@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.13 2009-10-23 20:32:50 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.14 2009-10-23 21:54:46 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -44,6 +44,9 @@ public:
 
    Kmer &operator=(const Kmer &other)
    {
+   	  if (this == &other)
+   	    return *this;
+   	    
       memcpy(_data(), other._data(), KmerSizer::getTwoBitLength());
       return *this;
    }
@@ -119,7 +122,7 @@ class KmerPtr
 {
 private:
    Kmer *_me;
-    //Kmer  *operator->() const { return _me;  }
+
 public:
    KmerPtr():
    _me(NULL)
@@ -135,8 +138,9 @@ public:
 
    void *get() const  { return _me; };
    Kmer & operator*() const  { return *_me; }
-  
-      KmerPtr operator->() const { return KmerPtr(_me);  }
+   
+   Kmer  *operator->() const { return _me;  }  
+   //KmerPtr operator->() const { return _me;  }
 
    KmerPtr &operator=(void *right)          { _me = (Kmer *)right; return *this; }
    KmerPtr &operator=(const KmerPtr &right) { _me = right._me ;    return *this; }
@@ -156,10 +160,11 @@ public:
    KmerPtr &operator--()           { return *this -= 1;}
    KmerPtr operator--(int unused)  { KmerPtr saved = *this; --(*this); return saved; }
 
-   Kmer &operator[](unsigned long index) const { return *(*this + index); }
-
+   const Kmer &operator[](unsigned long index) const { return *(*this + index); }
+   Kmer       &operator[](unsigned long index)       { return *(*this + index); }
+   
    // cast operator
-     //  operator VoidPtr() { return (VoidPtr)_me ; }
+   operator VoidPtr() { return (VoidPtr)_me ; }
    //  operator RawKmerPtr() { return _me; }
    // operator TwoBitEncodingPtr() { return (TwoBitEncodingPtr)_me; }
 };
@@ -192,20 +197,22 @@ public:
 
   KmerArray &operator=(const KmerArray &other)
   {
+  	if (this == &other)
+  	  return *this;
     reset();
     resize(other.size());
     memcpy(_begin.get(),other._begin.get(),_size*Kmer::getByteSize());
+    return *this;
   }
 
-
-  Kmer &operator[](unsigned long index) const
+  const Kmer &operator[](unsigned long index) const
   {
     if (index >= _size)
        throw; 
     return _begin[index];
   }
 
-  Kmer &get(unsigned long index) const
+  const Kmer &get(unsigned long index) const
   {
     return (*this)[index];
   }
@@ -283,6 +290,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.14  2009-10-23 21:54:46  regan
+// checkpoint
+//
 // Revision 1.13  2009-10-23 20:32:50  cfurman
 // more kmer changes
 //
