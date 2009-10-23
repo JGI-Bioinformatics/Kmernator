@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.11 2009-10-23 07:06:59 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.12 2009-10-23 17:22:39 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -39,6 +39,7 @@ public:
       memcpy(_data, other._data, KmerSizer::getTwoBitLength());
       return *this;
    }
+   //KmerPtr & operator&() const  { return KmerPtr(_data); }
 
    bool operator ==(const Kmer &other) const
    {
@@ -261,6 +262,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.12  2009-10-23 17:22:39  regan
+// added more tests
+//
 // Revision 1.11  2009-10-23 07:06:59  regan
 // more unit testing
 //   ReadSetTest
