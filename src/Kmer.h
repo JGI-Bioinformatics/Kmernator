@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.12 2009-10-23 17:22:39 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.13 2009-10-23 20:32:50 cfurman Exp $
 //
 
 #ifndef _KMER_H
@@ -24,22 +24,31 @@ class Kmer
 
 private:
    Kmer(); // never construct, just use as cast
-   
-   TwoBitEncoding _data[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
-   
+
+#ifdef STRICT_MEM_CHECK
+   TwoBitEncoding _someData[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
+  const void *_data() const { return _someData;}
+   void *_data()  { return _someData;}
+#else
+   // No data for you!!!
+   const void *_data() const { return this;}
+   void *_data()  { return this;}
+#endif
+
 public:
    
    int compare(const Kmer &other) const
    {
-     return memcmp(_data, other._data, KmerSizer::getTwoBitLength());
+     return memcmp(_data(), other._data(), KmerSizer::getTwoBitLength());
    }
 
    Kmer &operator=(const Kmer &other)
    {
-      memcpy(_data, other._data, KmerSizer::getTwoBitLength());
+      memcpy(_data(), other._data(), KmerSizer::getTwoBitLength());
       return *this;
    }
-   //KmerPtr & operator&() const  { return KmerPtr(_data); }
+//    KmerPtr operator&() const;
+   KmerPtr operator&() ;    
 
    bool operator ==(const Kmer &other) const
    {
@@ -76,12 +85,12 @@ public:
 
    TwoBitEncoding *getTwoBitSequence() const
    {
-     return (TwoBitEncoding *)_data;
+     return (TwoBitEncoding *)_data();
    }
 
    void reverseComplement(Kmer &output) const
    {
-     TwoBitSequence::reverseComplement((TwoBitEncoding*)&_data, (TwoBitEncoding*)&output._data, KmerSizer::getSequenceLength());
+     TwoBitSequence::reverseComplement((TwoBitEncoding*)_data(), (TwoBitEncoding*)output._data(), KmerSizer::getSequenceLength());
    }
 
    static SequenceLengthType getLength() {
@@ -102,32 +111,38 @@ public:
    
 };
 
-class KmerPtr
+typedef TwoBitEncoding *TwoBitEncodingPtr;
+typedef Kmer *RawKmerPtr;
+typedef void *VoidPtr;
+
+class KmerPtr 
 {
 private:
    Kmer *_me;
+    //Kmer  *operator->() const { return _me;  }
 public:
    KmerPtr():
    _me(NULL)
    {  }
    
    KmerPtr(Kmer &in):
-   _me(&in)
+   _me((&in)._me)
    { }
 
    KmerPtr( void *in):
    _me((Kmer *)in)
    { }
 
-   Kmer *get() const  { return _me; };
+   void *get() const  { return _me; };
    Kmer & operator*() const  { return *_me; }
-   Kmer * operator->() const { return _me;  }
+  
+      KmerPtr operator->() const { return KmerPtr(_me);  }
 
    KmerPtr &operator=(void *right)          { _me = (Kmer *)right; return *this; }
    KmerPtr &operator=(const KmerPtr &right) { _me = right._me ;    return *this; }
    
-   bool operator==(const KmerPtr &right) const { return _me == right._me; }
-   bool operator!=(const KmerPtr &right) const { return _me != right._me; }
+ //  bool operator==(const KmerPtr &right) const { return _me == right._me; }
+ //  bool operator!=(const KmerPtr &right) const { return _me != right._me; }
 
    KmerPtr  operator+ (unsigned long right) const { return KmerPtr((Kmer *)((char *)_me + right * Kmer::getByteSize())); }
    KmerPtr  operator- (unsigned long right) const { return *this + (-right); }
@@ -142,10 +157,16 @@ public:
    KmerPtr operator--(int unused)  { KmerPtr saved = *this; --(*this); return saved; }
 
    Kmer &operator[](unsigned long index) const { return *(*this + index); }
-  
+
+   // cast operator
+     //  operator VoidPtr() { return (VoidPtr)_me ; }
+   //  operator RawKmerPtr() { return _me; }
+   // operator TwoBitEncodingPtr() { return (TwoBitEncodingPtr)_me; }
 };
 
+ 
 
+ 
 class KmerArray
 {
 
@@ -160,8 +181,8 @@ public:
   KmerArray(unsigned long size):
    _size(size)
   {
-    if (_begin.get() == NULL)
-      throw;
+   if (_begin.get() == NULL)
+       throw;
   }
 
   ~KmerArray()
@@ -231,7 +252,7 @@ public:
       KmerArray &kmers = *this;  
       for(SequenceLengthType i=0; i < numKmers ; i+=4) {
         // 0 base shift
-        memcpy(&kmers[i], twoBit + i/4, Kmer::getTwoBitLength());
+   //     memcpy(&kmers[i], twoBit + i/4, Kmer::getTwoBitLength());
         
         TwoBitEncoding *ref = twoBit+i/4;
         if (i+1 < numKmers) {
@@ -240,9 +261,9 @@ public:
           for (int bitShift=1; bitShift < 4; bitShift++) {
             if (i+bitShift < numKmers) {
               for(SequenceLengthType bytes=0; bytes < Kmer::getTwoBitLength(); bytes++) {
-                TwoBitEncoding *kmer = (TwoBitEncoding*) &kmers[i + bitShift];
-                TwoBitEncoding *kmerByte = kmer+bytes;
-                *(kmerByte) = TwoBitSequence::bitShiftTable[ twoByte + (bitShift-1)];
+            //    TwoBitEncoding *kmer = (TwoBitEncoding*)((void *) &kmers[i + bitShift]);
+            //    TwoBitEncoding *kmerByte = kmer+bytes;
+            //    *(kmerByte) = TwoBitSequence::bitShiftTable[ twoByte + (bitShift-1)];
               }
             }
           }
@@ -262,6 +283,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.13  2009-10-23 20:32:50  cfurman
+// more kmer changes
+//
 // Revision 1.12  2009-10-23 17:22:39  regan
 // added more tests
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.2 2009-10-23 07:06:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.3 2009-10-23 20:32:52 cfurman Exp $
 //
  
 
@@ -11,7 +11,7 @@
 
 using namespace std;
 
-
+ 
 
 void testReadWriteFile(string filename)
 {
@@ -46,6 +46,9 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.3  2009-10-23 20:32:52  cfurman
+// more kmer changes
+//
 // Revision 1.2  2009-10-23 07:06:57  regan
 // more unit testing
 //   ReadSetTest
