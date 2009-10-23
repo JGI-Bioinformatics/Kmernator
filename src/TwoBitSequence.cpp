@@ -1,6 +1,7 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.7 2009-10-22 21:46:49 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.8 2009-10-23 00:13:54 cfurman Exp $
 //
 
+#include <cstring>
 #include "TwoBitSequence.h"
 
 static unsigned char compressBase(char base)
@@ -76,9 +77,15 @@ void TwoBitSequence::initBitShiftTable()
   unsigned short i=0;
   do {
   	const TwoBitEncoding *ptr = (TwoBitEncoding *) &i;
+ 
+//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = i >> 6;
+//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+1ul] = i >> 4;
+//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = i >> 2;
+//  
   	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = ((*ptr)<<2 & 0xfc) | ((*(ptr+1))>>6 & 0x03);
   	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+1ul] = ((*ptr)<<4 & 0xf0) | ((*(ptr+1))>>4 & 0x0f);
   	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+2ul] = ((*ptr)<<6 & 0xc0) | ((*(ptr+1))>>2 & 0x3f);
+ 
   } while(++i != 0);
 }
 
@@ -143,17 +150,61 @@ std::string TwoBitSequence::getFasta(const TwoBitEncoding *in, SequenceLengthTyp
 
 void TwoBitSequence::reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length)
 {
-  SequenceLengthType twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(length);
+   
+ 
+  SequenceLengthType twoBitLength = fastaLengthToTwoBitLength(length);
+   
   out+=twoBitLength;
+  unsigned long bitShift = length %4;
+ 
   for(SequenceLengthType i = 0; i<twoBitLength; i++)
-    *(--out) = TwoBitSequence::reverseComplementTable[*in++];
+    *(--out) = reverseComplementTable[*in++];
+
+  if (bitShift > 0)
+  {
+     shiftLeft(out,out,twoBitLength,4-bitShift);
+  }
+  
 }
 
+#define BIT_SHIFT(basesIn, targetBases, baseShift)\
+    TwoBitSequence::compressSequence(basesIn, in);\
+    out[0] = TwoBitSequence::bitShiftTable[((unsigned long)*((unsigned short*)in))*3ul+baseShift-1];\
+    TwoBitSequence::uncompressSequence(out,4,fasta);\
+    BOOST_CHECK_EQUAL(targetBases,fasta);
+
+
+void TwoBitSequence::shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases)
+{
+    if (shiftAmountInBases == 0 && (in != out)) {
+       memcpy(out,in,twoBitLength);
+       return;
+    }
+    
+    if (shiftAmountInBases > 3)
+      throw;
+      
+    in+= twoBitLength;
+    out += twoBitLength;
+    
+    unsigned short buffer = *(--in);
+     
+    for (SequenceLengthType i = 0; i < twoBitLength; i++) {
+       TwoBitEncoding byte = bitShiftTable[(unsigned long)buffer*3ul+shiftAmountInBases-1];
+       if (i < twoBitLength -1)
+          buffer = *((unsigned short *)--in);
+       *--out = byte;
+    }
+
+}
 
 KmerSizer KmerSizer::singleton = KmerSizer(21,0);
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.8  2009-10-23 00:13:54  cfurman
+// reverse complement now works
+//
 // Revision 1.7  2009-10-22 21:46:49  regan
 // fixed ushort to ulong conversion problems
 //

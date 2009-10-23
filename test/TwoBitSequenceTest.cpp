@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.3 2009-10-22 21:46:47 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.4 2009-10-23 00:13:56 cfurman Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -28,6 +28,7 @@ const char n5[]     = "NCGTANTACTNCGACNTGCCAGTN";
 
 TwoBitEncoding in[1024],out[1024],test[1024];
 char fasta[1024];
+SequenceLengthType twoBitLength,sequenceLength;
 
 #define BIT_SHIFT(basesIn, targetBases, baseShift)\
     TwoBitSequence::compressSequence(basesIn, in);\
@@ -59,13 +60,62 @@ void testBitShift()
    
 }
 
+//static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases);
+
+#define LEFT_SHIFT(inFasta,targetFasta,shiftAmount)\
+  sequenceLength = std::strlen(inFasta);\
+  twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
+  TwoBitSequence::compressSequence(inFasta, in);\
+  TwoBitSequence::shiftLeft(in,out,twoBitLength,shiftAmount);\
+  TwoBitSequence::uncompressSequence(out, sequenceLength, fasta);\
+  BOOST_CHECK_EQUAL(targetFasta,fasta);
+  
+
+
+
+
+void testLeftShift()
+{
+   LEFT_SHIFT("ACGT","ACGT",0);
+   LEFT_SHIFT("ACGT", "CGTA",1);
+   LEFT_SHIFT("ACGT",  "GTAA",2);
+   LEFT_SHIFT("ACGT",   "TAAA",3);
+
+   LEFT_SHIFT("AAAAAAAA","AAAAAAAA",0);
+   LEFT_SHIFT("AAAAAAAA", "AAAAAAAA",1);
+   LEFT_SHIFT("AAAAAAAA",  "AAAAAAAA",2);
+   LEFT_SHIFT("AAAAAAAA",   "AAAAAAAA",3);
+
+   LEFT_SHIFT("CCCCCCCC","CCCCCCCA",1);
+   LEFT_SHIFT("CCCCCCCC", "CCCCCCAA",2);
+   LEFT_SHIFT("CCCCCCCC",  "CCCCCAAA",3);
+      
+   LEFT_SHIFT("ACGTACGT","CGTACGTA",1);
+   LEFT_SHIFT("ACGTACGT", "GTACGTAA",2);
+   LEFT_SHIFT("ACGTACGT",  "TACGTAAA",3);
+
+   LEFT_SHIFT("TACGTACGT","ACGTACGTA",1);
+   LEFT_SHIFT("TACGTACGT", "CGTACGTAA",2);
+   LEFT_SHIFT("TACGTACGT",  "GTACGTAAA",3);
+   
+   LEFT_SHIFT("GTACGTACGT","TACGTACGTA",1);
+   LEFT_SHIFT("GTACGTACGT", "ACGTACGTAA",2);
+   LEFT_SHIFT("GTACGTACGT",  "CGTACGTAAA",3);
+
+   LEFT_SHIFT("CGTACGTACGT","GTACGTACGTA",1);
+   LEFT_SHIFT("CGTACGTACGT", "TACGTACGTAA",2);
+   LEFT_SHIFT("CGTACGTACGT",  "ACGTACGTAAA",3);
+
+}
 
 #define REV_COMP(fwd,rev) \
   TwoBitSequence::compressSequence(fwd, in);\
   TwoBitSequence::compressSequence(rev, test); \
-  TwoBitSequence::reverseComplement(in,out,std::strlen(fwd));\
-  BOOST_CHECK_EQUAL( memcmp(out,test,TwoBitSequence::fastaLengthToTwoBitLength(std::strlen(fwd))), 0);\
-  TwoBitSequence::uncompressSequence(out, std::strlen(fwd), fasta);\
+  sequenceLength = std::strlen(fwd);\
+  twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
+  TwoBitSequence::reverseComplement(in,out,sequenceLength);\
+  BOOST_CHECK_EQUAL( memcmp(out,test,twoBitLength), 0);\
+  TwoBitSequence::uncompressSequence(out, sequenceLength, fasta);\
   BOOST_CHECK_EQUAL(rev,fasta);
 
 
@@ -82,9 +132,7 @@ void testReverseComplement()
   REV_COMP(fasta2,rev2);
   REV_COMP(fasta3,rev3);
   REV_COMP(fasta4,rev4);
-  
-  TwoBitSequence::reverseComplement(out,test,std::strlen(fasta1));
-  BOOST_CHECK_EQUAL( memcmp(in,test,TwoBitSequence::fastaLengthToTwoBitLength(std::strlen(fasta1))), 0);
+ 
 }
 
 
@@ -191,6 +239,7 @@ void testMarkup()
 BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 {
     testBitShift();
+    testLeftShift();
 	testCompressUncompress();
     testMarkup();
     testReverseComplement();
@@ -198,6 +247,9 @@ BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 
 //
 // $Log: TwoBitSequenceTest.cpp,v $
+// Revision 1.4  2009-10-23 00:13:56  cfurman
+// reverse complement now works
+//
 // Revision 1.3  2009-10-22 21:46:47  regan
 // fixed ushort to ulong conversion problems
 //

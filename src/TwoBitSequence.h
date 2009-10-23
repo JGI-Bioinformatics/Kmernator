@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.6 2009-10-22 20:49:16 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.7 2009-10-23 00:13:54 cfurman Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -36,8 +36,8 @@ public:
    
    static std::string getFasta(const TwoBitEncoding *NCBI2NA, SequenceLengthType length);
    static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
-   static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length, unsigned char bases)
-   { throw; }
+   static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases);
+
 
     static SequenceLengthType fastaLengthToTwoBitLength(SequenceLengthType fastaLength)
     {
@@ -98,6 +98,9 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.7  2009-10-23 00:13:54  cfurman
+// reverse complement now works
+//
 // Revision 1.6  2009-10-22 20:49:16  cfurman
 // tests added
 //
