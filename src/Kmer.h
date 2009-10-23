@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.10 2009-10-23 01:24:53 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.11 2009-10-23 07:06:59 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -28,13 +28,6 @@ private:
    TwoBitEncoding _data[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
    
 public:
-/*
-   static void setKmerSizer(const KmerSizer &kmerSizer) {
-   	  if (kmerSizer.getTwoBitLength() > MAX_KMER_SIZE) {
-   	  	throw;
-   	  }
-   	  sizer = KmerSizer(kmerSizer.getSequenceLength(), kmerSizer.getExtraBytes());
-   }*/
    
    int compare(const Kmer &other) const
    {
@@ -47,27 +40,30 @@ public:
       return *this;
    }
 
-   bool operator ==(const Kmer &other)
+   bool operator ==(const Kmer &other) const
    {
       return compare(other) == 0;
    }
-   bool operator <(const Kmer &other)
+   bool operator !=(const Kmer &other) const
+   {
+   	  return compare(other) != 0;
+   }
+   bool operator <(const Kmer &other) const
    {
    	  return compare(other) < 0;
    }
-   bool operator <=(const Kmer &other)
+   bool operator <=(const Kmer &other) const
    {
    	  return compare(other) <= 0;
    }
-   bool operator >(const Kmer &other)
+   bool operator >(const Kmer &other) const
    {
    	  return compare(other) > 0;
    }
-   bool operator >=(const Kmer &other)
+   bool operator >=(const Kmer &other) const
    {
    	  return compare(other) >= 0;
    }
-   // override [], ptr++, ptr--, =
 
    void swap(Kmer &other)
    {
@@ -126,7 +122,11 @@ public:
    Kmer & operator*() const  { return *_me; }
    Kmer * operator->() const { return _me;  }
 
-   KmerPtr &operator=(void *right)       { _me = (Kmer *)right; return *this; }
+   KmerPtr &operator=(void *right)          { _me = (Kmer *)right; return *this; }
+   KmerPtr &operator=(const KmerPtr &right) { _me = right._me ;    return *this; }
+   
+   bool operator==(const KmerPtr &right) const { return _me == right._me; }
+   bool operator!=(const KmerPtr &right) const { return _me != right._me; }
 
    KmerPtr  operator+ (unsigned long right) const { return KmerPtr((Kmer *)((char *)_me + right * Kmer::getByteSize())); }
    KmerPtr  operator- (unsigned long right) const { return *this + (-right); }
@@ -261,6 +261,11 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.11  2009-10-23 07:06:59  regan
+// more unit testing
+//   ReadSetTest
+//   KmerTest
+//
 // Revision 1.10  2009-10-23 01:24:53  cfurman
 // ReadSet test created
 //

@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.6 2009-10-23 01:24:56 cfurman Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.7 2009-10-23 07:06:57 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -16,21 +16,33 @@ add_test( TwoBitSequenceTest TwoBitSequenceTest )
 
 
 add_executable( ReadSetTest ReadSetTest )
-target_link_libraries( ReadSetTest ReadSet Sequence
-                                          boost_test_exec_monitor-mt 
-                                          boost_unit_test_framework-mt )
-add_test( ReadSetTest ReadSetTest)
+target_link_libraries( ReadSetTest ReadSet 
+                                   Sequence
+                                   boost_test_exec_monitor-mt 
+                                   boost_unit_test_framework-mt )
+add_test( ReadSetTest ReadSetTest )
                                           
+
+add_executable( KmerTest KmerTest )
+target_link_libraries( KmerTest TwoBitSequence
+                                boost_test_exec_monitor-mt 
+                                boost_unit_test_framework-mt )
+add_test( KmerTest KmerTest )
 
 
 add_executable( ktest2 ktest2 )
 target_link_libraries( ktest2 Sequence 
                               ReadSet )
-add_test(ktest2 ktest2 ${CMAKE_SOURCE_DIR}/test/10.fastq)
+add_test(ktest2 ktest2 10.fastq)
 
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.7  2009-10-23 07:06:57  regan
+# more unit testing
+#   ReadSetTest
+#   KmerTest
+#
 # Revision 1.6  2009-10-23 01:24:56  cfurman
 # ReadSet test created
 #

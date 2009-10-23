@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.3 2009-10-21 00:00:58 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.4 2009-10-23 07:06:59 regan Exp $
 //
 
 #include <exception>
@@ -77,9 +77,14 @@ void ReadSet::appendFastq(string fastqFilePath)
         if (strlen(name) == 0 || name[0] != '@')
         {
           if (ifs.eof())
-              break;
-          else
-             throw   std::invalid_argument(fileErrorMsg("Missing @", fastqFilePath, lineCount));
+             break;
+          else if (strlen(name) == 0) {
+          	 // throw away last empty line
+          	 ifs.getline(name, sizeof(name));
+          	 if (ifs.eof())
+          	   break;
+          }   
+          throw   std::invalid_argument(fileErrorMsg("Missing @", fastqFilePath, lineCount));
         }
         char *space = strchr(name+1,' ');
         if (space != NULL)
@@ -131,6 +136,11 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.4  2009-10-23 07:06:59  regan
+// more unit testing
+//   ReadSetTest
+//   KmerTest
+//
 // Revision 1.3  2009-10-21 00:00:58  cfurman
 // working on kmers....
 //
