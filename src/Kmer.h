@@ -1,10 +1,11 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.9 2009-10-22 01:39:43 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.10 2009-10-23 01:24:53 cfurman Exp $
 //
 
 #ifndef _KMER_H
 #define _KMER_H
 #include <tr1/memory>
-
+#include <cstring>
+#include <cstdlib>
 #include "TwoBitSequence.h"
 
 
@@ -260,6 +261,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.10  2009-10-23 01:24:53  cfurman
+// ReadSet test created
+//
 // Revision 1.9  2009-10-22 01:39:43  cfurman
 // bug fix in kmer.h
 //

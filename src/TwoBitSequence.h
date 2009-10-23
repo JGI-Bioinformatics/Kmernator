@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.7 2009-10-23 00:13:54 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.8 2009-10-23 01:24:53 cfurman Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -34,7 +34,7 @@ public:
    static void applyMarkup(char *bases, BaseLocationVectorType markupBases);
    static void applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, BaseLocationType *markupBases);
    
-   static std::string getFasta(const TwoBitEncoding *NCBI2NA, SequenceLengthType length);
+   static std::string getFasta(const TwoBitEncoding *in, SequenceLengthType length);
    static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
    static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases);
 
@@ -98,6 +98,9 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.8  2009-10-23 01:24:53  cfurman
+// ReadSet test created
+//
 // Revision 1.7  2009-10-23 00:13:54  cfurman
 // reverse complement now works
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.8 2009-10-23 00:13:54 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.9 2009-10-23 01:24:53 cfurman Exp $
 //
 
 #include <cstring>
@@ -78,13 +78,13 @@ void TwoBitSequence::initBitShiftTable()
   do {
   	const TwoBitEncoding *ptr = (TwoBitEncoding *) &i;
  
-//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = i >> 6;
-//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+1ul] = i >> 4;
-//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = i >> 2;
-//  
+//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = (i >> 6)&0xff;
+//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+1ul] = (i >> 4)&0xff;
+//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+2ul] = (i >> 2)&0xff;
+
   	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = ((*ptr)<<2 & 0xfc) | ((*(ptr+1))>>6 & 0x03);
   	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+1ul] = ((*ptr)<<4 & 0xf0) | ((*(ptr+1))>>4 & 0x0f);
-  	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+2ul] = ((*ptr)<<6 & 0xc0) | ((*(ptr+1))>>2 & 0x3f);
+  	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+2ul] = ((*ptr)<<6 & 0xc0) | ((*(ptr+1))>>2 & 0x3f); 
  
   } while(++i != 0);
 }
@@ -202,6 +202,9 @@ KmerSizer KmerSizer::singleton = KmerSizer(21,0);
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.9  2009-10-23 01:24:53  cfurman
+// ReadSet test created
+//
 // Revision 1.8  2009-10-23 00:13:54  cfurman
 // reverse complement now works
 //
