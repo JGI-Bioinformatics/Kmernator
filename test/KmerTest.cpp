@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.6 2009-10-24 00:03:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.7 2009-10-24 00:32:47 regan Exp $
 //
  
 
@@ -248,6 +248,32 @@ void testKmerNewDelete()
 #endif
 }
 
+void testKmerInstance()
+{
+  KmerInstance one;
+  KmerInstance many[100];
+  KmerSizer::set(8);
+  
+  BOOST_CHECK_EQUAL( "AAAAAAAA", one.toFasta() );
+  BOOST_CHECK_EQUAL( "AAAAAAAA", many[0].toFasta() );
+  BOOST_CHECK_EQUAL( "AAAAAAAA", many[1].toFasta() );
+  
+  
+  std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+  SET_KMERS(A.c_str(), B.c_str(), C.c_str()); 
+  
+  one = *kmer1;
+  many[0] = kmer1ref;
+  many[1] = *kptr2;
+  many[2] = *kmer3;
+
+  BOOST_CHECK_EQUAL( "ACGTCGTA", one.toFasta() );
+  BOOST_CHECK_EQUAL( "ACGTCGTA", many[0].toFasta() );
+  BOOST_CHECK_EQUAL( "TACGACGT", many[1].toFasta() );
+  BOOST_CHECK_EQUAL( "AAAACCCC", many[2].toFasta() );
+  
+}
+
 BOOST_AUTO_TEST_CASE( KmerSetTest )
 {
   testKmerCompare();
@@ -273,10 +299,15 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
   testKmerArray(9);
   
   testKmerNewDelete();
+  
+  testKmerInstance();
 }
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.7  2009-10-24 00:32:47  regan
+// added bugs
+//
 // Revision 1.6  2009-10-24 00:03:51  regan
 // checkpoint
 //

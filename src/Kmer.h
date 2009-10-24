@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.16 2009-10-24 00:03:49 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.17 2009-10-24 00:32:46 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -17,43 +17,26 @@ typedef std::tr1::shared_ptr<TwoBitEncoding> KmerSharedPtr;
 class KmerPtr;
 class KmerArray;
 
+
 class Kmer
 {
 
 private:
-   Kmer(); // never construct, just use as cast
+   //Kmer(); // never construct, just use as cast
 
 #ifdef STRICT_MEM_CHECK
    TwoBitEncoding _someData[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
+public:
    const void *_data() const { return _someData;}
    void *_data()  { return _someData;}
 #else
    // No data for you!!!
+public:
    const void *_data() const { return this;}
    void *_data()  { return this;}
 #endif
 
 public:
-/*    void *operator new(size_t size) 
-   { 
-   	  void *mem = calloc(1,getByteSize()); 
-   	  if (mem == NULL) throw; 
-   	  return mem;
-   }
-   void operator delete(void *p) {
-   	  free(p);
-   }
-   void *operator new[](size_t size) 
-   { 
-   	  size_t elements = size / sizeof(Kmer);
-   	  void *mem = calloc(elements,getByteSize()); 
-   	  if (mem == NULL) throw; 
-   	  return mem;
-   }
-   void operator delete[](void *p) {
-   	  free(p);
-   }
-*/
    
    int compare(const Kmer &other) const
    {
@@ -130,6 +113,28 @@ public:
       return TwoBitSequence::getFasta(getTwoBitSequence(), getLength());
    }
    
+};
+
+class KmerInstance : public Kmer
+{
+
+private:
+   TwoBitEncoding _somedata[1024];
+public:
+
+   KmerInstance()
+   {
+   	 if ((void*)this != (void*) _somedata)
+   	   throw;
+   }
+   KmerInstance &operator=(const Kmer &other)
+   {
+   	  if (this == &other)
+   	    return *this;
+   	    
+      memcpy(_data(), other._data(), getTwoBitLength());
+      return *this;
+   }
 };
 
 typedef TwoBitEncoding *TwoBitEncodingPtr;
@@ -287,6 +292,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.17  2009-10-24 00:32:46  regan
+// added bugs
+//
 // Revision 1.16  2009-10-24 00:03:49  regan
 // checkpoint
 //
