@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.7 2009-10-24 00:32:47 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.8 2009-10-24 00:37:50 regan Exp $
 //
  
 
@@ -254,13 +254,9 @@ void testKmerInstance()
   KmerInstance many[100];
   KmerSizer::set(8);
   
-  BOOST_CHECK_EQUAL( "AAAAAAAA", one.toFasta() );
-  BOOST_CHECK_EQUAL( "AAAAAAAA", many[0].toFasta() );
-  BOOST_CHECK_EQUAL( "AAAAAAAA", many[1].toFasta() );
-  
-  
   std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
   SET_KMERS(A.c_str(), B.c_str(), C.c_str()); 
+  KmerSizer::set(8);
   
   one = *kmer1;
   many[0] = kmer1ref;
@@ -305,6 +301,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.8  2009-10-24 00:37:50  regan
+// fixed tests
+//
 // Revision 1.7  2009-10-24 00:32:47  regan
 // added bugs
 //
