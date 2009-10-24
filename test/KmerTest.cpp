@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.5 2009-10-23 23:22:44 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.6 2009-10-24 00:03:51 regan Exp $
 //
  
 
@@ -88,7 +88,6 @@ void testKmerPtr(SequenceLengthType size)
 {
   unsigned char bitshift = size % 4;
   kmerBytesJump = (size+3) /4;
-  cerr << "Executing testKmerPtr(" <<  size << "); kmerBytesJump == " << kmerBytesJump << endl;
   //verify initial conditions
   BOOST_CHECK_EQUAL( kptr1.get(), kmer1);
   BOOST_CHECK_EQUAL( kptr2.get(), kmer2);
@@ -214,10 +213,7 @@ void testKmerPtr(SequenceLengthType size)
 void testKmerArray(SequenceLengthType size)
 {
   kmerBytesJump = (size+3) /4;
-  BOOST_MESSAGE( "Executing testKmerArray(" );
-  BOOST_MESSAGE( size );
-  BOOST_MESSAGE( ") kmerBytesJump == " );
-  BOOST_MESSAGE( kmerBytesJump );	
+	
   std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
   SET_KMERS(A.c_str(), B.c_str(), C.c_str());
   KmerSizer::set(size);
@@ -226,22 +222,30 @@ void testKmerArray(SequenceLengthType size)
   KmerArray kmersB(twoBit2, B.length());
   KmerArray kmersC(twoBit3, C.length());
   
-  BOOST_MESSAGE( "Starting A" );
   for (int i=0; i< A.length() - size +1; i++) {
-    BOOST_MESSAGE( i );
     BOOST_CHECK_EQUAL( kmersA[i].toFasta(), SS2(A,i,size));
   }
-  BOOST_MESSAGE( "Starting B" );
   for (int i=0; i< B.length() - size +1; i++) {
-  	BOOST_MESSAGE( i );
     BOOST_CHECK_EQUAL( kmersB[i].toFasta(), SS2(B,i,size));
   }
-  BOOST_MESSAGE( "Starting C" );
   for (int i=0; i< C.length() - size +1; i++) {
-  	BOOST_MESSAGE( i );
     BOOST_CHECK_EQUAL( kmersC[i].toFasta(), SS2(C,i,size));
   }
   
+}
+
+void testKmerNewDelete()
+{
+#if 0
+  // This should never compile!
+  Kmer *one = new Kmer;
+  delete one;
+  
+  Kmer *many = new Kmer[100];
+  delete [] many;
+  
+  Kmer bad;
+#endif
 }
 
 BOOST_AUTO_TEST_CASE( KmerSetTest )
@@ -268,10 +272,14 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
   testKmerArray(8);
   testKmerArray(9);
   
+  testKmerNewDelete();
 }
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.6  2009-10-24 00:03:51  regan
+// checkpoint
+//
 // Revision 1.5  2009-10-23 23:22:44  regan
 // checkpoint
 //

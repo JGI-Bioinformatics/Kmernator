@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.15 2009-10-23 23:22:41 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.16 2009-10-24 00:03:49 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -7,8 +7,6 @@
 #include <cstring>
 #include <cstdlib>
 #include "TwoBitSequence.h"
-
-
 
 #ifndef MAX_KMER_SIZE
 #define MAX_KMER_SIZE 1024
@@ -27,7 +25,7 @@ private:
 
 #ifdef STRICT_MEM_CHECK
    TwoBitEncoding _someData[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
-  const void *_data() const { return _someData;}
+   const void *_data() const { return _someData;}
    void *_data()  { return _someData;}
 #else
    // No data for you!!!
@@ -36,10 +34,30 @@ private:
 #endif
 
 public:
+/*    void *operator new(size_t size) 
+   { 
+   	  void *mem = calloc(1,getByteSize()); 
+   	  if (mem == NULL) throw; 
+   	  return mem;
+   }
+   void operator delete(void *p) {
+   	  free(p);
+   }
+   void *operator new[](size_t size) 
+   { 
+   	  size_t elements = size / sizeof(Kmer);
+   	  void *mem = calloc(elements,getByteSize()); 
+   	  if (mem == NULL) throw; 
+   	  return mem;
+   }
+   void operator delete[](void *p) {
+   	  free(p);
+   }
+*/
    
    int compare(const Kmer &other) const
    {
-     return memcmp(_data(), other._data(), KmerSizer::getTwoBitLength());
+     return memcmp(_data(), other._data(), getTwoBitLength());
    }
 
    Kmer &operator=(const Kmer &other)
@@ -47,10 +65,10 @@ public:
    	  if (this == &other)
    	    return *this;
    	    
-      memcpy(_data(), other._data(), KmerSizer::getTwoBitLength());
+      memcpy(_data(), other._data(), getTwoBitLength());
       return *this;
    }
-//    KmerPtr operator&() const;
+
    KmerPtr operator&() ;    
 
    bool operator ==(const Kmer &other) const
@@ -91,9 +109,9 @@ public:
      return (TwoBitEncoding *)_data();
    }
 
-   void reverseComplement(Kmer &output) const
+   void buildReverseComplement(Kmer &output) const
    {
-     TwoBitSequence::reverseComplement((TwoBitEncoding*)_data(), (TwoBitEncoding*)output._data(), KmerSizer::getSequenceLength());
+     TwoBitSequence::reverseComplement((TwoBitEncoding*)_data(), (TwoBitEncoding*)output._data(), getLength());
    }
 
    static SequenceLengthType getLength() {
@@ -269,6 +287,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.16  2009-10-24 00:03:49  regan
+// checkpoint
+//
 // Revision 1.15  2009-10-23 23:22:41  regan
 // checkpoint
 //
