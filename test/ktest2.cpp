@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.7 2009-10-22 07:04:03 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.8 2009-10-26 17:42:26 regan Exp $
 //
 
 #include <iostream>
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
     KmerSizer::set(44);
     for (int i=0 ; i < store.getSize(); i++)
     {
-       KmerArray kmers(store.getRead(i).getTwoBitSequence(),store.getRead(i).getLength());
+       KmerArray<SolidKmerTag> kmers(store.getRead(i).getTwoBitSequence(),store.getRead(i).getLength());
        for (int j=0; j < kmers.size(); j++)
        {
           cout << "Read " << i << " kmer "<< j << ' '
@@ -48,6 +48,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.8  2009-10-26 17:42:26  regan
+// templated KmerArray
+//
 // Revision 1.7  2009-10-22 07:04:03  regan
 // added a few unit tests
 // minor refactor

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.8 2009-10-24 00:37:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.9 2009-10-26 17:42:26 regan Exp $
 //
  
 
@@ -215,12 +215,15 @@ void testKmerArray(SequenceLengthType size)
   kmerBytesJump = (size+3) /4;
 	
   std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+  KmerArray<WeakKmerTag>::releasePools();
+  KmerArray<SolidKmerTag>::releasePools();
   SET_KMERS(A.c_str(), B.c_str(), C.c_str());
   KmerSizer::set(size);
   
-  KmerArray kmersA(twoBit1, A.length());
-  KmerArray kmersB(twoBit2, B.length());
-  KmerArray kmersC(twoBit3, C.length());
+  struct myTag {};
+  KmerArray<WeakKmerTag> kmersA(twoBit1, A.length());
+  KmerArray<SolidKmerTag> kmersB(twoBit2, B.length());
+  KmerArray<> kmersC(twoBit3, C.length());
   
   for (int i=0; i< A.length() - size +1; i++) {
     BOOST_CHECK_EQUAL( kmersA[i].toFasta(), SS2(A,i,size));
@@ -301,6 +304,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.9  2009-10-26 17:42:26  regan
+// templated KmerArray
+//
 // Revision 1.8  2009-10-24 00:37:50  regan
 // fixed tests
 //
