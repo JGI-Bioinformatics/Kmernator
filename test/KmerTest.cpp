@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.9 2009-10-26 17:42:26 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.10 2009-10-26 23:04:35 regan Exp $
 //
  
 
@@ -14,67 +14,72 @@
 using namespace std;
 
 TwoBitEncoding twoBit1[1024],twoBit2[1024],twoBit3[1024];
-Kmer    *kmer1     = (Kmer*)&twoBit1;
+// do not want to support these....
+/* Kmer    *kmer1     = (Kmer*)&twoBit1;
 Kmer    *kmer2     = (Kmer*)&twoBit2;
 Kmer    *kmer3     = (Kmer*)&twoBit3;
 Kmer    &kmer1ref  = *kmer1;
 Kmer    &kmer2ref  = *kmer2;
 Kmer    &kmer3ref  = *kmer3;
+ */
+ 
+KmerPtr kmer1(&twoBit1), kmer2(&twoBit2), kmer3(&twoBit3);
+
 
 #define SET_KMERS(fasta1, fasta2, fasta3) \
     TwoBitSequence::compressSequence(fasta1,   twoBit1);\
     TwoBitSequence::compressSequence(fasta2,   twoBit2);\
     TwoBitSequence::compressSequence(fasta3,   twoBit3);\
     KmerSizer::set(std::strlen(fasta1));\
-    BOOST_CHECK_EQUAL( fasta1, kmer1->toFasta());\
-    BOOST_CHECK_EQUAL( fasta2, kmer2->toFasta());
+    BOOST_CHECK_EQUAL( fasta1, kmer1.toFasta());\
+    BOOST_CHECK_EQUAL( fasta2, kmer2.toFasta());
 
 void testKmerCompare()
 {
   SET_KMERS("AAAA", "AAAA", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
   
   SET_KMERS("AAAAA", "AAAAA", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
   
   SET_KMERS("AAAAAA", "AAAAAA", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
   
   SET_KMERS("AAAAAAA", "AAAAAAA", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
 
   SET_KMERS("AAAAAAAA", "AAAAAAAA", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
 
   SET_KMERS("ACGT", "ACGT", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
   
   SET_KMERS("ACGTC", "ACGTC", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
   
   SET_KMERS("ACGTCG", "ACGTCG", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
   
   SET_KMERS("ACGTCGT", "ACGTCGT", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
 
   SET_KMERS("ACGTCGTC", "ACGTCGTC", "");
-  BOOST_CHECK( *kmer1 == *kmer2 );
+  BOOST_CHECK( kmer1.equals(kmer2) );
 
   SET_KMERS("ACGT", "CGTA", "");
-  BOOST_CHECK( *kmer1 != *kmer2 );
+  BOOST_CHECK( !kmer1.equals(kmer2) );
   
   SET_KMERS("ACGTC", "CGTCA", "");
-  BOOST_CHECK( *kmer1 != *kmer2 );
+  BOOST_CHECK(  !kmer1.equals(kmer2) );
   
   SET_KMERS("ACGTCG", "CGTCGA", "");
-  BOOST_CHECK( *kmer1 != *kmer2 );
+  BOOST_CHECK(  !kmer1.equals(kmer2) );
   
   SET_KMERS("ACGTCGT", "CGTCGTA", "");
-  BOOST_CHECK( *kmer1 != *kmer2 );
+  BOOST_CHECK(  !kmer1.equals(kmer2) );
 
   SET_KMERS("ACGTCGTC", "CGTCGTCA", "");
-  BOOST_CHECK( *kmer1 != *kmer2 );
+  BOOST_CHECK(  !kmer1.equals(kmer2) );
 
 }
 
@@ -89,17 +94,18 @@ void testKmerPtr(SequenceLengthType size)
   unsigned char bitshift = size % 4;
   kmerBytesJump = (size+3) /4;
   //verify initial conditions
-  BOOST_CHECK_EQUAL( kptr1.get(), kmer1);
-  BOOST_CHECK_EQUAL( kptr2.get(), kmer2);
-  BOOST_CHECK_EQUAL( kptr3.get(), kmer3);
+  BOOST_CHECK( kptr1.get() == kmer1);
+  BOOST_CHECK( kptr2.get() == kmer2);
+  BOOST_CHECK( kptr3.get() == kmer3);
  
   BOOST_CHECK( kptr1 == *&kptr1);
   BOOST_CHECK( kptr2 == *&kptr2);
   BOOST_CHECK( kptr3 == *&kptr3); 
   
-  BOOST_CHECK( *kptr1 == kmer1ref);
-  BOOST_CHECK( *kptr2 == kmer2ref);
-  BOOST_CHECK( *kptr3 == kmer3ref); 
+  // do not want to support these...
+  //BOOST_CHECK( *kptr1 == kmer1ref);
+  //BOOST_CHECK( *kptr2 == kmer2ref);
+  //BOOST_CHECK( *kptr3 == kmer3ref); 
 
   KmerPtr a = kptr1;
   KmerPtr b = kptr2;
@@ -110,16 +116,18 @@ void testKmerPtr(SequenceLengthType size)
   BOOST_CHECK( kptr3 == c);
   BOOST_CHECK( a != c);
 
+/*   // Do not want to support theses...
   Kmer *a_ptr = kmer1;
   Kmer *b_ptr = (Kmer *)b.get();
-  Kmer *c_ptr = (Kmer *)((void *)&(*c));
+  Kmer *c_ptr = (Kmer *)c.get();//(Kmer *)((void *)&(*c));
   BOOST_CHECK( a_ptr == kmer1 );
   BOOST_CHECK( b_ptr == kmer2 );
   BOOST_CHECK( c_ptr == kmer3 );
 
+  // Do not want to support theses...
   Kmer &a_ref = (Kmer &)*kmer1;
   Kmer &b_ref = *b_ptr;
-  Kmer &c_ref = *c;  
+  Kmer &c_ref = *c_ptr; //*c;  
   // test Kmer == Kmer
   BOOST_CHECK( a_ref == *a_ptr );
   BOOST_CHECK( b_ref == *b_ptr );
@@ -128,7 +136,7 @@ void testKmerPtr(SequenceLengthType size)
   BOOST_CHECK( &a_ref == a_ptr );
   BOOST_CHECK( &b_ref == b_ptr );
   BOOST_CHECK( &c_ref == c_ptr );
-  
+ */  
   std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
   SET_KMERS(A.c_str(), B.c_str(), C.c_str());
   KmerSizer::set(size);
@@ -180,14 +188,16 @@ void testKmerPtr(SequenceLengthType size)
   
   
 
-  // check Kmer * (I do not know if this will ever work...)
-  BOOST_CHECK_EQUAL( SS(A,0,size), a_ptr++->toFasta());
-  BOOST_CHECK_EQUAL( SS(A,0,size), (--a_ptr)->toFasta());
-  
-  BOOST_CHECK_EQUAL( SS(B,0,size), b_ptr++->toFasta());
-  BOOST_CHECK_EQUAL( SS(B,0,size), (--b_ptr)->toFasta());
+/*   // Do not want o support these
   if(0)  
-  {
+  {  
+  	// check Kmer * (I do not know if this will ever work...)
+    BOOST_CHECK_EQUAL( SS(A,0,size), a_ptr++->toFasta());
+    BOOST_CHECK_EQUAL( SS(A,0,size), (--a_ptr)->toFasta());
+  
+    BOOST_CHECK_EQUAL( SS(B,0,size), b_ptr++->toFasta());
+    BOOST_CHECK_EQUAL( SS(B,0,size), (--b_ptr)->toFasta());
+
     BOOST_CHECK_EQUAL( SS(C,0,size), c_ptr++->toFasta());
     BOOST_CHECK_EQUAL( SS(C,1,size), c_ptr++->toFasta());
     BOOST_CHECK_EQUAL( SS(C,2,size), c_ptr++->toFasta());
@@ -200,12 +210,12 @@ void testKmerPtr(SequenceLengthType size)
 
     BOOST_CHECK( kptr3 == c_ptr);  
   }
-  
+ */  
   // and original have not changed...
   a++; b++; c++;
-  BOOST_CHECK_EQUAL( kptr1.get(), kmer1);
-  BOOST_CHECK_EQUAL( kptr2.get(), kmer2);
-  BOOST_CHECK_EQUAL( kptr3.get(), kmer3);  
+  BOOST_CHECK( kptr1.get() == kmer1);
+  BOOST_CHECK( kptr2.get() == kmer2);
+  BOOST_CHECK( kptr3.get() == kmer3);  
 }
 
 #define SS2(str, offset, len) str.substr(offset, len)
@@ -250,7 +260,7 @@ void testKmerNewDelete()
   Kmer bad;
 #endif
 }
-
+/* 
 void testKmerInstance()
 {
   KmerInstance one;
@@ -262,7 +272,7 @@ void testKmerInstance()
   KmerSizer::set(8);
   
   one = *kmer1;
-  many[0] = kmer1ref;
+  many[0] = *kptr1;//kmer1ref;
   many[1] = *kptr2;
   many[2] = *kmer3;
 
@@ -270,8 +280,8 @@ void testKmerInstance()
   BOOST_CHECK_EQUAL( "ACGTCGTA", many[0].toFasta() );
   BOOST_CHECK_EQUAL( "TACGACGT", many[1].toFasta() );
   BOOST_CHECK_EQUAL( "AAAACCCC", many[2].toFasta() );
-  
 }
+ */
 
 BOOST_AUTO_TEST_CASE( KmerSetTest )
 {
@@ -299,11 +309,14 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
   
   testKmerNewDelete();
   
-  testKmerInstance();
+  //testKmerInstance();
 }
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.10  2009-10-26 23:04:35  regan
+// checkpoint make Kmer private inner class
+//
 // Revision 1.9  2009-10-26 17:42:26  regan
 // templated KmerArray
 //
