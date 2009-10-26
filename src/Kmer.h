@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.17 2009-10-24 00:32:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.18 2009-10-26 17:50:54 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -6,6 +6,9 @@
 #include <tr1/memory>
 #include <cstring>
 #include <cstdlib>
+#include <vector>
+#include <boost/unordered_map.hpp>
+#include <boost/pool/pool.hpp>
 #include "TwoBitSequence.h"
 
 #ifndef MAX_KMER_SIZE
@@ -14,9 +17,43 @@
 
 typedef std::tr1::shared_ptr<TwoBitEncoding> KmerSharedPtr;
 
-class KmerPtr;
-class KmerArray;
+class KmerSizer
+{
+private:
+  KmerSizer() : _sequenceLength(21), _extraBytes(0) {}
 
+  SequenceLengthType _sequenceLength;
+  unsigned long _extraBytes;
+
+  SequenceLengthType _twoBitLength;
+  unsigned long _totalSize;
+public:
+
+  static KmerSizer &getSingleton() { /* TODO make thread safe */ static KmerSizer singleton; return singleton; }
+  static void set(SequenceLengthType sequenceLength, unsigned long extraBytes=0)
+  {
+    KmerSizer &singleton = getSingleton();
+    singleton._sequenceLength = sequenceLength;
+    singleton._extraBytes = extraBytes;
+    singleton._twoBitLength =  TwoBitSequence::fastaLengthToTwoBitLength(singleton._sequenceLength);
+    singleton._totalSize = singleton._twoBitLength + extraBytes;
+  }
+
+  static SequenceLengthType getSequenceLength()  {
+    return getSingleton()._sequenceLength;
+  }
+  static unsigned long getExtraBytes()  {
+    return getSingleton()._extraBytes;
+  }
+  static SequenceLengthType getTwoBitLength()   {
+    return getSingleton()._twoBitLength;
+  }
+  static unsigned long getTotalSize()  {
+    return getSingleton()._totalSize;
+  }
+};
+
+class KmerPtr;
 
 class Kmer
 {
@@ -192,9 +229,11 @@ public:
    // operator TwoBitEncodingPtr() { return (TwoBitEncodingPtr)_me; }
 };
 
- 
 
- 
+class SolidKmerTag {};
+class WeakKmerTag {};
+
+template<typename Tag = SolidKmerTag>
 class KmerArray
 {
 
@@ -203,13 +242,52 @@ private:
   unsigned long _size;
 
   KmerArray();
+
 public:
   
-  
+//  typedef boost::pool_allocator< Tag > Allocator;
+  typedef boost::pool< > Pool;
+  typedef std::tr1::shared_ptr<Pool> PoolPtr;
+  typedef std::vector< PoolPtr > SizePools;
+
+  static Pool &getPool(unsigned long size) {
+     static SizePools pools;
+     unsigned long poolByteSize = size * Kmer::getByteSize();
+     if (size == 0) {
+       pools.clear();
+     }
+     if (pools.size() <= poolByteSize)
+       pools.resize(poolByteSize+1);
+     if ( pools[poolByteSize].get() == NULL ) {
+       PoolPtr pool(new Pool(poolByteSize));
+       pools[poolByteSize] = pool;
+     }
+     return *(pools[poolByteSize]);
+     /* 
+     static Pool pool( Kmer::getByteSize() );
+     if (size == 0)
+       pool.purge_memory();
+     if (pool.get_requested_size() != Kmer::getByteSize() ) {
+       // this is dangerous...
+       pool.purge_memory();
+       pool = Pool( Kmer::getByteSize() );
+     }
+     
+     return pool;
+     */ 
+  }
+
+  static void releasePools() {
+    getPool(0);
+  }
+
+public:
+ 
   KmerArray(unsigned long size):
    _size(size)
   {
-   if (_begin.get() == NULL)
+    resize(_size);
+    if (_begin.get() == NULL)
        throw;
   }
 
@@ -220,7 +298,7 @@ public:
 
   KmerArray &operator=(const KmerArray &other)
   {
-  	if (this == &other)
+    if (this == &other)
   	  return *this;
     reset();
     resize(other.size());
@@ -251,24 +329,51 @@ public:
   void reset()
   {
     void *test = (void *)_begin.get();
-    if (test != NULL)
-     free(test);
+    if (test != NULL) {
+      getPool( _size ).free(test); 
+    }
     _begin =  NULL;
     _size = 0;
   }
 
   void resize(unsigned long size)
   {
-    void *temp = _begin.get();
-    _begin = KmerPtr(calloc(Kmer::getByteSize(),size));
-    if (temp != NULL && _size > 0) {
-       memcpy(_begin.get(),temp,_size*Kmer::getByteSize());
-       free(temp);
+    if (size == _size)
+      return;
+
+    // alloc / realloc memory
+    _setMemory(size);
+      
+    if(_begin.get() == NULL) {
+       throw;
+    }
+
+    if (size > _size) {
+       // zero fill remainder
+       char *start = ((char*)_begin.get()) + Kmer::getByteSize() * _size;
+       memset(start, 0, Kmer::getByteSize()*(size-_size));
     }
     _size = size;
   }
-    
 
+  void _setMemory(unsigned long size)
+  {
+    void *old = _begin.get();
+
+    boost::pool<> &pool = getPool( size );
+
+    void *memory = pool.malloc();
+    if(memory == NULL) {
+       throw;
+    }
+    if (old != NULL && _size > 0) {
+      // copy the old contents
+      memcpy(memory, old, (size < _size ? size : _size)*Kmer::getByteSize());
+      pool.free(old);
+    }
+    _begin = KmerPtr( memory );
+  }
+    
   KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length):
   _size(0),
   _begin(NULL)
@@ -278,10 +383,21 @@ public:
     build(twoBit,length);
   }
 
+  void build(TwoBitEncoding *twoBit, SequenceLengthType length)
+  {
+    SequenceLengthType numKmers = length - Kmer::getLength() + 1;
+    if (_size != numKmers)
+      throw;
 
-   void build(TwoBitEncoding *twoBit, SequenceLengthType length);
+    KmerArray &kmers = *this;
+    for(SequenceLengthType i=0; i < numKmers ; i+=4) {
+      TwoBitEncoding *ref = twoBit+i/4;
+      for (int bitShift=0; bitShift < 4 && i+bitShift < numKmers; bitShift++)
+        TwoBitSequence::shiftLeft(ref, &kmers[i+bitShift], Kmer::getTwoBitLength(), bitShift, bitShift != 0);
+    }
+  }
+
 };
-
 
 
 
@@ -292,6 +408,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.18  2009-10-26 17:50:54  regan
+// templated KmerArray; added boost pool allocation
+//
 // Revision 1.17  2009-10-24 00:32:46  regan
 // added bugs
 //
