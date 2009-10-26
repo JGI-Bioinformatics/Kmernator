@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.10 2009-10-23 23:22:41 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.11 2009-10-26 17:38:43 regan Exp $
 //
 
 #include <cstring>
@@ -205,10 +205,11 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLe
 
 }
 
-KmerSizer KmerSizer::singleton = KmerSizer(21,0);
-
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.11  2009-10-26 17:38:43  regan
+// moved KmerSizer to Kmer.h
+//
 // Revision 1.10  2009-10-23 23:22:41  regan
 // checkpoint
 //

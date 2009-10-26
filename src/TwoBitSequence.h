@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.9 2009-10-23 23:22:41 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.10 2009-10-26 17:38:42 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -45,59 +45,13 @@ public:
     }
 };
 
-class KmerSizer
-{
-private:
-    static KmerSizer singleton;
-
-private:
-   
-   KmerSizer(SequenceLengthType sequenceLength, unsigned long extraBytes) {
-     set(sequenceLength,extraBytes);
-  }
-
-
-  SequenceLengthType _sequenceLength;
-  unsigned long _extraBytes;
-  
-  SequenceLengthType _twoBitLength;
-  unsigned long _totalSize;
-public:
-
-  static void set(SequenceLengthType sequenceLength, unsigned long extraBytes=0)
-  {
-    singleton._sequenceLength = sequenceLength;
-    singleton._extraBytes = extraBytes;
-    singleton._twoBitLength =  TwoBitSequence::fastaLengthToTwoBitLength(singleton._sequenceLength);
-    singleton._totalSize = singleton._twoBitLength + extraBytes;
-  }
-
-  static SequenceLengthType getSequenceLength()  {
-    return singleton._sequenceLength;
-  }
-  static unsigned long getExtraBytes()  {
-    return singleton._extraBytes;
-  }
-  static SequenceLengthType getTwoBitLength()   { 
-    return singleton._twoBitLength;
-  }
-  static unsigned long getTotalSize()  {
-    return singleton._totalSize;
-  }
-//   int compare(const void *l, const void *r) const {
-//     return memcmp(l, r, _twoBitLength);
-//   }
-//   void *nextKmer(const void *kmer) const {
-//     return (TwoBitEncoding*)kmer + _totalSize;
-//   }
-//   void *kmerAt(const void *kmer, unsigned long idx) const {
-//     return (TwoBitEncoding*)kmer + _totalSize * idx;
-//  }
-};
 #endif
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.10  2009-10-26 17:38:42  regan
+// moved KmerSizer to Kmer.h
+//
 // Revision 1.9  2009-10-23 23:22:41  regan
 // checkpoint
 //
