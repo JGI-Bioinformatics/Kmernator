@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.10 2009-10-26 17:38:42 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.11 2009-10-26 23:03:05 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -9,6 +9,8 @@
 
 typedef unsigned int SequenceLengthType;
 typedef unsigned char TwoBitEncoding;
+typedef TwoBitEncoding *TwoBitEncodingPtr;
+
 
 typedef std::pair<char,SequenceLengthType>  BaseLocationType;
 typedef std::vector<BaseLocationType> BaseLocationVectorType;
@@ -49,6 +51,9 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.11  2009-10-26 23:03:05  regan
+// checkpoint
+//
 // Revision 1.10  2009-10-26 17:38:42  regan
 // moved KmerSizer to Kmer.h
 //
