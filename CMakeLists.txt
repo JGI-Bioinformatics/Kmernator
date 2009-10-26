@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.8 2009-10-23 21:14:25 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.9 2009-10-26 17:42:52 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -12,6 +12,8 @@ set(Boost_USE_SHARED_LIBS OFF)
 
 set(Boost_USE_MULTITHREADED ON)
 set(Booost_USE_SINGLETHREADED OFF)
+
+set(CMAKE_BUILD_TYPE Debug)
 
 find_package ( Boost 1.40.0 COMPONENTS regex mpi)
 if(Boost_FOUND)
@@ -42,6 +44,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.9  2009-10-26 17:42:52  regan
+# added debug build
+#
 # Revision 1.8  2009-10-23 21:14:25  regan
 # fixed test data
 #
