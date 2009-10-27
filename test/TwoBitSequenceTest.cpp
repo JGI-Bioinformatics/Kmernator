@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.4 2009-10-23 00:13:56 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.5 2009-10-27 22:13:43 cfurman Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -30,35 +30,7 @@ TwoBitEncoding in[1024],out[1024],test[1024];
 char fasta[1024];
 SequenceLengthType twoBitLength,sequenceLength;
 
-#define BIT_SHIFT(basesIn, targetBases, baseShift)\
-    TwoBitSequence::compressSequence(basesIn, in);\
-    out[0] = TwoBitSequence::bitShiftTable[((unsigned long)*((unsigned short*)in))*3ul+baseShift-1];\
-    TwoBitSequence::uncompressSequence(out,4,fasta);\
-    BOOST_CHECK_EQUAL(targetBases,fasta);
-
-void testBitShift()
-{
-   BIT_SHIFT("AAAAAAAA",fastaA,1);
-   BIT_SHIFT("AAAAAAAA",fastaA,2);
-   BIT_SHIFT("AAAAAAAA",fastaA,3);
-
-   BIT_SHIFT("CCCCCCCC",fastaC,1);
-   BIT_SHIFT("CCCCCCCC",fastaC,2);
-   BIT_SHIFT("CCCCCCCC",fastaC,3);
-      
-   BIT_SHIFT("GGGGGGGG",fastaG,1);
-   BIT_SHIFT("GGGGGGGG",fastaG,2);
-   BIT_SHIFT("GGGGGGGG",fastaG,3);
-
-   BIT_SHIFT("TTTTTTTT",fastaT,1);
-   BIT_SHIFT("TTTTTTTT",fastaT,2);
-   BIT_SHIFT("TTTTTTTT",fastaT,3);
-
-   BIT_SHIFT("ACGTACGT","CGTA",1);
-   BIT_SHIFT("ACGTACGT","GTAC",2);
-   BIT_SHIFT("ACGTACGT","TACG",3);
-   
-}
+ 
 
 //static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases);
 
@@ -238,7 +210,6 @@ void testMarkup()
 
 BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 {
-    testBitShift();
     testLeftShift();
 	testCompressUncompress();
     testMarkup();
@@ -247,6 +218,9 @@ BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 
 //
 // $Log: TwoBitSequenceTest.cpp,v $
+// Revision 1.5  2009-10-27 22:13:43  cfurman
+// removed bit shift table
+//
 // Revision 1.4  2009-10-23 00:13:56  cfurman
 // reverse complement now works
 //

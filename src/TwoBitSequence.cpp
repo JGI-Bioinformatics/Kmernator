@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.11 2009-10-26 17:38:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.12 2009-10-27 22:13:41 cfurman Exp $
 //
 
 #include <cstring>
@@ -20,28 +20,10 @@ static unsigned char compressBase(char base)
 TwoBitSequence TwoBitSequence::singleton = TwoBitSequence(); 
 TwoBitSequence::TwoBitSequence()
 {
-	TwoBitSequence::initBitMasks();
 	TwoBitSequence::initReverseComplementTable();
-	TwoBitSequence::initBitShiftTable();
 }
 
-/* initialize bitMasks[]
-  0: 00000001
-  1: 00000010
-  2: 00000100
-  3: 00001000
-  4: 00010000
-  5: 00100000
-  6: 01000000
-  7: 10000000
-  */
-TwoBitEncoding TwoBitSequence::bitMasks[8];
-void TwoBitSequence::initBitMasks()
-{
-  bitMasks[0] = 0x01;
-  for(int i=1; i<8; i++)
-    bitMasks[i] = bitMasks[i-1]<<1;
-}
+ 
 
 
 /* initialize reverse complement table
@@ -66,28 +48,7 @@ void TwoBitSequence::initReverseComplementTable()
 }
 
 
-/* initialize bit shift table
-   TwoBitSequence::bitShiftTable
-   
-   every two-byte possibility (65536) x 3 entries (excluding trivial non-bit-shift)
-   */
-TwoBitEncoding TwoBitSequence::bitShiftTable[256*256*3];
-void TwoBitSequence::initBitShiftTable()   
-{
-  unsigned short i=0;
-  do {
-  	const TwoBitEncoding *ptr = (TwoBitEncoding *) &i;
  
-//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = (i >> 6)&0xff;
-//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+1ul] = (i >> 4)&0xff;
-//     TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+2ul] = (i >> 2)&0xff;
-
-  	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+0ul] = ((*ptr)<<2 & 0xfc) | ((*(ptr+1))>>6 & 0x03);
-  	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+1ul] = ((*ptr)<<4 & 0xf0) | ((*(ptr+1))>>4 & 0x0f);
-  	TwoBitSequence::bitShiftTable[(unsigned long)i*3ul+2ul] = ((*ptr)<<6 & 0xc0) | ((*(ptr+1))>>2 & 0x3f); 
- 
-  } while(++i != 0);
-}
 
 BaseLocationVectorType TwoBitSequence::compressSequence(const char *bases,  TwoBitEncoding *out)
 {
@@ -167,11 +128,7 @@ void TwoBitSequence::reverseComplement(const TwoBitEncoding *in, TwoBitEncoding 
   
 }
 
-#define BIT_SHIFT(basesIn, targetBases, baseShift)\
-    TwoBitSequence::compressSequence(basesIn, in);\
-    out[0] = TwoBitSequence::bitShiftTable[((unsigned long)*((unsigned short*)in))*3ul+baseShift-1];\
-    TwoBitSequence::uncompressSequence(out,4,fasta);\
-    BOOST_CHECK_EQUAL(targetBases,fasta);
+ 
 
 
 void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases, bool hasExtraByte)
@@ -196,8 +153,9 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLe
     else
        buffer = *(--in);
      
+    const int shift = (8-shiftAmountInBases*2); 
     for (SequenceLengthType i = 0; i < twoBitLength; i++) {
-       TwoBitEncoding byte = bitShiftTable[(unsigned long)buffer*3ul+shiftAmountInBases-1];
+       TwoBitEncoding byte = ((buffer >> 8) | (buffer << 8)) >> shift; 
        if (i < twoBitLength -1)
           buffer = *((unsigned short *)--in);
        *--out = byte;
@@ -207,6 +165,9 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLe
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.12  2009-10-27 22:13:41  cfurman
+// removed bit shift table
+//
 // Revision 1.11  2009-10-26 17:38:43  regan
 // moved KmerSizer to Kmer.h
 //

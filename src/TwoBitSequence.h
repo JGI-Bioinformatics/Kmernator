@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.11 2009-10-26 23:03:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.12 2009-10-27 22:13:41 cfurman Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -21,14 +21,14 @@ private:
    TwoBitSequence();
    static TwoBitSequence singleton;
    
-   static void initBitMasks();
+ 
    static void initReverseComplementTable();
-   static void initBitShiftTable();
+ 
 
 public:
    static TwoBitEncoding bitMasks[8];
    static TwoBitEncoding reverseComplementTable[256];
-   static TwoBitEncoding bitShiftTable[256*256*3];
+ 
    
 public:
    static BaseLocationVectorType compressSequence(const char *bases,  TwoBitEncoding *out);
@@ -51,6 +51,9 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.12  2009-10-27 22:13:41  cfurman
+// removed bit shift table
+//
 // Revision 1.11  2009-10-26 23:03:05  regan
 // checkpoint
 //
