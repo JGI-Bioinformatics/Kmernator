@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.10 2009-10-26 23:04:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.11 2009-10-27 07:16:11 regan Exp $
 //
  
 
@@ -225,8 +225,8 @@ void testKmerArray(SequenceLengthType size)
   kmerBytesJump = (size+3) /4;
 	
   std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
-  KmerArray<WeakKmerTag>::releasePools();
-  KmerArray<SolidKmerTag>::releasePools();
+  KmerArray<WeakKmerTag>::purgePools();
+  KmerArray<SolidKmerTag>::purgePools();
   SET_KMERS(A.c_str(), B.c_str(), C.c_str());
   KmerSizer::set(size);
   
@@ -234,6 +234,7 @@ void testKmerArray(SequenceLengthType size)
   KmerArray<WeakKmerTag> kmersA(twoBit1, A.length());
   KmerArray<SolidKmerTag> kmersB(twoBit2, B.length());
   KmerArray<> kmersC(twoBit3, C.length());
+  KmerArray<> *kmersD = new KmerArray<>(twoBit3, C.length());
   
   for (int i=0; i< A.length() - size +1; i++) {
     BOOST_CHECK_EQUAL( kmersA[i].toFasta(), SS2(A,i,size));
@@ -244,6 +245,10 @@ void testKmerArray(SequenceLengthType size)
   for (int i=0; i< C.length() - size +1; i++) {
     BOOST_CHECK_EQUAL( kmersC[i].toFasta(), SS2(C,i,size));
   }
+  for (int i=0; i< C.length() - size +1; i++) {
+    BOOST_CHECK_EQUAL( (*kmersD)[i].toFasta(), SS2(C,i,size));
+  }
+  delete kmersD;
   
 }
 
@@ -314,6 +319,10 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.11  2009-10-27 07:16:11  regan
+// checkpoint
+// defined KmerMap and KmerArray lookup methods
+//
 // Revision 1.10  2009-10-26 23:04:35  regan
 // checkpoint make Kmer private inner class
 //
