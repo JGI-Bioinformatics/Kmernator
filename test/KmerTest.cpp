@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.11 2009-10-27 07:16:11 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.12 2009-10-27 19:02:08 regan Exp $
 //
  
 
@@ -227,6 +227,7 @@ void testKmerArray(SequenceLengthType size)
   std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
   KmerArray<WeakKmerTag>::purgePools();
   KmerArray<SolidKmerTag>::purgePools();
+  KmerArray<float>::purgePools();
   SET_KMERS(A.c_str(), B.c_str(), C.c_str());
   KmerSizer::set(size);
   
@@ -249,6 +250,18 @@ void testKmerArray(SequenceLengthType size)
     BOOST_CHECK_EQUAL( (*kmersD)[i].toFasta(), SS2(C,i,size));
   }
   delete kmersD;
+
+  KmerArray<float> kmersFloat(twoBit3, C.length());
+  for (int i=0; i<kmersFloat.size() ; i++) {
+  	 float *valPtr = kmersFloat.valueAt(i);
+  	 *valPtr = i*2.0;
+  }
+  for (int i=0; i<kmersFloat.size() ; i++) {
+  	 float *valPtr = kmersFloat.valueAt(i);
+  	 float val = i*2.0;
+  	 BOOST_CHECK_EQUAL( val, *valPtr );
+  	 BOOST_CHECK_EQUAL( kmersC[i].toFasta(), kmersFloat[i].toFasta() );
+  }
   
 }
 
@@ -319,6 +332,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.12  2009-10-27 19:02:08  regan
+// added tests
+//
 // Revision 1.11  2009-10-27 07:16:11  regan
 // checkpoint
 // defined KmerMap and KmerArray lookup methods
