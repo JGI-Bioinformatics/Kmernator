@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.20 2009-10-27 07:16:09 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.21 2009-10-28 00:00:41 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -68,7 +68,7 @@ private:
 	   
     private:
        static boost::hash<std::string> &getHasher() { static boost::hash<std::string> hasher; return hasher; }
-	   //Kmer(); // never construct, just use as cast
+	   Kmer(); // never construct, just use as cast
 	
 	#ifdef STRICT_MEM_CHECK
 	   TwoBitEncoding _someData[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
@@ -181,16 +181,16 @@ public:
    _me(NULL)
    {  }
    
-   KmerPtr(Kmer &in):
+/*    KmerPtr(Kmer &in):
    _me((&in)._me)
    { }
-
+ */
    KmerPtr( void *in):
    _me((Kmer *)in)
    { }
 
    void *get() const  { return _me; };
-   void *operator*() const  { return _me; }   
+   Kmer &operator*() const  { return *_me; }   
    Kmer *operator->() const { return _me;  } 
     
    int compare(const KmerPtr &other) {
@@ -218,39 +218,14 @@ public:
    KmerPtr &operator--()           { return *this -= 1;}
    KmerPtr operator--(int unused)  { KmerPtr saved = *this; --(*this); return saved; }
 
-   const KmerPtr operator[](unsigned long index) const { return (*this + index); }
-   KmerPtr       operator[](unsigned long index)       { return (*this + index); }
+   const Kmer &operator[](unsigned long index) const { return *(*this + index); }
+   Kmer       &operator[](unsigned long index)       { return *(*this + index); }
    
    // cast operator
    operator VoidPtr() { return (VoidPtr)_me ; }
    
    std::string toFasta() const { return _me->toFasta(); }
 };
-
-   
-/* class KmerInstance : public KmerPtr
-{
-
-private:
-   TwoBitEncoding _somedata[1024];
-public:
-
-   KmerInstance()
-   {
-   	 if ((void*)this != (void*) _somedata)
-   	   throw;
-   }
-   KmerInstance &operator=(const KmerPtr &other)
-   {
-   	  if (this == &other)
-   	    return *this;
-   	    
-      memcpy(_data(), other._data(), getTwoBitLength());
-      return *this;
-   }
-   KmerInstance &operator=(const KmerPtr &other);
-};
- */
 
 class SolidKmerTag {};
 class WeakKmerTag {};
@@ -290,10 +265,14 @@ public:
      return *(pools[poolByteSize]);
   }
 
+  // frees ALL memory that EVERY pool has ever allocated
+  // Use at end of program or before calling KmerSizer::set()...
   static void purgePools() {
   	 SizePools &pools = getPools();
   	 pools.clear();
   }
+  // frees unused memory in existing pools
+  // use anytime you want
   static void releasePools() {
   	 SizePools &pools = getPools();
   	 for(SizePools::iterator it = pools.begin() ; it != pools.end(); it++)
@@ -321,6 +300,9 @@ public:
   	  return *this;
     reset();
     resize(other.size());
+    if (_begin.get() == NULL)
+       throw;
+    
     memcpy(_begin.get(),other._begin.get(),_size*getElementByteSize());
     return *this;
   }
@@ -338,12 +320,12 @@ public:
     return _begin + index;
   }
   
-  ValueType *valueAt(unsigned long index) const
+  ValueType *getValueStart() const {
+  	return (ValueType*) (_begin + _size ).get();
+  }
+  ValueType &valueAt(unsigned long index) const
   {
-  	if (sizeof(ValueType) > 0 && _size > 0)
-      return ((ValueType*) (_begin + _size ).get()) + index;
-    else
-      return NULL;
+  	return *( getValueStart() + index );
   }
 
   const KmerPtr get(unsigned long index) const
@@ -359,10 +341,12 @@ public:
   
   void reset()
   {
-    void *test = (void *)_begin.get();
+ /*    void *test = (void *)(_begin.get());
     if (test != NULL) {
-      getPool( size() * getElementByteSize() ).free(test); 
-    }
+      //getPool( size() * getElementByteSize() ).free(test); 
+      free(test);
+    } */
+    resize(0);
     _begin = NULL;
     _size = 0;
   }
@@ -384,35 +368,45 @@ public:
        // zero fill remainder
        char *start = (char*) (_begin + oldSize).get();
        memset(start, 0, KmerSizer::getByteSize()*(size-oldSize));
-       if (sizeof(ValueType) > 0) {
-         start = (char*) (valueAt(0) + oldSize);
-         memset(start, 0, sizeof(ValueType) * (size - oldSize));
-       }
+       start = (char*) (getValueStart() + oldSize);
+       memset(start, 0, sizeof(ValueType) * (size - oldSize));
     }
+    
   }
 
   void _setMemory(unsigned long size)
   {
     void *old = _begin.get();
 
-    boost::pool<> &newPool = getPool( size * getElementByteSize() );
+    //boost::pool<> &newPool = getPool( size * getElementByteSize() );
 
-    void *memory = newPool.malloc();
-    if(memory == NULL) {
-       throw;
+    //void *memory = newPool.malloc();
+    void *memory = NULL;
+    if (size == 0 ) {
+    	memory = malloc( size * getElementByteSize() );
+        if(memory == NULL) {
+           throw;
+        }        
     }
     unsigned long oldSize = _size;
-    ValueType *oldValue = valueAt(0);
+    unsigned long lesserSize = std::min(size,oldSize);
+    ValueType *oldValue;
+    if (oldSize > 0) {
+    	oldValue = getValueStart();
+    }
     _begin = KmerPtr( memory );
     _size = size;
      
-    if (old != NULL && _size > 0) {      
+    if (old != NULL && oldValue != NULL && lesserSize > 0) {      
       // copy the old contents
-      memcpy(memory, old, (size < oldSize ? size : oldSize)*KmerSizer::getByteSize());
-      if (sizeof(ValueType)>0) 
-        memcpy(valueAt(0), oldValue, (size < oldSize ? size : oldSize)*sizeof(ValueType));
-      boost::pool<> &oldPool = getPool( _size * getElementByteSize() );
-      oldPool.free(old);
+      memcpy(memory, old, lesserSize*KmerSizer::getByteSize());
+      memcpy(getValueStart(), oldValue, lesserSize*sizeof(ValueType));
+    }
+    if (old != NULL) {
+      // free old memory
+      //boost::pool<> &oldPool = getPool( oldSize * getElementByteSize() );
+      //oldPool.free(old);
+      free(old);
     }
   }
     
@@ -441,14 +435,14 @@ public:
   
   unsigned long find(const KmerPtr &target) {
     for(unsigned long i=0; i<_size; i++)
-      if (target.compare(_begin[i]) == 0)
+      if (target->compare(_begin[i]) == 0)
         return i;
     return -1;
   }
   unsigned long insert(const KmerPtr &target) {
    	unsigned long idx = size();
    	resize(idx + 1);
-  	_begin[idx] = target;
+  	_begin[idx] = *target;
   	return idx; 
   }
   void erase(unsigned long idx) {
@@ -463,9 +457,9 @@ public:
   	  
   	get(idx1)->swap(get(idx2));
   	if (sizeof(ValueType) > 0) {
-  	  ValueType tmp = *valueAt(idx1);
-  	  *valueAt(idx1) = *valueAt(idx2);
-  	  *valueAt(idx2) = tmp; 
+  	  ValueType tmp = valueAt(idx1);
+  	  valueAt(idx1) = valueAt(idx2);
+  	  valueAt(idx2) = tmp; 
   	}
   }
 
@@ -509,8 +503,7 @@ public:
    	    bucketPtr = &getBucket(key);
    	    
    	  unsigned long idx = bucketPtr->insert(key);
-   	  ValueType *val = bucketPtr->valueAt(idx);
-   	  *val = value;
+   	  bucketPtr->valueAt(idx) = value;
 
    }
    
@@ -528,7 +521,7 @@ public:
      if (idx == -1)
        return insert(key, Value(), &bucket);
      else 
-       return *( bucket.valueAt(idx) );
+       return bucket.valueAt(idx);
    }
     
 
@@ -541,6 +534,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.21  2009-10-28 00:00:41  regan
+// added more bugs
+//
 // Revision 1.20  2009-10-27 07:16:09  regan
 // checkpoint
 // defined KmerMap and KmerArray lookup methods
