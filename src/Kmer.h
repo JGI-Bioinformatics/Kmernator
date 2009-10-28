@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.23 2009-10-28 18:42:59 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.24 2009-10-28 18:50:57 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -109,7 +109,11 @@ private:
        {
          return KmerPtr(_data());
 	   }
-	
+
+       Kmer *get() {
+         return this;
+       }
+       
 	   bool operator ==(const Kmer &other) const
 	   {
 	      return compare(other) == 0;
@@ -326,17 +330,17 @@ public:
     return *this;
   }
 
-  const KmerPtr operator[](unsigned long index) const
+  const KmerPtr::Kmer &operator[](unsigned long index) const
   {
     if (index >= _size)
        throw new std::invalid_argument("attempt to access index greater than size"); 
-    return _begin + index;
+    return *(_begin + index);
   }
-  KmerPtr operator[](unsigned long index)
+  KmerPtr::Kmer &operator[](unsigned long index)
   {
     if (index >= _size)
        throw new std::invalid_argument("attempt to access index greater than size"); 
-    return _begin + index;
+    return *(_begin + index);
   }
   
   ValueType *getValueStart() const {
@@ -354,9 +358,9 @@ public:
     return *( getValueStart() + index );
   }
 
-  const KmerPtr get(unsigned long index) const
+  const KmerPtr::Kmer &get(unsigned long index) const
   {
-    return _begin + index;
+    return *(_begin + index);
   }
 
   unsigned int size() const { return _size; }
@@ -553,6 +557,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.24  2009-10-28 18:50:57  regan
+// made KmerArray behave properly and not like a KmerPtrArray
+//
 // Revision 1.23  2009-10-28 18:42:59  regan
 // added debug flags, fixed tests, bugs
 //
