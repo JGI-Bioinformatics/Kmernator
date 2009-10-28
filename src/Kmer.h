@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.21 2009-10-28 00:00:41 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.22 2009-10-28 02:29:55 cfurman Exp $
 //
 
 #ifndef _KMER_H
@@ -285,10 +285,24 @@ public:
    _size(0), _begin(NULL)
   {
     resize(size);
-    if (_begin.get() == NULL)
-       throw;
+//     if (_begin.get() == NULL)
+//        throw;
   }
 
+  KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length):
+  _size(0),
+  _begin(NULL)
+  {
+    SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
+    resize(numKmers);
+    build(twoBit,length);
+  }
+
+   KmerArray(const KmerArray &copy)
+   {
+      *this = copy;
+   }
+   
   ~KmerArray()
   {
      reset();
@@ -325,7 +339,11 @@ public:
   }
   ValueType &valueAt(unsigned long index) const
   {
-  	return *( getValueStart() + index );
+    if (index >= _size)
+    {
+      throw ;
+  	}
+    return *( getValueStart() + index );
   }
 
   const KmerPtr get(unsigned long index) const
@@ -341,12 +359,12 @@ public:
   
   void reset()
   {
- /*    void *test = (void *)(_begin.get());
+    void *test = (void *)(_begin.get());
     if (test != NULL) {
       //getPool( size() * getElementByteSize() ).free(test); 
       free(test);
-    } */
-    resize(0);
+    } 
+   // resize(0);
     _begin = NULL;
     _size = 0;
   }
@@ -382,7 +400,7 @@ public:
 
     //void *memory = newPool.malloc();
     void *memory = NULL;
-    if (size == 0 ) {
+    if (size != 0 ) {
     	memory = malloc( size * getElementByteSize() );
         if(memory == NULL) {
            throw;
@@ -397,7 +415,7 @@ public:
     _begin = KmerPtr( memory );
     _size = size;
      
-    if (old != NULL && oldValue != NULL && lesserSize > 0) {      
+    if (old != NULL && oldValue != NULL && lesserSize > 0) {
       // copy the old contents
       memcpy(memory, old, lesserSize*KmerSizer::getByteSize());
       memcpy(getValueStart(), oldValue, lesserSize*sizeof(ValueType));
@@ -410,14 +428,7 @@ public:
     }
   }
     
-  KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length):
-  _size(0),
-  _begin(NULL)
-  {
-    SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
-    resize(numKmers);
-    build(twoBit,length);
-  }
+
 
   void build(TwoBitEncoding *twoBit, SequenceLengthType length)
   {
@@ -534,6 +545,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.22  2009-10-28 02:29:55  cfurman
+// fixed KmerArray  bugs
+//
 // Revision 1.21  2009-10-28 00:00:41  regan
 // added more bugs
 //
