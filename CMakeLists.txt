@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.9 2009-10-26 17:42:52 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.10 2009-10-28 18:42:57 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -7,13 +7,21 @@ project( KoMer )
 cmake_minimum_required(VERSION 2.6)
 enable_testing()
 
+IF(NOT CMAKE_BUILD_TYPE)
+  SET(CMAKE_BUILD_TYPE Debug CACHE STRING
+      "Choose the type of build, options are: None Debug Release."
+      FORCE)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+
+set(CMAKE_BUILD_TYPE Debug)
+enable_language(CXX)
+set(CMAKE_CXX_FLAGS -g)
+
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
 
 set(Boost_USE_MULTITHREADED ON)
 set(Booost_USE_SINGLETHREADED OFF)
-
-set(CMAKE_BUILD_TYPE Debug)
 
 find_package ( Boost 1.40.0 COMPONENTS regex mpi)
 if(Boost_FOUND)
@@ -44,6 +52,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.10  2009-10-28 18:42:57  regan
+# added debug flags, fixed tests, bugs
+#
 # Revision 1.9  2009-10-26 17:42:52  regan
 # added debug build
 #

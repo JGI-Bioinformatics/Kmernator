@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.22 2009-10-28 02:29:55 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.23 2009-10-28 18:42:59 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -7,9 +7,12 @@
 #include <cstring>
 #include <cstdlib>
 #include <vector>
+#include <stdexcept>
+
 #include <boost/unordered_map.hpp>
 #include <boost/pool/pool.hpp>
 #include <boost/functional/hash.hpp>
+
 #include "TwoBitSequence.h"
 
 #ifndef MAX_KMER_SIZE
@@ -83,6 +86,10 @@ private:
 	#endif
 	
 	public:
+	   
+	   Kmer(const Kmer &copy) {
+	   	  *this = copy;
+	   }
 	   
 	   int compare(const Kmer &other) const
 	   {
@@ -285,8 +292,6 @@ public:
    _size(0), _begin(NULL)
   {
     resize(size);
-//     if (_begin.get() == NULL)
-//        throw;
   }
 
   KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length):
@@ -298,10 +303,10 @@ public:
     build(twoBit,length);
   }
 
-   KmerArray(const KmerArray &copy)
-   {
-      *this = copy;
-   }
+  KmerArray(const KmerArray &copy)
+  {
+    *this = copy;
+  }
    
   ~KmerArray()
   {
@@ -315,7 +320,7 @@ public:
     reset();
     resize(other.size());
     if (_begin.get() == NULL)
-       throw;
+       throw new std::runtime_error("Could not allocate memory");
     
     memcpy(_begin.get(),other._begin.get(),_size*getElementByteSize());
     return *this;
@@ -324,24 +329,27 @@ public:
   const KmerPtr operator[](unsigned long index) const
   {
     if (index >= _size)
-       throw; 
+       throw new std::invalid_argument("attempt to access index greater than size"); 
     return _begin + index;
   }
   KmerPtr operator[](unsigned long index)
   {
     if (index >= _size)
-       throw; 
+       throw new std::invalid_argument("attempt to access index greater than size"); 
     return _begin + index;
   }
   
   ValueType *getValueStart() const {
-  	return (ValueType*) (_begin + _size ).get();
+  	if (size() > 0)
+  	  return (ValueType*) (_begin + size() ).get();
+  	else
+  	  return NULL;
   }
   ValueType &valueAt(unsigned long index) const
   {
     if (index >= _size)
     {
-      throw ;
+      throw std::invalid_argument("attempt to access index greater than size");
   	}
     return *( getValueStart() + index );
   }
@@ -364,7 +372,6 @@ public:
       //getPool( size() * getElementByteSize() ).free(test); 
       free(test);
     } 
-   // resize(0);
     _begin = NULL;
     _size = 0;
   }
@@ -379,7 +386,7 @@ public:
     _setMemory(size);
       
     if(_begin.get() == NULL) {
-       throw;
+       throw new std::runtime_error("Could not allocate memory");
     }
 
     if (size > oldSize) {
@@ -395,15 +402,16 @@ public:
   void _setMemory(unsigned long size)
   {
     void *old = _begin.get();
-
-    //boost::pool<> &newPool = getPool( size * getElementByteSize() );
-
-    //void *memory = newPool.malloc();
     void *memory = NULL;
+    
     if (size != 0 ) {
+    	// allocate new memory
+        //boost::pool<> &newPool = getPool( size * getElementByteSize() );
+        //memory = newPool.malloc();
     	memory = malloc( size * getElementByteSize() );
+
         if(memory == NULL) {
-           throw;
+           throw new std::runtime_error("Could not allocate memory");
         }        
     }
     unsigned long oldSize = _size;
@@ -415,7 +423,7 @@ public:
     _begin = KmerPtr( memory );
     _size = size;
      
-    if (old != NULL && oldValue != NULL && lesserSize > 0) {
+    if (old != NULL && memory != NULL && oldValue != NULL && lesserSize > 0) {
       // copy the old contents
       memcpy(memory, old, lesserSize*KmerSizer::getByteSize());
       memcpy(getValueStart(), oldValue, lesserSize*sizeof(ValueType));
@@ -434,7 +442,7 @@ public:
   {
     SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
     if (_size != numKmers)
-      throw;
+      throw new std::invalid_argument("attempt to build an incorrectly sized KmerArray"); ;
 
     KmerArray &kmers = *this;
     for(SequenceLengthType i=0; i < numKmers ; i+=4) {
@@ -464,7 +472,7 @@ public:
   	if (idx1 == idx2)
   	  return;
   	if (idx1 >= size() || idx2 >= size())
-  	  throw;
+  	  throw new std::invalid_argument("attempt to access index greater than size");
   	  
   	get(idx1)->swap(get(idx2));
   	if (sizeof(ValueType) > 0) {
@@ -545,6 +553,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.23  2009-10-28 18:42:59  regan
+// added debug flags, fixed tests, bugs
+//
 // Revision 1.22  2009-10-28 02:29:55  cfurman
 // fixed KmerArray  bugs
 //

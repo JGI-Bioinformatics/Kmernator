@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.14 2009-10-28 02:29:57 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.15 2009-10-28 18:43:02 regan Exp $
 //
  
 
@@ -226,7 +226,8 @@ void testKmerArray(SequenceLengthType size)
 {
 //   kmerBytesJump = (size+3) /4;
 // 	
-   std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+  BOOST_MESSAGE( size );
+  std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
   KmerArray<WeakKmerTag>::purgePools();
   KmerArray<SolidKmerTag>::purgePools();
   KmerArray<float>::purgePools();
@@ -278,6 +279,7 @@ void testKmerArray(SequenceLengthType size)
   	 BOOST_CHECK_EQUAL( valRef2, valRef );
   	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
   }
+  
   // test resize and []
   unsigned long oldSize = copy.size();
   copy.resize( oldSize+1 );
@@ -288,9 +290,11 @@ void testKmerArray(SequenceLengthType size)
   	 BOOST_CHECK_EQUAL( valRef2, valRef );
   	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
   }
-  copy[oldSize] = kmersFloat[0];
-  //cout << "oldSize =" << oldSize << " " << kmersFloat.size() << endl ;
-  //kmersFloat.valueAt(oldSize) = oldSize * 2.0;
+  
+  *copy[oldSize] = *kmersFloat[0];
+  BOOST_CHECK_EQUAL( kmersFloat[0].toFasta(), copy[oldSize].toFasta() );
+  copy.valueAt(oldSize) = oldSize * 2.0;
+  BOOST_CHECK_EQUAL( oldSize*2.0, copy.valueAt(oldSize) );
 
   for (int i=0; i<kmersFloat.size() ; i++) {
   	 float &valRef = copy.valueAt(i);
@@ -298,9 +302,9 @@ void testKmerArray(SequenceLengthType size)
   	 BOOST_CHECK_EQUAL( valRef2, valRef );
   	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
   }
- // BOOST_CHECK_EQUAL( kmersFloat[0].toFasta(), copy[oldSize].toFasta() );
- // BOOST_CHECK_EQUAL( oldSize*2.0, kmersFloat.valueAt(oldSize) );
-
+  BOOST_CHECK_EQUAL( kmersFloat[0].toFasta(), copy[oldSize].toFasta() );
+  BOOST_CHECK_EQUAL( oldSize*2.0, copy.valueAt(oldSize) );
+  
 
 
    BOOST_CHECK_EQUAL( 1, sizeof(WeakKmerTag));
@@ -394,6 +398,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.15  2009-10-28 18:43:02  regan
+// added debug flags, fixed tests, bugs
+//
 // Revision 1.14  2009-10-28 02:29:57  cfurman
 // fixed KmerArray  bugs
 //

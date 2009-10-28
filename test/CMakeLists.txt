@@ -1,13 +1,10 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.9 2009-10-28 00:04:28 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.10 2009-10-28 18:43:02 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
 
-project( KoMer )
 cmake_minimum_required(VERSION 2.6)
 enable_testing()
-set(CMAKE_BUILD_TYPE Debug)
-
 
 add_executable( TwoBitSequenceTest TwoBitSequenceTest )
 target_link_libraries( TwoBitSequenceTest TwoBitSequence
@@ -39,6 +36,9 @@ add_test(ktest2 ktest2 10.fastq)
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.10  2009-10-28 18:43:02  regan
+# added debug flags, fixed tests, bugs
+#
 # Revision 1.9  2009-10-28 00:04:28  regan
 # added more bugs
 #
