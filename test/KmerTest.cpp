@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.17 2009-10-29 07:03:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.18 2009-10-29 18:11:44 cfurman Exp $
 //
  
 
@@ -407,11 +407,11 @@ void testKmerMap(SequenceLengthType size)
   
   for(int i=0; i< kmersC.size(); i++) {
   	kmerF[ kmersC[i] ] = i*2.0;
-  	kmerP[ kmersC[i] ] = Pair(i, i*2.0);
+  	kmerP[ kmersC[i] ] = Pair(i, i*3.0);
   	
   	BOOST_CHECK_EQUAL( i*2.0, kmerF[ kmersC[i] ] );
   	BOOST_CHECK_EQUAL( i,     kmerP[ kmersC[i] ].first );
-  	BOOST_CHECK_EQUAL( i,     kmerP[ kmersC[i] ].second );
+  	BOOST_CHECK_EQUAL( i*3.0, kmerP[ kmersC[i] ].second );
   }
   kmerF.clear();
   kmerP.clear();
@@ -426,11 +426,11 @@ void testKmerMap(SequenceLengthType size)
   	if ( ! kmerF.exists( kmersC[i] ) ) 
   	  kmerF[ kmersC[i] ] = i*2.0;
   	if ( ! kmerP.exists( kmersC[i] ) )
-  	  kmerP[ kmersC[i] ] = Pair(i, i*2.0);
+  	  kmerP[ kmersC[i] ] = Pair(i, i*3.0);
   	
   	BOOST_CHECK( i*2.0 >= kmerF[ kmersC[i] ] );
   	BOOST_CHECK( i     >= kmerP[ kmersC[i] ].first );
-  	BOOST_CHECK( i     >= kmerP[ kmersC[i] ].second );
+  	BOOST_CHECK( i*3.0 >= kmerP[ kmersC[i] ].second );
   }
 }
 
@@ -512,6 +512,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.18  2009-10-29 18:11:44  cfurman
+// fixed testing bugs
+//
 // Revision 1.17  2009-10-29 07:03:35  regan
 // fixed some bugs , added others
 // KmerArray is working, *Sorted methods are untested
