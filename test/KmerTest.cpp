@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.21 2009-10-29 23:04:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.22 2009-10-29 23:30:03 regan Exp $
 //
  
 
@@ -242,6 +242,24 @@ void testKmerArray(SequenceLengthType size)
   KmerArray<SolidKmerTag> kmersB(twoBit2, B.length());
   KmerArray<> kmersC(twoBit3, C.length());
   
+  if (size == 1) {
+  	for (int i=0; i<kmersC.size(); i++) {
+  	  char *ch = (char*)kmersC[i].get();
+  	  BOOST_CHECK_EQUAL( *ch & 0x3f, 0x00 ); 
+  	}
+  }
+  if (size == 2) {
+  	for (int i=0; i<kmersC.size(); i++) {
+  	  char *ch = (char*)kmersC[i].get();
+  	  BOOST_CHECK_EQUAL( *ch & 0x0f, 0x00 ); 
+  	}
+  }
+  if (size == 3) {
+  	for (int i=0; i<kmersC.size(); i++) {
+  	  char *ch = (char*)kmersC[i].get();
+  	  BOOST_CHECK_EQUAL( *ch & 0x03, 0x00 ); 
+  	}
+  }
   KmerArray<> *kmersD = new KmerArray<>(twoBit3, C.length());
 
   for (int i=0; i< A.length() - size +1; i++) {
@@ -408,22 +426,20 @@ void testKmerMap(SequenceLengthType size)
   KmerMap< Pair > kmerP(8);
   
   for(int i=0; i< kmersC.size(); i++) {
-  	if (i == 28)
-  	  BOOST_MESSAGE( "STOP" );
   	kmerF[ kmersC[i] ] = i*2.0;
- // 	kmerP[ kmersC[i] ] = Pair(i, i*3.0);
+  	kmerP[ kmersC[i] ] = Pair(i, i*3.0);
   	BOOST_MESSAGE(kmersC[i].toFasta());
   	BOOST_CHECK_EQUAL( i*2.0, kmerF[ kmersC[i] ] );
- // 	BOOST_CHECK_EQUAL( i,     kmerP[ kmersC[i] ].first );
- // 	BOOST_CHECK_EQUAL( i*3.0, kmerP[ kmersC[i] ].second );
+  	BOOST_CHECK_EQUAL( i,     kmerP[ kmersC[i] ].first );
+  	BOOST_CHECK_EQUAL( i*3.0, kmerP[ kmersC[i] ].second );
   	
-  BOOST_MESSAGE ( kmerF.toString() );
+    BOOST_MESSAGE ( kmerF.toString() );
  
-  //	BOOST_MESSAGE( kmerP.toString() );
+ 
   }
   
   kmerF.clear();
-  //kmerP.clear()
+  kmerP.clear();
   BOOST_MESSAGE ("Testing exists()");
   for(int i=0; i< kmersC.size(); i++) {
   	BOOST_CHECK( ! kmerF.exists( kmersC[i] ) );
@@ -507,7 +523,7 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
   
   testKmerNewDelete();
   
-  //testKmerMap(1);
+  testKmerMap(1);
   testKmerMap(2);
   testKmerMap(3);
   testKmerMap(4);
@@ -522,6 +538,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.22  2009-10-29 23:30:03  regan
+// checkpoint
+//
 // Revision 1.21  2009-10-29 23:04:51  regan
 // works
 //

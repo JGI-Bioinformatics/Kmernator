@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.29 2009-10-29 23:04:49 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.30 2009-10-29 23:30:01 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -183,8 +183,8 @@ private:
 	   long hash() const
 	   {
     // NOTE : Fix remainder bit effect!
-	   //	  return getHasher()(std::string((const char *)getTwoBitSequence(), getTwoBitLength()));
-       return 1;// getHasher()(toFasta());
+	     return getHasher()(std::string((const char *)getTwoBitSequence(), getTwoBitLength()));
+         //return  getHasher()(toFasta());
 	   }
   };
    
@@ -509,8 +509,15 @@ public:
     KmerArray &kmers = *this;
     for(SequenceLengthType i=0; i < numKmers ; i+=4) {
       TwoBitEncoding *ref = twoBit+i/4;
-      for (int bitShift=0; bitShift < 4 && i+bitShift < numKmers; bitShift++)
+      for (int bitShift=0; bitShift < 4 && i+bitShift < numKmers; bitShift++) {
         TwoBitSequence::shiftLeft(ref, kmers[i+bitShift].get(), KmerSizer::getTwoBitLength(), bitShift, bitShift != 0);
+        TwoBitEncoding *lastByte = ref+KmerSizer::getTwoBitLength()-1;
+        switch (KmerSizer::getSequenceLength() % 4) {
+          case 1: *lastByte &= 0xc0; break;
+          case 2: *lastByte &= 0xf0; break;
+          case 3: *lastByte &= 0xfc; break;
+        }
+      }
     }
   }
   unsigned long find(const KmerPtr &target) const {
@@ -695,8 +702,15 @@ public:
      else 
        return insert(key, Value(), &bucket);       
    }
-    
-  std::string toString() {
+   
+   unsigned long size() const {
+   	unsigned long size = 0;
+   	for(int i = 0; i<_buckets.size() ; i++)
+   	  size += _buckets[i].size();
+   	return size;
+   } 
+   
+   std::string toString() {
   	std::stringstream ss;
   	ss << this << "[";
   	for(unsigned long idx=0; idx<_buckets.size(); idx++) {
@@ -715,6 +729,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.30  2009-10-29 23:30:01  regan
+// checkpoint
+//
 // Revision 1.29  2009-10-29 23:04:49  regan
 // works
 //
