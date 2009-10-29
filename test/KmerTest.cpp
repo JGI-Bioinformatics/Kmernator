@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.18 2009-10-29 18:11:44 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.19 2009-10-29 19:01:35 regan Exp $
 //
  
 
@@ -392,7 +392,7 @@ void testKmerArray(SequenceLengthType size)
 
 void testKmerMap(SequenceLengthType size)
 {
-  std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+  std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
   SET_KMERS(A.c_str(), B.c_str(), C.c_str());
   KmerSizer::set(size);
 
@@ -412,6 +412,9 @@ void testKmerMap(SequenceLengthType size)
   	BOOST_CHECK_EQUAL( i*2.0, kmerF[ kmersC[i] ] );
   	BOOST_CHECK_EQUAL( i,     kmerP[ kmersC[i] ].first );
   	BOOST_CHECK_EQUAL( i*3.0, kmerP[ kmersC[i] ].second );
+  	
+  	BOOST_MESSAGE( kmerF.toString() );
+  	BOOST_MESSAGE( kmerP.toString() );
   }
   kmerF.clear();
   kmerP.clear();
@@ -512,6 +515,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.19  2009-10-29 19:01:35  regan
+// checkpoint
+//
 // Revision 1.18  2009-10-29 18:11:44  cfurman
 // fixed testing bugs
 //

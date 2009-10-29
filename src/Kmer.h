@@ -1,9 +1,10 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.26 2009-10-29 17:00:58 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.27 2009-10-29 19:01:33 regan Exp $
 //
 
 #ifndef _KMER_H
 #define _KMER_H
 #include <tr1/memory>
+#include <sstream>
 #include <cstring>
 #include <cstdlib>
 #include <vector>
@@ -541,7 +542,7 @@ public:
   		  min = mid+1;
   		else if (comp < 0)
   		  max = mid-1;
-  	} while (comp != 0 && min <= max);
+  	} while (comp != 0 && max != -1 && min <= max);
   	if (comp == 0)
   	  targetIsFound = true;
   	else
@@ -592,6 +593,15 @@ public:
   	}
   }
 
+  std::string toString() {
+  	std::stringstream ss;
+  	ss << this << "{";
+  	for(unsigned long idx=0; idx<size(); idx++) {
+  		ss << get(idx).toFasta() << ":" << valueAt(idx) << ", ";
+  	} 
+  	ss << "}";
+  	return ss;
+  }
 };
 
 
@@ -688,6 +698,15 @@ public:
        return insert(key, Value(), &bucket);       
    }
     
+  std::string toString() {
+  	std::stringstream ss;
+  	ss << this << "{";
+  	for(unsigned long idx=0; idx<_buckets.size(); idx++) {
+  		ss << "idx : " << _buckets[idx].toString() << ", ";
+  	} 
+  	ss << "}";
+  	return ss;
+  }
 
 };
 
@@ -698,6 +717,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.27  2009-10-29 19:01:33  regan
+// checkpoint
+//
 // Revision 1.26  2009-10-29 17:00:58  regan
 // checkpoint (with bugs)
 //
