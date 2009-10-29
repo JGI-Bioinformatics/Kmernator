@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.25 2009-10-29 07:03:33 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.26 2009-10-29 17:00:58 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -324,6 +324,8 @@ public:
   	  return *this;
     reset();
     resize(other.size());
+    if (size() == 0)
+      return *this;
     if (_begin.get() == NULL)
        throw new std::runtime_error("Could not allocate memory");
     
@@ -522,7 +524,14 @@ public:
   unsigned long findSorted(const KmerPtr::Kmer &target, bool &targetIsFound) const {
   	// binary search
   	unsigned long min = 0;
-  	unsigned long max = size()-1;
+  	unsigned long max = size();
+  	if (max > 0)
+  	  max--;
+  	else {
+  	  targetIsFound = false;
+  	  return min;
+  	}
+  	  
   	unsigned long mid;
   	int comp;
   	do {
@@ -638,8 +647,7 @@ public:
    	    bucketPtr = &getBucket(key);
    	    
    	  unsigned long idx = bucketPtr->insertSorted(key);
-   	  bucketPtr->valueAt(idx) = value;
-
+   	  return bucketPtr->valueAt(idx) = value;
    }
    
    bool remove(const KmerPtr &key, BucketType *bucketPtr = NULL) {
@@ -690,6 +698,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.26  2009-10-29 17:00:58  regan
+// checkpoint (with bugs)
+//
 // Revision 1.25  2009-10-29 07:03:33  regan
 // fixed some bugs , added others
 // KmerArray is working, *Sorted methods are untested
