@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.27 2009-10-29 19:01:33 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.28 2009-10-29 20:59:23 cfurman Exp $
 //
 
 #ifndef _KMER_H
@@ -94,7 +94,8 @@ private:
 	   
 	   int compare(const Kmer &other) const
 	   {
-	     return memcmp(_data(), other._data(), getTwoBitLength());
+	     //return memcmp(_data(), other._data(), getTwoBitLength());
+         return (toFasta().compare(other.toFasta()));
 	   }
 	
 	   Kmer &operator=(const Kmer &other)
@@ -181,7 +182,9 @@ private:
 	   }
 	   long hash() const
 	   {
-	   	  return getHasher()(std::string((const char *)getTwoBitSequence(), getLength()));
+    // NOTE : Fix remainder bit effect!
+	   //	  return getHasher()(std::string((const char *)getTwoBitSequence(), getTwoBitLength()));
+       return 1;// getHasher()(toFasta());
 	   }
   };
    
@@ -526,13 +529,12 @@ public:
   	// binary search
   	unsigned long min = 0;
   	unsigned long max = size();
-  	if (max > 0)
-  	  max--;
-  	else {
-  	  targetIsFound = false;
-  	  return min;
-  	}
-  	  
+ 
+  	if (max == 0)
+    {
+       targetIsFound = false;
+       return 0;
+    }
   	unsigned long mid;
   	int comp;
   	do {
@@ -595,12 +597,12 @@ public:
 
   std::string toString() {
   	std::stringstream ss;
-  	ss << this << "{";
+  	ss <<  "{";
   	for(unsigned long idx=0; idx<size(); idx++) {
   		ss << get(idx).toFasta() << ":" << valueAt(idx) << ", ";
   	} 
   	ss << "}";
-  	return ss;
+  	return ss.str();
   }
 };
 
@@ -618,7 +620,7 @@ public:
 
 private:
    BucketsVector _buckets;
-
+   
 public:
    KmerMap(unsigned long bucketCount = 1024*1024) {
      _buckets.resize(bucketCount);
@@ -631,10 +633,14 @@ public:
    }
    
    void clear() {
-   	for(int i=0; i< _buckets.size(); i++)
-   	   _buckets[i].reset();
-   	 _buckets.clear();
-   	 BucketType::releasePools();
+   
+//    	for(int i=0; i< _buckets.size(); i++)
+//    	   _buckets[i].reset();
+     unsigned long bucketCount = _buckets.size();
+     _buckets.clear();
+   	// BucketType::releasePools();
+    _buckets.resize(bucketCount);
+     
    }
    BucketType &getBucket(const KmerPtr &key) {
      return getBucket(*key);
@@ -642,11 +648,11 @@ public:
    const BucketType &getBucket(const KmerPtr &key) const {
    	 return getBucket(*key);
    }
-   BucketType &getBucket(const KeyType &key) {
+   BucketType &getBucket(const KeyType &key)  {
      return _buckets[key.hash() % _buckets.size()];
    }
    const BucketType &getBucket(const KeyType &key) const {
-   	 return getBucket(key);
+     return _buckets[key.hash() % _buckets.size()];
    }
 
    ValueType &insert(const KmerPtr &key, const ValueType &value, BucketType *bucketPtr = NULL) {
@@ -700,12 +706,12 @@ public:
     
   std::string toString() {
   	std::stringstream ss;
-  	ss << this << "{";
+  	ss << this << "[";
   	for(unsigned long idx=0; idx<_buckets.size(); idx++) {
-  		ss << "idx : " << _buckets[idx].toString() << ", ";
+  		ss << "bucket:" << idx << ' ' << _buckets[idx].toString() << ", ";
   	} 
-  	ss << "}";
-  	return ss;
+  	ss << "]";
+  	return ss.str();
   }
 
 };
@@ -717,6 +723,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.28  2009-10-29 20:59:23  cfurman
+// fixed testing bugs
+//
 // Revision 1.27  2009-10-29 19:01:33  regan
 // checkpoint
 //
