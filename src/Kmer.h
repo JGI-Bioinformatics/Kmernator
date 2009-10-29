@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.28 2009-10-29 20:59:23 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.29 2009-10-29 23:04:49 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -549,7 +549,7 @@ public:
   	  targetIsFound = true;
   	else
   	  targetIsFound = false;
-  	return mid;
+  	return mid + (comp>0 && size()>mid?1:0);
   }
   void insertAt(unsigned long idx, const KmerPtr &target) {
   	insertAt(idx, *target);
@@ -627,20 +627,12 @@ public:
    }
    ~KmerMap() 
    {
-   	 //for(BucketsVector::iterator iter = _buckets.begin(); iter != _buckets.end(); iter++)
-   	 //  iter->reset();
    	 clear();
    }
    
    void clear() {
-   
-//    	for(int i=0; i< _buckets.size(); i++)
-//    	   _buckets[i].reset();
-     unsigned long bucketCount = _buckets.size();
-     _buckets.clear();
-   	// BucketType::releasePools();
-    _buckets.resize(bucketCount);
-     
+     for(int i=0; i< _buckets.size(); i++)
+       _buckets[i].reset();
    }
    BucketType &getBucket(const KmerPtr &key) {
      return getBucket(*key);
@@ -723,6 +715,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.29  2009-10-29 23:04:49  regan
+// works
+//
 // Revision 1.28  2009-10-29 20:59:23  cfurman
 // fixed testing bugs
 //
