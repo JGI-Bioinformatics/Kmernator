@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.22 2009-10-29 23:30:03 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.23 2009-10-30 00:51:37 regan Exp $
 //
  
 
@@ -428,19 +428,19 @@ void testKmerMap(SequenceLengthType size)
   for(int i=0; i< kmersC.size(); i++) {
   	kmerF[ kmersC[i] ] = i*2.0;
   	kmerP[ kmersC[i] ] = Pair(i, i*3.0);
-  	BOOST_MESSAGE(kmersC[i].toFasta());
+  	//BOOST_MESSAGE(kmersC[i].toFasta());
   	BOOST_CHECK_EQUAL( i*2.0, kmerF[ kmersC[i] ] );
   	BOOST_CHECK_EQUAL( i,     kmerP[ kmersC[i] ].first );
   	BOOST_CHECK_EQUAL( i*3.0, kmerP[ kmersC[i] ].second );
   	
-    BOOST_MESSAGE ( kmerF.toString() );
+    //BOOST_MESSAGE ( kmerF.toString() );
  
  
   }
   
   kmerF.clear();
   kmerP.clear();
-  BOOST_MESSAGE ("Testing exists()");
+  //BOOST_MESSAGE ("Testing exists()");
   for(int i=0; i< kmersC.size(); i++) {
   	BOOST_CHECK( ! kmerF.exists( kmersC[i] ) );
   	BOOST_CHECK( ! kmerF.exists( kmersC[i] ) );
@@ -538,6 +538,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.23  2009-10-30 00:51:37  regan
+// bug fix and working on executable
+//
 // Revision 1.22  2009-10-29 23:30:03  regan
 // checkpoint
 //

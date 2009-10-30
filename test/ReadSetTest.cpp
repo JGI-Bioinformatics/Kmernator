@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.3 2009-10-23 20:32:52 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.4 2009-10-30 00:51:37 regan Exp $
 //
  
 
@@ -11,7 +11,16 @@
 
 using namespace std;
 
- 
+
+void testZeroReads()
+{
+	Read s;
+	
+	BOOST_CHECK_EQUAL( 0, s.getLength() );
+	BOOST_CHECK_EQUAL( "", s.getQuals() );
+	BOOST_CHECK_EQUAL( "", s.getFasta() );
+	BOOST_CHECK_EQUAL( "", s.getName()  );
+}
 
 void testReadWriteFile(string filename)
 {
@@ -39,13 +48,16 @@ void testReadWriteFile(string filename)
 
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
-
+  testZeroReads();
   testReadWriteFile(string("10.fastq"));
   
 }
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.4  2009-10-30 00:51:37  regan
+// bug fix and working on executable
+//
 // Revision 1.3  2009-10-23 20:32:52  cfurman
 // more kmer changes
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.8 2009-10-26 17:42:26 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.9 2009-10-30 00:51:37 regan Exp $
 //
 
 #include <iostream>
@@ -15,39 +15,36 @@ using namespace std;
 
 int main(int argc, char *argv[]) {
     
-    cerr << "Hello, world! " << endl;
-
     ReadSet store;
 
-    store.appendFastq(argv[1]);
-
-    cerr << "loaded " << store.getSize() << " Reads" << endl;
-    for (int i=0 ; i < store.getSize(); i++)
-    {
-       cout << store.getRead(i).toFastq();
+    KmerSizer::set(atoi(argv[1]));
+    for (int i = 2 ; i< argc ; i++) {
+      cerr << "reading " << argv[i] << endl;
+      store.appendFastq(argv[i]);
+      cerr << "loaded " << store.getSize() << " Reads" << endl;
     }
 
-
-    Read s;
-
-    cerr << "And even 0 length Reads work!: " << s.getQuals() << s.getFasta() << s.getName() << s.getLength()<< endl;
-
-    KmerSizer::set(44);
+    KmerMap<unsigned short> kmerCounts(102400);
     for (int i=0 ; i < store.getSize(); i++)
     {
-       KmerArray<SolidKmerTag> kmers(store.getRead(i).getTwoBitSequence(),store.getRead(i).getLength());
+       KmerArray<WeakKmerTag> kmers(store.getRead(i).getTwoBitSequence(),store.getRead(i).getLength());
        for (int j=0; j < kmers.size(); j++)
        {
-          cout << "Read " << i << " kmer "<< j << ' '
-               << kmers[j].toFasta() << endl;
+          kmerCounts[ kmers[j] ]++;
        }
-       cout << "----------------" << endl;
+       if (i % 10000 == 0) {
+         cerr << i << " reads, " << kmerCounts.size() << " kmers so far " << kmerCounts.getBucket(1).toString() << endl;
+         
+       }
     }
 }
 
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.9  2009-10-30 00:51:37  regan
+// bug fix and working on executable
+//
 // Revision 1.8  2009-10-26 17:42:26  regan
 // templated KmerArray
 //

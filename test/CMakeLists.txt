@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.10 2009-10-28 18:43:02 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.11 2009-10-30 00:51:37 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -31,11 +31,14 @@ add_test( KmerTest KmerTest )
 add_executable( ktest2 ktest2 )
 target_link_libraries( ktest2 Sequence Kmer
                               ReadSet )
-add_test(ktest2 ktest2 10.fastq)
+add_test(ktest2 ktest2 21 10.fastq)
 
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.11  2009-10-30 00:51:37  regan
+# bug fix and working on executable
+#
 # Revision 1.10  2009-10-28 18:43:02  regan
 # added debug flags, fixed tests, bugs
 #

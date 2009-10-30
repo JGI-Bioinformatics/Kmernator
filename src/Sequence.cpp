@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.7 2009-10-22 20:49:15 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.8 2009-10-30 00:51:40 regan Exp $
 //
 
 #include <cstring>
@@ -76,7 +76,8 @@ void Sequence::reset()
 
 string Sequence::getFasta()
 {
-
+  if(_data == nullSequence)
+    return string("");
   string fasta = TwoBitSequence::getFasta(getTwoBitSequence() ,getLength());
   TwoBitSequence::applyMarkup(fasta, *_getMarkupBasesCount(), _getMarkupBases());
 
@@ -150,7 +151,10 @@ string Read::getQuals()
 
 string Read::getName()
 {
-  return string(_getName());
+  if(_data == nullSequence)
+    return string("");
+  else
+    return string(_getName());    
 }
 
 
@@ -161,6 +165,9 @@ string Read::toFastq()
 
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.8  2009-10-30 00:51:40  regan
+// bug fix and working on executable
+//
 // Revision 1.7  2009-10-22 20:49:15  cfurman
 // tests added
 //

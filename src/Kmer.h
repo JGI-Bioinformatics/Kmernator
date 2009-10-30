@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.32 2009-10-30 00:10:32 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.33 2009-10-30 00:51:40 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -636,6 +636,12 @@ public:
      for(int i=0; i< _buckets.size(); i++)
        _buckets[i].reset();
    }
+   BucketType &getBucket(long hash) {
+   	return _buckets[hash % _buckets.size()];
+   }
+   const BucketType &getBucket(long hash) const {
+   	return _buckets[hash % _buckets.size()];
+   }
    BucketType &getBucket(const KmerPtr &key) {
      return getBucket(*key);
    }
@@ -643,10 +649,10 @@ public:
    	 return getBucket(*key);
    }
    BucketType &getBucket(const KeyType &key)  {
-     return _buckets[key.hash() % _buckets.size()];
+     return getBucket(key.hash());
    }
    const BucketType &getBucket(const KeyType &key) const {
-     return _buckets[key.hash() % _buckets.size()];
+     return getBucket(key.hash());
    }
 
    ValueType &insert(const KmerPtr &key, const ValueType &value, BucketType *bucketPtr = NULL) {
@@ -724,6 +730,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.33  2009-10-30 00:51:40  regan
+// bug fix and working on executable
+//
 // Revision 1.32  2009-10-30 00:10:32  regan
 // cleaned up a bit
 //
