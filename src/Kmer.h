@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.34 2009-10-30 19:27:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.35 2009-10-30 20:56:27 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -823,7 +823,8 @@ public:
             break;
           } else {
             _pos2++;
-            break;
+            if ( !_pos2.isEnd() )
+              break;
           }
         }
         return *this;
@@ -848,6 +849,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.35  2009-10-30 20:56:27  regan
+// fixed kmermap iterator
+//
 // Revision 1.34  2009-10-30 19:27:46  regan
 // added iterator goodness, but KmerMap::Iterator still does not work
 //
