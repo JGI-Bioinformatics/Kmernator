@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.10 2009-10-28 18:42:57 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.11 2009-10-30 19:27:42 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -7,15 +7,7 @@ project( KoMer )
 cmake_minimum_required(VERSION 2.6)
 enable_testing()
 
-IF(NOT CMAKE_BUILD_TYPE)
-  SET(CMAKE_BUILD_TYPE Debug CACHE STRING
-      "Choose the type of build, options are: None Debug Release."
-      FORCE)
-ENDIF(NOT CMAKE_BUILD_TYPE)
-
-set(CMAKE_BUILD_TYPE Debug)
 enable_language(CXX)
-set(CMAKE_CXX_FLAGS -g)
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
@@ -52,6 +44,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.11  2009-10-30 19:27:42  regan
+# added iterator goodness, but KmerMap::Iterator still does not work
+#
 # Revision 1.10  2009-10-28 18:42:57  regan
 # added debug flags, fixed tests, bugs
 #

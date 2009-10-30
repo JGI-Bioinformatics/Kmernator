@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.33 2009-10-30 00:51:40 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.34 2009-10-30 19:27:46 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -26,10 +26,9 @@ typedef std::tr1::shared_ptr<TwoBitEncoding> KmerSharedPtr;
 class KmerSizer
 {
 private:
-  KmerSizer() : _sequenceLength(21), _extraBytes(0) {}
+  KmerSizer() : _sequenceLength(21) {}
 
   SequenceLengthType _sequenceLength;
-  unsigned long _extraBytes;
 
   SequenceLengthType _twoBitLength;
   unsigned long _totalSize;
@@ -40,16 +39,12 @@ public:
   {
     KmerSizer &singleton = getSingleton();
     singleton._sequenceLength = sequenceLength;
-    singleton._extraBytes = extraBytes;
     singleton._twoBitLength =  TwoBitSequence::fastaLengthToTwoBitLength(singleton._sequenceLength);
-    singleton._totalSize = singleton._twoBitLength + extraBytes;
+    singleton._totalSize = singleton._twoBitLength;
   }
 
   static SequenceLengthType getSequenceLength()  {
     return getSingleton()._sequenceLength;
-  }
-  static unsigned long getExtraBytes()  {
-    return getSingleton()._extraBytes;
   }
   static SequenceLengthType getTwoBitLength()   {
     return getSingleton()._twoBitLength;
@@ -256,6 +251,25 @@ public:
   typedef std::tr1::shared_ptr<Pool> PoolPtr;
   typedef std::vector< PoolPtr > SizePools;
   typedef Value ValueType;
+  class ElementType { 
+  private:
+  	  KmerPtr _key; 
+  	  ValueType *_value;
+  public:
+      ElementType(): _key(NULL), _value(NULL) {}
+  	  ElementType(KmerPtr::Kmer &key, ValueType &value): _key(&key), _value(&value) {}
+  	  ElementType(const ElementType &copy) {
+  	  	*this = copy;
+  	  }
+  	  ~ElementType() {}
+  	  ElementType &operator=(const ElementType &other) {
+  	  	_key = other._key;
+  	  	_value = other._value;
+  	  	return *this;
+  	  }
+  	  KmerPtr::Kmer &key() { return *_key; }
+  	  ValueType &value()   { return *_value; }
+  };
 
 private:
   KmerPtr _begin;
@@ -284,11 +298,12 @@ public:
   }
   // frees unused memory in existing pools
   // use anytime you want
-  //static void releasePools() {
-  // 	 SizePools &pools = getPools();
-  //	 for(SizePools::iterator it = pools.begin() ; it != pools.end(); it++)
-  //	   (*it)->release_memory();
-  //}
+  static void releasePools() {
+   	 SizePools &pools = getPools();
+  	 for(SizePools::iterator it = pools.begin() ; it != pools.end(); it++)
+  	   if (*it != NULL)
+             (*it)->release_memory();
+  }
 
 public:
  
@@ -326,7 +341,7 @@ public:
     if (size() == 0)
       return *this;
     if (_begin.get() == NULL)
-       throw new std::runtime_error("Could not allocate memory");
+       throw new std::runtime_error("Could not allocate memory in KmerArray operator=()");
     
     memcpy(_begin.get(),other._begin.get(),_size*getElementByteSize());
     return *this;
@@ -335,13 +350,13 @@ public:
   const KmerPtr::Kmer &operator[](unsigned long index) const
   {
     if (index >= _size)
-       throw new std::invalid_argument("attempt to access index greater than size"); 
+       throw new std::invalid_argument("attempt to access index greater than size in KmerArray operator[] const"); 
     return get(index);
   }
   KmerPtr::Kmer &operator[](unsigned long index)
   {
     if (index >= _size)
-       throw new std::invalid_argument("attempt to access index greater than size"); 
+       throw new std::invalid_argument("attempt to access index greater than size in KmerArray operator[]"); 
     return get(index);
   }
   
@@ -355,7 +370,7 @@ public:
   {
     if (index >= _size)
     {
-      throw std::invalid_argument("attempt to access index greater than size");
+      throw std::invalid_argument("attempt to access index greater than size in KmerArray valueAt() const");
   	}
     return *( getValueStart() + index );
   }
@@ -363,7 +378,7 @@ public:
   {
     if (index >= _size)
     {
-      throw std::invalid_argument("attempt to access index greater than size");
+      throw std::invalid_argument("attempt to access index greater than size in KmerArray valueAt()");
   	}
     return *( getValueStart() + index );
   }
@@ -377,6 +392,15 @@ public:
     return *(_begin + index);
   }
 
+  const ElementType getElement(unsigned long idx) const
+  {
+  	return ElementType( get(idx), valueAt(idx) );
+  }
+  ElementType getElement(unsigned long idx)
+  {
+  	return ElementType( get(idx), valueAt(idx) );
+  }
+  
   unsigned int size() const { return _size; }
 
   unsigned int getElementByteSize() const { 
@@ -387,7 +411,7 @@ public:
   {
     void *test = (void *)(_begin.get());
     if (test != NULL) {
-      getPool( size() * getElementByteSize() ).free(test); 
+      getPool( size() * getElementByteSize() ).ordered_free(test); 
       //free(test);
     } 
     _begin = NULL;
@@ -407,7 +431,7 @@ public:
     _setMemory(size, idx);
       
     if(_begin.get() == NULL) {
-       throw new std::runtime_error("Could not allocate memory");
+       throw new std::runtime_error("Could not allocate memory in KmrArray resize()");
     }
 
     if (size > oldSize && idx == -1) {
@@ -428,11 +452,11 @@ public:
     if (size != 0 ) {
     	// allocate new memory
         boost::pool<> &newPool = getPool( size * getElementByteSize() );
-        memory = newPool.malloc();
+        memory = newPool.ordered_malloc();
     	//memory = malloc( size * getElementByteSize() );
 
         if(memory == NULL) {
-           throw new std::runtime_error("Could not allocate memory");
+           throw new std::runtime_error("Could not allocate memory in KmerArray _setMemory()");
         }        
     }
     unsigned long oldSize = _size;
@@ -488,7 +512,7 @@ public:
     if (old != NULL) {
       // free old memory
       boost::pool<> &oldPool = getPool( oldSize * getElementByteSize() );
-      oldPool.free(old);
+      oldPool.ordered_free(old);
       //free(old);
     }
   }
@@ -499,7 +523,7 @@ public:
   {
     SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
     if (_size != numKmers)
-      throw new std::invalid_argument("attempt to build an incorrectly sized KmerArray"); ;
+      throw new std::invalid_argument("attempt to build an incorrectly sized KmerArray in KmerArray build()"); ;
 
     KmerArray &kmers = *this;
     for(SequenceLengthType i=0; i < numKmers ; i+=4) {
@@ -558,7 +582,7 @@ public:
   }
   void insertAt(unsigned long idx, const KmerPtr::Kmer &target) {
   	if (idx > size())
-  	  throw new std::invalid_argument("attempt to access index greater than size");
+  	  throw new std::invalid_argument("attempt to access index greater than size in KmerArray insertAt");
   	resize(size() + 1, idx);
   	_begin[idx] = target;
   }
@@ -587,7 +611,7 @@ public:
   	if (idx1 == idx2)
   	  return;
   	if (idx1 >= size() || idx2 >= size())
-  	  throw new std::invalid_argument("attempt to access index greater than size");
+  	  throw new std::invalid_argument("attempt to access index greater than size in KmerArray swap()");
   	  
   	get(idx1).swap(get(idx2));
   	if (sizeof(ValueType) > 0) {
@@ -606,6 +630,37 @@ public:
   	ss << "}";
   	return ss.str();
   }
+
+public:
+  class Iterator : public std::iterator<std::forward_iterator_tag, KmerArray>
+  {
+    private:
+      KmerArray *_tgt;
+      unsigned long _idx;
+      ElementType elementCopy;
+    public:
+      Iterator(KmerArray *target, unsigned long idx = 0): _tgt(target), _idx(idx) { }
+      Iterator(const Iterator &copy) { *this = copy; }
+      ~Iterator() {}
+      Iterator& operator=(const Iterator& other) {
+        _tgt = other._tgt;
+        _idx = other._idx;
+        return *this;
+      }
+      bool operator==(const Iterator& other) { return _idx == other._idx && _tgt == other._tgt; }
+      bool operator!=(const Iterator& other) { return _idx != other._idx || _tgt != other._tgt; }
+      Iterator& operator++() { if ( !isEnd() ) _idx++; return *this; }
+      Iterator operator++(int unused) { Iterator tmp(*this) ; ++(*this); return tmp; }
+      ElementType &operator*() { return elementCopy = _tgt->getElement(_idx); }
+      KmerPtr::Kmer &key() { return _tgt->get(_idx); }
+      Value &value() { return _tgt->valueAt(_idx); }
+      ElementType *operator->() { elementCopy = _tgt->getElement(_idx); return &elementCopy; }
+      bool isEnd() { return _idx == _tgt->size(); }
+  };
+
+  Iterator begin() { return Iterator(this, 0); }
+  Iterator end()   { return Iterator(this, size()); }
+
 };
 
 
@@ -618,7 +673,11 @@ public:
    typedef KmerPtr::Kmer KeyType;
    typedef Value ValueType;
    typedef KmerArray<Value> BucketType;
+   typedef typename BucketType::Iterator BucketTypeIterator;
+   typedef typename BucketType::ElementType ElementType;
+   
    typedef std::vector< BucketType > BucketsVector;
+   typedef typename BucketsVector::iterator BucketsVectorIterator;
 
 private:
    BucketsVector _buckets;
@@ -629,12 +688,13 @@ public:
    }
    ~KmerMap() 
    {
-   	 clear();
+     clear();
    }
    
    void clear() {
      for(int i=0; i< _buckets.size(); i++)
        _buckets[i].reset();
+     BucketType::releasePools();
    }
    BucketType &getBucket(long hash) {
    	return _buckets[hash % _buckets.size()];
@@ -656,7 +716,7 @@ public:
    }
 
    ValueType &insert(const KmerPtr &key, const ValueType &value, BucketType *bucketPtr = NULL) {
-     return insesrt(*key, value, bucketPtr);
+     return insert(*key, value, bucketPtr);
    }
    ValueType &insert(const KeyType &key, const ValueType &value, BucketType *bucketPtr = NULL) {
    	  if (bucketPtr == NULL)
@@ -721,6 +781,64 @@ public:
   	return ss.str();
   }
 
+public:
+  class Iterator : public std::iterator<std::forward_iterator_tag, KmerMap>
+  {
+    private:
+      KmerMap *_tgt;
+      BucketsVectorIterator _pos; 
+      BucketTypeIterator    _pos2;
+    public:
+      Iterator(KmerMap *map, const BucketsVectorIterator &pos, unsigned long idx = 0): _tgt(map), _pos(pos), _pos2( (*pos).begin() ) {
+        if ( ! isEnd() ) {
+          setPos2(*_pos, idx);
+          if ( _pos2.isEnd() )
+            ++(*this);
+        }
+      }
+      Iterator(const Iterator &copy): _pos2( (*copy._pos).begin() ){
+        *this = copy;
+      }
+      ~Iterator() {}
+      void setPos2(BucketType &bucket, unsigned long idx = 0) {
+        _pos2 = bucket.begin();
+        for(unsigned long i=0; i<idx; i++)
+          _pos2++;
+      }
+      Iterator& operator=(const Iterator& other) {
+      	_tgt = other._tgt;
+        _pos = other._pos;
+        _pos2 = other._pos2;
+        return *this;
+      }
+      bool operator==(const Iterator& other) { return _pos == other._pos && _pos2 == other._pos2; }
+      bool operator!=(const Iterator& other) { return _pos != other._pos || _pos2 != other._pos2; }
+      Iterator& operator++() { 
+        bool movedBucket = false;
+        while ( !isEnd() ) {
+          if ( _pos2.isEnd() ) {
+            setPos2(*(++_pos));
+            movedBucket = true;
+          } else if (movedBucket) {
+            break;
+          } else {
+            _pos2++;
+            break;
+          }
+        }
+        return *this;
+      }
+      Iterator operator++(int unused) { Iterator tmp(*this) ; ++(*this); return tmp; }
+      ElementType &operator*() { return *_pos2; }
+      KmerPtr::Kmer &key() {return _pos2.key(); }
+      Value &value() { return _pos2.value(); }
+      ElementType *operator->() { return &(*_pos2); }
+      bool isEnd() { return _pos == _tgt->_buckets.end(); }
+  };
+
+  Iterator begin() { return Iterator( this, _buckets.begin(), 0); }
+  Iterator end()   { return Iterator( this, _buckets.end()  , 0); }
+
 };
 
 #endif
@@ -730,6 +848,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.34  2009-10-30 19:27:46  regan
+// added iterator goodness, but KmerMap::Iterator still does not work
+//
 // Revision 1.33  2009-10-30 00:51:40  regan
 // bug fix and working on executable
 //

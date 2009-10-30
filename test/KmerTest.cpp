@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.23 2009-10-30 00:51:37 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.24 2009-10-30 19:27:49 regan Exp $
 //
  
 
@@ -406,6 +406,16 @@ void testKmerArray(SequenceLengthType size)
   	 BOOST_CHECK_EQUAL( valRef2, valRef);
   	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
   }
+
+  BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size() );
+  int count = 0;
+  for(KmerArray<float>::Iterator it = kmersFloat.begin() ; it != kmersFloat.end() ; it++) {
+    BOOST_CHECK_EQUAL( kmersFloat.valueAt(count), it->value() );
+    BOOST_CHECK_EQUAL( kmersFloat[count].toFasta(), it->key().toFasta() );
+    count++;
+  }
+  BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size() );
+  BOOST_CHECK_EQUAL( copy.size(), count );
    
   
 }
@@ -458,6 +468,14 @@ void testKmerMap(SequenceLengthType size)
   	BOOST_CHECK( i     >= kmerP[ kmersC[i] ].first );
   	BOOST_CHECK( i*3.0 >= kmerP[ kmersC[i] ].second );
   }
+
+  int count = 0;
+  for(KmerMap<float>::Iterator it = kmerF.begin() ; it != kmerF.end(); it++) {
+    BOOST_CHECK( kmerF.exists( it->key() ) );
+    BOOST_CHECK_EQUAL( kmerF[ it->key() ], it->value() );
+    count++;
+  }
+  BOOST_CHECK_EQUAL( kmerF.size(), count );
 }
 
 
@@ -538,6 +556,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.24  2009-10-30 19:27:49  regan
+// added iterator goodness, but KmerMap::Iterator still does not work
+//
 // Revision 1.23  2009-10-30 00:51:37  regan
 // bug fix and working on executable
 //
