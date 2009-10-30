@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.31 2009-10-30 00:07:59 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.32 2009-10-30 00:10:32 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -186,9 +186,7 @@ private:
 	   }
 	   long hash() const
 	   {
-    // NOTE : Fix remainder bit effect!
 	     return getHasher()(std::string((const char *)getTwoBitSequence(), getTwoBitLength()));
-         //return  getHasher()(toFasta());
 	   }
   };
    
@@ -201,10 +199,6 @@ public:
    _me(NULL)
    {  }
    
-/*    KmerPtr(Kmer &in):
-   _me((&in)._me)
-   { }
- */
    KmerPtr( void *in):
    _me((Kmer *)in)
    { }
@@ -222,9 +216,6 @@ public:
   
    KmerPtr &operator=(const void *right)    { _me = (Kmer *)right; return *this; }
    KmerPtr &operator=(const KmerPtr &right) { _me = right._me ;    return *this; }
-   
-   //bool operator==(const KmerPtr &right) const { return _me == right._me; }
-   //bool operator!=(const KmerPtr &right) const { return _me != right._me; }
    
    KmerPtr  operator+ (unsigned long right) const { return KmerPtr((Kmer *)((char *)_me + right * KmerSizer::getByteSize())); }
    KmerPtr  operator- (unsigned long right) const { return *this + (-right); }
@@ -293,11 +284,11 @@ public:
   }
   // frees unused memory in existing pools
   // use anytime you want
-  static void releasePools() {
-  	 SizePools &pools = getPools();
-  	 for(SizePools::iterator it = pools.begin() ; it != pools.end(); it++)
-  	   (*it)->release_memory();
-  }
+  //static void releasePools() {
+  // 	 SizePools &pools = getPools();
+  //	 for(SizePools::iterator it = pools.begin() ; it != pools.end(); it++)
+  //	   (*it)->release_memory();
+  //}
 
 public:
  
@@ -733,6 +724,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.32  2009-10-30 00:10:32  regan
+// cleaned up a bit
+//
 // Revision 1.31  2009-10-30 00:07:59  regan
 // bugfix on KmerArray.build trailing bits
 //
