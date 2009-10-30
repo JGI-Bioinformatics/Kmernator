@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.30 2009-10-29 23:30:01 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.31 2009-10-30 00:07:59 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -179,6 +179,10 @@ private:
 	   std::string toFasta() const
 	   {
 	      return TwoBitSequence::getFasta(getTwoBitSequence(), getLength());
+	   }
+	   std::string toFastaFull() const
+	   {
+	   	  return TwoBitSequence::getFasta(getTwoBitSequence(), getTwoBitLength()*4);
 	   }
 	   long hash() const
 	   {
@@ -511,7 +515,7 @@ public:
       TwoBitEncoding *ref = twoBit+i/4;
       for (int bitShift=0; bitShift < 4 && i+bitShift < numKmers; bitShift++) {
         TwoBitSequence::shiftLeft(ref, kmers[i+bitShift].get(), KmerSizer::getTwoBitLength(), bitShift, bitShift != 0);
-        TwoBitEncoding *lastByte = ref+KmerSizer::getTwoBitLength()-1;
+        TwoBitEncoding *lastByte = kmers[i+bitShift].getTwoBitSequence()+KmerSizer::getTwoBitLength()-1;
         switch (KmerSizer::getSequenceLength() % 4) {
           case 1: *lastByte &= 0xc0; break;
           case 2: *lastByte &= 0xf0; break;
@@ -729,6 +733,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.31  2009-10-30 00:07:59  regan
+// bugfix on KmerArray.build trailing bits
+//
 // Revision 1.30  2009-10-29 23:30:01  regan
 // checkpoint
 //
