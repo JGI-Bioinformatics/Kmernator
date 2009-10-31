@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.5 2009-10-26 23:02:49 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.6 2009-10-31 00:16:35 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -12,6 +12,8 @@ typedef unsigned int ReadSetSizeType;
 class ReadSet {
     class body;
     body &_my;
+    unsigned long baseCount;
+    
 public:
     ReadSet();
     ~ReadSet();
@@ -19,9 +21,11 @@ public:
     void appendFastq(std::string fastqFilePath);
 
     ReadSetSizeType getSize();
+    unsigned long getBaseCount() {return baseCount;}
 
     Read &getRead(ReadSetSizeType index);
-
+private:
+    void push_back(Read &read);
 };
 
 
@@ -45,6 +49,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.6  2009-10-31 00:16:35  regan
+// minor changes and optimizations
+//
 // Revision 1.5  2009-10-26 23:02:49  regan
 // checkpoint
 //

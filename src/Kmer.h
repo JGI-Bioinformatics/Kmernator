@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.35 2009-10-30 20:56:27 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.36 2009-10-31 00:16:35 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -34,7 +34,7 @@ private:
   unsigned long _totalSize;
 public:
 
-  static KmerSizer &getSingleton() { /* TODO make thread safe */ static KmerSizer singleton; return singleton; }
+  static inline KmerSizer &getSingleton() { /* TODO make thread safe */ static KmerSizer singleton; return singleton; }
   static void set(SequenceLengthType sequenceLength, unsigned long extraBytes=0)
   {
     KmerSizer &singleton = getSingleton();
@@ -43,13 +43,13 @@ public:
     singleton._totalSize = singleton._twoBitLength;
   }
 
-  static SequenceLengthType getSequenceLength()  {
+  static inline SequenceLengthType getSequenceLength()  {
     return getSingleton()._sequenceLength;
   }
-  static SequenceLengthType getTwoBitLength()   {
+  static inline SequenceLengthType getTwoBitLength()   {
     return getSingleton()._twoBitLength;
   }
-  static unsigned long getByteSize()  {
+  static inline unsigned long getByteSize()  {
     return getSingleton()._totalSize;
   }
 };
@@ -89,8 +89,7 @@ private:
 	   
 	   int compare(const Kmer &other) const
 	   {
-	     //return memcmp(_data(), other._data(), getTwoBitLength());
-         return (toFasta().compare(other.toFasta()));
+	     return memcmp(_data(), other._data(), getTwoBitLength());
 	   }
 	
 	   Kmer &operator=(const Kmer &other)
@@ -233,11 +232,14 @@ public:
    std::string toFasta() const { return _me->toFasta(); }
 };
 
-class SolidKmerTag {};
-class WeakKmerTag {};
 
-template<typename Tag, typename Value>
+template<typename Value>
 class KmerValue { public: Value value; };
+
+typedef KmerValue<unsigned char> KmerValueByte;
+
+class SolidKmerTag : public KmerValue<unsigned char> {};
+class WeakKmerTag  : public KmerValue<unsigned char> {};
 
 static KmerPtr NullKmerPtr(NULL);
 
@@ -300,9 +302,9 @@ public:
   // use anytime you want
   static void releasePools() {
    	 SizePools &pools = getPools();
-  	 for(SizePools::iterator it = pools.begin() ; it != pools.end(); it++)
-  	   if (*it != NULL)
-             (*it)->release_memory();
+  	 //for(SizePools::iterator it = pools.begin() ; it != pools.end(); it++)
+  	 //  if (*it != NULL)
+     //        (*it)->release_memory();
   }
 
 public:
@@ -411,7 +413,7 @@ public:
   {
     void *test = (void *)(_begin.get());
     if (test != NULL) {
-      getPool( size() * getElementByteSize() ).ordered_free(test); 
+      getPool( size() * getElementByteSize() ).free(test); 
       //free(test);
     } 
     _begin = NULL;
@@ -452,7 +454,7 @@ public:
     if (size != 0 ) {
     	// allocate new memory
         boost::pool<> &newPool = getPool( size * getElementByteSize() );
-        memory = newPool.ordered_malloc();
+        memory = newPool.malloc();
     	//memory = malloc( size * getElementByteSize() );
 
         if(memory == NULL) {
@@ -512,7 +514,7 @@ public:
     if (old != NULL) {
       // free old memory
       boost::pool<> &oldPool = getPool( oldSize * getElementByteSize() );
-      oldPool.ordered_free(old);
+      oldPool.free(old);
       //free(old);
     }
   }
@@ -833,6 +835,8 @@ public:
       ElementType &operator*() { return *_pos2; }
       KmerPtr::Kmer &key() {return _pos2.key(); }
       Value &value() { return _pos2.value(); }
+      BucketType &bucket() { return *_pos; }
+      unsigned long bucketIndex() { return (_pos - _tgt->_buckets.begin()); }
       ElementType *operator->() { return &(*_pos2); }
       bool isEnd() { return _pos == _tgt->_buckets.end(); }
   };
@@ -842,6 +846,10 @@ public:
 
 };
 
+typedef KmerMap<SolidKmerTag>   KmerSolidMap;
+typedef KmerMap<WeakKmerTag>    KmerWeakMap;
+typedef KmerMap<unsigned short> KmerCountMap;
+
 #endif
 
 
@@ -849,6 +857,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.36  2009-10-31 00:16:35  regan
+// minor changes and optimizations
+//
 // Revision 1.35  2009-10-30 20:56:27  regan
 // fixed kmermap iterator
 //

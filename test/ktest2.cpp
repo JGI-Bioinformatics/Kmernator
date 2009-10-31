@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.9 2009-10-30 00:51:37 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.10 2009-10-31 00:16:38 regan Exp $
 //
 
 #include <iostream>
@@ -13,6 +13,17 @@
 
 using namespace std;
 
+unsigned long estimateBucketSize( ReadSet &store, unsigned long assumedReadCoverage = 25 ) {
+	unsigned long baseCount = store.getBaseCount();
+	unsigned long avgSequenceLength = baseCount / store.getSize();
+	unsigned long kmersPerRead = (avgSequenceLength - KmerSizer::getSequenceLength() + 1);
+	unsigned long rawKmers = kmersPerRead * store.getSize();
+	unsigned long estimatedUniqueKmers =  store.getSize() / assumedReadCoverage  * kmersPerRead;
+	unsigned long targetBuckets = estimatedUniqueKmers; // put avg 256 kmers per bucket
+	unsigned long maxBuckets = 128*1024*1024;
+	unsigned long minBuckets = 128;
+	return targetBuckets > maxBuckets ? maxBuckets : (targetBuckets < minBuckets ? minBuckets : targetBuckets);
+}
 int main(int argc, char *argv[]) {
     
     ReadSet store;
@@ -21,10 +32,15 @@ int main(int argc, char *argv[]) {
     for (int i = 2 ; i< argc ; i++) {
       cerr << "reading " << argv[i] << endl;
       store.appendFastq(argv[i]);
-      cerr << "loaded " << store.getSize() << " Reads" << endl;
+      cerr << "loaded " << store.getSize() << " Reads, " << store.getBaseCount() << " Bases " << endl;
     }
+    
+    unsigned long numBuckets = estimateBucketSize( store );
 
-    KmerMap<unsigned short> kmerCounts(102400);
+    cerr << "targetting " << numBuckets << endl;
+    
+    KmerCountMap kmerCounts( numBuckets ); // weak (possible) kmers are much larger than solid estimate
+    
     for (int i=0 ; i < store.getSize(); i++)
     {
        KmerArray<WeakKmerTag> kmers(store.getRead(i).getTwoBitSequence(),store.getRead(i).getLength());
@@ -32,16 +48,23 @@ int main(int argc, char *argv[]) {
        {
           kmerCounts[ kmers[j] ]++;
        }
-       if (i % 10000 == 0) {
-         cerr << i << " reads, " << kmerCounts.size() << " kmers so far " << kmerCounts.getBucket(1).toString() << endl;
+       if (i % 1000000 == 0) {
+       	 KmerCountMap::Iterator it = kmerCounts.begin();
+         cerr << i << " reads, " << kmerCounts.size() << " kmers so far " << it.bucketIndex() << endl;//<< " : " << it.bucket().toString() << endl;
          
        }
     }
+     KmerCountMap::Iterator it = kmerCounts.begin();
+    cerr << store.getSize() << " reads, " << kmerCounts.size() << " kmers so far " << it.bucketIndex() << endl;//<< " : " << it.bucket().toString() << endl;
+    
 }
 
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.10  2009-10-31 00:16:38  regan
+// minor changes and optimizations
+//
 // Revision 1.9  2009-10-30 00:51:37  regan
 // bug fix and working on executable
 //

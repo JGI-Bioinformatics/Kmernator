@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.12 2009-10-27 22:13:41 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.13 2009-10-31 00:16:35 regan Exp $
 //
 
 #include <cstring>
@@ -103,6 +103,7 @@ void TwoBitSequence::applyMarkup(std::string &bases, SequenceLengthType markupBa
 
 std::string TwoBitSequence::getFasta(const TwoBitEncoding *in, SequenceLengthType length)
 {
+
   char buffer[length+1];
   uncompressSequence(in,length, buffer);
 
@@ -165,6 +166,9 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLe
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.13  2009-10-31 00:16:35  regan
+// minor changes and optimizations
+//
 // Revision 1.12  2009-10-27 22:13:41  cfurman
 // removed bit shift table
 //

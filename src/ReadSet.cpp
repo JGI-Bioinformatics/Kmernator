@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.4 2009-10-23 07:06:59 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.5 2009-10-31 00:16:35 regan Exp $
 //
 
 #include <exception>
@@ -39,6 +39,7 @@ public:
 ReadSet::ReadSet():
 _my(*new(body))
 {
+   baseCount=0;
 }
 
 ReadSet::~ReadSet()
@@ -54,6 +55,11 @@ string fileErrorMsg(string msg, string name, unsigned long lineCount)
 
   sprintf(buffer, "%s in %s at %ld", msg.c_str(),name.c_str(), lineCount);
   return string(buffer);
+}
+
+void ReadSet::push_back(Read &read) {
+	_my.seqs.push_back( read );
+	baseCount += read.getLength();
 }
 
 void ReadSet::appendFastq(string fastqFilePath)
@@ -106,15 +112,16 @@ void ReadSet::appendFastq(string fastqFilePath)
         if (strlen(quals) != basesSize)
               throw  std::invalid_argument(fileErrorMsg("Wrong number of quals", fastqFilePath, lineCount));
 
-         if (lineCount == 0)  // Estimate set size
-         {
+        if (lineCount == 0)  // Estimate set size
+        {
              //_my.seqs.reserve(1+ _my.seqs.size() + fileSize/((unsigned long)ifs.tellg() - 10UL));
              cerr << "Capacity : " << _my.seqs.capacity()<< endl;
         }
 
-         lineCount += 4;
+        lineCount += 4;
 
-        _my.seqs.push_back( Read(name+1 , bases, quals));
+        Read read(name+1, bases, quals);
+        push_back( read );
 
 
     }
@@ -136,6 +143,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.5  2009-10-31 00:16:35  regan
+// minor changes and optimizations
+//
 // Revision 1.4  2009-10-23 07:06:59  regan
 // more unit testing
 //   ReadSetTest
