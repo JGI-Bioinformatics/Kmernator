@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.11 2009-10-30 19:27:42 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.12 2009-10-31 23:38:51 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -6,8 +6,6 @@
 project( KoMer )
 cmake_minimum_required(VERSION 2.6)
 enable_testing()
-
-enable_language(CXX)
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
@@ -44,6 +42,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.12  2009-10-31 23:38:51  regan
+# fixed build to read env CXX_FLAGS
+#
 # Revision 1.11  2009-10-30 19:27:42  regan
 # added iterator goodness, but KmerMap::Iterator still does not work
 #

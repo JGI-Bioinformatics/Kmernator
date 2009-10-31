@@ -1,10 +1,18 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.11 2009-10-30 00:51:37 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.12 2009-10-31 23:41:48 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
 
 cmake_minimum_required(VERSION 2.6)
 enable_testing()
+
+# compiler flags
+IF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
+  SET(CXX_FLAGS $ENV{CXX_FLAGS})
+ENDIF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
+IF(CXX_FLAGS)
+  SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
+ENDIF(CXX_FLAGS)
 
 add_executable( TwoBitSequenceTest TwoBitSequenceTest )
 target_link_libraries( TwoBitSequenceTest TwoBitSequence
@@ -36,6 +44,9 @@ add_test(ktest2 ktest2 21 10.fastq)
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.12  2009-10-31 23:41:48  regan
+# fixed build to read env CXX_FLAGS
+#
 # Revision 1.11  2009-10-30 00:51:37  regan
 # bug fix and working on executable
 #

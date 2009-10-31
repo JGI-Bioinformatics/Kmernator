@@ -1,9 +1,18 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/src/CMakeLists.txt,v 1.6 2009-10-28 18:42:59 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/src/CMakeLists.txt,v 1.7 2009-10-31 23:41:46 regan Exp $
 #
 # KoMer/src/CmakeLists.txt
 #
 
 cmake_minimum_required(VERSION 2.6)
+
+# compiler flags
+IF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
+  SET(CXX_FLAGS $ENV{CXX_FLAGS})
+ENDIF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
+
+IF(CXX_FLAGS)
+  SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
+ENDIF(CXX_FLAGS)
 
 add_library( TwoBitSequence TwoBitSequence )
 add_library( Sequence Sequence TwoBitSequence )
@@ -12,6 +21,9 @@ add_library( ReadSet ReadSet )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.7  2009-10-31 23:41:46  regan
+# fixed build to read env CXX_FLAGS
+#
 # Revision 1.6  2009-10-28 18:42:59  regan
 # added debug flags, fixed tests, bugs
 #
