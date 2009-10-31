@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.36 2009-10-31 00:16:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.37 2009-10-31 23:44:17 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -10,11 +10,10 @@
 #include <vector>
 #include <stdexcept>
 
-#include <boost/unordered_map.hpp>
-#include <boost/pool/pool.hpp>
 #include <boost/functional/hash.hpp>
 
 #include "TwoBitSequence.h"
+#include "MemoryUtils.h"
 
 #ifndef MAX_KMER_SIZE
 #define MAX_KMER_SIZE 1024
@@ -22,11 +21,11 @@
 
 typedef std::tr1::shared_ptr<TwoBitEncoding> KmerSharedPtr;
 
-// TODO remove ExtraBytes from this!!
 class KmerSizer
 {
 private:
   KmerSizer() : _sequenceLength(21) {}
+  static KmerSizer singleton;
 
   SequenceLengthType _sequenceLength;
 
@@ -34,7 +33,7 @@ private:
   unsigned long _totalSize;
 public:
 
-  static inline KmerSizer &getSingleton() { /* TODO make thread safe */ static KmerSizer singleton; return singleton; }
+  static inline KmerSizer &getSingleton() { return singleton; }
   static void set(SequenceLengthType sequenceLength, unsigned long extraBytes=0)
   {
     KmerSizer &singleton = getSingleton();
@@ -237,8 +236,11 @@ template<typename Value>
 class KmerValue { public: Value value; };
 
 typedef KmerValue<unsigned char> KmerValueByte;
+typedef KmerValue<unsigned short> KmerValue2Byte;
+typedef KmerValue<unsigned int> KmerValue4Byte;
 
-class SolidKmerTag : public KmerValue<unsigned char> {};
+
+class SolidKmerTag : public KmerValue<unsigned short> {};
 class WeakKmerTag  : public KmerValue<unsigned char> {};
 
 static KmerPtr NullKmerPtr(NULL);
@@ -249,9 +251,6 @@ class KmerArray
 
 public:
   
-  typedef boost::pool< > Pool;
-  typedef std::tr1::shared_ptr<Pool> PoolPtr;
-  typedef std::vector< PoolPtr > SizePools;
   typedef Value ValueType;
   class ElementType { 
   private:
@@ -276,36 +275,6 @@ public:
 private:
   KmerPtr _begin;
   unsigned long _size;
-
-  static SizePools &getPools() { static SizePools pools; return pools; }
-
-public:
-
-  static Pool &getPool(unsigned long poolByteSize) {
-     SizePools &pools = getPools();
-     if (pools.size() <= poolByteSize)
-       pools.resize(poolByteSize+1);
-     if ( pools[poolByteSize].get() == NULL ) {
-       PoolPtr pool(new Pool(poolByteSize));
-       pools[poolByteSize] = pool;
-     }
-     return *(pools[poolByteSize]);
-  }
-
-  // frees ALL memory that EVERY pool has ever allocated
-  // Use at end of program or before calling KmerSizer::set()...
-  static void purgePools() {
-  	 SizePools &pools = getPools();
-  	 pools.clear();
-  }
-  // frees unused memory in existing pools
-  // use anytime you want
-  static void releasePools() {
-   	 SizePools &pools = getPools();
-  	 //for(SizePools::iterator it = pools.begin() ; it != pools.end(); it++)
-  	 //  if (*it != NULL)
-     //        (*it)->release_memory();
-  }
 
 public:
  
@@ -343,7 +312,7 @@ public:
     if (size() == 0)
       return *this;
     if (_begin.get() == NULL)
-       throw new std::runtime_error("Could not allocate memory in KmerArray operator=()");
+       throw std::runtime_error("Could not allocate memory in KmerArray operator=()");
     
     memcpy(_begin.get(),other._begin.get(),_size*getElementByteSize());
     return *this;
@@ -352,13 +321,13 @@ public:
   const KmerPtr::Kmer &operator[](unsigned long index) const
   {
     if (index >= _size)
-       throw new std::invalid_argument("attempt to access index greater than size in KmerArray operator[] const"); 
+       throw std::invalid_argument("attempt to access index greater than size in KmerArray operator[] const"); 
     return get(index);
   }
   KmerPtr::Kmer &operator[](unsigned long index)
   {
     if (index >= _size)
-       throw new std::invalid_argument("attempt to access index greater than size in KmerArray operator[]"); 
+       throw std::invalid_argument("attempt to access index greater than size in KmerArray operator[]"); 
     return get(index);
   }
   
@@ -409,11 +378,12 @@ public:
   	return (KmerSizer::getByteSize() + sizeof(ValueType)); 
   }
   
-  void reset()
+  void reset(PoolManager &pool = BoostPoolManager::get())
   {
     void *test = (void *)(_begin.get());
     if (test != NULL) {
-      getPool( size() * getElementByteSize() ).free(test); 
+      pool.free(test, size() * getElementByteSize());
+      //getPool( size() * getElementByteSize() ).free(test); 
       //free(test);
     } 
     _begin = NULL;
@@ -423,17 +393,17 @@ public:
   void resize(unsigned long size) {
   	resize(size, -1);
   }
-  void resize(unsigned long size, unsigned long idx)
+  void resize(unsigned long size, unsigned long idx, PoolManager &pool = BoostPoolManager::get())
   {
     if (size == _size)
       return;
     unsigned long oldSize = _size;
     
     // alloc / realloc memory
-    _setMemory(size, idx);
+    _setMemory(size, idx, pool);
       
     if(_begin.get() == NULL) {
-       throw new std::runtime_error("Could not allocate memory in KmrArray resize()");
+       throw std::runtime_error("Could not allocate memory in KmrArray resize()");
     }
 
     if (size > oldSize && idx == -1) {
@@ -442,80 +412,73 @@ public:
        memset(start, 0, KmerSizer::getByteSize()*(size-oldSize));
        start = (char*) (getValueStart() + oldSize);
        memset(start, 0, sizeof(ValueType) * (size - oldSize));
-    }
+    }    
+  }
     
+  void _copyRange(KmerPtr &srcKmer, ValueType *srcValue, unsigned long idx, unsigned long srcIdx, unsigned long count) {
+	memcpy((_begin + idx).get(), (srcKmer + srcIdx).get(), count * KmerSizer::getByteSize()); 
+	memcpy(getValueStart() + idx, srcValue + srcIdx, count * sizeof(ValueType));
   }
 
-  void _setMemory(unsigned long size, unsigned long idx)
+  void _setMemory(unsigned long size, unsigned long idx, PoolManager &pool = BoostPoolManager::get())
   {
-    void *old = _begin.get();
-    void *memory = NULL;
+    void *oldMemory = _begin.get();
+    void *memory    = NULL;
+    
+    KmerPtr oldBegin(_begin.get());
     
     if (size != 0 ) {
     	// allocate new memory
-        boost::pool<> &newPool = getPool( size * getElementByteSize() );
-        memory = newPool.malloc();
+        //boost::pool<> &newPool = getPool( size * getElementByteSize() );
+        //memory = newPool.ordered_malloc();
     	//memory = malloc( size * getElementByteSize() );
+    	memory = pool.malloc( size * getElementByteSize() );
 
         if(memory == NULL) {
-           throw new std::runtime_error("Could not allocate memory in KmerArray _setMemory()");
+           throw std::runtime_error("Could not allocate memory in KmerArray _setMemory()");
         }        
     }
     unsigned long oldSize = _size;
     unsigned long lesserSize = std::min(size,oldSize);
-    ValueType *oldValue;
+    ValueType *oldValueStart;
     if (oldSize > 0) {
-    	oldValue = getValueStart();
+    	oldValueStart = getValueStart();
     }
-    KmerPtr oldBegin(_begin.get());
     _begin = KmerPtr( memory );
     _size = size;
-     
-    // TODO refactor this block
-    if (old != NULL && memory != NULL && oldValue != NULL && lesserSize > 0) {
+    
+    if (oldMemory != NULL && memory != NULL && oldValueStart != NULL && lesserSize > 0) {
       // copy the old contents
       if (idx == -1 || idx >= lesserSize) {
       	// copy all records in order (default ; end is trimmed or expanded)
-        memcpy(memory, old, lesserSize*KmerSizer::getByteSize());
-        memcpy(getValueStart(), oldValue, lesserSize*sizeof(ValueType));
-      } else {
+      	_copyRange(oldBegin,oldValueStart, 0, 0, lesserSize);
+      } else {      	
+      	// shrink or expand.
       	
-      	// shrink or expand the first records will be copied
+      	// the first record(s) leading to idx will be copied
       	if (idx > 0) {
-      	  memcpy(memory, old, (idx)*KmerSizer::getByteSize());
-          memcpy(getValueStart(), oldValue, (idx)*sizeof(ValueType));
+      	  _copyRange(oldBegin, oldValueStart, 0, 0, idx);
       	}
       	
       	if (lesserSize == size) {
-      	  // shrink, removing record at idx
-      	  if (idx < lesserSize-1) {
-      	  	void *memory2 = _begin[idx].get();
-      	  	void *old2 = oldBegin[idx+1].get();
-      	  	unsigned long length = (lesserSize-idx)*KmerSizer::getByteSize();
-      	  	memcpy(memory2, old2, length);
-      	  	
-      	  	length = (lesserSize-idx)*sizeof(ValueType);
-            memcpy(getValueStart()+idx, oldValue+idx+1, length);
+      	  // shrink: skipping the old record at idx
+      	  if (idx < size) {
+      	  	_copyRange(oldBegin, oldValueStart, idx, idx+1, lesserSize-idx);
       	  }
       	} else {
-      	  // expand, leaving new (uninitialized) record at idx
-      	  if (idx < lesserSize) {
-      	  	void *memory2 = _begin[idx+1].get();
-      	  	void *old2 = oldBegin[idx].get();
-      	  	unsigned long length = (lesserSize-idx)*KmerSizer::getByteSize();
-      	  	memcpy(memory2, old2, length);
-      	  	
-      	  	length = (lesserSize-idx)*sizeof(ValueType);
-            memcpy(getValueStart()+idx+1, oldValue+idx, length);
+      	  // expand: leaving new (uninitialized) record at idx
+      	  if (idx < oldSize) {
+      	  	_copyRange(oldBegin, oldValueStart, idx+1, idx, lesserSize-idx);
       	  }
       	}
       }
     }
-    if (old != NULL) {
+    if (oldMemory != NULL) {
       // free old memory
-      boost::pool<> &oldPool = getPool( oldSize * getElementByteSize() );
-      oldPool.free(old);
+      //boost::pool<> &oldPool = getPool( oldSize * getElementByteSize() );
+      //oldPool.free(old);
       //free(old);
+      pool.free(oldMemory, oldSize * getElementByteSize());
     }
   }
     
@@ -525,7 +488,7 @@ public:
   {
     SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
     if (_size != numKmers)
-      throw new std::invalid_argument("attempt to build an incorrectly sized KmerArray in KmerArray build()"); ;
+      throw std::invalid_argument("attempt to build an incorrectly sized KmerArray in KmerArray build()"); ;
 
     KmerArray &kmers = *this;
     for(SequenceLengthType i=0; i < numKmers ; i+=4) {
@@ -584,7 +547,7 @@ public:
   }
   void insertAt(unsigned long idx, const KmerPtr::Kmer &target) {
   	if (idx > size())
-  	  throw new std::invalid_argument("attempt to access index greater than size in KmerArray insertAt");
+  	  throw std::invalid_argument("attempt to access index greater than size in KmerArray insertAt");
   	resize(size() + 1, idx);
   	_begin[idx] = target;
   }
@@ -613,7 +576,7 @@ public:
   	if (idx1 == idx2)
   	  return;
   	if (idx1 >= size() || idx2 >= size())
-  	  throw new std::invalid_argument("attempt to access index greater than size in KmerArray swap()");
+  	  throw std::invalid_argument("attempt to access index greater than size in KmerArray swap()");
   	  
   	get(idx1).swap(get(idx2));
   	if (sizeof(ValueType) > 0) {
@@ -696,7 +659,7 @@ public:
    void clear() {
      for(int i=0; i< _buckets.size(); i++)
        _buckets[i].reset();
-     BucketType::releasePools();
+     //BucketType::releasePools();
    }
    BucketType &getBucket(long hash) {
    	return _buckets[hash % _buckets.size()];
@@ -857,6 +820,10 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.37  2009-10-31 23:44:17  regan
+// fixed bug in KmerArray::remove
+// refactored memory pool out of KmerArray
+//
 // Revision 1.36  2009-10-31 00:16:35  regan
 // minor changes and optimizations
 //

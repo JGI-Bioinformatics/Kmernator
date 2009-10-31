@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.24 2009-10-30 19:27:49 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.25 2009-10-31 23:44:19 regan Exp $
 //
  
 
@@ -230,9 +230,6 @@ void testKmerArray(SequenceLengthType size)
 // 	
   //BOOST_MESSAGE( size );
   std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
-  KmerArray<WeakKmerTag>::purgePools();
-  KmerArray<SolidKmerTag>::purgePools();
-  KmerArray<float>::purgePools();
  
   SET_KMERS(A.c_str(), B.c_str(), C.c_str());
   KmerSizer::set(size);
@@ -556,6 +553,10 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.25  2009-10-31 23:44:19  regan
+// fixed bug in KmerArray::remove
+// refactored memory pool out of KmerArray
+//
 // Revision 1.24  2009-10-30 19:27:49  regan
 // added iterator goodness, but KmerMap::Iterator still does not work
 //
