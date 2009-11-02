@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.6 2009-10-22 07:04:06 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.7 2009-11-02 18:27:00 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -40,6 +40,7 @@ public:
 
   SequenceLengthType getLength();
   std::string getFasta();
+  BaseLocationVectorType getMarkups();
 
   SequenceLengthType getTwoBitEncodingSequenceLength();
   TwoBitEncoding *getTwoBitSequence();
@@ -51,11 +52,11 @@ class Read : public Sequence
 {
 private:
 
-/*
+	/*
    _data is inherited and now contains a composite of 4 fields:
       +0                    : the sequence as NCBI 2NA (2 bits per base ACGT)
       += (length +3)/4      :  non-ACGT bases: count followed by array of markups
-      += getMarkupLength()  :qualities as 1 byte per base, 0 = N 1..255 Phred Quality Score.
+      += getMarkupLength()  : qualities as 1 byte per base, 0 = N 1..255 Phred Quality Score.
       += length             : null terminated name.
  */
 
@@ -63,6 +64,9 @@ private:
   char * _getQual();
   char * _getName();
 
+  static int qualityToProbabilityInitialized;
+  static int initializeQualityToProbability();
+  
 public:
 
   Read():Sequence(){ };
@@ -74,12 +78,19 @@ public:
   std::string getQuals();
 
   std::string toFastq();
+  
+  static double qualityToProbability[256];
+  
 };
 
 #endif
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.7  2009-11-02 18:27:00  regan
+// added getMarkups()
+// added quality to probability lookup table
+//
 // Revision 1.6  2009-10-22 07:04:06  regan
 // added a few unit tests
 // minor refactor

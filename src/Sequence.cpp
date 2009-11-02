@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.8 2009-10-30 00:51:40 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.9 2009-11-02 18:27:00 regan Exp $
 //
 
 #include <cstring>
@@ -7,6 +7,7 @@
 
 #include "Sequence.h"
 #include <cstdlib>
+#include <cmath>
 
 using namespace std;
 
@@ -20,10 +21,10 @@ static const std::tr1::shared_ptr<TwoBitEncoding> nullSequence(new TwoBitEncodin
 
 
 
- Sequence::Sequence()
- {
-   reset();
- };
+Sequence::Sequence()
+{
+  reset();
+};
 
 Sequence::Sequence(std::string name):
  _length(0)
@@ -108,9 +109,32 @@ SequenceLengthType Sequence::getTwoBitEncodingSequenceLength()
   return TwoBitSequence::fastaLengthToTwoBitLength(getLength());;
 }
 
+BaseLocationVectorType Sequence::getMarkups()
+{
+  SequenceLengthType size =  *_getMarkupBasesCount();
+  BaseLocationVectorType markups( size );
+  if (size > 0) {
+  	BaseLocationType *ptr = _getMarkupBases();
+  	for(int i=0; i<size; i++)
+  	  markups.push_back( *(ptr++) );
+  }
+  return markups;
+}
 
 /*------------------------------------ READ ----------------------------------------*/
 
+double Read::qualityToProbability[256];
+int Read::initializeQualityToProbability() 
+{
+  for (int i=0; i<256; i++) {
+  	Read::qualityToProbability[i] = 0;
+  }
+  int start = 64;
+  for (int i = start ; i < 127 ; i++ )
+    Read::qualityToProbability[i] = 1.0 - pow(10,( ( i - start ) / - 10 ));
+  return 1;
+}
+int Read::qualityToProbabilityInitialized = Read::initializeQualityToProbability();
 
 
 Read::Read(std::string name, std::string fasta, std::string qualBytes)
@@ -165,6 +189,10 @@ string Read::toFastq()
 
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.9  2009-11-02 18:27:00  regan
+// added getMarkups()
+// added quality to probability lookup table
+//
 // Revision 1.8  2009-10-30 00:51:40  regan
 // bug fix and working on executable
 //
