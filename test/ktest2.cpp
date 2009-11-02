@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.10 2009-10-31 00:16:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.11 2009-11-02 18:50:36 regan Exp $
 //
 
 #include <iostream>
@@ -8,22 +8,12 @@
 
 #include <tr1/unordered_map>
 
+#include "Utils.h"
 #include "ReadSet.h"
 #include "Kmer.h"
 
 using namespace std;
 
-unsigned long estimateBucketSize( ReadSet &store, unsigned long assumedReadCoverage = 25 ) {
-	unsigned long baseCount = store.getBaseCount();
-	unsigned long avgSequenceLength = baseCount / store.getSize();
-	unsigned long kmersPerRead = (avgSequenceLength - KmerSizer::getSequenceLength() + 1);
-	unsigned long rawKmers = kmersPerRead * store.getSize();
-	unsigned long estimatedUniqueKmers =  store.getSize() / assumedReadCoverage  * kmersPerRead;
-	unsigned long targetBuckets = estimatedUniqueKmers; // put avg 256 kmers per bucket
-	unsigned long maxBuckets = 128*1024*1024;
-	unsigned long minBuckets = 128;
-	return targetBuckets > maxBuckets ? maxBuckets : (targetBuckets < minBuckets ? minBuckets : targetBuckets);
-}
 int main(int argc, char *argv[]) {
     
     ReadSet store;
@@ -35,22 +25,51 @@ int main(int argc, char *argv[]) {
       cerr << "loaded " << store.getSize() << " Reads, " << store.getBaseCount() << " Bases " << endl;
     }
     
-    unsigned long numBuckets = estimateBucketSize( store );
+    unsigned long numBuckets = estimateWeakKmerBucketSize( store, 64 );
 
     cerr << "targetting " << numBuckets << endl;
     
     KmerCountMap kmerCounts( numBuckets ); // weak (possible) kmers are much larger than solid estimate
+    KmerSolidMap solidKmers( numBuckets / 32 );
+    
+    TwoBitEncoding _kmer1[KmerSizer::getTwoBitLength()];
+    TwoBitEncoding _kmer2[KmerSizer::getTwoBitLength()];
+    KmerPtr kmer1(&_kmer1), kmer2(&_kmer2);
+    KmerPtr least;
+    
+    unsigned long minDepth = 10;
+    
     
     for (int i=0 ; i < store.getSize(); i++)
     {
-       KmerArray<WeakKmerTag> kmers(store.getRead(i).getTwoBitSequence(),store.getRead(i).getLength());
+       KmerWeights kmers = buildWeightedKmers(store.getRead(i));
+  
        for (int j=0; j < kmers.size(); j++)
        {
-          kmerCounts[ kmers[j] ]++;
+       	  
+       	  *kmer2 = kmers[j];
+       	  TwoBitSequence::reverseComplement((TwoBitEncoding*)kmer1.get(), (TwoBitEncoding*)kmer2.get(), KmerSizer::getSequenceLength());
+       	  
+       	  bool keepDirection = *kmer1 < *kmer2;
+       	  least = kmer1;
+       	  if (!keepDirection)
+       	     least = kmer2;
+       	  
+       	  if ( solidKmers.exists( *least ) ) {
+       	  	// track stats
+       	  	solidKmers[ *least ].value.track( kmers.valueAt(j), keepDirection );
+       	  	
+       	  } else if (++kmerCounts[ *least ] > minDepth) {
+          	// track stats and pop out of weak hash
+          	solidKmers[ *least ].value.track( kmers.valueAt(j), keepDirection );
+          	
+          	kmerCounts.remove(*least);
+          };
        }
        if (i % 1000000 == 0) {
-       	 KmerCountMap::Iterator it = kmerCounts.begin();
-         cerr << i << " reads, " << kmerCounts.size() << " kmers so far " << it.bucketIndex() << endl;//<< " : " << it.bucket().toString() << endl;
+       	 KmerSolidMap::Iterator it = solidKmers.begin();
+         cerr << i << " reads, " << solidKmers.size() << " / " << kmerCounts.size() << " kmers so far " 
+              << it.bucketIndex() << endl ;//<< " : " << it.bucket().toString() << endl;
          
        }
     }
@@ -62,6 +81,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.11  2009-11-02 18:50:36  regan
+// more changes
+//
 // Revision 1.10  2009-10-31 00:16:38  regan
 // minor changes and optimizations
 //
