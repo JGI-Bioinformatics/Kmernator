@@ -1,9 +1,10 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.25 2009-10-31 23:44:19 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.26 2009-11-02 18:49:07 regan Exp $
 //
  
 
 #include "TwoBitSequence.h"
 #include "Kmer.h"
+#include "Utils.h"
 
 #define BOOST_TEST_MODULE KmerSetTest
 #include <boost/test/unit_test.hpp>
@@ -553,6 +554,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.26  2009-11-02 18:49:07  regan
+// fixed linking issues
+//
 // Revision 1.25  2009-10-31 23:44:19  regan
 // fixed bug in KmerArray::remove
 // refactored memory pool out of KmerArray

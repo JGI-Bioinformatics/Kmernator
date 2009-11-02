@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.12 2009-10-31 23:41:48 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.13 2009-11-02 18:48:44 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -30,7 +30,7 @@ add_test( ReadSetTest ReadSetTest )
                                           
 
 add_executable( KmerTest KmerTest )
-target_link_libraries( KmerTest TwoBitSequence Kmer
+target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet
                                 boost_test_exec_monitor-mt 
                                 boost_unit_test_framework-mt )
 add_test( KmerTest KmerTest )
@@ -44,6 +44,9 @@ add_test(ktest2 ktest2 21 10.fastq)
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.13  2009-11-02 18:48:44  regan
+# fixed linking issues
+#
 # Revision 1.12  2009-10-31 23:41:48  regan
 # fixed build to read env CXX_FLAGS
 #
