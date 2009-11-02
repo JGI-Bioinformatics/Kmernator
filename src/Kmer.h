@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.38 2009-11-02 18:48:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.39 2009-11-02 20:02:48 cfurman Exp $
 //
 
 #ifndef _KMER_H
@@ -750,63 +750,64 @@ public:
 public:
   class Iterator : public std::iterator<std::forward_iterator_tag, KmerMap>
   {
+    friend class KmerMap;
     private:
-      KmerMap *_tgt;
-      BucketsVectorIterator _pos; 
-      BucketTypeIterator    _pos2;
-    public:
-      Iterator(KmerMap *map, const BucketsVectorIterator &pos, unsigned long idx = 0): _tgt(map), _pos(pos), _pos2( (*pos).begin() ) {
-        if ( ! isEnd() ) {
-          setPos2(*_pos, idx);
-          if ( _pos2.isEnd() )
-            ++(*this);
-        }
-      }
-      Iterator(const Iterator &copy): _pos2( (*copy._pos).begin() ){
-        *this = copy;
-      }
-      ~Iterator() {}
-      void setPos2(BucketType &bucket, unsigned long idx = 0) {
-        _pos2 = bucket.begin();
-        for(unsigned long i=0; i<idx; i++)
-          _pos2++;
-      }
-      Iterator& operator=(const Iterator& other) {
-      	_tgt = other._tgt;
-        _pos = other._pos;
-        _pos2 = other._pos2;
+     const KmerMap *_target;
+     BucketsVectorIterator _iBucket;
+     BucketTypeIterator  _iElement;
+
+     void _moveToNextValidElement()  {
+          while(_iElement == _iBucket->end()  && ++_iBucket != _target->_buckets.end() ) 
+          _iElement = _iBucket->begin();
+     }
+          
+      Iterator(KmerMap *target):
+      _target(target),
+      _iBucket(target->_buckets.begin()),
+      _iElement(_iBucket->begin())
+     {
+       _moveToNextValidElement();
+     }
+
+      Iterator(KmerMap *target,bool endConstructor):
+      _target(target),
+      _iBucket(target->_buckets.end()), 
+      _iElement((_iBucket-1)->end())    // Assumes at least 1 bucket.
+     {
+
+     }
+
+     public:
+        
+      bool operator==(const Iterator& other) 
+      { return _iBucket == other._iBucket && _iElement == other._iElement; }
+      
+      bool operator!=(const Iterator& other) 
+      { return !(*this == other); }
+
+      Iterator& operator++() 
+      { 
+        ++_iElement;
+        _moveToNextValidElement();
         return *this;
       }
-      bool operator==(const Iterator& other) { return _pos == other._pos && _pos2 == other._pos2; }
-      bool operator!=(const Iterator& other) { return _pos != other._pos || _pos2 != other._pos2; }
-      Iterator& operator++() { 
-        bool movedBucket = false;
-        while ( !isEnd() ) {
-          if ( _pos2.isEnd() ) {
-            setPos2(*(++_pos));
-            movedBucket = true;
-          } else if (movedBucket) {
-            break;
-          } else {
-            _pos2++;
-            if ( !_pos2.isEnd() )
-              break;
-          }
-        }
-        return *this;
-      }
-      Iterator operator++(int unused) { Iterator tmp(*this) ; ++(*this); return tmp; }
-      ElementType &operator*() { return *_pos2; }
-      KmerPtr::Kmer &key() {return _pos2.key(); }
-      Value &value() { return _pos2.value(); }
-      BucketType &bucket() { return *_pos; }
-      unsigned long bucketIndex() { return (_pos - _tgt->_buckets.begin()); }
-      ElementType *operator->() { return &(*_pos2); }
-      bool isEnd() { return _pos == _tgt->_buckets.end(); }
+
+      Iterator operator++(int unused) 
+      { Iterator tmp(*this) ; ++(*this); return tmp; }
+
+      ElementType &operator*()  { return *_iElement;        }
+      ElementType *operator->() { return &(*_iElement);     }
+
+      KmerPtr::Kmer &key()      { return _iElement.key();   }
+      Value &value()            { return _iElement.value(); }
+
+      BucketType &bucket() { return *_iBucket; }
+      unsigned long bucketIndex() { return (_iBucket - _target->_buckets.begin()); }
+
   };
 
-  Iterator begin() { return Iterator( this, _buckets.begin(), 0); }
-  Iterator end()   { return Iterator( this, _buckets.end()  , 0); }
+  Iterator begin()  { return Iterator(this);}
+  Iterator end()   {  return Iterator(this,true);}
 
 };
 
@@ -817,6 +818,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.39  2009-11-02 20:02:48  cfurman
+// KmerMap::iterator refactor
+//
 // Revision 1.38  2009-11-02 18:48:18  regan
 // minor refactor and performance tweaks
 //
