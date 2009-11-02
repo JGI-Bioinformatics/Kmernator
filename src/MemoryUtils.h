@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.2 2009-11-02 18:27:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.3 2009-11-02 21:19:25 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
@@ -94,17 +94,20 @@ public:
 };
 
 
-std::string getMemoryUsage()
-{
-  std::stringstream ss;
-  rusage usage
-  ss << 
-}
+//std::string getMemoryUsage()
+//{
+//  std::stringstream ss;
+  //rusage usage
+  //ss << 
+//}
 
 #endif
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.3  2009-11-02 21:19:25  regan
+// fixed types and boundary tests
+//
 // Revision 1.2  2009-11-02 18:27:43  regan
 // refactor memory pools (out)
 //

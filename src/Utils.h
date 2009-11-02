@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.1 2009-11-02 18:47:34 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.2 2009-11-02 21:19:25 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -7,6 +7,7 @@
 #include <cmath>
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 
 #include "Kmer.h"
 #include "Sequence.h"
@@ -85,9 +86,9 @@ public:
   ~SolidTrackingData() {}
   
   bool track(double weight, bool forward) {
-  	if (weight < minimumWeight)
+    if (weight < minimumWeight)
   	  return false;
-    if (count < -1) {
+    if (count < 0xffff) {
       count++;
       if (forward) 
         directionBias++;
@@ -96,10 +97,18 @@ public:
     } else
       return false;
   }
+  std::string toString() {
+    std::stringstream ss;
+    ss << count << ":" << std::fixed << std::setprecision(2) << ((double)directionBias / (double)count);
+    ss << ':' << std::fixed << std::setprecision(2) << ((double)count / weightedCount);
+    return ss.str();
+  }
+  // cast to std::string
+  operator std::string() { return toString() ; }
 };
-std::ostream &operator<<(std::ostream &stream, SolidTrackingData ob)
+std::ostream &operator<<(std::ostream &stream, SolidTrackingData &ob)
 {
-  stream << ob.count << ':' << ((double)ob.directionBias / (double)ob.count) << ':' << ((double)ob.count / ob.weightedCount);
+  stream << ob.toString();
   return stream;
 }
 
@@ -133,6 +142,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Utils.h,v $
+// Revision 1.2  2009-11-02 21:19:25  regan
+// fixed types and boundary tests
+//
 // Revision 1.1  2009-11-02 18:47:34  regan
 // added some code without a permanent home
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.39 2009-11-02 20:02:48 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.40 2009-11-02 21:19:25 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -20,6 +20,9 @@
 #endif
 
 typedef std::tr1::shared_ptr<TwoBitEncoding> KmerSharedPtr;
+typedef unsigned long IndexType;
+
+const IndexType MAX_INDEX = (IndexType) -1;
 
 class KmerSizer
 {
@@ -30,11 +33,11 @@ private:
   SequenceLengthType _sequenceLength;
 
   SequenceLengthType _twoBitLength;
-  unsigned long _totalSize;
+  IndexType _totalSize;
 public:
 
   static inline KmerSizer &getSingleton() { return singleton; }
-  static void set(SequenceLengthType sequenceLength, unsigned long extraBytes=0)
+  static void set(SequenceLengthType sequenceLength, IndexType extraBytes=0)
   {
     KmerSizer &singleton = getSingleton();
     singleton._sequenceLength = sequenceLength;
@@ -48,7 +51,7 @@ public:
   static inline SequenceLengthType getTwoBitLength()   {
     return getSingleton()._twoBitLength;
   }
-  static inline unsigned long getByteSize()  {
+  static inline IndexType getByteSize()  {
     return getSingleton()._totalSize;
   }
 };
@@ -210,11 +213,11 @@ public:
    KmerPtr &operator=(const void *right)    { _me = (Kmer *)right; return *this; }
    KmerPtr &operator=(const KmerPtr &right) { _me = right._me ;    return *this; }
    
-   KmerPtr  operator+ (unsigned long right) const { return KmerPtr((Kmer *)((char *)_me + right * KmerSizer::getByteSize())); }
-   KmerPtr  operator- (unsigned long right) const { return *this + (-right); }
+   KmerPtr  operator+ (IndexType right) const { return KmerPtr((Kmer *)((char *)_me + right * KmerSizer::getByteSize())); }
+   KmerPtr  operator- (IndexType right) const { return *this + (-right); }
    
-   KmerPtr &operator+=(unsigned long right)       { *this = *this + right; return *this; }
-   KmerPtr &operator-=(unsigned long right)       { *this = *this - right; return *this; }
+   KmerPtr &operator+=(IndexType right)       { *this = *this + right; return *this; }
+   KmerPtr &operator-=(IndexType right)       { *this = *this - right; return *this; }
 
    KmerPtr &operator++()           { return *this += 1;}
    KmerPtr operator++(int unused)  { KmerPtr saved = *this; ++(*this); return saved; }
@@ -222,8 +225,8 @@ public:
    KmerPtr &operator--()           { return *this -= 1;}
    KmerPtr operator--(int unused)  { KmerPtr saved = *this; --(*this); return saved; }
 
-   const Kmer &operator[](unsigned long index) const { return *(*this + index); }
-   Kmer       &operator[](unsigned long index)       { return *(*this + index); }
+   const Kmer &operator[](IndexType index) const { return *(*this + index); }
+   Kmer       &operator[](IndexType index)       { return *(*this + index); }
      
    // cast operator
    operator VoidPtr() { return (VoidPtr)_me ; }
@@ -234,6 +237,13 @@ public:
 
 template<typename Value>
 class KmerValue { public: Value value; };
+template<typename Value>
+std::ostream &operator<<(std::ostream &stream, KmerValue<Value> &ob)
+{
+  stream << ob.value;
+  return stream;
+}
+
 
 typedef KmerValue<unsigned char> KmerValueByte;
 typedef KmerValue<unsigned short> KmerValue2Byte;
@@ -272,11 +282,11 @@ public:
 
 private:
   KmerPtr _begin;
-  unsigned long _size;
+  IndexType _size;
 
 public:
  
-  KmerArray(unsigned long size = 0):
+  KmerArray(IndexType size = 0):
    _size(0), _begin(NULL)
   {
     resize(size);
@@ -316,13 +326,13 @@ public:
     return *this;
   }
 
-  const KmerPtr::Kmer &operator[](unsigned long index) const
+  const KmerPtr::Kmer &operator[](IndexType index) const
   {
     if (index >= _size)
        throw std::invalid_argument("attempt to access index greater than size in KmerArray operator[] const"); 
     return get(index);
   }
-  KmerPtr::Kmer &operator[](unsigned long index)
+  KmerPtr::Kmer &operator[](IndexType index)
   {
     if (index >= _size)
        throw std::invalid_argument("attempt to access index greater than size in KmerArray operator[]"); 
@@ -335,7 +345,7 @@ public:
   	else
   	  return NULL;
   }
-  const ValueType &valueAt(unsigned long index) const
+  const ValueType &valueAt(IndexType index) const
   {
     if (index >= _size)
     {
@@ -343,7 +353,7 @@ public:
   	}
     return *( getValueStart() + index );
   }
-  ValueType &valueAt(unsigned long index)
+  ValueType &valueAt(IndexType index)
   {
     if (index >= _size)
     {
@@ -352,27 +362,27 @@ public:
     return *( getValueStart() + index );
   }
 
-  const KmerPtr::Kmer &get(unsigned long index) const
+  const KmerPtr::Kmer &get(IndexType index) const
   {
     return *(_begin + index);
   }
-  KmerPtr::Kmer &get(unsigned long index)
+  KmerPtr::Kmer &get(IndexType index)
   {
     return *(_begin + index);
   }
 
-  const ElementType getElement(unsigned long idx) const
+  const ElementType getElement(IndexType idx) const
   {
   	return ElementType( get(idx), valueAt(idx) );
   }
-  ElementType getElement(unsigned long idx)
+  ElementType getElement(IndexType idx)
   {
   	return ElementType( get(idx), valueAt(idx) );
   }
   
-  unsigned int size() const { return _size; }
+  IndexType size() const { return _size; }
 
-  unsigned int getElementByteSize() const { 
+  IndexType getElementByteSize() const { 
   	return (KmerSizer::getByteSize() + sizeof(ValueType)); 
   }
   
@@ -387,14 +397,14 @@ public:
     _size = 0;
   }
 
-  void resize(unsigned long size) {
-  	resize(size, -1);
+  void resize(IndexType size) {
+  	resize(size, MAX_INDEX);
   }
-  void resize(unsigned long size, unsigned long idx)//, PoolManager &pool = BoostPoolManager::get())
+  void resize(IndexType size, IndexType idx)//, PoolManager &pool = BoostPoolManager::get())
   {
     if (size == _size)
       return;
-    unsigned long oldSize = _size;
+    IndexType oldSize = _size;
     
     // alloc / realloc memory
     _setMemory(size, idx);//, pool);
@@ -403,7 +413,7 @@ public:
        throw std::runtime_error("Could not allocate memory in KmerArray resize()");
     }
 
-    if (size > oldSize && idx == -1) {
+    if (size > oldSize && idx == MAX_INDEX) {
        // zero fill remainder
        char *start = (char*) (_begin + oldSize).get();
        memset(start, 0, KmerSizer::getByteSize()*(size-oldSize));
@@ -412,12 +422,12 @@ public:
     }    
   }
     
-  void _copyRange(KmerPtr &srcKmer, ValueType *srcValue, unsigned long idx, unsigned long srcIdx, unsigned long count) {
+  void _copyRange(KmerPtr &srcKmer, ValueType *srcValue, IndexType idx, IndexType srcIdx, IndexType count) {
 	memcpy((_begin + idx).get(), (srcKmer + srcIdx).get(), count * KmerSizer::getByteSize()); 
 	memcpy(getValueStart() + idx, srcValue + srcIdx, count * sizeof(ValueType));
   }
 
-  void _setMemory(unsigned long size, unsigned long idx)//, PoolManager &pool = BoostPoolManager::get())
+  void _setMemory(IndexType size, IndexType idx)//, PoolManager &pool = BoostPoolManager::get())
   {
     void *oldMemory = _begin.get();
     void *memory    = NULL;
@@ -433,8 +443,8 @@ public:
            throw std::runtime_error("Could not allocate memory in KmerArray _setMemory()");
         }        
     }
-    unsigned long oldSize = _size;
-    unsigned long lesserSize = std::min(size,oldSize);
+    IndexType oldSize = _size;
+    IndexType lesserSize = std::min(size,oldSize);
     ValueType *oldValueStart;
     if (oldSize > 0) {
     	oldValueStart = getValueStart();
@@ -444,7 +454,7 @@ public:
     
     if (oldMemory != NULL && memory != NULL && oldValueStart != NULL && lesserSize > 0) {
       // copy the old contents
-      if (idx == -1 || idx >= lesserSize) {
+      if (idx == MAX_INDEX || idx >= lesserSize) {
       	// copy all records in order (default ; end is trimmed or expanded)
       	_copyRange(oldBegin,oldValueStart, 0, 0, lesserSize);
       } else {      	
@@ -497,29 +507,29 @@ public:
       }
     }
   }
-  unsigned long find(const KmerPtr &target) const {
+  IndexType find(const KmerPtr &target) const {
   	return find(*target);
   }
-  unsigned long find(const KmerPtr::Kmer &target) const {
-    for(unsigned long i=0; i<_size; i++)
+  IndexType find(const KmerPtr::Kmer &target) const {
+    for(IndexType i=0; i<_size; i++)
       if (target.compare(_begin[i]) == 0)
         return i;
-    return -1;
+    return MAX_INDEX;
   }
-  unsigned long findSorted(const KmerPtr &target, bool &targetIsFound) const {
+  IndexType findSorted(const KmerPtr &target, bool &targetIsFound) const {
   	return findSorted(*target, targetIsFound);
   }
-  unsigned long findSorted(const KmerPtr::Kmer &target, bool &targetIsFound) const {
+  IndexType findSorted(const KmerPtr::Kmer &target, bool &targetIsFound) const {
   	// binary search
-  	unsigned long min = 0;
-  	unsigned long max = size();
+  	IndexType min = 0;
+  	IndexType max = size();
  
   	if (max == 0)
     {
        targetIsFound = false;
        return 0;
     }
-  	unsigned long mid;
+  	IndexType mid;
   	int comp;
   	do {
   		mid = (min+max) / 2;
@@ -528,36 +538,36 @@ public:
   		  min = mid+1;
   		else if (comp < 0)
   		  max = mid-1;
-  	} while (comp != 0 && max != -1 && min <= max);
+  	} while (comp != 0 && max != MAX_INDEX && min <= max);
   	if (comp == 0)
   	  targetIsFound = true;
   	else
   	  targetIsFound = false;
   	return mid + (comp>0 && size()>mid?1:0);
   }
-  void insertAt(unsigned long idx, const KmerPtr &target) {
+  void insertAt(IndexType idx, const KmerPtr &target) {
   	insertAt(idx, *target);
   }
-  void insertAt(unsigned long idx, const KmerPtr::Kmer &target) {
+  void insertAt(IndexType idx, const KmerPtr::Kmer &target) {
   	if (idx > size())
   	  throw std::invalid_argument("attempt to access index greater than size in KmerArray insertAt");
   	resize(size() + 1, idx);
   	_begin[idx] = target;
   }
-  unsigned long append(const KmerPtr &target) {
+  IndexType append(const KmerPtr &target) {
     return append(*target);	
   }
-  unsigned long append(const KmerPtr::Kmer &target) {
-  	unsigned long idx = size();
+  IndexType append(const KmerPtr::Kmer &target) {
+  	IndexType idx = size();
    	insertAt(size(), target);
    	return idx;
   }
-  unsigned long insertSorted(const KmerPtr &target) {
+  IndexType insertSorted(const KmerPtr &target) {
   	return insertSorted(*target);
   }
-  unsigned long insertSorted(const KmerPtr::Kmer &target) {
+  IndexType insertSorted(const KmerPtr::Kmer &target) {
   	bool isFound;
-  	unsigned long idx = findSorted(target, isFound);
+  	IndexType idx = findSorted(target, isFound);
   	if (!isFound)
   	  insertAt(idx, target);
   	return idx;
@@ -567,14 +577,14 @@ public:
   }
   void remove(const KmerPtr::Kmer &target) {
   	bool isFound;
-  	unsigned long idx = find(target, isFound);
+  	IndexType idx = find(target, isFound);
   	if (isFound)
   	  remove(idx);
   }
-  void remove(unsigned long idx) {
+  void remove(IndexType idx) {
     resize(size()-1,idx);
   }
-  void swap(unsigned long idx1, unsigned long idx2) {
+  void swap(IndexType idx1, IndexType idx2) {
   	if (idx1 == idx2)
   	  return;
   	if (idx1 >= size() || idx2 >= size())
@@ -591,7 +601,7 @@ public:
   std::string toString() {
   	std::stringstream ss;
   	ss <<  "{";
-  	for(unsigned long idx=0; idx<size(); idx++) {
+  	for(IndexType idx=0; idx<size(); idx++) {
   		ss << get(idx).toFasta() << ":" << valueAt(idx) << ", ";
   	} 
   	ss << "}";
@@ -603,10 +613,10 @@ public:
   {
     private:
       KmerArray *_tgt;
-      unsigned long _idx;
+      IndexType _idx;
       ElementType elementCopy;
     public:
-      Iterator(KmerArray *target, unsigned long idx = 0): _tgt(target), _idx(idx) { }
+      Iterator(KmerArray *target, IndexType idx = 0): _tgt(target), _idx(idx) { }
       Iterator(const Iterator &copy) { *this = copy; }
       ~Iterator() {}
       Iterator& operator=(const Iterator& other) {
@@ -650,7 +660,7 @@ private:
    BucketsVector _buckets;
    
 public:
-   KmerMap(unsigned long bucketCount = 1024*1024) {
+   KmerMap(IndexType bucketCount = 1024*1024) {
      _buckets.resize(bucketCount);
    }
    ~KmerMap() 
@@ -688,7 +698,7 @@ public:
    	  if (bucketPtr == NULL)
    	    bucketPtr = &getBucket(key);
    	    
-   	  unsigned long idx = bucketPtr->insertSorted(key);
+   	  IndexType idx = bucketPtr->insertSorted(key);
    	  return bucketPtr->valueAt(idx) = value;
    }
    
@@ -699,8 +709,8 @@ public:
    	  if (bucketPtr == NULL)
    	    bucketPtr = &getBucket(key);
    	  bool isFound;
-   	  unsigned long idx = bucketPtr->findSorted(key, isFound);
-   	  if (isFound && idx != -1)
+   	  IndexType idx = bucketPtr->findSorted(key, isFound);
+   	  if (isFound && idx != MAX_INDEX)
    	    bucketPtr->remove(idx);
    	  return isFound;
    }
@@ -723,15 +733,15 @@ public:
    ValueType &operator[](const KeyType &key) {
      BucketType &bucket = getBucket(key);
      bool isFound;
-     unsigned long idx = bucket.findSorted(key, isFound);
-     if (isFound && idx != -1)
+     IndexType idx = bucket.findSorted(key, isFound);
+     if (isFound && idx != MAX_INDEX)
        return bucket.valueAt(idx);
      else 
        return insert(key, Value(), &bucket);       
    }
    
-   unsigned long size() const {
-   	unsigned long size = 0;
+   IndexType size() const {
+   	IndexType size = 0;
    	for(int i = 0; i<_buckets.size() ; i++)
    	  size += _buckets[i].size();
    	return size;
@@ -740,7 +750,7 @@ public:
    std::string toString() {
   	std::stringstream ss;
   	ss << this << "[";
-  	for(unsigned long idx=0; idx<_buckets.size(); idx++) {
+  	for(IndexType idx=0; idx<_buckets.size(); idx++) {
   		ss << "bucket:" << idx << ' ' << _buckets[idx].toString() << ", ";
   	} 
   	ss << "]";
@@ -802,7 +812,7 @@ public:
       Value &value()            { return _iElement.value(); }
 
       BucketType &bucket() { return *_iBucket; }
-      unsigned long bucketIndex() { return (_iBucket - _target->_buckets.begin()); }
+      IndexType bucketIndex() { return (_iBucket - _target->_buckets.begin()); }
 
   };
 
@@ -818,6 +828,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.40  2009-11-02 21:19:25  regan
+// fixed types and boundary tests
+//
 // Revision 1.39  2009-11-02 20:02:48  cfurman
 // KmerMap::iterator refactor
 //

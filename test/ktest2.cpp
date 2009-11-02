@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.11 2009-11-02 18:50:36 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.12 2009-11-02 21:19:28 regan Exp $
 //
 
 #include <iostream>
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
        for (int j=0; j < kmers.size(); j++)
        {
        	  
-       	  *kmer2 = kmers[j];
+       	  *kmer1 = kmers[j];
        	  TwoBitSequence::reverseComplement((TwoBitEncoding*)kmer1.get(), (TwoBitEncoding*)kmer2.get(), KmerSizer::getSequenceLength());
        	  
        	  bool keepDirection = *kmer1 < *kmer2;
@@ -68,19 +68,29 @@ int main(int argc, char *argv[]) {
        }
        if (i % 1000000 == 0) {
        	 KmerSolidMap::Iterator it = solidKmers.begin();
-         cerr << i << " reads, " << solidKmers.size() << " / " << kmerCounts.size() << " kmers so far " 
-              << it.bucketIndex() << endl ;//<< " : " << it.bucket().toString() << endl;
-         
+       	 cerr << i << " reads, " << solidKmers.size() << " / " << kmerCounts.size() << " kmers so far ";
+       	 if (it != solidKmers.end())
+           cerr << it.bucket().toString();
+         else
+           cerr << " EMPTY ";
+         cerr << endl;         
        }
     }
-     KmerCountMap::Iterator it = kmerCounts.begin();
-    cerr << store.getSize() << " reads, " << kmerCounts.size() << " kmers so far " << it.bucketIndex() << endl;//<< " : " << it.bucket().toString() << endl;
-    
+    KmerSolidMap::Iterator it = solidKmers.begin();
+    cerr << store.getSize() << " reads, " << solidKmers.size() << " / " << kmerCounts.size() << " kmers so far ";
+    if (it != solidKmers.end())
+      cerr << it.bucket().toString();
+    else
+    cerr << " EMPTY ";
+    cerr << endl;         
 }
 
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.12  2009-11-02 21:19:28  regan
+// fixed types and boundary tests
+//
 // Revision 1.11  2009-11-02 18:50:36  regan
 // more changes
 //
