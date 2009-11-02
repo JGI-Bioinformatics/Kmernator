@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.13 2009-10-31 00:16:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.14 2009-11-02 18:24:29 regan Exp $
 //
 
 #include <cstring>
@@ -112,8 +112,6 @@ std::string TwoBitSequence::getFasta(const TwoBitEncoding *in, SequenceLengthTyp
 
 void TwoBitSequence::reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length)
 {
-   
- 
   SequenceLengthType twoBitLength = fastaLengthToTwoBitLength(length);
    
   out+=twoBitLength;
@@ -125,8 +123,7 @@ void TwoBitSequence::reverseComplement(const TwoBitEncoding *in, TwoBitEncoding 
   if (bitShift > 0)
   {
      shiftLeft(out,out,twoBitLength,4-bitShift);
-  }
-  
+  } 
 }
 
  
@@ -166,6 +163,9 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLe
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.14  2009-11-02 18:24:29  regan
+// *** empty log message ***
+//
 // Revision 1.13  2009-10-31 00:16:35  regan
 // minor changes and optimizations
 //

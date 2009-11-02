@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.12 2009-10-27 22:13:41 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.13 2009-11-02 18:24:29 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -19,9 +19,7 @@ class TwoBitSequence // yee hah!
 {
 private:
    TwoBitSequence();
-   static TwoBitSequence singleton;
-   
- 
+   static TwoBitSequence singleton;  
    static void initReverseComplementTable();
  
 
@@ -51,6 +49,9 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.13  2009-11-02 18:24:29  regan
+// *** empty log message ***
+//
 // Revision 1.12  2009-10-27 22:13:41  cfurman
 // removed bit shift table
 //
