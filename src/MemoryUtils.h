@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.1 2009-10-31 23:44:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.2 2009-11-02 18:27:43 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
@@ -10,6 +10,11 @@
 #include <tr1/memory>
 #include <cstdlib>
 #include <vector>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <iostream>
+#include <cstdlib>
+#include <cstring>
 
 class PoolManager
 {
@@ -20,15 +25,19 @@ public:
 
 class ClassicMemory : public PoolManager
 {
+private:
+  static ClassicMemory singleton;
 public:
-  void *malloc(unsigned long size) { return std::malloc(size); }
-  void free(void* memory, unsigned long size) { std::free(memory); }
+  inline void *malloc(unsigned long size) { return std::malloc(size); }
+  inline void free(void* memory, unsigned long size) { std::free(memory); }
   
-  inline static PoolManager &get() { static ClassicMemory singleton; return singleton; }
+  inline static PoolManager &get() { return singleton; }
 };
 
 class BoostPoolManager : public PoolManager
 {
+private:
+  static BoostPoolManager singleton;
 public:
   typedef boost::pool< > Pool;
   typedef std::tr1::shared_ptr<Pool> PoolPtr;
@@ -50,8 +59,8 @@ public:
   	  frees=0;
   	}
   }
-  // inline static PoolManager &get() {return ClassicMemory::get();}
-  inline static PoolManager &get() { static BoostPoolManager singleton; return singleton; } 
+  inline static PoolManager &get() {return ClassicMemory::get();}
+  //inline static PoolManager &get() { return singleton; } 
    
 private:
   SizePools pools;
@@ -85,10 +94,20 @@ public:
 };
 
 
+std::string getMemoryUsage()
+{
+  std::stringstream ss;
+  rusage usage
+  ss << 
+}
+
 #endif
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.2  2009-11-02 18:27:43  regan
+// refactor memory pools (out)
+//
 // Revision 1.1  2009-10-31 23:44:17  regan
 // fixed bug in KmerArray::remove
 // refactored memory pool out of KmerArray
