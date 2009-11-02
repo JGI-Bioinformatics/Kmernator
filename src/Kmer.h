@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.37 2009-10-31 23:44:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.38 2009-11-02 18:48:18 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -224,7 +224,7 @@ public:
 
    const Kmer &operator[](unsigned long index) const { return *(*this + index); }
    Kmer       &operator[](unsigned long index)       { return *(*this + index); }
-   
+     
    // cast operator
    operator VoidPtr() { return (VoidPtr)_me ; }
    
@@ -239,13 +239,11 @@ typedef KmerValue<unsigned char> KmerValueByte;
 typedef KmerValue<unsigned short> KmerValue2Byte;
 typedef KmerValue<unsigned int> KmerValue4Byte;
 
-
-class SolidKmerTag : public KmerValue<unsigned short> {};
 class WeakKmerTag  : public KmerValue<unsigned char> {};
 
 static KmerPtr NullKmerPtr(NULL);
 
-template<typename Value = SolidKmerTag>
+template<typename Value = WeakKmerTag>
 class KmerArray
 {
 
@@ -378,13 +376,12 @@ public:
   	return (KmerSizer::getByteSize() + sizeof(ValueType)); 
   }
   
-  void reset(PoolManager &pool = BoostPoolManager::get())
+  void reset()//PoolManager &pool = BoostPoolManager::get())
   {
     void *test = (void *)(_begin.get());
     if (test != NULL) {
-      pool.free(test, size() * getElementByteSize());
-      //getPool( size() * getElementByteSize() ).free(test); 
-      //free(test);
+      //pool.free(test, size() * getElementByteSize());
+      std::free(test);
     } 
     _begin = NULL;
     _size = 0;
@@ -393,17 +390,17 @@ public:
   void resize(unsigned long size) {
   	resize(size, -1);
   }
-  void resize(unsigned long size, unsigned long idx, PoolManager &pool = BoostPoolManager::get())
+  void resize(unsigned long size, unsigned long idx)//, PoolManager &pool = BoostPoolManager::get())
   {
     if (size == _size)
       return;
     unsigned long oldSize = _size;
     
     // alloc / realloc memory
-    _setMemory(size, idx, pool);
+    _setMemory(size, idx);//, pool);
       
-    if(_begin.get() == NULL) {
-       throw std::runtime_error("Could not allocate memory in KmrArray resize()");
+    if(_begin.get() == NULL && size > 0) {
+       throw std::runtime_error("Could not allocate memory in KmerArray resize()");
     }
 
     if (size > oldSize && idx == -1) {
@@ -420,7 +417,7 @@ public:
 	memcpy(getValueStart() + idx, srcValue + srcIdx, count * sizeof(ValueType));
   }
 
-  void _setMemory(unsigned long size, unsigned long idx, PoolManager &pool = BoostPoolManager::get())
+  void _setMemory(unsigned long size, unsigned long idx)//, PoolManager &pool = BoostPoolManager::get())
   {
     void *oldMemory = _begin.get();
     void *memory    = NULL;
@@ -429,11 +426,9 @@ public:
     
     if (size != 0 ) {
     	// allocate new memory
-        //boost::pool<> &newPool = getPool( size * getElementByteSize() );
-        //memory = newPool.ordered_malloc();
-    	//memory = malloc( size * getElementByteSize() );
-    	memory = pool.malloc( size * getElementByteSize() );
-
+    	//memory = pool.malloc( size * getElementByteSize() );
+        memory = std::malloc( size * getElementByteSize() );
+        
         if(memory == NULL) {
            throw std::runtime_error("Could not allocate memory in KmerArray _setMemory()");
         }        
@@ -475,10 +470,8 @@ public:
     }
     if (oldMemory != NULL) {
       // free old memory
-      //boost::pool<> &oldPool = getPool( oldSize * getElementByteSize() );
-      //oldPool.free(old);
-      //free(old);
-      pool.free(oldMemory, oldSize * getElementByteSize());
+      //pool.free(oldMemory, oldSize * getElementByteSize());
+      std::free(oldMemory);
     }
   }
     
@@ -568,6 +561,15 @@ public:
   	if (!isFound)
   	  insertAt(idx, target);
   	return idx;
+  }
+  void remove(const KmerPtr &target) {
+  	remove(*target);
+  }
+  void remove(const KmerPtr::Kmer &target) {
+  	bool isFound;
+  	unsigned long idx = find(target, isFound);
+  	if (isFound)
+  	  remove(idx);
   }
   void remove(unsigned long idx) {
     resize(size()-1,idx);
@@ -659,7 +661,6 @@ public:
    void clear() {
      for(int i=0; i< _buckets.size(); i++)
        _buckets[i].reset();
-     //BucketType::releasePools();
    }
    BucketType &getBucket(long hash) {
    	return _buckets[hash % _buckets.size()];
@@ -809,10 +810,6 @@ public:
 
 };
 
-typedef KmerMap<SolidKmerTag>   KmerSolidMap;
-typedef KmerMap<WeakKmerTag>    KmerWeakMap;
-typedef KmerMap<unsigned short> KmerCountMap;
-
 #endif
 
 
@@ -820,6 +817,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.38  2009-11-02 18:48:18  regan
+// minor refactor and performance tweaks
+//
 // Revision 1.37  2009-10-31 23:44:17  regan
 // fixed bug in KmerArray::remove
 // refactored memory pool out of KmerArray
