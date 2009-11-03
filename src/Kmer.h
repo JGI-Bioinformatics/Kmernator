@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.40 2009-11-02 21:19:25 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.41 2009-11-03 17:15:40 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <vector>
 #include <stdexcept>
+#include <iostream>
+#include <iomanip>
 
 #include <boost/functional/hash.hpp>
 
@@ -237,18 +239,70 @@ public:
 
 template<typename Value>
 class KmerValue { public: Value value; };
+
 template<typename Value>
 std::ostream &operator<<(std::ostream &stream, KmerValue<Value> &ob)
 {
   stream << ob.value;
   return stream;
-}
+};
 
 
 typedef KmerValue<unsigned char> KmerValueByte;
 typedef KmerValue<unsigned short> KmerValue2Byte;
 typedef KmerValue<unsigned int> KmerValue4Byte;
 
+
+class SolidTrackingData 
+{
+public:
+  static double minimumWeight;
+  static unsigned short maxCount;
+  static unsigned short minimumDepth;
+  
+public:
+  static inline void trackMaxCount(unsigned short count) { 
+  	if (maxCount < count) { 
+  		maxCount = count; 
+  		if ( count / 200  > minimumDepth) {
+  			minimumDepth = count / 300;
+  		};
+  	}
+  }
+  
+  unsigned short count;
+  unsigned short directionBias;
+  float weightedCount;
+  SolidTrackingData(): count(0), directionBias(0), weightedCount(0.0) {}
+  ~SolidTrackingData() {}
+  
+  bool track(double weight, bool forward) {
+    if (weight < minimumWeight)
+  	  return false;
+    if (count < 0xffff) {
+      count++;
+      if (forward) 
+        directionBias++;
+      weightedCount += weight;
+      trackMaxCount(count);
+      
+      return true;
+    } else
+      return false;
+  }
+  
+  std::string toString() {
+    std::stringstream ss;
+    ss << count << ":" << std::fixed << std::setprecision(2) << ((double)directionBias / (double)count);
+    ss << ':' << std::fixed << std::setprecision(2) << ((double)count / weightedCount);
+    return ss.str();
+  }
+
+};
+
+std::ostream &operator<<(std::ostream &stream, SolidTrackingData &ob);
+
+class SolidKmerTag : public KmerValue<SolidTrackingData> {};
 class WeakKmerTag  : public KmerValue<unsigned char> {};
 
 static KmerPtr NullKmerPtr(NULL);
@@ -660,7 +714,7 @@ private:
    BucketsVector _buckets;
    
 public:
-   KmerMap(IndexType bucketCount = 1024*1024) {
+   KmerMap(IndexType bucketCount = 1024) {
      _buckets.resize(bucketCount);
    }
    ~KmerMap() 
@@ -828,6 +882,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.41  2009-11-03 17:15:40  regan
+// minor refactor
+//
 // Revision 1.40  2009-11-02 21:19:25  regan
 // fixed types and boundary tests
 //

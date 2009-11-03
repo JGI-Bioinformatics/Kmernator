@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.12 2009-11-02 21:19:28 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.13 2009-11-03 17:15:43 regan Exp $
 //
 
 #include <iostream>
@@ -8,9 +8,9 @@
 
 #include <tr1/unordered_map>
 
-#include "Utils.h"
 #include "ReadSet.h"
 #include "Kmer.h"
+#include "Utils.h"
 
 using namespace std;
 
@@ -29,65 +29,21 @@ int main(int argc, char *argv[]) {
 
     cerr << "targetting " << numBuckets << endl;
     
-    KmerCountMap kmerCounts( numBuckets ); // weak (possible) kmers are much larger than solid estimate
-    KmerSolidMap solidKmers( numBuckets / 32 );
     
-    TwoBitEncoding _kmer1[KmerSizer::getTwoBitLength()];
-    TwoBitEncoding _kmer2[KmerSizer::getTwoBitLength()];
-    KmerPtr kmer1(&_kmer1), kmer2(&_kmer2);
-    KmerPtr least;
+    SolidTrackingData::minimumDepth = 10;
+    SolidTrackingData::minimumWeight = 0.25;
     
-    unsigned long minDepth = 10;
+    KmerSpectrum spectrum(numBuckets);
+    buildKmerSpectrum( store, spectrum );
     
-    
-    for (int i=0 ; i < store.getSize(); i++)
-    {
-       KmerWeights kmers = buildWeightedKmers(store.getRead(i));
-  
-       for (int j=0; j < kmers.size(); j++)
-       {
-       	  
-       	  *kmer1 = kmers[j];
-       	  TwoBitSequence::reverseComplement((TwoBitEncoding*)kmer1.get(), (TwoBitEncoding*)kmer2.get(), KmerSizer::getSequenceLength());
-       	  
-       	  bool keepDirection = *kmer1 < *kmer2;
-       	  least = kmer1;
-       	  if (!keepDirection)
-       	     least = kmer2;
-       	  
-       	  if ( solidKmers.exists( *least ) ) {
-       	  	// track stats
-       	  	solidKmers[ *least ].value.track( kmers.valueAt(j), keepDirection );
-       	  	
-       	  } else if (++kmerCounts[ *least ] > minDepth) {
-          	// track stats and pop out of weak hash
-          	solidKmers[ *least ].value.track( kmers.valueAt(j), keepDirection );
-          	
-          	kmerCounts.remove(*least);
-          };
-       }
-       if (i % 1000000 == 0) {
-       	 KmerSolidMap::Iterator it = solidKmers.begin();
-       	 cerr << i << " reads, " << solidKmers.size() << " / " << kmerCounts.size() << " kmers so far ";
-       	 if (it != solidKmers.end())
-           cerr << it.bucket().toString();
-         else
-           cerr << " EMPTY ";
-         cerr << endl;         
-       }
-    }
-    KmerSolidMap::Iterator it = solidKmers.begin();
-    cerr << store.getSize() << " reads, " << solidKmers.size() << " / " << kmerCounts.size() << " kmers so far ";
-    if (it != solidKmers.end())
-      cerr << it.bucket().toString();
-    else
-    cerr << " EMPTY ";
-    cerr << endl;         
 }
 
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.13  2009-11-03 17:15:43  regan
+// minor refactor
+//
 // Revision 1.12  2009-11-02 21:19:28  regan
 // fixed types and boundary tests
 //

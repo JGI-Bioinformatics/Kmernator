@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.2 2009-11-02 21:19:25 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.3 2009-11-03 17:15:40 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -6,8 +6,14 @@
 
 #include <cmath>
 #include <iostream>
-#include <fstream>
-#include <iomanip>
+#include <cstdlib>
+
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/mean.hpp>
+#include <boost/accumulators/statistics/moment.hpp>
+using namespace boost::accumulators;
+
 
 #include "Kmer.h"
 #include "Sequence.h"
@@ -74,46 +80,6 @@ unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKm
 	return std::max( std::min(targetBuckets,maxBuckets), minBuckets );
 }
 
-class SolidTrackingData 
-{
-public:
-  static const double minimumWeight = 0.1;
-  
-  unsigned short count;
-  unsigned short directionBias;
-  float weightedCount;
-  SolidTrackingData(): count(0), directionBias(0), weightedCount(0.0) {}
-  ~SolidTrackingData() {}
-  
-  bool track(double weight, bool forward) {
-    if (weight < minimumWeight)
-  	  return false;
-    if (count < 0xffff) {
-      count++;
-      if (forward) 
-        directionBias++;
-      weightedCount += weight;
-      return true;
-    } else
-      return false;
-  }
-  std::string toString() {
-    std::stringstream ss;
-    ss << count << ":" << std::fixed << std::setprecision(2) << ((double)directionBias / (double)count);
-    ss << ':' << std::fixed << std::setprecision(2) << ((double)count / weightedCount);
-    return ss.str();
-  }
-  // cast to std::string
-  operator std::string() { return toString() ; }
-};
-std::ostream &operator<<(std::ostream &stream, SolidTrackingData &ob)
-{
-  stream << ob.toString();
-  return stream;
-}
-
-
-class SolidKmerTag : public KmerValue<SolidTrackingData> {};
 
 typedef KmerArray<double> KmerWeights;
 
@@ -138,10 +104,84 @@ typedef KmerMap<SolidKmerTag>   KmerSolidMap;
 typedef KmerMap<WeakKmerTag>    KmerWeakMap;
 typedef KmerMap<unsigned short> KmerCountMap;
 
+class KmerSpectrum
+{
+public:
+  KmerSolidMap weak, solid;
+  KmerSpectrum(unsigned long buckets): weak(buckets), solid(buckets/64) {}
+  ~KmerSpectrum() {}
+};
+
+void printStats(unsigned long pos, KmerSpectrum &stats) {
+	KmerSolidMap::Iterator it = stats.solid.begin();
+    std::cerr << pos << " reads, " << stats.solid.size() << " / " << stats.weak.size() << " kmers so far ";
+    for(int i=0; i < 5 && it != stats.solid.end(); i++,it++)
+        std::cerr << it.bucket().toString() << "; ";
+     std::cerr << " minDepth: " << (unsigned long)SolidTrackingData::minimumDepth <<  std::endl;         
+}
+
+void buildKmerSpectrum( ReadSet &store, KmerSpectrum &spectrum ) 
+{
+	KmerSolidMap &weak  = spectrum.weak;
+	KmerSolidMap &solid = spectrum.solid;
+	weak.clear();
+	solid.clear();
+	   
+    unsigned long numBuckets = estimateWeakKmerBucketSize( store, 64 );
+
+    std::cerr << "targetting " << numBuckets << std::endl;
+ 
+	KmerArray<> tmp;
+	tmp.resize(2);
+	KmerPtr least;
+	
+	for (int i=0 ; i < store.getSize(); i++)
+    {
+       KmerWeights kmers = buildWeightedKmers(store.getRead(i));
+  
+       for (int j=0; j < kmers.size(); j++)
+       {
+       	  
+       	  TwoBitSequence::reverseComplement((TwoBitEncoding*)kmers[j].get(), (TwoBitEncoding*)tmp[0].get(), KmerSizer::getSequenceLength());
+       	  
+       	  bool keepDirection = kmers[j] < tmp[0];
+       	  
+       	  if (keepDirection)
+       	     least = kmers[j].get();
+       	  else
+       	     least = tmp[0].get();
+       	  
+       	  if ( solid.exists( *least ) ) {
+       	  	// track solid stats
+       	  	solid[ *least ].value.track( kmers.valueAt(j), keepDirection );
+       	  	
+       	  } else {
+       	  	// track weak stats
+       	  	SolidTrackingData &data = weak[ *least ].value;
+       	  	
+       	  	data.track( kmers.valueAt(j), keepDirection );
+       	  	if ( data.count > SolidTrackingData::minimumDepth ) {
+          	  // track stats and pop out of weak hash
+          	  solid[ *least ].value = data;          	
+          	  weak.remove(*least);
+       	    }
+       	  }
+       }
+       if (i % 1000000 == 0) {
+       	 printStats(i, spectrum);  
+       }
+    }
+    printStats(store.getSize(), spectrum);    
+
+};
+
 #endif
 
 //
 // $Log: Utils.h,v $
+// Revision 1.3  2009-11-03 17:15:40  regan
+// minor refactor
+//
 // Revision 1.2  2009-11-02 21:19:25  regan
 // fixed types and boundary tests
 //
