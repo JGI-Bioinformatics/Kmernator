@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.3 2009-11-02 21:19:25 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.4 2009-11-04 18:23:14 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
@@ -15,6 +15,12 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <stdexcept>
+#include <iomanip>
+#include <unistd.h>
+#include <fstream>
 
 class PoolManager
 {
@@ -94,17 +100,50 @@ public:
 };
 
 
-//std::string getMemoryUsage()
-//{
-//  std::stringstream ss;
-  //rusage usage
-  //ss << 
-//}
+class MemoryUtils
+{
+public:
+
+	static std::string getMemoryUsage()
+	{
+	  std::stringstream ss;
+	  rusage usage;
+	  if (getrusage(RUSAGE_SELF, &usage) != 0)
+	    throw std::runtime_error("Could not probe memory");
+	    
+	  double t = (double)usage.ru_utime.tv_sec + (double)usage.ru_utime.tv_usec / 1000000.0;     
+	  ss << " utime: " << std::fixed << std::setprecision(1) << t;
+	  
+	  t = usage.ru_stime.tv_sec + (double)usage.ru_stime.tv_usec / 1000000.0;       
+	  ss << " stime: " << std::fixed << std::setprecision(1) << t;
+	  
+	  if (usage.ru_maxrss != 0) { 
+	    ss << " maxrss: " << usage.ru_maxrss;
+	    ss << " ixrss: "  << usage.ru_ixrss;
+	    ss << " idrss: "  << usage.ru_idrss;
+	    ss << " isrss: "  << usage.ru_isrss;
+	  } else {
+	  	pid_t pid = getpid();
+	  	char buffer[1024];
+	  	sprintf(buffer, "/proc/%d/statm", pid);
+	  	std::fstream statm(buffer, std::fstream::in);
+	  	statm.getline(buffer, 1024);
+	  	statm.close();
+	  	ss << " statm: " << buffer;
+	  }
+	  
+	  return ss.str();
+	}
+
+};
 
 #endif
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.4  2009-11-04 18:23:14  regan
+// added a memory usage reporting function
+//
 // Revision 1.3  2009-11-02 21:19:25  regan
 // fixed types and boundary tests
 //
