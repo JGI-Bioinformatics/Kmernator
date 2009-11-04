@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.28 2009-11-04 18:26:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.29 2009-11-04 19:30:46 cfurman Exp $
 //
  
 
@@ -415,6 +415,23 @@ void testKmerArray(SequenceLengthType size)
   
 }
 
+  class Tester
+  {
+  public:
+    KmerMap<float> &kmerF;
+    Tester (KmerMap<float>  map):
+    kmerF(map)
+    {
+      
+    }
+
+    void operator() (KmerArray<float>::ElementType  &e)
+    {
+        BOOST_CHECK( kmerF.exists( e.key() ) );
+        BOOST_CHECK_EQUAL( kmerF[ e.key() ], e.value() );
+    }
+  };
+
 void testKmerMap(SequenceLengthType size)
 {
   std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
@@ -463,6 +480,10 @@ void testKmerMap(SequenceLengthType size)
   	BOOST_CHECK( i     >= kmerP[ kmersC[i] ].first );
   	BOOST_CHECK( i*3.0 >= kmerP[ kmersC[i] ].second );
   }
+
+  
+  std::for_each(kmerF.begin() , kmerF.end(), Tester(kmerF)) ;
+
 
   int count = 0;
   for(KmerMap<float>::Iterator it = kmerF.begin() ; it != kmerF.end(); it++) {
@@ -551,6 +572,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.29  2009-11-04 19:30:46  cfurman
+// added 'std::for_each' test for KmerMap iterator
+//
 // Revision 1.28  2009-11-04 18:26:18  regan
 // refactored
 // added statistics calculations and histograms
