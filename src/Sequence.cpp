@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.9 2009-11-02 18:27:00 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.10 2009-11-04 19:32:03 cfurman Exp $
 //
 
 #include <cstring>
@@ -127,11 +127,13 @@ double Read::qualityToProbability[256];
 int Read::initializeQualityToProbability() 
 {
   for (int i=0; i<256; i++) {
-  	Read::qualityToProbability[i] = 0;
+  	qualityToProbability[i] = 0;
   }
   int start = 64;
   for (int i = start ; i < 127 ; i++ )
-    Read::qualityToProbability[i] = 1.0 - pow(10,( ( i - start ) / - 10 ));
+    qualityToProbability[i] = 1.0 - pow(10,( ( i - start ) / - 10 ));
+
+  qualityToProbability[255] = 1.0; // for reads with no quality data
   return 1;
 }
 int Read::qualityToProbabilityInitialized = Read::initializeQualityToProbability();
@@ -189,6 +191,9 @@ string Read::toFastq()
 
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.10  2009-11-04 19:32:03  cfurman
+// now reads in fasta (with optional qual) files
+//
 // Revision 1.9  2009-11-02 18:27:00  regan
 // added getMarkups()
 // added quality to probability lookup table

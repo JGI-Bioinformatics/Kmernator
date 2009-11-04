@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.6 2009-10-31 00:16:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.7 2009-11-04 19:32:03 cfurman Exp $
 //
 
 #ifndef _READ_SET_H
@@ -10,22 +10,24 @@
 typedef unsigned int ReadSetSizeType;
 
 class ReadSet {
-    class body;
-    body &_my;
-    unsigned long baseCount;
+    std::vector<Read> _reads;
+    unsigned long _baseCount;
+    
+private:
+    void push_back(Read &read);
     
 public:
     ReadSet();
     ~ReadSet();
 
     void appendFastq(std::string fastqFilePath);
+    void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
 
     ReadSetSizeType getSize();
-    unsigned long getBaseCount() {return baseCount;}
+    unsigned long getBaseCount() {return _baseCount;}
 
     Read &getRead(ReadSetSizeType index);
-private:
-    void push_back(Read &read);
+
 };
 
 
@@ -49,6 +51,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.7  2009-11-04 19:32:03  cfurman
+// now reads in fasta (with optional qual) files
+//
 // Revision 1.6  2009-10-31 00:16:35  regan
 // minor changes and optimizations
 //
