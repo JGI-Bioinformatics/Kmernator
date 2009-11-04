@@ -3,11 +3,13 @@
 
 KmerSizer KmerSizer::singleton;
 
-double SolidTrackingData::minimumWeight = 0.1;
-unsigned short SolidTrackingData::maxCount = 0;
-unsigned short SolidTrackingData::minimumDepth = 10;
+TrackingData::WeightType TrackingData::minimumWeight = 0.1;
+TrackingData::CountType  TrackingData::minimumDepth = 10;
 
-std::ostream &operator<<(std::ostream &stream, SolidTrackingData &ob)
+TrackingData::CountType  TrackingData::maxCount = 0;
+TrackingData::WeightType TrackingData::maxWeightedCount = 0;
+
+std::ostream &operator<<(std::ostream &stream, TrackingData &ob)
 {
   stream << ob.toString();
   return stream;

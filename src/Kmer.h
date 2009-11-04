@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.41 2009-11-03 17:15:40 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.42 2009-11-04 18:24:25 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -253,57 +253,96 @@ typedef KmerValue<unsigned short> KmerValue2Byte;
 typedef KmerValue<unsigned int> KmerValue4Byte;
 
 
-class SolidTrackingData 
+class TrackingData 
 {
 public:
-  static double minimumWeight;
-  static unsigned short maxCount;
-  static unsigned short minimumDepth;
+  typedef unsigned short CountType;
+  typedef float          WeightType;
   
+  static WeightType minimumWeight;
+  static CountType minimumDepth;
+  static const CountType MAX_COUNT = (CountType) -1;
+  
+  static CountType  maxCount;
+  static WeightType maxWeightedCount;
+  
+  
+protected:
+  CountType  count;
+  CountType  directionBias;
+  WeightType weightedCount;
+
 public:
-  static inline void trackMaxCount(unsigned short count) { 
-  	if (maxCount < count) { 
-  		maxCount = count; 
-  		if ( count / 200  > minimumDepth) {
-  			minimumDepth = count / 300;
-  		};
-  	}
+  TrackingData(): count(0), directionBias(0), weightedCount(0.0) {}
+  ~TrackingData() {}
+  TrackingData(const TrackingData &other) {
+  	*this = other;
   }
-  
-  unsigned short count;
-  unsigned short directionBias;
-  float weightedCount;
-  SolidTrackingData(): count(0), directionBias(0), weightedCount(0.0) {}
-  ~SolidTrackingData() {}
+  TrackingData &operator=(const TrackingData &other) {
+  	count = other.count;
+  	directionBias = other.directionBias;
+  	weightedCount = other.weightedCount;
+  }
   
   bool track(double weight, bool forward) {
     if (weight < minimumWeight)
   	  return false;
-    if (count < 0xffff) {
+    if (count < MAX_COUNT) {
       count++;
       if (forward) 
         directionBias++;
       weightedCount += weight;
-      trackMaxCount(count);
       
+      if (count > maxCount) 
+        maxCount = count;
+      if (weightedCount > maxWeightedCount)
+        maxWeightedCount = weightedCount;
+        
       return true;
     } else
       return false;
   }
+
+  inline CountType getCount() { return count; }
+  inline CountType getDirectionBias() { return directionBias; }
+  inline WeightType getWeightedCount() { return weightedCount; }
+  inline double getNormalizedDirectionBias() { return 0.0 - ((double)count - 2.*(double)directionBias) / (double) count; }
   
   std::string toString() {
     std::stringstream ss;
-    ss << count << ":" << std::fixed << std::setprecision(2) << ((double)directionBias / (double)count);
-    ss << ':' << std::fixed << std::setprecision(2) << ((double)count / weightedCount);
+    ss << count << ":" << std::fixed << std::setprecision(2) << getNormalizedDirectionBias();
+    ss << ':' << std::fixed << std::setprecision(2) << ((double)weightedCount / (double)count);
     return ss.str();
   }
 
 };
+/*
 
-std::ostream &operator<<(std::ostream &stream, SolidTrackingData &ob);
+Need to work on copy constructor and assignement between
+parent and child classes
+
+class SolidTrackingData : public TrackingData
+{
+public:
+  SolidTrackingData() : TrackingData() {}
+  ~SolidTrackingData() {}
+  SolidTrackingData( const TrackingData &other ) {
+    (TrackingData)*this = other;
+  }
+  So
+  
+  bool track(double weight, bool forward) {
+  	return TrackingData::track(weight, forward);
+  }
+};
+*/
+typedef TrackingData SolidTrackingData;
+
+std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
+
 
 class SolidKmerTag : public KmerValue<SolidTrackingData> {};
-class WeakKmerTag  : public KmerValue<unsigned char> {};
+class WeakKmerTag  : public KmerValue<TrackingData> {};
 
 static KmerPtr NullKmerPtr(NULL);
 
@@ -882,6 +921,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.42  2009-11-04 18:24:25  regan
+// reworked tracking data
+//
 // Revision 1.41  2009-11-03 17:15:40  regan
 // minor refactor
 //
