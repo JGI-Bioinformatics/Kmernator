@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.13 2009-11-03 17:15:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.14 2009-11-04 18:26:18 regan Exp $
 //
 
 #include <iostream>
@@ -11,6 +11,7 @@
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "Utils.h"
+#include "MemoryUtils.h"
 
 using namespace std;
 
@@ -18,29 +19,38 @@ int main(int argc, char *argv[]) {
     
     ReadSet store;
 
+    cerr << MemoryUtils::getMemoryUsage() << endl;
+    
     KmerSizer::set(atoi(argv[1]));
     for (int i = 2 ; i< argc ; i++) {
       cerr << "reading " << argv[i] << endl;
       store.appendFastq(argv[i]);
       cerr << "loaded " << store.getSize() << " Reads, " << store.getBaseCount() << " Bases " << endl;
+      cerr << MemoryUtils::getMemoryUsage() << endl;
     }
     
     unsigned long numBuckets = estimateWeakKmerBucketSize( store, 64 );
-
-    cerr << "targetting " << numBuckets << endl;
-    
-    
-    SolidTrackingData::minimumDepth = 10;
-    SolidTrackingData::minimumWeight = 0.25;
+    cerr << "targetting " << numBuckets << " buckets " << endl;
     
     KmerSpectrum spectrum(numBuckets);
+    cerr << MemoryUtils::getMemoryUsage() << endl;
+
+    TrackingData::minimumDepth = 10;
+    TrackingData::minimumWeight = 0.25;
+        
     buildKmerSpectrum( store, spectrum );
+    
+    cerr << MemoryUtils::getMemoryUsage() << endl;
     
 }
 
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.14  2009-11-04 18:26:18  regan
+// refactored
+// added statistics calculations and histograms
+//
 // Revision 1.13  2009-11-03 17:15:43  regan
 // minor refactor
 //

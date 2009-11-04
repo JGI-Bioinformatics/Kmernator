@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.27 2009-11-03 17:15:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.28 2009-11-04 18:26:18 regan Exp $
 //
  
 
@@ -344,9 +344,7 @@ void testKmerArray(SequenceLengthType size)
   	 BOOST_CHECK_EQUAL( valRef2, valRef );
   	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
   }
-  
-  BOOST_CHECK_EQUAL( 1, sizeof(WeakKmerTag));
-  
+    
   // test find
   for (int i=0; i<kmersFloat.size() ; i++) {
     unsigned long idx = copy.find(kmersFloat[i]);
@@ -553,6 +551,10 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.28  2009-11-04 18:26:18  regan
+// refactored
+// added statistics calculations and histograms
+//
 // Revision 1.27  2009-11-03 17:15:43  regan
 // minor refactor
 //
