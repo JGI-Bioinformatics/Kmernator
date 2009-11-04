@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.6 2009-11-04 19:32:03 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.7 2009-11-04 20:14:46 cfurman Exp $
 //
 
 #include <exception>
@@ -8,7 +8,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
-#include <tr1/memory>
+#include <locale>
+#include <algorithm>
 
 #include "ReadSet.h"
 
@@ -258,6 +259,8 @@ try {
             break;
 
         string bases = reader->getBases();
+        std::transform(bases.begin(),bases.end(),bases.begin(),::toupper);
+
         string quals = reader->getQuals();
 
         if (quals.length() != bases.length())
@@ -297,6 +300,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.7  2009-11-04 20:14:46  cfurman
+// added conversion to uppercase
+//
 // Revision 1.6  2009-11-04 19:32:03  cfurman
 // now reads in fasta (with optional qual) files
 //
