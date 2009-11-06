@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.5 2009-11-06 04:10:21 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.6 2009-11-06 16:59:11 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -27,7 +27,7 @@
 using namespace boost;
 using namespace boost::accumulators;
 
-
+#include "TwoBitSequence.h"
 #include "Kmer.h"
 #include "Sequence.h"
 #include "ReadSet.h"
@@ -97,7 +97,6 @@ unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKm
 }
 
 
-typedef KmerArray<double> KmerWeights;
 
 KmerWeights buildWeightedKmers(Read &read) {
   KmerWeights kmers(read.getTwoBitSequence(), read.getLength());
@@ -124,10 +123,6 @@ KmerWeights buildWeightedKmers(Read &read) {
   return kmers;
 }
 
-
-typedef KmerMap<SolidKmerTag>   KmerSolidMap;
-typedef KmerMap<WeakKmerTag>    KmerWeakMap;
-typedef KmerMap<unsigned short> KmerCountMap;
 
 class KmerSpectrum
 {
@@ -330,7 +325,7 @@ public:
   	    if ( reference.solid.exists( it->key() ) ) {
   	      // exists in reference but in this is weak: incorrectWeak
   	      incorrectWeak++;
-  	      ss << "IW " << pretty( &it->key(), it->value().value);
+  	      ss << "IW " << pretty( it->key(), it->value().value);
   	    } else {
   	      // Weak and not in reference: correctWeak
   	      // count later
@@ -343,7 +338,7 @@ public:
   	    } else {
   	      // exists in this but not reference: extraSolid
   	      extraSolid++;
-  	      ss << "ES " << pretty( &it->key(), it->value().value);
+  	      ss << "ES " << pretty( it->key(), it->value().value);
   	    }
   	  }
   	}
@@ -357,10 +352,10 @@ public:
   	  } else if ( weak.exists ( it->key() )) {
       	// exists in reference but in this is weak: incorrectWeak
       	incorrectWeak++;
-      	ss << "IW " << pretty( &it->key(), weak[ it->key() ].value );
+      	ss << "IW " << pretty( it->key(), weak[ it->key() ].value );
   	  } else {
   	  	// exists in reference but not in either solid nor weak: missingSolid
-  	    ss << "MS " << pretty( &it->key(), "N/A");
+  	    ss << "MS " << pretty( it->key(), "N/A");
   	    missingSolid++;
   	  }
   	}
@@ -465,6 +460,9 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.6  2009-11-06 16:59:11  regan
+// added base substitution/permutations table and build function
+//
 // Revision 1.5  2009-11-06 04:10:21  regan
 // refactor of cmd line option handling
 // added methods to evaluate spectrums

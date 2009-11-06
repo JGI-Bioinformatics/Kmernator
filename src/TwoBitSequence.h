@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.13 2009-11-02 18:24:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.14 2009-11-06 16:59:11 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -21,11 +21,13 @@ private:
    TwoBitSequence();
    static TwoBitSequence singleton;  
    static void initReverseComplementTable();
+   static void initPermutationsTable();
  
 
 public:
    static TwoBitEncoding bitMasks[8];
    static TwoBitEncoding reverseComplementTable[256];
+   static TwoBitEncoding permutations[ 256*12 ];
  
    
 public:
@@ -49,6 +51,9 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.14  2009-11-06 16:59:11  regan
+// added base substitution/permutations table and build function
+//
 // Revision 1.13  2009-11-02 18:24:29  regan
 // *** empty log message ***
 //

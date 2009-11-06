@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.14 2009-11-02 18:24:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.15 2009-11-06 16:59:11 regan Exp $
 //
 
 #include <cstring>
@@ -21,10 +21,10 @@ TwoBitSequence TwoBitSequence::singleton = TwoBitSequence();
 TwoBitSequence::TwoBitSequence()
 {
 	TwoBitSequence::initReverseComplementTable();
+	TwoBitSequence::initPermutationsTable();
 }
 
  
-
 
 /* initialize reverse complement table
    00000000 -> 11111111
@@ -38,7 +38,8 @@ TwoBitSequence::TwoBitSequence()
 TwoBitEncoding TwoBitSequence::reverseComplementTable[256];
 void TwoBitSequence::initReverseComplementTable() 
 {
-  for(TwoBitEncoding i=0; i<255; i++) {
+  for(int c=0; c<256; c++) {
+  	TwoBitEncoding i = c;
   	TwoBitEncoding complement = ~i;
     reverseComplementTable[i] = ((complement << 6) & (0x03 << 6)) |
                                 ((complement << 2) & (0x03 << 4)) |
@@ -47,6 +48,30 @@ void TwoBitSequence::initReverseComplementTable()
   }
 }
 
+/*
+  initialize permutations table - [256][12]
+  AAAA -> CAAA GAAA TAAA  ACAA AGAA ATAA  AACA AAGA AATA  AAAC AAAG AAAT
+  AAAC -> CAAC GAAC TAAC  ACAC ...
+  ...
+  TTTT -> ATTT CTTT GTTT  TATT ...
+*/
+TwoBitEncoding TwoBitSequence::permutations[256*12];
+void TwoBitSequence::initPermutationsTable()
+{
+  for(int i=0; i<256; i++) {
+  	TwoBitEncoding tb = i;
+  	int j = 0;
+  	for(int baseIdx=0; baseIdx<4; baseIdx++) {
+  	  for(int k=0; k<4; k++) {
+  	  	TwoBitEncoding newBase  = k    <<(6-baseIdx*2);
+  	  	TwoBitEncoding baseMask = 0x03 <<(6-baseIdx*2);
+  	  	TwoBitEncoding test = (tb & (~baseMask)) | newBase;
+  	  	if (test != i)
+  	  	  permutations[i*12+j++] = test;
+  	  }
+  	}
+  }
+}
 
  
 
@@ -163,6 +188,9 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLe
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.15  2009-11-06 16:59:11  regan
+// added base substitution/permutations table and build function
+//
 // Revision 1.14  2009-11-02 18:24:29  regan
 // *** empty log message ***
 //

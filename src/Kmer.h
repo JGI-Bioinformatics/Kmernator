@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.43 2009-11-06 04:08:23 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.44 2009-11-06 16:59:11 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -197,10 +197,14 @@ public:
    _me(NULL)
    {  }
    
-   KmerPtr( void *in):
+   KmerPtr( void *in ):
    _me((Kmer *)in)
    { }
-
+   
+   KmerPtr( Kmer &kmer ) :
+   _me(kmer.get())
+   { }
+   	
    void *get() const  { return _me; };
    Kmer &operator*() const  { return *_me; }   
    Kmer *operator->() const { return _me;  } 
@@ -611,6 +615,27 @@ public:
       }
     }
   }
+  // return a KmerArray that has one entry for each possible single-base substitution
+  static KmerArray permuteBases( KmerPtr kmer ) {
+    KmerArray kmers( KmerSizer::getSequenceLength() * 3 );
+  
+    for(SequenceLengthType byteIdx=0; byteIdx<KmerSizer::getByteSize(); byteIdx++) { 
+  	  int max = 12;
+  	  if (byteIdx+1 == KmerSizer::getByteSize())
+  	    max = 3*(KmerSizer::getSequenceLength()%4);
+  	  if (max == 0)
+  	    max = 12;
+  	  for(SequenceLengthType j=0; j<max; j++) {
+  	    SequenceLengthType kmerIdx = byteIdx*12+j;
+        kmers[kmerIdx] = *kmer;
+        TwoBitEncoding *ptr = (TwoBitEncoding*) kmers[kmerIdx].get();
+        ptr += byteIdx;
+        *ptr = TwoBitSequence::permutations[ ((TwoBitEncoding)*ptr)*12 + j ];
+      }
+    }
+    return kmers;
+  }
+  
   IndexType find(const KmerPtr &target) const {
   	return find(*target);
   }
@@ -935,6 +960,12 @@ public:
 
 };
 
+typedef KmerArray<double> KmerWeights;
+
+typedef KmerMap<SolidKmerTag>   KmerSolidMap;
+typedef KmerMap<WeakKmerTag>    KmerWeakMap;
+typedef KmerMap<unsigned short> KmerCountMap;
+
 #endif
 
 
@@ -942,6 +973,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.44  2009-11-06 16:59:11  regan
+// added base substitution/permutations table and build function
+//
 // Revision 1.43  2009-11-06 04:08:23  regan
 // minor changes
 //

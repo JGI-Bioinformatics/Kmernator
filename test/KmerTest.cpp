@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.29 2009-11-04 19:30:46 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.30 2009-11-06 16:59:14 regan Exp $
 //
  
 
@@ -411,8 +411,37 @@ void testKmerArray(SequenceLengthType size)
   }
   BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size() );
   BOOST_CHECK_EQUAL( copy.size(), count );
-   
-  
+
+/* print out the permutations table
+  if (size == 4)  {
+  for(int i=0; i<=255; i++) {
+  	TwoBitEncoding tb = i;
+  	KmerPtr k2( &tb );
+  	std::stringstream ss;
+  	ss << k2->toFasta() << ": ";
+  	for (int j=0; j<12; j++) {
+  	  KmerPtr k( &(TwoBitSequence::permutations[i*12+j]) );
+  	  ss << k->toFasta() << ", ";
+  	}
+  	BOOST_MESSAGE( ss.str() );
+  }
+  }  else
+    return; 
+*/
+
+  for(int i=0; i<kmersFloat.size(); i++) {
+    KmerArray<float> permutations = KmerArray<float>::permuteBases( kmersFloat[i] );
+    BOOST_CHECK_EQUAL( KmerSizer::getSequenceLength() * 3, permutations.size() );
+    //BOOST_MESSAGE( "start" );
+    //BOOST_MESSAGE( kmersFloat[i].toFasta() );
+    for(int j=0; j<permutations.size(); j++) {
+      BOOST_CHECK_NE( kmersFloat[i].toFasta(), permutations[j].toFasta() );
+      //BOOST_MESSAGE( permutations[j].toFasta() );
+      for(int k=0; k<j; k++) {
+      	BOOST_CHECK_NE( permutations[j].toFasta(), permutations[k].toFasta() );
+      }
+    } 
+  }
 }
 
   class Tester
@@ -572,6 +601,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.30  2009-11-06 16:59:14  regan
+// added base substitution/permutations table and build function
+//
 // Revision 1.29  2009-11-04 19:30:46  cfurman
 // added 'std::for_each' test for KmerMap iterator
 //
