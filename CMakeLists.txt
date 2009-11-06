@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.12 2009-10-31 23:38:51 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.13 2009-11-06 04:06:16 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -27,7 +27,8 @@ else()
   add_dependencies( boost_subset boost_mpi-mt-static 
                                  boost_regex-mt-static 
                                  boost_test_exec_monitor-mt-static
-                                 boost_unit_test_framework-mt-static)
+                                 boost_unit_test_framework-mt-static
+                                 boost_program_options-mt-static)
   include_directories( ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 )
   link_directories( ${CMAKE_CURRENT_BINARY_DIR}/lib )
 endif()
@@ -42,6 +43,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.13  2009-11-06 04:06:16  regan
+# added boost options modules
+#
 # Revision 1.12  2009-10-31 23:38:51  regan
 # fixed build to read env CXX_FLAGS
 #

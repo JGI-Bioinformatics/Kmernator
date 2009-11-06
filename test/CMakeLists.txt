@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.13 2009-11-02 18:48:44 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.14 2009-11-06 04:06:18 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -38,12 +38,16 @@ add_test( KmerTest KmerTest )
 
 add_executable( ktest2 ktest2 )
 target_link_libraries( ktest2 Sequence Kmer
-                              ReadSet )
+                              ReadSet
+                              boost_program_options-mt-static )
 add_test(ktest2 ktest2 21 10.fastq)
 
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.14  2009-11-06 04:06:18  regan
+# added boost options modules
+#
 # Revision 1.13  2009-11-02 18:48:44  regan
 # fixed linking issues
 #
