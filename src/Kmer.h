@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.42 2009-11-04 18:24:25 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.43 2009-11-06 04:08:23 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -238,7 +238,18 @@ public:
 
 
 template<typename Value>
-class KmerValue { public: Value value; };
+class KmerValue { 
+public: 
+  Value value;
+  KmerValue() : value() {}
+  ~KmerValue() {}
+  KmerValue(const KmerValue &copy) {
+  	*this = copy;
+  }
+  KmerValue &operator=(const KmerValue &other) {
+  	this->value = other.value;
+  }
+};
 
 template<typename Value>
 std::ostream &operator<<(std::ostream &stream, KmerValue<Value> &ob)
@@ -694,9 +705,12 @@ public:
   std::string toString() {
   	std::stringstream ss;
   	ss <<  "{";
-  	for(IndexType idx=0; idx<size(); idx++) {
+  	IndexType idx=0;
+  	for(idx=0; idx<size() && idx < 30; idx++) {
   		ss << get(idx).toFasta() << ":" << valueAt(idx) << ", ";
   	} 
+  	if (idx < size())
+  	    ss << " ... " << size() - idx << " more ";
   	ss << "}";
   	return ss.str();
   }
@@ -761,9 +775,13 @@ public:
      clear();
    }
    
-   void clear() {
+   void reset() {
      for(int i=0; i< _buckets.size(); i++)
        _buckets[i].reset();
+   }
+   void clear() {
+   	 reset();
+     _buckets.resize(1); // iterators require at least 1
    }
    BucketType &getBucket(long hash) {
    	return _buckets[hash % _buckets.size()];
@@ -843,9 +861,12 @@ public:
    std::string toString() {
   	std::stringstream ss;
   	ss << this << "[";
-  	for(IndexType idx=0; idx<_buckets.size(); idx++) {
+  	IndexType idx=0;
+  	for(; idx<_buckets.size() && idx < 30; idx++) {
   		ss << "bucket:" << idx << ' ' << _buckets[idx].toString() << ", ";
   	} 
+  	if (idx < _buckets.size())
+  	  ss << " ... " << _buckets.size() - idx << " more ";
   	ss << "]";
   	return ss.str();
   }
@@ -921,6 +942,9 @@ public:
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.43  2009-11-06 04:08:23  regan
+// minor changes
+//
 // Revision 1.42  2009-11-04 18:24:25  regan
 // reworked tracking data
 //
