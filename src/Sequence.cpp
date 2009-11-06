@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.10 2009-11-04 19:32:03 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.11 2009-11-06 04:07:13 regan Exp $
 //
 
 #include <cstring>
@@ -47,8 +47,13 @@ void Sequence::setSequence(std::string fasta, unsigned int extraBytes)
    reset();
    _length = fasta.length();
 
-   unsigned char buffer[getTwoBitEncodingSequenceLength()];
-   BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(fasta.c_str(),buffer);
+   unsigned long buffSize = getTwoBitEncodingSequenceLength();
+   TwoBitEncoding *buffer = (TwoBitEncoding*) malloc(buffSize);
+   if ( buffer == NULL )
+     throw std::runtime_error("Could not allocate buffer memory in Sequence::setSequence");
+     
+   const char *f_str = fasta.c_str();
+   BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(f_str,buffer);
    SequenceLengthType markupBasesSize = markupBases.size();
    try {
      unsigned int size =  getTwoBitEncodingSequenceLength() + sizeof(SequenceLengthType)+
@@ -59,7 +64,8 @@ void Sequence::setSequence(std::string fasta, unsigned int extraBytes)
    }
 
    memcpy(getTwoBitSequence(), buffer, getTwoBitEncodingSequenceLength());
-
+   free(buffer);
+   
    memcpy(_getMarkupBasesCount(),&markupBasesSize,sizeof(markupBasesSize));
    BaseLocationType *ptr = _getMarkupBases();
    for (SequenceLengthType i = 0 ; i < markupBasesSize;i++) {
@@ -191,6 +197,9 @@ string Read::toFastq()
 
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.11  2009-11-06 04:07:13  regan
+// bugfix when stack size is limited
+//
 // Revision 1.10  2009-11-04 19:32:03  cfurman
 // now reads in fasta (with optional qual) files
 //
