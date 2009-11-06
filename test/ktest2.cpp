@@ -1,36 +1,59 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.14 2009-11-04 18:26:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.15 2009-11-06 04:10:23 regan Exp $
 //
 
 #include <iostream>
-
 #include <cstdlib>
 #include <cstring>
-
-#include <tr1/unordered_map>
 
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "Utils.h"
 #include "MemoryUtils.h"
+#include "Options.h"
+
+#include <boost/foreach.hpp>
+#define foreach BOOST_FOREACH
 
 using namespace std;
 
+
 int main(int argc, char *argv[]) {
     
-    ReadSet store;
+    if (!Options::parseOpts(argc,argv))
+      throw std::invalid_argument("Please fix the command line arguments");
+      
+    ReadSet refReads, reads;
 
     cerr << MemoryUtils::getMemoryUsage() << endl;
     
-    KmerSizer::set(atoi(argv[1]));
-    for (int i = 2 ; i< argc ; i++) {
-      cerr << "reading " << argv[i] << endl;
-      store.appendFastq(argv[i]);
-      cerr << "loaded " << store.getSize() << " Reads, " << store.getBaseCount() << " Bases " << endl;
+    KmerSizer::set(Options::getKmerSize());
+    Options::FileListType references = Options::getReferenceFiles();
+    Options::FileListType inputs     = Options::getInputFiles();
+    
+    cerr << "Reading Reference Files" << endl;
+    foreach( string referenceFile, references ) {
+    	cerr << "Reading Reference: " << referenceFile << endl;
+    	refReads.appendFastq( referenceFile.c_str() );
+    	cerr << "loaded " << refReads.getSize() << " Reads, " << refReads.getBaseCount() << " Bases " << endl;
+        cerr << MemoryUtils::getMemoryUsage() << endl; 
+    }
+    unsigned long numBuckets = estimateWeakKmerBucketSize( refReads, 256 );
+    cerr << "targetting " << numBuckets << " buckets for reference " << endl;
+    KmerSpectrum refSpectrum( numBuckets );
+    refSpectrum.weak.clear();
+    buildKmerSpectrum( refReads, refSpectrum, true );
+    cerr << MemoryUtils::getMemoryUsage() << endl;
+    
+    cerr << "Reading Input Files" << endl;
+    foreach( string inputFile, inputs ) {
+      cerr << "reading " << inputFile << endl;
+      reads.appendFastq(inputFile);
+      cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases " << endl;
       cerr << MemoryUtils::getMemoryUsage() << endl;
     }
     
-    unsigned long numBuckets = estimateWeakKmerBucketSize( store, 64 );
-    cerr << "targetting " << numBuckets << " buckets " << endl;
+    numBuckets = estimateWeakKmerBucketSize( reads, 64 );
+    cerr << "targetting " << numBuckets << " buckets for reads " << endl;
     
     KmerSpectrum spectrum(numBuckets);
     cerr << MemoryUtils::getMemoryUsage() << endl;
@@ -38,15 +61,23 @@ int main(int argc, char *argv[]) {
     TrackingData::minimumDepth = 10;
     TrackingData::minimumWeight = 0.25;
         
-    buildKmerSpectrum( store, spectrum );
-    
+    buildKmerSpectrum( reads, spectrum );
     cerr << MemoryUtils::getMemoryUsage() << endl;
+    spectrum.promote( Options::getSolidQuantile() );
     
+    if (refReads.getSize() > 0) {
+    	cerr << "Contrasted to reference kmer-spectrum:" << endl;
+        cerr << spectrum.contrastSpectrums( refSpectrum ) << endl;
+    }
 }
 
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.15  2009-11-06 04:10:23  regan
+// refactor of cmd line option handling
+// added methods to evaluate spectrums
+//
 // Revision 1.14  2009-11-04 18:26:18  regan
 // refactored
 // added statistics calculations and histograms
