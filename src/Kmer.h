@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.44 2009-11-06 16:59:11 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.45 2009-11-07 00:26:13 cfurman Exp $
 //
 
 #ifndef _KMER_H
@@ -906,11 +906,11 @@ public:
      BucketTypeIterator  _iElement;
 
      void _moveToNextValidElement()  {
-          while(_iElement == _iBucket->end()  && ++_iBucket != _target->_buckets.end() ) 
-          _iElement = _iBucket->begin();
+      while(_iElement == _iBucket->end() && ++_iBucket != _target->_buckets.end())
+        _iElement = _iBucket->begin();
      }
           
-      Iterator(KmerMap *target):
+      Iterator(KmerMap *target):    
       _target(target),
       _iBucket(target->_buckets.begin()),
       _iElement(_iBucket->begin())
@@ -955,8 +955,8 @@ public:
 
   };
 
-  Iterator begin()  { return Iterator(this);}
-  Iterator end()   {  return Iterator(this,true);}
+  Iterator begin()  { return Iterator(this);     }
+  Iterator end()    { return Iterator(this,true);}
 
 };
 
@@ -973,6 +973,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.45  2009-11-07 00:26:13  cfurman
+// minor formatting
+//
 // Revision 1.44  2009-11-06 16:59:11  regan
 // added base substitution/permutations table and build function
 //
