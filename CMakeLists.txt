@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.13 2009-11-06 04:06:16 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.14 2009-11-07 00:28:44 cfurman Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -38,11 +38,14 @@ add_subdirectory( src )
 link_directories( src )
 
 add_subdirectory( test )
-execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
+# 
 
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.14  2009-11-07 00:28:44  cfurman
+# ReadSet now takes fasta, fastq or  fasta+qual files.
+#
 # Revision 1.13  2009-11-06 04:06:16  regan
 # added boost options modules
 #

@@ -1,9 +1,10 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.11 2009-11-06 04:07:13 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.12 2009-11-07 00:28:41 cfurman Exp $
 //
 
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <sstream>
 
 #include "Sequence.h"
 #include <cstdlib>
@@ -176,11 +177,6 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes )
 }
 
 
-string Read::getQuals()
-{
-  return  string(_getQual(), _length);
-}
-
 string Read::getName()
 {
   if(_data == nullSequence)
@@ -189,14 +185,31 @@ string Read::getName()
     return string(_getName());    
 }
 
+string Read::getQuals()
+{
+  return  string(_getQual(), _length);
+}
+
 
 string Read::toFastq()
 {
   return  string ('@' + getName() + "\n" + getFasta() + "\n+\n" + getQuals() + "\n" )  ;
 }
-
+string Read::getFormattedQuals()
+{
+  string quals = getQuals();
+  stringstream ss;
+  for(int i =0; i < quals.length(); i++)
+  {
+     ss << (int)quals[i] << ' ';  
+  }
+  return ss.str();
+}
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.12  2009-11-07 00:28:41  cfurman
+// ReadSet now takes fasta, fastq or  fasta+qual files.
+//
 // Revision 1.11  2009-11-06 04:07:13  regan
 // bugfix when stack size is limited
 //

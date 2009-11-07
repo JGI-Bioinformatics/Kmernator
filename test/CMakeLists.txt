@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.14 2009-11-06 04:06:18 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.15 2009-11-07 00:28:38 cfurman Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -41,10 +41,17 @@ target_link_libraries( ktest2 Sequence Kmer
                               ReadSet
                               boost_program_options-mt-static )
 add_test(ktest2 ktest2 21 10.fastq)
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
+# v2.8: file(COPY test/500.fasta test/500.qual DESTINATION test)
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fasta test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.15  2009-11-07 00:28:38  cfurman
+# ReadSet now takes fasta, fastq or  fasta+qual files.
+#
 # Revision 1.14  2009-11-06 04:06:18  regan
 # added boost options modules
 #

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.4 2009-10-30 00:51:37 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.5 2009-11-07 00:28:38 cfurman Exp $
 //
  
 
@@ -22,39 +22,72 @@ void testZeroReads()
 	BOOST_CHECK_EQUAL( "", s.getName()  );
 }
 
-void testReadWriteFile(string filename)
+
+static string getFileContents(string filename)
 {
     ifstream ifs(filename.c_str());
     BOOST_REQUIRE( ! ifs.fail() );
-    string fileContents;
-    char buffer[1024*1024];
-    while (!ifs.eof()) {
-    	ifs.getline(buffer, sizeof(buffer));
-    	fileContents += string(buffer) + '\n';
-    }
+    string contents;
+ 
+    getline(ifs,contents,'\0');
+    return contents;
+}
+
+void testFastQFile(string filename)
+{
+    string fileContents = getFileContents(filename);
     
-    string fastq;
     ReadSet store;
-    store.appendFastq(filename.c_str());
-    
+    store.appendFastq(filename);
+
+    string fastq;
     for (int i=0 ; i < store.getSize(); i++)
     {
        fastq += store.getRead(i).toFastq();
     }
-    fastq += '\n'; // not sure why this works...
-    
+ 
     BOOST_CHECK_EQUAL(fileContents, fastq);
 } 
+  
+void testFastaWithQualFile(string f,string q)
+{
+    string fFile = getFileContents(f);
+    string qFile = getFileContents(q);
+         
+    ReadSet store;
+    store.appendFasta(f,q);
+
+    string fasta,qual;
+    for (int i=0 ; i < store.getSize(); i++)
+    {
+       Read &s = store.getRead(i);
+
+       string nameLine('>' + s.getName()  + "\n");
+       fasta += nameLine;
+       fasta += s.getFasta() + "\n";
+
+       qual += nameLine;
+       qual += s.getFormattedQuals() + "\n";
+
+    }
+ 
+    BOOST_CHECK_EQUAL(fFile, fasta);
+    BOOST_CHECK_EQUAL(qFile,qual);
+}
+
 
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
   testZeroReads();
-  testReadWriteFile(string("10.fastq"));
-  
+  testFastQFile("10.fastq");
+  testFastaWithQualFile("10.fasta","10.qual");
 }
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.5  2009-11-07 00:28:38  cfurman
+// ReadSet now takes fasta, fastq or  fasta+qual files.
+//
 // Revision 1.4  2009-10-30 00:51:37  regan
 // bug fix and working on executable
 //

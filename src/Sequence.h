@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.7 2009-11-02 18:27:00 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.8 2009-11-07 00:28:41 cfurman Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -78,6 +78,8 @@ public:
   std::string getQuals();
 
   std::string toFastq();
+  std::string getFormattedQuals();
+
   
   static double qualityToProbability[256];
   
@@ -87,6 +89,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.8  2009-11-07 00:28:41  cfurman
+// ReadSet now takes fasta, fastq or  fasta+qual files.
+//
 // Revision 1.7  2009-11-02 18:27:00  regan
 // added getMarkups()
 // added quality to probability lookup table

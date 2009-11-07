@@ -1,23 +1,246 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.7 2009-11-04 20:14:46 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.8 2009-11-07 00:28:41 cfurman Exp $
 //
-
+ 
 #include <exception>
 #include <stdexcept>
 #include <iostream>
 #include <fstream>
-#include <cstdlib>
-#include <cstring>
-#include <vector>
+#include <sstream>
+
 #include <locale>
 #include <algorithm>
 
 #include "ReadSet.h"
 
-#define MAX_LINE_LENGTH 1024*1024
-
 using  namespace std;
 
+class ReadFileReader
+{
+public:
 
+   ReadFileReader(string fastaFilePath,string qualFilePath):
+      _path(fastaFilePath),
+      _parser(NULL)
+   {
+      _ifs.open(fastaFilePath.c_str());
+
+      if (_ifs.fail())
+        throw  runtime_error("Could not open : " + fastaFilePath) ;
+
+      if (!qualFilePath.empty())
+      {
+        _qs.open (qualFilePath.c_str());
+        if (_qs.fail())
+            throw  runtime_error("Could not open : " + qualFilePath) ;
+            
+        _parser = new FastaQualStreamParser(_ifs,_qs);
+      }
+      else if ( _ifs.peek() == '@')
+        _parser = new FastqStreamParser(_ifs);
+      else
+        _parser = new FastaStreamParser(_ifs);
+      
+    }
+    
+    ~ReadFileReader()
+    {
+      _ifs.close();
+      _qs.close();
+      if (_parser)
+         delete _parser;
+    }
+
+    bool nextRead(string &name,string &bases, string &quals)
+    {
+       try {
+         name = _parser->getName();
+         if (name.empty())
+            return false;
+
+        bases = _parser->getBases();
+        std::transform(bases.begin(),bases.end(),bases.begin(),::toupper);
+
+        quals = _parser->getQuals();
+
+        if (quals.length() != bases.length())
+            throw  runtime_error("Number of bases and quals not equal");
+        return true;
+       }
+       
+       catch (runtime_error &e)
+       {
+          stringstream error;
+          error << e.what() << " in file '" << _path << "' at line " << _parser->lineNumber();
+          throw runtime_error(error.str());
+       } 
+    }
+ 
+private:
+    class SequenceStreamParser;
+    
+    SequenceStreamParser  *_parser;
+    ifstream _ifs;
+    ifstream _qs;
+
+    string _path; 
+private:
+
+  class SequenceStreamParser
+  {
+    unsigned long   _line;
+    istream  *    _stream;
+    char          _marker;
+    
+  public:
+    string nextLine () {
+        _line++;
+        string line;
+        getline(*_stream,line);
+        return line;
+    }
+    
+    SequenceStreamParser(istream &stream,char marker) : _stream(&stream), _line(0),_marker(marker) {  }
+
+    virtual ~SequenceStreamParser() {  }
+    
+    unsigned long lineNumber() { return _line;}
+    bool endOfStream()         { return _stream->eof();}
+    int  peek()                { return _stream->peek();}
+
+    virtual string getName()
+    {
+        string name = nextLine();
+      
+        while (name.length() == 0) // skip empty lines at end of stream
+        {
+          if (endOfStream())
+              return string();
+          name = nextLine();
+        }
+
+        if (name[0] != _marker)
+          throw  runtime_error((string("Missing '") + _marker + "'").c_str());
+
+//         char *space = strchr(name,' ');
+//         if (space != NULL)
+//             space = '\0';
+//         char *tab = strchr(name,'\t');
+//         if (tab !=NULL)
+//             tab = '\0';
+
+      return name.substr(1);
+    }
+    
+    virtual string getBases() = 0;
+    virtual string getQuals() = 0;
+  };
+
+
+  class FastqStreamParser : public SequenceStreamParser
+  {
+
+  public:
+    FastqStreamParser(istream &s) : SequenceStreamParser(s,'@') { }
+
+    string getBases()
+    {
+      string bases = nextLine();
+
+      if (bases.empty()  || bases.length() == bases.max_size())
+          throw  runtime_error("Missing or too many bases");
+
+      string qualName = nextLine();
+      if (qualName.empty() || qualName[0] != '+')
+          throw  runtime_error("Missing '+'");
+
+      return bases;
+    }
+
+    string getQuals() { return nextLine(); }
+  };
+
+
+  class FastaStreamParser : public SequenceStreamParser
+  {
+    static const char fasta_marker = '>';
+    string _qualString;
+    
+  public:
+
+    FastaStreamParser(istream &s) : SequenceStreamParser(s,fasta_marker) {    }
+  
+    virtual string getBases()
+    {
+      string bases = getBasesOrQuals();
+      _qualString.assign(bases.length(),255); // TODO make 255 a const ??
+      return bases;
+    }
+    
+    virtual string getQuals() {  return _qualString; }
+    
+    string getBasesOrQuals()
+    {
+      string dataString;
+      while (!endOfStream())
+      {
+         string data = nextLine();
+          
+          if (data.empty())
+            break;
+            
+         dataString += data;
+         if ( dataString.size() == dataString.max_size())
+            throw  runtime_error("Sequence/Qual too large to read");
+          
+          if (peek() == fasta_marker)
+            break;
+      }
+      return dataString;
+    }
+
+  };
+
+
+  class FastaQualStreamParser : public FastaStreamParser
+  {
+    FastaStreamParser _qualParser;  // odd, but it works
+
+  public:
+    FastaQualStreamParser(istream &fastaStream,istream &qualStream) : FastaStreamParser(fastaStream) , _qualParser(qualStream)
+    {   }
+
+    string getName() {
+      string qualName = _qualParser.getName();
+      string name     =  FastaStreamParser::getName();
+      if (name != qualName)
+        throw runtime_error("fasta and quals have different names");
+      return name;
+    }
+
+    string getBases() {
+      return getBasesOrQuals( );
+    }
+
+    string getQuals() {
+      string qualValues = _qualParser.getBasesOrQuals();
+
+      istringstream ss(qualValues);
+      string quals;
+      while (!ss.eof()) {
+        int qVal;
+        ss >> qVal;
+        if (ss.fail())
+          break;
+        quals.push_back(qVal);
+      }
+      return quals;
+    }
+  };
+};
+
+
+
+/*
 std::ifstream::pos_type _fileSize(ifstream &f)
 {
   std::ifstream::pos_type current = f.tellg();
@@ -28,7 +251,7 @@ std::ifstream::pos_type _fileSize(ifstream &f)
   f.seekg(current,std::ios_base::beg);
 
   return size;
-}
+}*/
 
 
 ReadSet::ReadSet():
@@ -42,243 +265,21 @@ ReadSet::~ReadSet()
    
 }
 
-void ReadSet::push_back(Read &read) {
+void ReadSet::addRead(Read &read) {
 	_reads.push_back( read );
 	_baseCount += read.getLength();
 }
 
-
- 
-class fast_stream_base : public std::ifstream
-{
-private: 
-   std::string _path;
-   unsigned long _line;
-      
-public:
-  
-  fast_stream_base(std::string path) : _path(path), _line(0)
-  { 
-     open(_path.c_str());
-
-    if (fail()) {
-       throw  std::invalid_argument("Could not open : " + _path) ;
-    }     
-  }
-
-  virtual ~fast_stream_base()
-  {
-  }
-  
-  istream& getline (char* s, streamsize n )
-  {
-      _line++;
-      return std::istream::getline(s,n);
-  }
-
-
-   std::string get_name(char marker)
-   {
-        char name[1024];
-        getline(name,sizeof (name));
-        if (strlen(name) == 0 || name[0] != marker)
-        {
-          if (eof())
-             return string();
-          else if (strlen(name) == 0) {
-              // throw away last empty line
-              getline(name, sizeof(name));
-              if (eof())
-                return string();
-          }
-          throw  this->exception(string("Missing ") + marker);
-        }
-        char *space = strchr(name,' ');
-        if (space != NULL)
-            space = '\0';
-        char *tab = strchr(name,'\t');
-        if (tab !=NULL)
-            tab = '\0';
-
-    return string(name+1);
-  }
-
-  runtime_error exception(const std::string &msg) 
-  {
-    char buffer[1024];
-    sprintf(buffer, "%s in file '%s' at line %ld", msg.c_str(),_path.c_str(), _line);
-    return runtime_error(buffer);
-  }
-
-  virtual string getName() = 0;
-  virtual string getBases() = 0;
-  virtual string getQuals() = 0;
-};
-
-
-class fastq_stream : public fast_stream_base
-{
-
-public:
-  fastq_stream(const string &path) : fast_stream_base(path)
-  {
-  }
-
-  std::string getName() { return get_name('@'); }
-
-  std::string getBases()
-  {
-    char bases[MAX_LINE_LENGTH+1];
-    char qualname[1024];
-
-    getline(bases,sizeof (bases));
-    unsigned long basesSize = strlen(bases);
-
-    if (basesSize == 0 || basesSize > MAX_LINE_LENGTH-1)
-        throw  exception("Missing or too many bases");
-
-    getline(qualname,sizeof (qualname));
-    if (strlen(qualname) == 0 || qualname[0] != '+')
-        throw  exception("Missing '+'");
-
-    return string(bases);
-  }
-
-  std::string getQuals()
-  {
-    char quals[MAX_LINE_LENGTH+1];
-    getline(quals,sizeof (quals));
-    return string(quals);
-  }
-};
-
-
-class fasta_stream : public fast_stream_base
-{
-  static const char fasta_marker = '>';
-  string _qualString;
-public:
-  fasta_stream(const string &path) : fast_stream_base(path)
-  {
-    
-  }
-
-  virtual std::string getName() {  return get_name(fasta_marker); }
-
- 
-  virtual std::string getBases()
-  {
-    char bases[MAX_LINE_LENGTH+1];
-
-    string baseString;
-    while (good())
-    {
-       getline(bases,sizeof (bases));
-       unsigned long basesSize = strlen(bases);
-
-      if ( basesSize > MAX_LINE_LENGTH-1)
-         throw  exception("Too many bases");
-      
-      if (basesSize == 0)
-        break;
-
-      if (peek() == fasta_marker)
-         break;
-
-      baseString += bases;
-    }
-  
-    _qualString.assign(baseString.length(),255);
-    return baseString;
-  }
-  
-
-  virtual std::string getQuals()
-  {
-    return _qualString;
-  }
-};
-
-
-class fasta_qual_stream : public fasta_stream
-{
-  fasta_stream _qual_stream;
-public:
-  fasta_qual_stream(const string &path,const string &qualPath) : fasta_stream(path) , _qual_stream(qualPath)
-  {
-      
-  }
-
-  std::string getName()
-  {
-     string qualName = _qual_stream.getName();
-     string name     =  fasta_stream::getName();
-     if (name != qualName)
-       throw exception("fasta and quals have different names");
-     return name;
-  }
-
-
-  std::string getQuals()
-  {
-    return _qual_stream.getBases(); // odd!!!
-  }
-};
-
-
-
-
 void ReadSet::appendFasta(string fastaFilePath,string qualFilePath)
 {
-    fast_stream_base  *reader;    
-
-    if (qualFilePath.empty())
-    {        
-       // determine file format
-       ifstream ifs(fastaFilePath.c_str());
-    
-      if (ifs.fail())
-        throw  runtime_error("Could not open : " + fastaFilePath) ;
-    
-      bool isFastq = ifs.peek() == '@';
-      ifs.close();
-
-      if (isFastq)
-        reader = new fastq_stream(fastaFilePath);
-      else
-        reader = new fasta_stream(fastaFilePath);
-    }
-    else
-       reader = new fasta_qual_stream(fastaFilePath,qualFilePath);
-
-try {
-    while (!reader->eof()) {
-
-         string name = reader->getName();
-         if (name.empty())
-            break;
-
-        string bases = reader->getBases();
-        std::transform(bases.begin(),bases.end(),bases.begin(),::toupper);
-
-        string quals = reader->getQuals();
-
-        if (quals.length() != bases.length())
-            throw  reader->exception("Number of bases and quals not equal");
-
-        Read read(name, bases, quals);
-        push_back( read );
+    ReadFileReader reader(fastaFilePath,qualFilePath);
+    string name,bases,quals;
+    while (reader.nextRead(name,bases,quals))
+    {
+       Read read(name, bases, quals);
+       addRead( read );
     }
 }
-
-catch(...)
-{
- delete reader;
- throw;
-}
-  delete reader;
-}
-
 
 
 void ReadSet::appendFastq(string fastaFilePath)
@@ -300,6 +301,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.8  2009-11-07 00:28:41  cfurman
+// ReadSet now takes fasta, fastq or  fasta+qual files.
+//
 // Revision 1.7  2009-11-04 20:14:46  cfurman
 // added conversion to uppercase
 //
