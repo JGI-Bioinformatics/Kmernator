@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.45 2009-11-07 00:26:13 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.46 2009-11-09 19:37:17 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -173,6 +173,17 @@ private:
 	   {
 	     TwoBitSequence::reverseComplement((TwoBitEncoding*)_data(), (TwoBitEncoding*)output._data(), getLength());
 	   }
+	   
+	   bool buildLeastComplement(Kmer &output) const
+	   {
+	   	 buildReverseComplement(output);
+	   	 if ( *this <= output ) {
+	   	   output = *this;
+	   	   return true;
+	   	 } else {
+	   	   return false;
+	   	 }
+	   }
 	
 	   std::string toFasta() const
 	   {
@@ -321,7 +332,7 @@ public:
   inline CountType getCount() { return count; }
   inline CountType getDirectionBias() { return directionBias; }
   inline WeightType getWeightedCount() { return weightedCount; }
-  inline double getNormalizedDirectionBias() { return 0.0 - ((double)count - 2.*(double)directionBias) / (double) count; }
+  inline double getNormalizedDirectionBias() { return (double) directionBias / (double)count ; }
   
   std::string toString() {
     std::stringstream ss;
@@ -616,9 +627,11 @@ public:
     }
   }
   // return a KmerArray that has one entry for each possible single-base substitution
-  static KmerArray permuteBases( KmerPtr kmer ) {
+  static KmerArray permuteBases( KmerPtr kmer, bool leastComplement = false ) {
     KmerArray kmers( KmerSizer::getSequenceLength() * 3 );
   
+    TwoBitEncoding _tmp[KmerSizer::getByteSize()];
+    KmerPtr tmp( &_tmp );
     for(SequenceLengthType byteIdx=0; byteIdx<KmerSizer::getByteSize(); byteIdx++) { 
   	  int max = 12;
   	  if (byteIdx+1 == KmerSizer::getByteSize())
@@ -627,10 +640,14 @@ public:
   	    max = 12;
   	  for(SequenceLengthType j=0; j<max; j++) {
   	    SequenceLengthType kmerIdx = byteIdx*12+j;
-        kmers[kmerIdx] = *kmer;
-        TwoBitEncoding *ptr = (TwoBitEncoding*) kmers[kmerIdx].get();
+        *tmp = *kmer;
+        TwoBitEncoding *ptr = (TwoBitEncoding*) tmp.get();
         ptr += byteIdx;
         *ptr = TwoBitSequence::permutations[ ((TwoBitEncoding)*ptr)*12 + j ];
+        if (leastComplement)
+          tmp->buildLeastComplement( kmers[kmerIdx] );
+        else
+          kmers[kmerIdx] = *tmp;
       }
     }
     return kmers;
@@ -973,6 +990,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.46  2009-11-09 19:37:17  regan
+// enhanced some debugging / analysis output
+//
 // Revision 1.45  2009-11-07 00:26:13  cfurman
 // minor formatting
 //

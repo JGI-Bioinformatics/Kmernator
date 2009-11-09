@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.6 2009-11-06 16:59:11 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.7 2009-11-09 19:37:17 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -32,6 +32,7 @@ using namespace boost::accumulators;
 #include "Sequence.h"
 #include "ReadSet.h"
 #include "MemoryUtils.h"
+#include "Options.h"
 
 template<typename Raw, typename Store>
 class BucketedData
@@ -129,7 +130,12 @@ class KmerSpectrum
 public:
   KmerWeakMap  weak;
   KmerSolidMap solid;
-  KmerSpectrum(unsigned long buckets): weak(buckets), solid(buckets/4) {}
+  KmerSpectrum(unsigned long buckets): weak(buckets), solid(buckets/4) 
+  {
+  	// set the minimum weight that will be used to track kmers
+  	// based on the given options
+  	TrackingData::minimumWeight = Options::getMinKmerQuality();
+  }
   ~KmerSpectrum() {}
   KmerSpectrum(const KmerSpectrum &copy) {
   	*this = copy;
@@ -141,8 +147,8 @@ public:
   
   void printHistograms(bool solidOnly = false) {
 
-  	double maxCount = log10(TrackingData::maxCount);
-  	double maxWeightedCount = log10(TrackingData::maxWeightedCount);
+  	double maxCount = (TrackingData::maxCount);
+  	double maxWeightedCount = (TrackingData::maxWeightedCount);
   	unsigned long numDataPoints = std::max(10ul, ((solidOnly ? 0 : weak.size()) + solid.size())/1000);
   
     unsigned long bins = 30;
@@ -241,12 +247,6 @@ public:
   
   unsigned long promote(double probabilityQuantile) {
   	unsigned long promoted = 0;
-  	double maxCount = log10(TrackingData::maxCount);
-  	double maxWeightedCount = log10(TrackingData::maxWeightedCount);
-  	unsigned long numDataPoints = std::max(10ul, (weak.size() + solid.size())/1000);
-  
-    unsigned long bins = 30;
-    unsigned long cacheSize = numDataPoints;
     
   	typedef accumulator_set<
   	                unsigned long, 
@@ -254,39 +254,97 @@ public:
   	                       >,
   	                double
   	                > AccumulatorType;
-  	int count = 11;
-  	double probabilities[] = { probabilityQuantile, 0.001, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05 };
-  	std::vector< AccumulatorType > accumulators;
-  	for(int i=0; i < count; i++)
-  	   accumulators.push_back( AccumulatorType( quantile_probability = probabilities[i] ) );
+  	int count = 12;
+  	double probabilities[] = { probabilityQuantile, 1.0-probabilityQuantile, 0.001, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05 };
+  	std::vector< AccumulatorType > countAcc, weightedCountAcc, directionAcc;
+  	for(int i=0; i < count; i++) {
+  	   countAcc.push_back( AccumulatorType( quantile_probability = probabilities[i] ) );
+  	   weightedCountAcc.push_back( AccumulatorType( quantile_probability = probabilities[i] ) );
+  	   directionAcc.push_back( AccumulatorType( quantile_probability = probabilities[i] ) );
+  	}
   	for(KmerWeakMap::Iterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++)
   	   for(int i=0; i< count; i++) {
-  	   	  double count = it->value().value.getCount();
-  	      accumulators[i]( count, weight = count );
+  	   	  TrackingData &data = it->value().value;
+  	   	  double count = data.getCount();
+  	      countAcc[i]( count, weight = count );
+  	      weightedCountAcc[i]( data.getWeightedCount(), weight = count );
+  	      directionAcc[i]( data.getNormalizedDirectionBias(), weight = count);
   	   }
   	for(KmerSolidMap::Iterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++)
   	   for(int i=0; i< count; i++) {
-  	   	  double count = it->value().value.getCount();
-  	      accumulators[i]( count, weight = count );
+  	   	  TrackingData &data = it->value().value;
+  	   	  double count = data.getCount();
+  	      countAcc[i]( count, weight = count );
+  	      weightedCountAcc[i]( data.getWeightedCount(), weight = count );
+  	      directionAcc[i]( data.getNormalizedDirectionBias(), weight = count);
   	   }
   	
   	std::cerr << "Quantiles: ";
     for(int i=0; i< count; i++) {
        std::cerr << std::fixed << std::setprecision(4) << probabilities[i] << ": ";
-       std::cerr << std::fixed << std::setprecision(4) << weighted_p_square_quantile(accumulators[i]) << "\t";
+       std::cerr << std::fixed << std::setprecision(4) << weighted_p_square_quantile(countAcc[i]) << "\t";
+       std::cerr << std::fixed << std::setprecision(4) << weighted_p_square_quantile(weightedCountAcc[i]) << "\t";
+       std::cerr << std::fixed << std::setprecision(4) << weighted_p_square_quantile(directionAcc[i]) << "\t";
+       std::cerr << std::fixed << std::setprecision(4) << weighted_p_square_quantile(directionAcc[i]) << "\t";
+       std::cerr << std::endl;
     }
-    std::cerr << std::endl;
+  	double minimumCount = weighted_p_square_quantile(countAcc[0]);
+  	double minimumWeightedCount = weighted_p_square_quantile(weightedCountAcc[0]);
+  	double minimumDirBias = weighted_p_square_quantile(directionAcc[0]);
+  	double maximumDirBias = weighted_p_square_quantile(directionAcc[1]);
   	
-  	double minimumCount = weighted_p_square_quantile(accumulators[0]);
-    for(KmerWeakMap::Iterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++)
-      if (it->value().value.getCount() > minimumCount) {
-      	solid[ it->key() ].value = it->value().value;
-      	promoted++;
+    for(KmerWeakMap::Iterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
+      TrackingData &data = it->value().value;
+      double dirBias = data.getNormalizedDirectionBias();
+      if (data.getCount() > minimumCount && data.getWeightedCount() > minimumWeightedCount
+          //&& dirBias < maximumDirBias && dirBias > minimumDirBias
+          //&& dirBias < 0.8 && dirBias > 0.2
+          ) {
+        std::pair<double,double> scores = getPermutedScores( it->key(), Options::getFirstOrderWeight(), Options::getSecondOrderWeight() );
+        double permuteScore = (scores.first+scores.second);
+        if ( (double)data.getCount() / permuteScore > 1.0 ) {
+      	  solid[ it->key() ].value = it->value().value;
+      	  promoted++;
+        }
       }
+    }
   	for(KmerSolidMap::Iterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++)
   	  weak.remove( it->key() );
 
   	return promoted;
+  }
+  
+  
+  std::pair<double,double> getPermutedScores( KmerPtr kmer, double permutationWeight = 0.1, double secondWeight = 0.0 ) {
+  	std::pair<double,double> score(0.0,0.0);
+  	//std::cerr << "Permuting " << kmer->toFasta() << std::endl;
+  	bool isSolid; double base = 0.0;
+  	if ( solid.exists( *kmer ) ) {
+  	  base = solid[ *kmer ].value.getCount();
+  	  isSolid = true;
+  	} else if (weak.exists( *kmer ) ) {
+  	  base = weak[ *kmer ].value.getCount();
+  	  isSolid = false;
+  	}
+  	KmerWeights permutations = KmerWeights::permuteBases(kmer, true);
+  	for(int i=0; i<permutations.size(); i++) {
+      //std::cerr << "Looking at " << permutations[i].toFasta() << std::endl;		
+  	  if( solid.exists( permutations[i] ) ) {
+  	  	score.first += solid[ permutations[i] ].value.getCount() * permutationWeight;
+  	  } else if ( weak.exists( permutations[i] ) ) {
+  	  	score.second += weak[ permutations[i] ].value.getCount() * permutationWeight;
+  	  }
+  	  if (secondWeight > 0.0) {
+  	    std::pair<double,double> sScores = getPermutedScores( permutations[i], secondWeight );
+  	    score.first += sScores.first;
+  	    score.second += sScores.second;
+  	    if (isSolid)
+  	      score.first -= secondWeight * base;
+  	    else 
+  	      score.second -= secondWeight * base;
+  	  }
+  	}
+  	return score;
   }
   
   int countGC(std::string fasta) {
@@ -298,16 +356,23 @@ public:
   }
   std::string pretty( KmerPtr kmer, std::string note ) {
   	std::stringstream ss;
+  	
   	TwoBitEncoding _rev[ KmerSizer::getByteSize() ];
   	KmerPtr rev(&_rev);
   	kmer->buildReverseComplement( *rev );
   	
-  	ss << kmer->toFasta() << " " << rev->toFasta() << " " << countGC(kmer->toFasta()) << "\t" << note << " " << std::endl;
+  	ss << kmer->toFasta() << " " << rev->toFasta() << " " << countGC(kmer->toFasta()) << "\t" << note << std::endl;
   	return ss.str();
   }
   std::string pretty( KmerPtr kmer, TrackingData &data ) {
   	std::stringstream ss;
-  	ss << data;
+  	ss << data << "\t";
+
+  	std::pair<double,double> scores = getPermutedScores( kmer, 0.1, 0.01 );
+  	ss << std::fixed << std::setprecision(2) << scores.first  << "\t";
+  	ss << std::fixed << std::setprecision(2) << scores.second << "\t";
+  	ss << std::fixed << std::setprecision(2) << (double)data.getCount() / (double)(scores.first+scores.second) << "\t";
+  	
   	return pretty( kmer, ss.str() );
   }
   std::string contrastSpectrums(KmerSpectrum &reference, double minSolidDepth = -1.0) {
@@ -329,12 +394,16 @@ public:
   	    } else {
   	      // Weak and not in reference: correctWeak
   	      // count later
+  	      if (Options::getVerbosity() > 1)
+  	        ss << "CW " << pretty( it->key(), it->value().value);
   	    }
   	  } else {
   	    thisSolidSize++;
   	    if ( reference.solid.exists( it->key() ) ) {
   	      // correctly matches solid in reference: matchingSolid
   	  	  matchingSolid++;
+  	  	  if (Options::getVerbosity() > 0)
+  	  	    ss << "CS " << pretty( it->key(), it->value().value);
   	    } else {
   	      // exists in this but not reference: extraSolid
   	      extraSolid++;
@@ -359,6 +428,12 @@ public:
   	    missingSolid++;
   	  }
   	}
+  	if (Options::getVerbosity() > 2) {
+  	  for(KmerWeakMap::Iterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
+  	    if (! reference.solid.exists( it->key() ))
+  	      ss << "CW " << pretty( it->key(), it->value().value);
+  	  }
+  	}
   	correctWeak = thisWeakSize - incorrectWeak;
 
     std::stringstream header;
@@ -371,19 +446,12 @@ public:
   void append( KmerWeights &kmers, bool isSolid = false ) {
       
      TwoBitEncoding _tmp[KmerSizer::getByteSize()];
-     KmerPtr tmp(&_tmp);
-     KmerPtr least;
+     KmerPtr least(&_tmp);
+     
      
      for (int j=0; j < kmers.size(); j++)
      {
-       	TwoBitSequence::reverseComplement((TwoBitEncoding*)kmers[j].get(), (TwoBitEncoding*)tmp.get(), KmerSizer::getSequenceLength());
-       	  
-       	bool keepDirection = kmers[j] < *tmp;
-       	  
-       	if (keepDirection)
-       	   least = kmers[j].get();
-       	else
-       	   least = tmp.get();
+     	bool keepDirection = kmers[j].buildLeastComplement(*least);
        	
        	if ( solid.exists( *least ) || isSolid ) {
        	  	// track solid stats
@@ -460,6 +528,9 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.7  2009-11-09 19:37:17  regan
+// enhanced some debugging / analysis output
+//
 // Revision 1.6  2009-11-06 16:59:11  regan
 // added base substitution/permutations table and build function
 //

@@ -3,7 +3,7 @@
 
 KmerSizer KmerSizer::singleton;
 
-TrackingData::WeightType TrackingData::minimumWeight = 0.1;
+TrackingData::WeightType TrackingData::minimumWeight = 0.01;
 TrackingData::CountType  TrackingData::minimumDepth = 10;
 
 TrackingData::CountType  TrackingData::maxCount = 0;

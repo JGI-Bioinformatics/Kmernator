@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.15 2009-11-06 04:10:23 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.16 2009-11-09 19:37:20 regan Exp $
 //
 
 #include <iostream>
@@ -63,7 +63,9 @@ int main(int argc, char *argv[]) {
         
     buildKmerSpectrum( reads, spectrum );
     cerr << MemoryUtils::getMemoryUsage() << endl;
-    spectrum.promote( Options::getSolidQuantile() );
+    unsigned long promoted = spectrum.promote( Options::getSolidQuantile() );
+    
+    cerr << "Promoted " << promoted << " kmers" << endl;
     
     if (refReads.getSize() > 0) {
     	cerr << "Contrasted to reference kmer-spectrum:" << endl;
@@ -74,6 +76,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.16  2009-11-09 19:37:20  regan
+// enhanced some debugging / analysis output
+//
 // Revision 1.15  2009-11-06 04:10:23  regan
 // refactor of cmd line option handling
 // added methods to evaluate spectrums

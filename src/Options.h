@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.1 2009-11-06 04:10:21 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.2 2009-11-09 19:37:17 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -14,37 +14,51 @@ namespace po = boost::program_options;
 
 class Options
 {
+public:
+  typedef std::vector<std::string> FileListType;
+  
 private:
-  static Options &getOptions() { static Options singleton; return singleton; }
-  static po::variables_map &getVM() { return getOptions().vm; }
+  static inline Options &getOptions() { static Options singleton; return singleton; }
   
   po::options_description desc;
   po::positional_options_description p;
   po::variables_map vm;
   
+  // cache of variables (for inline lookup and defaults)
+  FileListType referenceFiles;
+  FileListType inputFiles;
+  unsigned int kmerSize;
+  double       solidQuantile;
+  double       minKmerQuality;
+  unsigned int verbosity;
+  double       firstOrderWeight;
+  double       secondOrderWeight;
+  
 public:
 
-  typedef std::vector<std::string> FileListType;
-
-  static FileListType        getReferenceFiles() { if (getVM().count("reference-file"))
-  	                                                  return getVM()["reference-file"].as< FileListType >();
-  	                                               FileListType empty(0);
-  	                                               return empty;
-  	                                             }
-  static FileListType        getInputFiles()     { return getVM()["input-file"]    .as< FileListType >(); }
-  static unsigned int        getKmerSize()       { return getVM()["kmer-size"]     .as< unsigned int >(); }
-  static double              getSolidQuantile()  { return getVM()["solid-quantile"].as< double       >(); }
-  
+  static inline FileListType        &getReferenceFiles()   { return getOptions().referenceFiles; }
+  static inline FileListType        &getInputFiles()       { return getOptions().inputFiles; }
+  static inline unsigned int        &getKmerSize()         { return getOptions().kmerSize; }
+  static inline double              &getSolidQuantile()    { return getOptions().solidQuantile; }
+  static inline double              &getMinKmerQuality()   { return getOptions().minKmerQuality; }
+  static inline unsigned int        &getVerbosity()        { return getOptions().verbosity; }
+  static inline double              &getFirstOrderWeight() { return getOptions().firstOrderWeight; }
+  static inline double              &getSecondOrderWeight(){ return getOptions().secondOrderWeight; }
+    
   static bool parseOpts(int argc, char *argv[]) {
     try {
     	po::options_description &desc = getOptions().desc;
     	
         desc.add_options()
             ("help", "produce help message")
+            ("verbose", po::value< unsigned int >()->default_value(0), "level of verbosity (0+)")
             ("reference-file", po::value< FileListType >(), "set reference file(s)")
             ("solid-quantile", po::value< double >()->default_value(0.05), "quantile threshold for solid kmers (0-1)")
             ("kmer-size", po::value< unsigned int >(), "kmer size")
             ("input-file", po::value< FileListType >(), "input file(s)")
+            ("min-kmer-quality", po::value< double >()->default_value(0.01), "minimum quality-adjusted kmer probability (0-1)")
+            ("first-order-weight", po::value< double >()->default_value(0.10), "first order permuted bases weight")
+            ("second-order-weight", po::value< double >()->default_value(0.00), "second order permuted bases weight")
         ;
 
         po::positional_options_description &p = getOptions().p;
@@ -60,10 +74,11 @@ public:
             std::cerr << desc << std::endl;
             return false;
         }
+        getVerbosity() = vm["verbose"].as< unsigned int >();
 
         if (vm.count("reference-file")) {
         	std::cerr << "Reference files are: ";
-            FileListType referenceFiles = getReferenceFiles();
+            FileListType &referenceFiles = getReferenceFiles() = vm["reference-file"].as< FileListType >();
         	for(FileListType::iterator it = referenceFiles.begin(); it != referenceFiles.end() ; it++ )
                 std::cerr << *it << ", ";
             std::cerr << std::endl;
@@ -72,6 +87,7 @@ public:
         }
         
         if (vm.count("kmer-size")) {
+        	getKmerSize() = vm["kmer-size"].as< unsigned int >();
         	std::cerr << "Kmer size is: " << getKmerSize() << std::endl;
         } else {
         	std::cerr << desc << "There was no kmer size specified!" << std::endl;
@@ -79,7 +95,7 @@ public:
         }
         if (vm.count("input-file")) {	
         	std::cerr << "Input files are: ";
-        	FileListType inputs = getInputFiles();
+        	FileListType inputs = getInputFiles() = vm["input-file"].as< FileListType >();
         	for(FileListType::iterator it = inputs.begin(); it != inputs.end() ; it++ )
                 std::cerr << *it << ", ";
             std::cerr << std::endl;
@@ -87,8 +103,18 @@ public:
         	std::cerr << desc << "There were no input files specified!" << std::endl;
         	return false;
         }
+     
+        // set solid-quantile
+      	getSolidQuantile() = vm["solid-quantile"].as< double >();
         std::cerr << "solid-quantile is: " << getSolidQuantile() << std::endl;
         
+        // set kmer quality
+        getMinKmerQuality() = vm["min-kmer-quality"].as< double >();
+        std::cerr << "min-kmer-quality is: " << getMinKmerQuality() << std::endl;
+        
+        // set permuted weights
+        getFirstOrderWeight() = vm["first-order-weight"].as< double >();
+        getSecondOrderWeight() = vm["second-order-weight"].as< double>();
         
     }
     catch(std::exception& e) {
@@ -108,6 +134,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.2  2009-11-09 19:37:17  regan
+// enhanced some debugging / analysis output
+//
 // Revision 1.1  2009-11-06 04:10:21  regan
 // refactor of cmd line option handling
 // added methods to evaluate spectrums
