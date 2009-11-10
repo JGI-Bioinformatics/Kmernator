@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.7 2009-11-09 19:37:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.8 2009-11-10 07:05:37 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -106,21 +106,29 @@ KmerWeights buildWeightedKmers(Read &read) {
   
   BaseLocationVectorType markups = read.getMarkups();
   double weight = 0.0;
+  double change = 0.0;
+  
   for(SequenceLengthType i=0; i< kmers.size(); i++) {
   	if (i%100 == 0 || weight == 0.0) {
   	  weight = 1.0;
   	  for(SequenceLengthType j=0; j < KmerSizer::getSequenceLength(); j++) 
   	    weight *= Read::qualityToProbability[ quals[i+j] ];
   	} else {
-  		weight *= Read::qualityToProbability[ quals[i+KmerSizer::getSequenceLength()] ] / 
-  		          Read::qualityToProbability[ quals[i-1] ];
+  		change = Read::qualityToProbability[ quals[i+KmerSizer::getSequenceLength()-1] ] / 
+  		         Read::qualityToProbability[ quals[i-1] ];
+  		weight *= change;
   	}
   	while( markupIdx < markups.size() && markups[markupIdx].second < i)
   	  markupIdx++;
-  	if (markupIdx < markups.size() && markups[markupIdx].second < i+KmerSizer::getSequenceLength())
+  	if (markupIdx < markups.size() && markups[markupIdx].second < i+KmerSizer::getSequenceLength()) {
   	    weight = 0.0;
+//  	    std::cerr << "markupAt " << markups[markupIdx].first << " " << markups[markupIdx].second << "\t";
+    }
   	kmers.valueAt(i) = weight;
+//  	std::cerr << i << ":" << std::fixed << std::setprecision(3) << quals[i+KmerSizer::getSequenceLength()-1] << "-" << change << "/" << weight << "\t";
+  	
   }
+//  std::cerr << std::endl;
   return kmers;
 }
 
@@ -528,6 +536,9 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.8  2009-11-10 07:05:37  regan
+// changes for debugging
+//
 // Revision 1.7  2009-11-09 19:37:17  regan
 // enhanced some debugging / analysis output
 //
