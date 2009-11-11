@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.9 2009-11-11 07:57:23 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.10 2009-11-11 17:23:23 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -278,15 +278,19 @@ public:
       }
     }
     
-    std::cerr << "Heap: " <<  weakHeap.size() << " " << weakHeap[0].value().value << std::endl;
-    for(int i=0; i<weakHeap.size(); i++)
-      std::cerr << i << ": " << weakHeap[i].value().value << std::endl;
+    if (weakHeap.size() == 0) {
+    	std::cerr << "There are no eligible kmers to promote" << std::endl;
+    	return 0;
+    }
+    //std::cerr << "Heap: " <<  weakHeap.size() << " " << weakHeap[0].value().value << std::endl;
+    //for(int i=0; i<weakHeap.size(); i++)
+    //  std::cerr << i << ": " << weakHeap[i].value().value << std::endl;
         
     //heapify kmer counts 
     std::make_heap( weakHeap.begin(), weakHeap.end() );
-    std::cerr << "Heap: " <<  weakHeap.size() << " " << weakHeap.front().value().value << std::endl;
-    for(int i=0; i<weakHeap.size(); i++)
-      std::cerr << i << ": " << weakHeap[i].value().value << std::endl;
+    //std::cerr << "Heap: " <<  weakHeap.size() << " " << weakHeap.front().value().value << std::endl;
+    //for(int i=0; i<weakHeap.size(); i++)
+    //  std::cerr << i << ": " << weakHeap[i].value().value << std::endl;
  
     // work in batches, stop when 0 new solids are added
     unsigned long count = 0;
@@ -296,8 +300,8 @@ public:
     	
         if (shouldBeSolid( element, minWeakRatio, minSolidRatio )) {
         	solid[ element.key() ].value = element.value().value;
-        	element.value().value.reset(); // to avoid double counting
         	std::cerr << "Added " << pretty(element.key(), element.value().value);
+        	element.value().value.reset(); // to avoid double counting
         	promoted++;
         	promotedInBatch++;
         } else {
@@ -644,6 +648,10 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.10  2009-11-11 17:23:23  regan
+// fixed bugs in heap generation
+// solid picking logic needs work
+//
 // Revision 1.9  2009-11-11 07:57:23  regan
 // built framework for autoPromote (not working) - make_heap is broken
 //

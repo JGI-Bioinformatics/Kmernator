@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.47 2009-11-11 07:57:23 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.48 2009-11-11 17:23:24 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -429,13 +429,22 @@ public:
   	  KmerPtr::Kmer &key() { return *_key; }
   	  ValueType &value()   { return *_value; }
   	  inline bool operator==(const ElementType &other) const {
-  	  	return this->_value == other._value;
+  	  	if (this->_value != NULL && other._value != NULL)
+  	  	  return *(this->_value) == *(other._value);
+  	  	else
+  	  	  return true;
   	  }
   	  inline bool operator<(const ElementType &other) const {
-  	  	return this->_value < other._value;
+  	  	if (this->_value != NULL && other._value != NULL)
+  	  	  return *(this->_value) < *(other._value);
+  	  	else
+  	  	  return false;
   	  }
   	  inline bool operator>(const ElementType &other) const {
-  	  	return this->_value > other._value;
+  	  	if (this->_value != NULL && other._value != NULL)
+  	  	  return *(this->_value) > *(other._value);
+  	  	else
+  	  	  return false;
   	  }
   };
 
@@ -1032,6 +1041,10 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.48  2009-11-11 17:23:24  regan
+// fixed bugs in heap generation
+// solid picking logic needs work
+//
 // Revision 1.47  2009-11-11 07:57:23  regan
 // built framework for autoPromote (not working) - make_heap is broken
 //
