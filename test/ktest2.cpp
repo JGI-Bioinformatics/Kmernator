@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.16 2009-11-09 19:37:20 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.17 2009-11-11 07:57:26 regan Exp $
 //
 
 #include <iostream>
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
         
     buildKmerSpectrum( reads, spectrum );
     cerr << MemoryUtils::getMemoryUsage() << endl;
-    unsigned long promoted = spectrum.promote( Options::getSolidQuantile() );
+    unsigned long promoted = spectrum.autoPromote();//spectrum.promote( Options::getSolidQuantile() );
     
     cerr << "Promoted " << promoted << " kmers" << endl;
     
@@ -76,6 +76,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.17  2009-11-11 07:57:26  regan
+// built framework for autoPromote (not working) - make_heap is broken
+//
 // Revision 1.16  2009-11-09 19:37:20  regan
 // enhanced some debugging / analysis output
 //

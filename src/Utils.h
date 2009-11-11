@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.8 2009-11-10 07:05:37 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.9 2009-11-11 07:57:23 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <vector>
+#include <algorithm>
 
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
@@ -136,6 +137,9 @@ KmerWeights buildWeightedKmers(Read &read) {
 class KmerSpectrum
 {
 public:
+
+  typedef std::pair<double,double> WeakSolidWeightType;
+
   KmerWeakMap  weak;
   KmerSolidMap solid;
   KmerSpectrum(unsigned long buckets): weak(buckets), solid(buckets/4) 
@@ -222,8 +226,8 @@ public:
   	std::cerr << "Counts:\t";
   	std::cerr << std::fixed << std::setprecision(2) << mean(countAcc) << "/" << median(countAcc) << " +-";
   	std::cerr << std::fixed << std::setprecision(2) << sqrt(variance(countAcc)) << "\t";
-  	std::cerr << std::fixed << std::setprecision(2) << weighted_mean(countWAcc) << " +-";
-  	std::cerr << std::fixed << std::setprecision(2) << sqrt(weighted_variance(countWAcc)) << "\t";
+  	std::cerr << std::fixed << std::setprecision(2) << mean(countWAcc) << " +-";
+  	std::cerr << std::fixed << std::setprecision(2) << sqrt(variance(countWAcc)) << "\t";
   
   	std::cerr << "WeightedCounts:\t";
   	std::cerr << std::fixed << std::setprecision(2) << mean(weightedCountAcc) << "/" << median(weightedCountAcc) << " +-";
@@ -253,6 +257,101 @@ public:
   	}
   }
   
+  unsigned long autoPromote(unsigned int minKmerCount = 2, double minKmerWeightedCount = 0.0,
+                            double minWeakRatio = 0.10, double minSolidRatio = 0.01 )
+  {
+  	unsigned long promoted = 0;
+  	// build vector of WeakKmerMap
+  	// screen out singletons 
+  	// getCount() >= minKmerCount && getWeightedCount() >= minKmerWeightedCount
+
+    typedef std::vector< KmerWeakMap::ElementType > HeapType;
+    HeapType weakHeap;
+    weakHeap.reserve(( weak.size() - TrackingData::singletonCount ));
+
+    KmerWeakMap::Iterator mapIt  = weak.begin();
+    KmerWeakMap::Iterator mapEnd = weak.end();
+    for(; mapIt != mapEnd; mapIt++ ) {
+      TrackingData &data = mapIt->value().value;
+      if (data.getCount() >= minKmerCount && data.getWeightedCount() >= minKmerWeightedCount) {
+        weakHeap.push_back( *mapIt );
+      }
+    }
+    
+    std::cerr << "Heap: " <<  weakHeap.size() << " " << weakHeap[0].value().value << std::endl;
+    for(int i=0; i<weakHeap.size(); i++)
+      std::cerr << i << ": " << weakHeap[i].value().value << std::endl;
+        
+    //heapify kmer counts 
+    std::make_heap( weakHeap.begin(), weakHeap.end() );
+    std::cerr << "Heap: " <<  weakHeap.size() << " " << weakHeap.front().value().value << std::endl;
+    for(int i=0; i<weakHeap.size(); i++)
+      std::cerr << i << ": " << weakHeap[i].value().value << std::endl;
+ 
+    // work in batches, stop when 0 new solids are added
+    unsigned long count = 0;
+    unsigned long promotedInBatch = 0;
+    while ( weakHeap.begin() != weakHeap.end() ) {
+    	KmerWeakMap::ElementType &element = weakHeap.front();
+    	
+        if (shouldBeSolid( element, minWeakRatio, minSolidRatio )) {
+        	solid[ element.key() ].value = element.value().value;
+        	element.value().value.reset(); // to avoid double counting
+        	std::cerr << "Added " << pretty(element.key(), element.value().value);
+        	promoted++;
+        	promotedInBatch++;
+        } else {
+        	std::cerr << "Skipping " << pretty(element.key(), element.value().value);
+        }
+        if (++count == 255) {
+        	if (promotedInBatch == 0)
+        	   break;
+        	promotedInBatch = count = 0;
+        }
+    	std::pop_heap(weakHeap.begin(), weakHeap.end());
+    	weakHeap.pop_back();
+    }
+    return promoted;
+  }
+  
+  bool shouldBeSolid( KmerWeakMap::ElementType &weakElement, double minWeakRatio, double minSolidRatio ) {
+  	KmerPtr kmer = weakElement.key();
+  	TrackingData &data = weakElement.value().value;
+  	WeakSolidWeightType permutedScores = getPermutedScores(kmer, 1.0, 0.0);
+  	if (   permutedScores.first  <= minWeakRatio  * data.getCount()
+  	    && permutedScores.second <= minSolidRatio * data.getCount())
+  	    return true;
+    else
+        return false;  	
+  }
+  
+    //repeat:
+    // pop one
+    // if solid (sum of all 1st order permutations < thresholdPermutationRatio * mycount)
+    //    add to solid
+    // else
+    //    if rolling avg of tested kmer to added solid < thresholdSolidIncorporation 
+    //         stop
+    
+    
+    
+    
+    
+    // find peak-getCount() (from maximum backwards) (above trivial at 1)
+    // seeds Solid kmers
+    
+    // find all 1st order permutations of solids, knock out weaks
+    // walk down sorted list of kmers
+    // test 1st order permutation:
+    //    if permute < threshold -> promote, knock out weaks
+    //    else next
+    
+    // then check permutations of kmers with ratios > thresholdMax
+    
+    
+    
+  
+  
   unsigned long promote(double probabilityQuantile) {
   	unsigned long promoted = 0;
     
@@ -262,8 +361,10 @@ public:
   	                       >,
   	                double
   	                > AccumulatorType;
-  	int count = 12;
-  	double probabilities[] = { probabilityQuantile, 1.0-probabilityQuantile, 0.001, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05 };
+  	int count = 25;
+  	double probabilities[] = { probabilityQuantile, 1.0-probabilityQuantile, 
+  		                       0.001, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05,
+  		                       0.06,  0.07,  0.08, 0.09,  0.10, 0.11,  0.12, 0.13,  0.14, 0.15,  0.16, 0.20 };
   	std::vector< AccumulatorType > countAcc, weightedCountAcc, directionAcc;
   	for(int i=0; i < count; i++) {
   	   countAcc.push_back( AccumulatorType( quantile_probability = probabilities[i] ) );
@@ -323,8 +424,11 @@ public:
   }
   
   
-  std::pair<double,double> getPermutedScores( KmerPtr kmer, double permutationWeight = 0.1, double secondWeight = 0.0 ) {
-  	std::pair<double,double> score(0.0,0.0);
+  WeakSolidWeightType getPermutedScores( KmerPtr kmer, double permutationWeight = 0.1, double secondWeight = 0.0 ) {
+  	WeakSolidWeightType score(0.0,0.0);
+  	if (permutationWeight == 0.0)
+  	  return score;
+  	  
   	//std::cerr << "Permuting " << kmer->toFasta() << std::endl;
   	bool isSolid; double base = 0.0;
   	if ( solid.exists( *kmer ) ) {
@@ -343,7 +447,7 @@ public:
   	  	score.second += weak[ permutations[i] ].value.getCount() * permutationWeight;
   	  }
   	  if (secondWeight > 0.0) {
-  	    std::pair<double,double> sScores = getPermutedScores( permutations[i], secondWeight );
+  	    WeakSolidWeightType sScores = getPermutedScores( permutations[i], secondWeight );
   	    score.first += sScores.first;
   	    score.second += sScores.second;
   	    if (isSolid)
@@ -386,9 +490,8 @@ public:
   std::string contrastSpectrums(KmerSpectrum &reference, double minSolidDepth = -1.0) {
   	// ignores reference.weak and everything in reference.solid passed criteria
   	 
-  	std::stringstream ss;
   	unsigned long thisSolidSize(0), thisWeakSize(0), referenceSolidSize(0), 
-  	              matchingSolid(0), missingSolid(0), incorrectWeak(0), extraSolid(0), correctWeak(0);
+  	              trueSolid(0), missingSolid(0), falseWeak(0), falseSolid(0), trueWeak(0);
   	
   	thisWeakSize = weak.size();
   	// compare this->solid to reference.solid 
@@ -396,26 +499,26 @@ public:
   	  if (minSolidDepth >= 0 && it->value().value.getCount() < minSolidDepth) {
   	  	thisWeakSize++;
   	    if ( reference.solid.exists( it->key() ) ) {
-  	      // exists in reference but in this is weak: incorrectWeak
-  	      incorrectWeak++;
-  	      ss << "IW " << pretty( it->key(), it->value().value);
+  	      // exists in reference but in this is weak: falseWeak
+  	      falseWeak++;
+  	      std::cerr << "FW " << pretty( it->key(), it->value().value);
   	    } else {
-  	      // Weak and not in reference: correctWeak
+  	      // Weak and not in reference: trueWeak
   	      // count later
   	      if (Options::getVerbosity() > 1)
-  	        ss << "CW " << pretty( it->key(), it->value().value);
+  	        std::cerr << "TW " << pretty( it->key(), it->value().value);
   	    }
   	  } else {
   	    thisSolidSize++;
   	    if ( reference.solid.exists( it->key() ) ) {
-  	      // correctly matches solid in reference: matchingSolid
-  	  	  matchingSolid++;
+  	      // correctly matches solid in reference: trueSolid
+  	  	  trueSolid++;
   	  	  if (Options::getVerbosity() > 0)
-  	  	    ss << "CS " << pretty( it->key(), it->value().value);
+  	  	    std::cerr << "TS " << pretty( it->key(), it->value().value);
   	    } else {
-  	      // exists in this but not reference: extraSolid
-  	      extraSolid++;
-  	      ss << "ES " << pretty( it->key(), it->value().value);
+  	      // exists in this but not reference: falseSolid
+  	      falseSolid++;
+  	      std::cerr << "FS " << pretty( it->key(), it->value().value);
   	    }
   	  }
   	}
@@ -427,28 +530,28 @@ public:
   	  if ( solid.exists( it->key() ) ) {
   	  	// already accounted  	  	
   	  } else if ( weak.exists ( it->key() )) {
-      	// exists in reference but in this is weak: incorrectWeak
-      	incorrectWeak++;
-      	ss << "IW " << pretty( it->key(), weak[ it->key() ].value );
+      	// exists in reference but in this is weak: falseWeak
+      	falseWeak++;
+      	std::cerr << "FW " << pretty( it->key(), weak[ it->key() ].value );
   	  } else {
   	  	// exists in reference but not in either solid nor weak: missingSolid
-  	    ss << "MS " << pretty( it->key(), "N/A");
+  	    std::cerr << "MS " << pretty( it->key(), "N/A");
   	    missingSolid++;
   	  }
   	}
   	if (Options::getVerbosity() > 2) {
   	  for(KmerWeakMap::Iterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
   	    if (! reference.solid.exists( it->key() ))
-  	      ss << "CW " << pretty( it->key(), it->value().value);
+  	      std::cerr << "TW " << pretty( it->key(), it->value().value);
   	  }
   	}
-  	correctWeak = thisWeakSize - incorrectWeak;
+  	trueWeak = thisWeakSize - falseWeak;
 
     std::stringstream header;
   	header << "SolidSizes: " << thisSolidSize << " / " << referenceSolidSize << std::endl;
-  	header << "MatchingSolid: " << matchingSolid << " MissingSolid: " << missingSolid << " IncorrectWeak: " << incorrectWeak << " ExtraSolid: " << extraSolid << std::endl;
-  	header << "CorrectWeak: " << correctWeak << " / " << thisWeakSize << std::endl;
-   	return header.str() + ss.str();
+  	header << "trueSolid: " << trueSolid << " MissingSolid: " << missingSolid << " falseWeak: " << falseWeak << " falseSolid: " << falseSolid << std::endl;
+  	header << "trueWeak: " << trueWeak << " / " << thisWeakSize << std::endl;
+   	return header.str();
   }
   
   void append( KmerWeights &kmers, bool isSolid = false ) {
@@ -466,9 +569,14 @@ public:
        	  	solid[ *least ].value.track( kmers.valueAt(j), keepDirection );
        	} else {
        	  	// track weak stats
-       	  	TrackingData &data = weak[ *least ].value;
-       	  	
-       	  	data.track( kmers.valueAt(j), keepDirection );
+       	  	if ( weak.exists( *least ) ) {
+       	  	  TrackingData &data = weak[ *least ].value;
+       	  	  data.track( kmers.valueAt(j), keepDirection );
+       	  	} else {
+       	  	  TrackingData data;
+       	  	  if (data.track( kmers.valueAt(j), keepDirection ))
+       	  	    weak[ *least ].value = data;
+       	  	}
        	}
      }  	
   }
@@ -478,7 +586,7 @@ public:
 void printStats(unsigned long pos, KmerSpectrum &stats, bool solidOnly = false) {
 	stats.printHistograms(solidOnly);
 	KmerSolidMap::Iterator it = stats.solid.begin();
-    std::cerr << pos << " reads, " << stats.solid.size() << " / " << stats.weak.size() << " kmers so far ";
+    std::cerr << pos << " reads, " << stats.solid.size() << " / " << stats.weak.size() << " / " << TrackingData::discarded << " kmers so far ";
     if(it != stats.solid.end())
         std::cerr << it.bucket().toString() << "; ";
     std::cerr << " minDepth: " << (unsigned long)TrackingData::minimumDepth <<  std::endl;
@@ -536,6 +644,9 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.9  2009-11-11 07:57:23  regan
+// built framework for autoPromote (not working) - make_heap is broken
+//
 // Revision 1.8  2009-11-10 07:05:37  regan
 // changes for debugging
 //

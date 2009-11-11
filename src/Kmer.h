@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.46 2009-11-09 19:37:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.47 2009-11-11 07:57:23 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -264,6 +264,15 @@ public:
   KmerValue &operator=(const KmerValue &other) {
   	this->value = other.value;
   }
+  inline bool operator==(const KmerValue &other) const {
+  	return this->value == other.value;
+  }
+  inline bool operator<(const KmerValue &other) const {
+  	return this->value < other.value;
+  }
+  inline bool operator>(const KmerValue &other) const {
+  	return this->value > other.value;
+  }
 };
 
 template<typename Value>
@@ -288,6 +297,8 @@ public:
   static WeightType minimumWeight;
   static CountType minimumDepth;
   static const CountType MAX_COUNT = (CountType) -1;
+  static unsigned long discarded;
+  static unsigned long singletonCount;
   
   static CountType  maxCount;
   static WeightType maxWeightedCount;
@@ -309,10 +320,25 @@ public:
   	directionBias = other.directionBias;
   	weightedCount = other.weightedCount;
   }
-  
+  void reset() {
+  	count = 0;
+  	directionBias = 0;
+  	weightedCount = 0.0;
+  }
+  inline bool operator==(const TrackingData &other) const {
+  	return count == other.count && weightedCount == other.weightedCount;
+  }
+  inline bool operator<(const TrackingData &other) const {
+  	return count < other.count || (count == other.count && weightedCount < other.weightedCount);
+  }
+  inline bool operator>(const TrackingData &other) const {
+  	return count > other.count || (count == other.count && weightedCount > other.weightedCount);
+  }
   bool track(double weight, bool forward) {
-    if (weight < minimumWeight)
+    if (weight < minimumWeight) {
+      discarded++;
   	  return false;
+    }
     if (count < MAX_COUNT) {
       count++;
       if (forward) 
@@ -323,6 +349,11 @@ public:
         maxCount = count;
       if (weightedCount > maxWeightedCount)
         maxWeightedCount = weightedCount;
+      
+      if (count == 1)
+        singletonCount++;
+      else if (count == 2)
+        singletonCount--;
         
       return true;
     } else
@@ -397,6 +428,15 @@ public:
   	  }
   	  KmerPtr::Kmer &key() { return *_key; }
   	  ValueType &value()   { return *_value; }
+  	  inline bool operator==(const ElementType &other) const {
+  	  	return this->_value == other._value;
+  	  }
+  	  inline bool operator<(const ElementType &other) const {
+  	  	return this->_value < other._value;
+  	  }
+  	  inline bool operator>(const ElementType &other) const {
+  	  	return this->_value > other._value;
+  	  }
   };
 
 private:
@@ -983,6 +1023,8 @@ typedef KmerMap<SolidKmerTag>   KmerSolidMap;
 typedef KmerMap<WeakKmerTag>    KmerWeakMap;
 typedef KmerMap<unsigned short> KmerCountMap;
 
+
+
 #endif
 
 
@@ -990,6 +1032,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.47  2009-11-11 07:57:23  regan
+// built framework for autoPromote (not working) - make_heap is broken
+//
 // Revision 1.46  2009-11-09 19:37:17  regan
 // enhanced some debugging / analysis output
 //

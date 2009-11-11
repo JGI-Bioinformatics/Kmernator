@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.4 2009-11-04 18:23:14 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.5 2009-11-11 07:57:23 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
@@ -141,6 +141,9 @@ public:
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.5  2009-11-11 07:57:23  regan
+// built framework for autoPromote (not working) - make_heap is broken
+//
 // Revision 1.4  2009-11-04 18:23:14  regan
 // added a memory usage reporting function
 //
