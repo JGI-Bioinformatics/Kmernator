@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.48 2009-11-11 17:23:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.49 2009-11-12 17:01:51 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -326,13 +326,13 @@ public:
   	weightedCount = 0.0;
   }
   inline bool operator==(const TrackingData &other) const {
-  	return count == other.count && weightedCount == other.weightedCount;
+  	return count == other.count;// && weightedCount == other.weightedCount;
   }
   inline bool operator<(const TrackingData &other) const {
-  	return count < other.count || (count == other.count && weightedCount < other.weightedCount);
+  	return count < other.count;// || (count == other.count && weightedCount < other.weightedCount);
   }
   inline bool operator>(const TrackingData &other) const {
-  	return count > other.count || (count == other.count && weightedCount > other.weightedCount);
+  	return count > other.count;// || (count == other.count && weightedCount > other.weightedCount);
   }
   bool track(double weight, bool forward) {
     if (weight < minimumWeight) {
@@ -1041,6 +1041,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.49  2009-11-12 17:01:51  regan
+// checkpoint
+//
 // Revision 1.48  2009-11-11 17:23:24  regan
 // fixed bugs in heap generation
 // solid picking logic needs work

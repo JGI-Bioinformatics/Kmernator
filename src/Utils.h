@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.11 2009-11-12 01:29:22 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.12 2009-11-12 17:01:51 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -258,7 +258,7 @@ public:
   }
   
   unsigned long autoPromote(unsigned int minKmerCount = 2, double minKmerWeightedCount = 0.0,
-                            double minWeakRatio = 0.50, double minSolidRatio = 0.5)
+                            double minWeakRatio = 0.50, double minSolidRatio = 0.05)
   {
   	unsigned long promoted = 0;
   	// build vector of WeakKmerMap
@@ -297,7 +297,7 @@ public:
     unsigned long promotedInBatch = 0;
     while ( weakHeap.begin() != weakHeap.end() ) {
     	KmerWeakMap::ElementType &element = weakHeap.front();
-    	
+    	unsigned long lastCount = element.value().value.getCount();
         if (shouldBeSolid( element, minWeakRatio, minSolidRatio )) {
         	solid[ element.key() ].value = element.value().value;
         //	std::cerr << "Added " << pretty(element.key(), element.value().value);
@@ -307,8 +307,8 @@ public:
         } else {
        // 	std::cerr << "Skipping " << pretty(element.key(), element.value().value);
         }
-        if (++count == 255) {
-          std::cerr << "Added " << promotedInBatch << ", Heap size: " <<  weakHeap.size() << std::endl;
+        if (++count == 1000) {
+          std::cerr << "Added " << promotedInBatch << ", Heap size: " <<  weakHeap.size() << " lastCount: " << lastCount << std::endl;
         	if (promotedInBatch == 0)
         	   break;
         	promotedInBatch = count = 0;
@@ -620,7 +620,8 @@ void buildKmerSpectrum( ReadSet &store, KmerSpectrum &spectrum, bool isSolid = f
        }
     }
     printStats(store.getSize(), spectrum);    
-    
+    if (!isSolid)
+      spectrum.printHistograms();
 }
 
 void experimentOnSpectrum( KmerSpectrum &spectrum ) {
@@ -653,6 +654,9 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.12  2009-11-12 17:01:51  regan
+// checkpoint
+//
 // Revision 1.11  2009-11-12 01:29:22  cfurman
 // Solid picking logic bug fixed, params tweaked.
 //
