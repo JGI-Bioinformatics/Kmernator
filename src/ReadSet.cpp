@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.8 2009-11-07 00:28:41 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.9 2009-11-21 15:58:29 regan Exp $
 //
  
 #include <exception>
@@ -34,11 +34,16 @@ public:
             throw  runtime_error("Could not open : " + qualFilePath) ;
             
         _parser = new FastaQualStreamParser(_ifs,_qs);
+      } else {
+        // test for an implicit qual file
+        _qs.open( (fastaFilePath + ".qual").c_str() );
+        if (! _qs.fail()) {
+          _parser = new FastaQualStreamParser(_ifs,_qs);
+	  } else if ( _ifs.peek() == '@')
+          _parser = new FastqStreamParser(_ifs);
+        else
+          _parser = new FastaStreamParser(_ifs);
       }
-      else if ( _ifs.peek() == '@')
-        _parser = new FastqStreamParser(_ifs);
-      else
-        _parser = new FastaStreamParser(_ifs);
       
     }
     
@@ -231,6 +236,7 @@ private:
         ss >> qVal;
         if (ss.fail())
           break;
+        qVal += 64;
         quals.push_back(qVal);
       }
       return quals;
@@ -301,6 +307,10 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.9  2009-11-21 15:58:29  regan
+// changed some types
+// bugfix in reading and using qual files
+//
 // Revision 1.8  2009-11-07 00:28:41  cfurman
 // ReadSet now takes fasta, fastq or  fasta+qual files.
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.12 2009-11-12 17:01:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.13 2009-11-21 15:58:29 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -257,7 +257,7 @@ public:
   	}
   }
   
-  unsigned long autoPromote(unsigned int minKmerCount = 2, double minKmerWeightedCount = 0.0,
+  unsigned long autoPromote(unsigned int minKmerCount = 3, double minKmerWeightedCount = 0.0,
                             double minWeakRatio = 0.50, double minSolidRatio = 0.05)
   {
   	unsigned long promoted = 0;
@@ -418,7 +418,7 @@ public:
           //&& dirBias < maximumDirBias && dirBias > minimumDirBias
           //&& dirBias < 0.8 && dirBias > 0.2
           ) {
-        std::pair<double,double> scores = getPermutedScores( it->key(), Options::getFirstOrderWeight(), Options::getSecondOrderWeight() );
+        SolidWeakWeightType scores = getPermutedScores( it->key(), Options::getFirstOrderWeight(), Options::getSecondOrderWeight() );
         double permuteScore = (scores.first+scores.second);
         if ( (double)data.getCount() / permuteScore > 1.0 ) {
       	  solid[ it->key() ].value = it->value().value;
@@ -489,7 +489,7 @@ public:
   	std::stringstream ss;
   	ss << data << "\t";
 
-  	std::pair<double,double> scores = getPermutedScores( kmer, 1.0, 0.0 );
+  	SolidWeakWeightType scores = getPermutedScores( kmer, 1.0, 0.0 );
   	ss << std::fixed << std::setprecision(2) << scores.first  << "\t";
   	ss << std::fixed << std::setprecision(2) << scores.second << "\t";
   	ss << std::fixed << std::setprecision(2) << (double)data.getCount() / (double)(scores.first+scores.second) << "\t";
@@ -539,9 +539,9 @@ public:
   	  if ( solid.exists( it->key() ) ) {
   	  	// already accounted  	  	
   	  } else if ( weak.exists ( it->key() )) {
-      	// exists in reference but in this is weak: falseWeak
-      	falseWeak++;
-      	//std::cerr << "FW " << pretty( it->key(), weak[ it->key() ].value );
+      	    // exists in reference but in this is weak: falseWeak
+      	    falseWeak++;
+      	    std::cerr << "FW " << pretty( it->key(), weak[ it->key() ].value );
   	  } else {
   	  	// exists in reference but not in either solid nor weak: missingSolid
   	    std::cerr << "MS " << pretty( it->key(), "N/A");
@@ -654,6 +654,10 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.13  2009-11-21 15:58:29  regan
+// changed some types
+// bugfix in reading and using qual files
+//
 // Revision 1.12  2009-11-12 17:01:51  regan
 // checkpoint
 //

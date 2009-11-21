@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.13 2009-11-10 07:04:59 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.14 2009-11-21 15:58:29 regan Exp $
 //
 
 #include <cstring>
@@ -137,7 +137,7 @@ int Read::initializeQualityToProbability()
   	qualityToProbability[i] = 0;
   }
   int start = 64;
-  for (int i = start ; i < 127 ; i++ )
+  for (int i = start ; i < 164 ; i++ )
     qualityToProbability[i] = 1.0 - pow(10.0,( ( start - i ) / 10.0 ));
 
   qualityToProbability[255] = 1.0; // for reads with no quality data
@@ -201,12 +201,16 @@ string Read::getFormattedQuals()
   stringstream ss;
   for(int i =0; i < quals.length(); i++)
   {
-     ss << (int)quals[i] << ' ';  
+     ss << (int)quals[i]-64 << ' ';  
   }
   return ss.str();
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.14  2009-11-21 15:58:29  regan
+// changed some types
+// bugfix in reading and using qual files
+//
 // Revision 1.13  2009-11-10 07:04:59  regan
 // bugfix in quality lookup table -- use float!
 //

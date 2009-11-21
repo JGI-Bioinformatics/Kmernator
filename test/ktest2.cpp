@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.17 2009-11-11 07:57:26 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.18 2009-11-21 15:58:31 regan Exp $
 //
 
 #include <iostream>
@@ -70,12 +70,28 @@ int main(int argc, char *argv[]) {
     if (refReads.getSize() > 0) {
     	cerr << "Contrasted to reference kmer-spectrum:" << endl;
         cerr << spectrum.contrastSpectrums( refSpectrum ) << endl;
+    } else if (Options::getVerbosity() > 0){
+    	cerr << "Dumping kmer spectrum" << endl;
+    	cerr << "Solid:" << endl;
+    	for( KmerSolidMap::Iterator it = spectrum.solid.begin(); it != spectrum.solid.end(); it++) {
+    	  if (it->value().value.getCount() > 15 && it->value().value.getNormalizedDirectionBias() > 0.9 || it->value().value.getNormalizedDirectionBias() < 0.1)
+    		cerr << "\t" << spectrum.pretty( it->key(), it->value().value.toString() );
+    	}
+    	cerr << "Weak:" << endl;
+    	for( KmerWeakMap::Iterator it = spectrum.weak.begin(); it != spectrum.weak.end(); it++) {
+    	  if (it->value().value.getCount() > 15 && it->value().value.getNormalizedDirectionBias() > 0.9 || it->value().value.getNormalizedDirectionBias() < 0.1)
+    		cerr << "\t" << spectrum.pretty( it->key(), it->value().value.toString() );
+    	}
     }
 }
 
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.18  2009-11-21 15:58:31  regan
+// changed some types
+// bugfix in reading and using qual files
+//
 // Revision 1.17  2009-11-11 07:57:26  regan
 // built framework for autoPromote (not working) - make_heap is broken
 //

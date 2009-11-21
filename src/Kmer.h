@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.49 2009-11-12 17:01:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.50 2009-11-21 15:58:29 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -291,7 +291,7 @@ typedef KmerValue<unsigned int> KmerValue4Byte;
 class TrackingData 
 {
 public:
-  typedef unsigned short CountType;
+  typedef unsigned int   CountType;
   typedef float          WeightType;
   
   static WeightType minimumWeight;
@@ -1041,6 +1041,10 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.50  2009-11-21 15:58:29  regan
+// changed some types
+// bugfix in reading and using qual files
+//
 // Revision 1.49  2009-11-12 17:01:51  regan
 // checkpoint
 //
