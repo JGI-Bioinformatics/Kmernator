@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.13 2009-11-21 15:58:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.14 2009-11-21 18:46:53 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -91,7 +91,8 @@ unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKm
 	if (kmersPerRead > avgSequenceLength + 1)
 	  throw std::invalid_argument("Attempting to use a kmer greater than the avgerage sequence length");
 	unsigned long rawKmers = kmersPerRead * store.getSize();
-	unsigned long estimatedUniqueKmers =  rawKmers * ( std::max(pow(1.01, KmerSizer::getSequenceLength()),2.0) - 1.0 );
+	// assume 1% error rate
+	unsigned long estimatedUniqueKmers = rawKmers * ( std::max(pow(1.01, KmerSizer::getSequenceLength()),2.0) - 1.0 );
 	unsigned long targetBuckets = estimatedUniqueKmers / targetKmersPerBucket;
 	unsigned long maxBuckets = 128*1024*1024;
 	unsigned long minBuckets = 128;
@@ -654,6 +655,9 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.14  2009-11-21 18:46:53  regan
+// added bugs
+//
 // Revision 1.13  2009-11-21 15:58:29  regan
 // changed some types
 // bugfix in reading and using qual files

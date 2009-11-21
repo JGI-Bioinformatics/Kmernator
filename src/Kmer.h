@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.50 2009-11-21 15:58:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.51 2009-11-21 18:46:53 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -273,6 +273,8 @@ public:
   inline bool operator>(const KmerValue &other) const {
   	return this->value > other.value;
   }
+  // cast operator
+  operator Value() { return value; }
 };
 
 template<typename Value>
@@ -305,21 +307,11 @@ public:
   
   
 protected:
-  CountType  count;
-  CountType  directionBias;
-  WeightType weightedCount;
+  CountType           count;
+  CountType           directionBias;
+  WeightType          weightedCount;
 
 public:
-  TrackingData(): count(0), directionBias(0), weightedCount(0.0) {}
-  ~TrackingData() {}
-  TrackingData(const TrackingData &other) {
-  	*this = other;
-  }
-  TrackingData &operator=(const TrackingData &other) {
-  	count = other.count;
-  	directionBias = other.directionBias;
-  	weightedCount = other.weightedCount;
-  }
   void reset() {
   	count = 0;
   	directionBias = 0;
@@ -354,7 +346,8 @@ public:
         singletonCount++;
       else if (count == 2)
         singletonCount--;
-        
+      
+      
       return true;
     } else
       return false;
@@ -373,33 +366,58 @@ public:
   }
 
 };
-/*
 
-Need to work on copy constructor and assignement between
-parent and child classes
+class TrackingDataWithLastRead : public TrackingData
+{
+public:
+  typedef std::pair< unsigned int, unsigned short > ReadAndPositionType;
+  typedef std::vector< ReadAndPositionType > ReadAndPositionVectorType;
+  
+protected:
+  ReadAndPositionType lastReadAndPosition;
+
+public:
+  bool track(double weight, bool forward, unsigned int readIdx, unsigned short readPos) { 
+  	bool ret = TrackingData::track(weight,forward);
+  	if (ret)
+  	  lastReadAndPosition = ReadAndPositionType(readIdx,readPos);
+    return ret;
+  }
+};
+
+class TrackingDataWithAllReads : public TrackingData
+{
+public:
+  typedef std::pair< unsigned int, unsigned short > ReadAndPositionType;
+  typedef std::vector< ReadAndPositionType > ReadAndPositionVectorType;
+  
+protected:
+  ReadAndPositionVectorType readsAndPositions;
+
+public:
+  bool track(double weight, bool forward, unsigned int readIdx, unsigned short readPos) { 
+  	bool ret = TrackingData::track(weight,forward);
+  	if (ret)
+  	  readsAndPositions.push_back( ReadAndPositionType(readIdx,readPos) );
+    return ret;
+  }
+};
 
 class SolidTrackingData : public TrackingData
 {
 public:
-  SolidTrackingData() : TrackingData() {}
-  ~SolidTrackingData() {}
-  SolidTrackingData( const TrackingData &other ) {
-    (TrackingData)*this = other;
-  }
-  So
-  
   bool track(double weight, bool forward) {
   	return TrackingData::track(weight, forward);
   }
 };
-*/
-typedef TrackingData SolidTrackingData;
+
+//typedef TrackingData SolidTrackingData;
 
 std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
 
 
 class SolidKmerTag : public KmerValue<SolidTrackingData> {};
-class WeakKmerTag  : public KmerValue<TrackingData> {};
+class WeakKmerTag  : public KmerValue<TrackingDataWithLastRead> {};
 
 static KmerPtr NullKmerPtr(NULL);
 
@@ -1041,6 +1059,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.51  2009-11-21 18:46:53  regan
+// added bugs
+//
 // Revision 1.50  2009-11-21 15:58:29  regan
 // changed some types
 // bugfix in reading and using qual files
