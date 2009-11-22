@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.14 2009-11-21 18:46:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.15 2009-11-22 08:16:41 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -126,6 +126,8 @@ KmerWeights buildWeightedKmers(Read &read) {
   	    weight = 0.0;
 //  	    std::cerr << "markupAt " << markups[markupIdx].first << " " << markups[markupIdx].second << "\t";
     }
+    if (kmers[i].isTrivial())
+        weight = 0.0;
   	kmers.valueAt(i) = weight;
 //  	std::cerr << i << ":" << std::fixed << std::setprecision(3) << quals[i+KmerSizer::getSequenceLength()-1] << "-" << change << "/" << weight << "\t";
   	
@@ -268,8 +270,7 @@ public:
 
     typedef std::vector< KmerWeakMap::ElementType > HeapType;
     HeapType weakHeap;
-    weakHeap.reserve(( weak.size() - TrackingData::singletonCount ));
-
+    
     KmerWeakMap::Iterator mapIt  = weak.begin();
     KmerWeakMap::Iterator mapEnd = weak.end();
     for(; mapIt != mapEnd; mapIt++ ) {
@@ -564,7 +565,7 @@ public:
    	return header.str();
   }
   
-  void append( KmerWeights &kmers, bool isSolid = false ) {
+  void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false ) {
       
      TwoBitEncoding _tmp[KmerSizer::getByteSize()];
      KmerPtr least(&_tmp);
@@ -580,13 +581,11 @@ public:
        	} else {
        	  	// track weak stats
        	  	if ( weak.exists( *least ) ) {
-       	  	  TrackingData &data = weak[ *least ].value;
-       	  	  data.track( kmers.valueAt(j), keepDirection );
+       	  	  weak[ *least ].value.track( kmers.valueAt(j), keepDirection, readIdx, j );
        	  	} else {
-       	  	  TrackingData data;
-       	  	  if (data.track( kmers.valueAt(j), keepDirection ))
-       	  	    weak[ *least ].value = data;
-       	  	}
+       	  	  if ( ! weak[ *least ].value.track( kmers.valueAt(j), keepDirection, readIdx, j ) )
+       	  	     weak.remove( *least );
+       	    }
        	}
      }  	
   }
@@ -596,7 +595,7 @@ public:
 void printStats(unsigned long pos, KmerSpectrum &stats, bool solidOnly = false) {
 	//stats.printHistograms(solidOnly);
 	KmerSolidMap::Iterator it = stats.solid.begin();
-    std::cerr << pos << " reads, " << stats.solid.size() << " / " << stats.weak.size() << " / " << TrackingData::discarded << " kmers so far ";
+    std::cerr << pos << " reads, " << stats.solid.size() << " solid / " << stats.weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " singleton - kmers so far ";
     if(it != stats.solid.end())
         std::cerr << it.bucket().toString() << "; ";
     std::cerr << " minDepth: " << (unsigned long)TrackingData::minimumDepth <<  std::endl;
@@ -610,11 +609,11 @@ void buildKmerSpectrum( ReadSet &store, KmerSpectrum &spectrum, bool isSolid = f
 	weak.reset();
 	solid.reset();
 	
-	for (int i=0 ; i < store.getSize(); i++)
+	for (unsigned int i=0 ; i < store.getSize(); i++)
     {
        KmerWeights kmers = buildWeightedKmers(store.getRead(i));
   
-       spectrum.append(kmers, isSolid);
+       spectrum.append(kmers, i, isSolid);
 
        if (i % 1000000 == 0) {
        	 printStats(i, spectrum);  
@@ -655,6 +654,9 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.15  2009-11-22 08:16:41  regan
+// some fixes some bugs... optimized vs debug vs deb4/5 give different results
+//
 // Revision 1.14  2009-11-21 18:46:53  regan
 // added bugs
 //

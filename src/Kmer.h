@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.51 2009-11-21 18:46:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.52 2009-11-22 08:16:41 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -197,6 +197,19 @@ private:
 	   {
 	     return getHasher()(std::string((const char *)getTwoBitSequence(), getTwoBitLength()));
 	   }
+	   // check for trivial patterns AAAAA... GGGGG.... etc
+	   bool isTrivial() const
+	   {
+	     const TwoBitEncoding *firstByte = (const TwoBitEncoding *) this;
+	     if (*firstByte == 0x00 || *firstByte == 0x55 || *firstByte == 0xaa || *firstByte == 0xff) {
+	     	const TwoBitEncoding *nextByte = firstByte;
+	     	for(int i=1; i<getTwoBitLength()-1; i++)
+	     	  if (*firstByte != *(++nextByte))
+	     	    return false;
+	     	return true;
+	     } else
+	        return false;
+	   }
   };
    
 private:
@@ -305,6 +318,12 @@ public:
   static CountType  maxCount;
   static WeightType maxWeightedCount;
   
+  static void resetGlobalCounters() {
+  	discarded = 0;
+  	singletonCount = 0;
+  	maxCount = 0;
+  	maxWeightedCount = 0.0;
+  }
   
 protected:
   CountType           count;
@@ -347,7 +366,6 @@ public:
       else if (count == 2)
         singletonCount--;
       
-      
       return true;
     } else
       return false;
@@ -357,6 +375,7 @@ public:
   inline CountType getDirectionBias() { return directionBias; }
   inline WeightType getWeightedCount() { return weightedCount; }
   inline double getNormalizedDirectionBias() { return (double) directionBias / (double)count ; }
+
   
   std::string toString() {
     std::stringstream ss;
@@ -408,6 +427,10 @@ class SolidTrackingData : public TrackingData
 public:
   bool track(double weight, bool forward) {
   	return TrackingData::track(weight, forward);
+  }
+  SolidTrackingData &operator=(TrackingData &other) {
+  	TrackingData::operator=(other);
+  	return *this;
   }
 };
 
@@ -1059,6 +1082,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.52  2009-11-22 08:16:41  regan
+// some fixes some bugs... optimized vs debug vs deb4/5 give different results
+//
 // Revision 1.51  2009-11-21 18:46:53  regan
 // added bugs
 //
@@ -1074,7 +1100,7 @@ typedef KmerMap<unsigned short> KmerCountMap;
 // solid picking logic needs work
 //
 // Revision 1.47  2009-11-11 07:57:23  regan
-// built framework for autoPromote (not working) - make_heap is broken
+// built framework for  (not working) - make_heap is broken
 //
 // Revision 1.46  2009-11-09 19:37:17  regan
 // enhanced some debugging / analysis output

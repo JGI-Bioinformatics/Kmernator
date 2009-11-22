@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.18 2009-11-21 15:58:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.19 2009-11-22 08:16:43 regan Exp $
 //
 
 #include <iostream>
@@ -42,6 +42,7 @@ int main(int argc, char *argv[]) {
     KmerSpectrum refSpectrum( numBuckets );
     refSpectrum.weak.clear();
     buildKmerSpectrum( refReads, refSpectrum, true );
+    TrackingData::resetGlobalCounters();
     cerr << MemoryUtils::getMemoryUsage() << endl;
     
     cerr << "Reading Input Files" << endl;
@@ -88,6 +89,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.19  2009-11-22 08:16:43  regan
+// some fixes some bugs... optimized vs debug vs deb4/5 give different results
+//
 // Revision 1.18  2009-11-21 15:58:31  regan
 // changed some types
 // bugfix in reading and using qual files
