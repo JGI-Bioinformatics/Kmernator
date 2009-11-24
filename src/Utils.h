@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.15 2009-11-22 08:16:41 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.16 2009-11-24 13:35:29 cfurman Exp $
 //
 
 #ifndef _UTILS_H
@@ -325,7 +325,7 @@ public:
   }
   
   bool shouldBeSolid( KmerWeakMap::ElementType &weakElement, double minWeakRatio, double minSolidRatio ) {
-  	KmerPtr kmer = weakElement.key();
+  	Kmer &kmer = weakElement.key();
   	TrackingData &data = weakElement.value().value;
   	SolidWeakWeightType permutedScores = getPermutedScores(kmer, 1.0, 0.0);
   	if (   permutedScores.first  <= minSolidRatio  * data.getCount()
@@ -435,18 +435,18 @@ public:
   }
   
   
-  SolidWeakWeightType getPermutedScores( KmerPtr kmer, double permutationWeight = 0.1, double secondWeight = 0.0 ) {
+  SolidWeakWeightType getPermutedScores( const Kmer &kmer, double permutationWeight = 0.1, double secondWeight = 0.0 ) {
   	SolidWeakWeightType score(0.0,0.0);
   	if (permutationWeight == 0.0)
   	  return score;
   	  
   	//std::cerr << "Permuting " << kmer->toFasta() << std::endl;
   	bool isSolid; double base = 0.0;
-  	if ( solid.exists( *kmer ) ) {
-  	  base = solid[ *kmer ].value.getCount();
+  	if ( solid.exists( kmer ) ) {
+  	  base = solid[ kmer ].value.getCount();
   	  isSolid = true;
-  	} else if (weak.exists( *kmer ) ) {
-  	  base = weak[ *kmer ].value.getCount();
+  	} else if (weak.exists( kmer ) ) {
+  	  base = weak[ kmer ].value.getCount();
   	  isSolid = false;
   	}
   	KmerWeights permutations = KmerWeights::permuteBases(kmer, true);
@@ -477,17 +477,16 @@ public:
          count++;
      return count;
   }
-  std::string pretty( KmerPtr kmer, std::string note ) {
+  std::string pretty( const Kmer &kmer, std::string note ) {
   	std::stringstream ss;
   	
-  	TwoBitEncoding _rev[ KmerSizer::getByteSize() ];
-  	KmerPtr rev(&_rev);
-  	kmer->buildReverseComplement( *rev );
+  	TEMP_KMER(rev);
+  	kmer.buildReverseComplement(  rev );
   	
-  	ss << kmer->toFasta() << " " << rev->toFasta() << " " << countGC(kmer->toFasta()) << "\t" << note << std::endl;
+  	ss << kmer.toFasta() << " " << rev.toFasta() << " " << countGC(kmer.toFasta()) << "\t" << note << std::endl;
   	return ss.str();
   }
-  std::string pretty( KmerPtr kmer, TrackingData &data ) {
+  std::string pretty( const Kmer &kmer, TrackingData &data ) {
   	std::stringstream ss;
   	ss << data << "\t";
 
@@ -567,26 +566,25 @@ public:
   
   void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false ) {
       
-     TwoBitEncoding _tmp[KmerSizer::getByteSize()];
-     KmerPtr least(&_tmp);
-     
-     
+     TEMP_KMER (least);
+       
      for (int j=0; j < kmers.size(); j++)
      {
-     	bool keepDirection = kmers[j].buildLeastComplement(*least);
+     	bool keepDirection = kmers[j].buildLeastComplement( least);
        	
-       	if ( solid.exists( *least ) || isSolid ) {
+       	if ( solid.exists( least ) || isSolid ) {
        	  	// track solid stats
-       	  	solid[ *least ].value.track( kmers.valueAt(j), keepDirection );
+       	  	solid[ least ].value.track( kmers.valueAt(j), keepDirection );
        	} else {
        	  	// track weak stats
-       	  	if ( weak.exists( *least ) ) {
-       	  	  weak[ *least ].value.track( kmers.valueAt(j), keepDirection, readIdx, j );
+       	  	if ( weak.exists( least ) ) {
+       	  	  weak[ least ].value.track( kmers.valueAt(j), keepDirection, readIdx, j );
        	  	} else {
-       	  	  if ( ! weak[ *least ].value.track( kmers.valueAt(j), keepDirection, readIdx, j ) )
-       	  	     weak.remove( *least );
+       	  	  if ( ! weak[ least ].value.track( kmers.valueAt(j), keepDirection, readIdx, j ) )
+       	  	     weak.remove(least );
        	    }
        	}
+
      }  	
   }
   
@@ -654,6 +652,9 @@ void experimentOnSpectrum( KmerSpectrum &spectrum ) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.16  2009-11-24 13:35:29  cfurman
+// removed KmerPtr class.
+//
 // Revision 1.15  2009-11-22 08:16:41  regan
 // some fixes some bugs... optimized vs debug vs deb4/5 give different results
 //

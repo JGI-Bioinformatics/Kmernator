@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.30 2009-11-06 16:59:14 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.31 2009-11-24 13:35:32 cfurman Exp $
 //
  
 
@@ -25,7 +25,9 @@ Kmer    &kmer2ref  = *kmer2;
 Kmer    &kmer3ref  = *kmer3;
  */
  
-KmerPtr kmer1(&twoBit1), kmer2(&twoBit2), kmer3(&twoBit3);
+Kmer &kmer1 = *((Kmer *)(twoBit1));
+Kmer &kmer2 = *((Kmer *)(twoBit2));
+Kmer &kmer3 = *((Kmer *)(twoBit3));
 
 
 #define SET_KMERS(fasta1, fasta2, fasta3) \
@@ -38,53 +40,55 @@ KmerPtr kmer1(&twoBit1), kmer2(&twoBit2), kmer3(&twoBit3);
 
 void testKmerCompare()
 {
+
+
   SET_KMERS("AAAA", "AAAA", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
   
   SET_KMERS("AAAAA", "AAAAA", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
   
   SET_KMERS("AAAAAA", "AAAAAA", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
   
   SET_KMERS("AAAAAAA", "AAAAAAA", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
 
   SET_KMERS("AAAAAAAA", "AAAAAAAA", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
 
   SET_KMERS("ACGT", "ACGT", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
   
   SET_KMERS("ACGTC", "ACGTC", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
   
   SET_KMERS("ACGTCG", "ACGTCG", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
   
   SET_KMERS("ACGTCGT", "ACGTCGT", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
 
   SET_KMERS("ACGTCGTC", "ACGTCGTC", "");
-  BOOST_CHECK( kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1==(kmer2) );
 
   SET_KMERS("ACGT", "CGTA", "");
-  BOOST_CHECK( !kmer1.equals(kmer2) );
+  BOOST_CHECK( kmer1!=(kmer2) );
   
   SET_KMERS("ACGTC", "CGTCA", "");
-  BOOST_CHECK(  !kmer1.equals(kmer2) );
+  BOOST_CHECK(  kmer1!=(kmer2) );
   
   SET_KMERS("ACGTCG", "CGTCGA", "");
-  BOOST_CHECK(  !kmer1.equals(kmer2) );
+  BOOST_CHECK(  kmer1!=(kmer2) );
   
   SET_KMERS("ACGTCGT", "CGTCGTA", "");
-  BOOST_CHECK(  !kmer1.equals(kmer2) );
+  BOOST_CHECK(  kmer1!=(kmer2) );
 
   SET_KMERS("ACGTCGTC", "CGTCGTCA", "");
-  BOOST_CHECK(  !kmer1.equals(kmer2) );
+  BOOST_CHECK(  kmer1 !=(kmer2) );
 
 }
-
+#if 0
 KmerPtr kptr1(kmer1);
 KmerPtr kptr2(kmer2);
 KmerPtr kptr3(kmer3);
@@ -221,6 +225,7 @@ void testKmerPtr(SequenceLengthType size)
   BOOST_CHECK( kptr2.get() == kmer2);
   BOOST_CHECK( kptr3.get() == kmer3);  
 }
+#endif
 
 #define SS2(str, offset, len) str.substr(offset, len)
 
@@ -563,7 +568,7 @@ void testKmerInstance()
 BOOST_AUTO_TEST_CASE( KmerSetTest )
 {
   testKmerCompare();
-  
+  /*
   testKmerPtr(1);
   testKmerPtr(2);
   testKmerPtr(3);
@@ -573,7 +578,7 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
   testKmerPtr(7);
   testKmerPtr(8);
   testKmerPtr(9);
-
+*/
   testKmerArray(1);
   testKmerArray(2);
   testKmerArray(3);
@@ -601,6 +606,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.31  2009-11-24 13:35:32  cfurman
+// removed KmerPtr class.
+//
 // Revision 1.30  2009-11-06 16:59:14  regan
 // added base substitution/permutations table and build function
 //
