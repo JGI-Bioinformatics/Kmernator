@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.53 2009-11-24 13:35:29 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.54 2009-11-25 18:39:08 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -132,7 +132,7 @@ class Kmer
 	
 	   void swap(Kmer &other)
 	   {
-              TEMP_KMER(temp);
+          TEMP_KMER(temp);
 	      temp = other;
 	      other = *this;
 	      *this = temp;
@@ -265,6 +265,8 @@ protected:
   WeightType          weightedCount;
 
 public:
+  TrackingData() : count(0), directionBias(0), weightedCount(0.0) {}
+  
   void reset() {
   	count = 0;
   	directionBias = 0;
@@ -458,7 +460,7 @@ public:
     if (this == &other)
   	  return *this;
     reset();
-   resize(other.size());
+    resize(other.size());
     if (size() == 0)
       return *this;
     if (_begin == NULL)
@@ -947,7 +949,7 @@ public:
       ElementType &operator*()  { return *_iElement;        }
       ElementType *operator->() { return &(*_iElement);     }
 
-      Kmer &key()      { return _iElement.key();   }
+      Kmer &key()               { return _iElement.key();   }
       Value &value()            { return _iElement.value(); }
 
       BucketType &bucket() { return *_iBucket; }
@@ -975,6 +977,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.54  2009-11-25 18:39:08  regan
+// fixed bug across versions of compiler
+//
 // Revision 1.53  2009-11-24 13:35:29  cfurman
 // removed KmerPtr class.
 //
