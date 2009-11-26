@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.31 2009-11-24 13:35:32 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.32 2009-11-26 09:03:34 regan Exp $
 //
  
 
@@ -240,9 +240,9 @@ void testKmerArray(SequenceLengthType size)
   KmerSizer::set(size);
   
   struct myTag {};
-  KmerArray<WeakKmerTag> kmersA(twoBit1, A.length());
-  KmerArray<SolidKmerTag> kmersB(twoBit2, B.length());
-  KmerArray<> kmersC(twoBit3, C.length());
+  KmerArray<char> kmersA(twoBit1, A.length());
+  KmerArray<char> kmersB(twoBit2, B.length());
+  KmerArray<char> kmersC(twoBit3, C.length());
   
   if (size == 1) {
   	for (int i=0; i<kmersC.size(); i++) {
@@ -262,7 +262,7 @@ void testKmerArray(SequenceLengthType size)
   	  BOOST_CHECK_EQUAL( *ch & 0x03, 0x00 ); 
   	}
   }
-  KmerArray<> *kmersD = new KmerArray<>(twoBit3, C.length());
+  KmerArray<char> *kmersD = new KmerArray<char>(twoBit3, C.length());
 
   for (int i=0; i< A.length() - size +1; i++) {
     BOOST_CHECK_EQUAL( kmersA[i].toFasta(), SS2(A,i,size));
@@ -475,7 +475,7 @@ void testKmerMap(SequenceLengthType size)
   // test KmerMap construction, destruction
   // test insert, find, delete
 
-  KmerArray<> kmersC(twoBit3, C.length());
+  KmerArray<char> kmersC(twoBit3, C.length());
   
   KmerMap<float> kmerF(4);
   typedef std::pair<unsigned short, float> Pair;
@@ -606,6 +606,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.32  2009-11-26 09:03:34  regan
+// refactored and stuff
+//
 // Revision 1.31  2009-11-24 13:35:32  cfurman
 // removed KmerPtr class.
 //

@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.15 2009-11-10 18:28:09 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.16 2009-11-26 09:03:32 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -13,6 +13,7 @@ set(Boost_USE_SHARED_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Booost_USE_SINGLETHREADED OFF)
 
+find_package( OpenMP )
 find_package ( Boost 1.40.0 COMPONENTS regex mpi)
 if(Boost_FOUND)
   include_directories(${BOOST_INCLUDE_DIRS})
@@ -43,6 +44,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.16  2009-11-26 09:03:32  regan
+# refactored and stuff
+#
 # Revision 1.15  2009-11-10 18:28:09  regan
 # *** empty log message ***
 #

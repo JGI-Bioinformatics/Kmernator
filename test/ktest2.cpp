@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.19 2009-11-22 08:16:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.20 2009-11-26 09:03:34 regan Exp $
 //
 
 #include <iostream>
@@ -8,6 +8,7 @@
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "Utils.h"
+#include "KmerSpectrum.h"
 #include "MemoryUtils.h"
 #include "Options.h"
 
@@ -16,6 +17,7 @@
 
 using namespace std;
 
+typedef KmerSpectrum<TrackingData,TrackingData> KS;
 
 int main(int argc, char *argv[]) {
     
@@ -39,9 +41,9 @@ int main(int argc, char *argv[]) {
     }
     unsigned long numBuckets = estimateWeakKmerBucketSize( refReads, 256 );
     cerr << "targetting " << numBuckets << " buckets for reference " << endl;
-    KmerSpectrum refSpectrum( numBuckets );
+    KmerSpectrum<TrackingData,TrackingData> refSpectrum( numBuckets );
     refSpectrum.weak.clear();
-    buildKmerSpectrum( refReads, refSpectrum, true );
+    refSpectrum.buildKmerSpectrum( refReads, true );
     TrackingData::resetGlobalCounters();
     cerr << MemoryUtils::getMemoryUsage() << endl;
     
@@ -56,14 +58,20 @@ int main(int argc, char *argv[]) {
     numBuckets = estimateWeakKmerBucketSize( reads, 64 );
     cerr << "targetting " << numBuckets << " buckets for reads " << endl;
     
-    KmerSpectrum spectrum(numBuckets);
+    KmerSpectrum<TrackingData,TrackingData> spectrum(numBuckets);
     cerr << MemoryUtils::getMemoryUsage() << endl;
 
     TrackingData::minimumDepth = 10;
     TrackingData::minimumWeight = 0.25;
         
-    buildKmerSpectrum( reads, spectrum );
+    spectrum.buildKmerSpectrum( reads );
     cerr << MemoryUtils::getMemoryUsage() << endl;
+    
+    if (refReads.getSize() > 0) {
+    	cerr << "Getting real error rate" << endl;
+    	spectrum.getErrorRate(refSpectrum.solid);
+    }
+    
     unsigned long promoted = spectrum.autoPromote();//spectrum.promote( Options::getSolidQuantile() );
     
     cerr << "Promoted " << promoted << " kmers" << endl;
@@ -74,14 +82,14 @@ int main(int argc, char *argv[]) {
     } else if (Options::getVerbosity() > 0){
     	cerr << "Dumping kmer spectrum" << endl;
     	cerr << "Solid:" << endl;
-    	for( KmerSolidMap::Iterator it = spectrum.solid.begin(); it != spectrum.solid.end(); it++) {
-    	  if (it->value().value.getCount() > 15 && it->value().value.getNormalizedDirectionBias() > 0.9 || it->value().value.getNormalizedDirectionBias() < 0.1)
-    		cerr << "\t" << spectrum.pretty( it->key(), it->value().value.toString() );
+    	for( KS::SolidMapType::Iterator it = spectrum.solid.begin(); it != spectrum.solid.end(); it++) {
+    	  if (it->value().getCount() > 15 && it->value().getNormalizedDirectionBias() > 0.9 || it->value().getNormalizedDirectionBias() < 0.1)
+    		cerr << "\t" << spectrum.pretty( it->key(), it->value().toString() );
     	}
     	cerr << "Weak:" << endl;
-    	for( KmerWeakMap::Iterator it = spectrum.weak.begin(); it != spectrum.weak.end(); it++) {
-    	  if (it->value().value.getCount() > 15 && it->value().value.getNormalizedDirectionBias() > 0.9 || it->value().value.getNormalizedDirectionBias() < 0.1)
-    		cerr << "\t" << spectrum.pretty( it->key(), it->value().value.toString() );
+    	for( KS::WeakMapType::Iterator it = spectrum.weak.begin(); it != spectrum.weak.end(); it++) {
+    	  if (it->value().getCount() > 15 && it->value().getNormalizedDirectionBias() > 0.9 || it->value().getNormalizedDirectionBias() < 0.1)
+    		cerr << "\t" << spectrum.pretty( it->key(), it->value().toString() );
     	}
     }
 }
@@ -89,6 +97,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.20  2009-11-26 09:03:34  regan
+// refactored and stuff
+//
 // Revision 1.19  2009-11-22 08:16:43  regan
 // some fixes some bugs... optimized vs debug vs deb4/5 give different results
 //

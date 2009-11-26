@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/src/CMakeLists.txt,v 1.7 2009-10-31 23:41:46 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/src/CMakeLists.txt,v 1.8 2009-11-26 09:03:30 regan Exp $
 #
 # KoMer/src/CmakeLists.txt
 #
@@ -14,6 +14,10 @@ IF(CXX_FLAGS)
   SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
 ENDIF(CXX_FLAGS)
 
+#set_source_files_properties( ReadSet
+#                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+#                          )
+                          
 add_library( TwoBitSequence TwoBitSequence )
 add_library( Sequence Sequence TwoBitSequence )
 add_library( Kmer Kmer TwoBitSequence)
@@ -21,6 +25,9 @@ add_library( ReadSet ReadSet )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.8  2009-11-26 09:03:30  regan
+# refactored and stuff
+#
 # Revision 1.7  2009-10-31 23:41:46  regan
 # fixed build to read env CXX_FLAGS
 #

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.54 2009-11-25 18:39:08 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.55 2009-11-26 09:03:29 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -199,42 +199,6 @@ class Kmer
 	   }
   };
 
-template<typename Value>
-class KmerValue { 
-public: 
-  Value value;
-  KmerValue() : value() {}
-  ~KmerValue() {}
-  KmerValue(const KmerValue &copy) {
-  	*this = copy;
-  }
-  KmerValue &operator=(const KmerValue &other) {
-  	this->value = other.value;
-  }
-  inline bool operator==(const KmerValue &other) const {
-  	return this->value == other.value;
-  }
-  inline bool operator<(const KmerValue &other) const {
-  	return this->value < other.value;
-  }
-  inline bool operator>(const KmerValue &other) const {
-  	return this->value > other.value;
-  }
-  // cast operator
-  operator Value() { return value; }
-};
-
-template<typename Value>
-std::ostream &operator<<(std::ostream &stream, KmerValue<Value> &ob)
-{
-  stream << ob.value;
-  return stream;
-};
-
-
-typedef KmerValue<unsigned char> KmerValueByte;
-typedef KmerValue<unsigned short> KmerValue2Byte;
-typedef KmerValue<unsigned int> KmerValue4Byte;
 
 
 class TrackingData 
@@ -281,7 +245,7 @@ public:
   inline bool operator>(const TrackingData &other) const {
   	return count > other.count;// || (count == other.count && weightedCount > other.weightedCount);
   }
-  bool track(double weight, bool forward) {
+  bool track(double weight, bool forward, unsigned int readIdx = 0, unsigned short readPos = 0) {
     if (weight < minimumWeight) {
       discarded++;
   	  return false;
@@ -375,12 +339,9 @@ public:
 std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
 
 
-class SolidKmerTag : public KmerValue<SolidTrackingData> {};
-class WeakKmerTag  : public KmerValue<TrackingDataWithLastRead> {};
 
 
-
-template<typename Value = WeakKmerTag>
+template<typename Value>
 class KmerArray
 {
 
@@ -962,13 +923,9 @@ public:
 
 };
 
-typedef KmerArray<double> KmerWeights;
-
-typedef KmerMap<SolidKmerTag>   KmerSolidMap;
-typedef KmerMap<WeakKmerTag>    KmerWeakMap;
-typedef KmerMap<unsigned short> KmerCountMap;
-
-
+typedef KmerArray<char>          Kmers;
+typedef KmerArray<double>        KmerWeights;
+typedef KmerArray<unsigned long> KmerCounts;
 
 #endif
 
@@ -977,6 +934,9 @@ typedef KmerMap<unsigned short> KmerCountMap;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.55  2009-11-26 09:03:29  regan
+// refactored and stuff
+//
 // Revision 1.54  2009-11-25 18:39:08  regan
 // fixed bug across versions of compiler
 //
