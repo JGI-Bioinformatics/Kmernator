@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.1 2009-11-26 09:03:30 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.2 2009-11-27 01:53:40 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -35,11 +35,18 @@ class KmerSpectrum
 {
 public:
 
-  typedef std::pair<double,double> SolidWeakWeightType;
+  typedef std::pair<double,double> DoublePairType;
+  typedef DoublePairType SolidWeakWeightType;
+  typedef DoublePairType MeanType;
+  
+  typedef std::vector< DoublePairType > DoublePairVectorType;
+  typedef DoublePairVectorType MeanVectorType;
 
   typedef S SolidDataType;
   typedef W WeakDataType;
   
+  typedef typename WeakDataType::ReadPositionWeightVector WeakReadPositionWeightVector;
+  typedef typename WeakDataType::ReadPositionWeightVector::iterator WeakReadPositionWeightVectorIterator;
   typedef KmerMap<SolidDataType> SolidMapType;
   typedef KmerMap<WeakDataType> WeakMapType;
   
@@ -48,6 +55,11 @@ public:
   typedef typename WeakMapType::Iterator  WeakIterator;
   typedef typename WeakMapType::ElementType WeakElementType;
   
+  typedef accumulator_set<double, 
+  	                stats< tag::variance(lazy), 
+  	                       tag::mean
+  	                       >
+  	                > StdAccumulatorType;
   
   SolidMapType  solid;
   WeakMapType   weak;
@@ -100,7 +112,7 @@ public:
    	  	
    	if (!solidOnly) {
   	 for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
-  	  TrackingData &data = it->value();
+  	  WeakDataType &data = it->value();
   	  countAcc( std::max(-1.0, (double)(data.getCount()) ) );
   	  weightedCountAcc( std::max(-1.0, (double)(data.getWeightedCount())) );
   	  directionAcc( data.getNormalizedDirectionBias() );
@@ -111,7 +123,7 @@ public:
   	 }
   	}
   	for(SolidIterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++) {
-  	  TrackingData &data = it->value();
+  	  SolidDataType &data = it->value();
   	  //std::cerr << data.getCount() << std::endl;
   	  countAcc( std::max(-1.0, (double)(data.getCount()) ) );
   	  weightedCountAcc( std::max(-1.0, (double)(data.getWeightedCount())) );
@@ -181,7 +193,7 @@ public:
     WeakIterator mapIt  = weak.begin();
     WeakIterator mapEnd = weak.end();
     for(; mapIt != mapEnd; mapIt++ ) {
-      TrackingData &data = mapIt->value();
+      WeakDataType &data = mapIt->value();
       if (data.getCount() >= minKmerCount && data.getWeightedCount() >= minKmerWeightedCount) {
         weakHeap.push_back( *mapIt );
       }
@@ -204,25 +216,25 @@ public:
     // work in batches, stop when 0 new solids are added
     unsigned long count = 0;
     unsigned long promotedInBatch = 0;
-    double errorRate;
+
     while ( weakHeap.begin() != weakHeap.end() ) {
     	WeakElementType &element = weakHeap.front();
     	unsigned long lastCount = element.value().getCount();
         if (shouldBeSolid( element, minWeakRatio, minSolidRatio )) {
         	solid[ element.key() ] = element.value();
-        //	std::cerr << "Added " << pretty(element.key(), element.value());
+        //	std::cerr << "Added " << prettyW(element.key(), element.value());
         	element.value().reset(); // to avoid double counting
         	promoted++;
         	promotedInBatch++;
         } else {
-       // 	std::cerr << "Skipping " << pretty(element.key(), element.value());
+       // 	std::cerr << "Skipping " << prettyW(element.key(), element.value());
         }
         if (++count == 1000) {
           std::cerr << "Added " << promotedInBatch << ", Heap size: " <<  weakHeap.size() << " lastCount: " << lastCount << std::endl;
         	if (promotedInBatch == 0)
         	   break;
         	promotedInBatch = count = 0;
-        	errorRate = getErrorRate( solid );
+        	getErrorRates( solid );
         }
     	std::pop_heap(weakHeap.begin(), weakHeap.end());
     	weakHeap.pop_back();
@@ -235,7 +247,7 @@ public:
   
   bool shouldBeSolid( WeakElementType &weakElement, double minWeakRatio, double minSolidRatio ) {
   	Kmer &kmer = weakElement.key();
-  	TrackingData &data = weakElement.value();
+  	WeakDataType &data = weakElement.value();
   	SolidWeakWeightType permutedScores = getPermutedScores(kmer, 1.0, 0.0);
   	if (   permutedScores.first  <= minSolidRatio  * data.getCount()
   	    && permutedScores.second <= minWeakRatio * data.getCount()
@@ -293,7 +305,7 @@ public:
   	}
   	for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++)
   	   for(int i=0; i< count; i++) {
-  	   	  TrackingData &data = it->value();
+  	   	  WeakDataType &data = it->value();
   	   	  double count = data.getCount();
   	      countAcc[i]( count, weight = count );
   	      weightedCountAcc[i]( data.getWeightedCount(), weight = count );
@@ -301,7 +313,7 @@ public:
   	   }
   	for(SolidIterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++)
   	   for(int i=0; i< count; i++) {
-  	   	  TrackingData &data = it->value();
+  	   	  SolidDataType &data = it->value();
   	   	  double count = data.getCount();
   	      countAcc[i]( count, weight = count );
   	      weightedCountAcc[i]( data.getWeightedCount(), weight = count );
@@ -323,7 +335,7 @@ public:
   	double maximumDirBias = weighted_p_square_quantile(directionAcc[1]);
   	
     for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
-      TrackingData &data = it->value();
+      WeakDataType &data = it->value();
       double dirBias = data.getNormalizedDirectionBias();
       if (data.getCount() > minimumCount && data.getWeightedCount() > minimumWeightedCount
           //&& dirBias < maximumDirBias && dirBias > minimumDirBias
@@ -343,65 +355,95 @@ public:
   	return promoted;
   }
   
-  double getErrorRate( SolidMapType &solidReference, bool useWeighted = false ) {
-  	typedef 
-  	accumulator_set<double, 
-  	                stats< tag::variance(lazy), 
-  	                       tag::mean
-  	                       >
-  	                > StdAccumulatorType;
-  	StdAccumulatorType acc;
+  MeanVectorType getErrorRates( SolidMapType &solidReference, bool useWeighted = false ) {
+  	
+  	std::vector< StdAccumulatorType > accumulators;
     for( SolidIterator it = solidReference.begin(); it != solidReference.end(); it++) {
-      double errorRatio = getErrorRatio(it->key(), useWeighted);
-      acc(errorRatio);
+      std::vector< double > errorRatios = getErrorRatios(it->key(), useWeighted);
+      if (accumulators.size() < errorRatios.size())
+        accumulators.resize( errorRatios.size() );
+      for(int i = 0 ; i< errorRatios.size(); i++)
+        accumulators[i](errorRatios[i]);
       //std::cerr << "Error Ratio for " << it->key().toFasta() << " "  << std::fixed << std::setprecision(6) << errorRatio << std::endl;
     }
     
-    double rate = mean(acc);
-    std::cerr << "Error Rate: " << std::fixed << std::setprecision(6) << rate << " +/- " << std::fixed << std::setprecision(6) << sqrt( variance(acc) ) << std::endl;
-    
+    MeanVectorType rates;
+    for(int i = 0 ; i< accumulators.size(); i++) {
+    	rates.push_back( MeanType(mean(accumulators[i]), sqrt( variance(accumulators[i]) ) ) );
+        std::cerr << "Error Rate for pos " << i << ", " << std::fixed << std::setprecision(6) << rates[i].first << " +/- " << std::fixed << std::setprecision(6) << rates[i].second << std::endl;
+    }
+    return rates;
   }
   
-  double getErrorRatio(const Kmer &kmer, bool useWeighted = false) {
+  std::vector< double > getErrorRatios(const Kmer &kmer, bool useWeighted = false) {
+  	std::vector< double > errorRatios;
   	double baseValue;
   	if ( solid.exists(kmer) ) 
   	  baseValue = useWeighted ? solid[ kmer ].getWeightedCount() : solid[ kmer ].getCount();
   	else if (weak.exists(kmer))
   	  baseValue = useWeighted ? weak[ kmer ].getWeightedCount() : weak[ kmer ].getCount();
     else 
-  	  return 0.0;
+  	  return errorRatios;
   	  
   	Kmers permutations = Kmers::permuteBases(kmer,true);
   	std::vector<double> previouslyObservedSolids;
-  	std::vector<double> weakCounts;
+  	std::vector< std::vector<double> > weakCounts;
   	for(int i=0; i<permutations.size(); i++) {
   		if ( solid.exists( permutations[i] ) )
   		  previouslyObservedSolids.push_back( useWeighted ? solid[ permutations[i] ].getWeightedCount() : solid[ permutations[i] ].getCount() );
-  		else if ( weak.exists( permutations[i] ) )
-  	 	  weakCounts.push_back( useWeighted ? weak[ permutations[i] ].getWeightedCount() : weak[ permutations[i] ].getCount() );
-  	}
-  	double median, nonZeroCount;
-  	if (weakCounts.size() > 0) {
-  		sort(weakCounts.begin(), weakCounts.end());
-  		median = weakCounts[ weakCounts.size()/2 ];
-  		nonZeroCount = weakCounts.size();
-  		
-  		if (previouslyObservedSolids.size() == 0)
-  			return (median * nonZeroCount) / baseValue;  		
-  		
-  		// some code to correct for previously Observed Solids
-  		double rawErrorRatio = 0.0;
-  		double sum = 0.0;
-  		for(std::vector<double>::iterator it = previouslyObservedSolids.begin(); it!=previouslyObservedSolids.end(); it++) {
-  		   sum += *it;
-  		   rawErrorRatio -= (median * nonZeroCount) / *it;
+  		else if ( weak.exists( permutations[i] ) ) {
+  		  WeakDataType &data = weak[ permutations[i] ];
+  		  double count = useWeighted ? data.getWeightedCount() : data.getCount();
+  		  WeakReadPositionWeightVector positions = data.getEachInstance();
+  		  std::vector< double > positionSums;
+  		  for(WeakReadPositionWeightVectorIterator it=positions.begin(); it!=positions.end(); it++) {
+  		  	unsigned short pos = it->position;
+  		  	if (positionSums.size() < pos + 1)
+  		  	  positionSums.resize(pos + 1);
+  		  	positionSums[pos] += useWeighted ? it->weight : 1.0;
+  		  }
+  		  for(int i=0; i< positionSums.size(); i++) {
+  		  	if(positionSums[i] > 0) {
+  		  		if (weakCounts.size() < i+1)
+  		  		  weakCounts.resize(i+1);
+  		  		weakCounts[i].push_back( count * positionSums[i] / positions.size() );
+  		  	}
+  		  }
   		}
+  	}
+  	std::vector< double > median, nonZeroCount;
+  	if (weakCounts.size() > 0) {
+  	  median.resize( weakCounts.size() );
+  	  nonZeroCount.resize( weakCounts.size() );
+  	  errorRatios.resize( weakCounts.size() );
+  	  for(int pos = 0 ; pos < weakCounts.size(); pos++) {
+  	  	if (weakCounts[pos].size() > 0) {
+  	  	  std::vector< double > &tmp = weakCounts[pos];
+  		  sort(tmp.begin(), tmp.end());
+  		  median[pos] = tmp[ tmp.size()/2 ];
+  		  nonZeroCount[pos] = tmp.size();
+  	  	  errorRatios[pos] = (median[pos] * nonZeroCount[pos]) / baseValue;
+  	  	}
+  	  }
+  	  if (previouslyObservedSolids.size() == 0) 
+  	    return errorRatios;  		
   		
-  		rawErrorRatio += (median * nonZeroCount) / sum;
+      // some code to correct for previously Observed Solids
+      for(int pos = 0 ; pos < weakCounts.size(); pos++) {
+      	  double rawErrorRatio = 0.0;
+  	      double sum = baseValue;
+  	      for(std::vector<double>::iterator it = previouslyObservedSolids.begin(); it!=previouslyObservedSolids.end(); it++) {
+  	         sum += *it;
+  	         rawErrorRatio -= (median[pos] * nonZeroCount[pos]) / *it;
+  	      }
+  		
+  	      rawErrorRatio += (median[pos] * nonZeroCount[pos]) / sum;
   		  
-  		return rawErrorRatio;
+  	      errorRatios[pos] = rawErrorRatio;
+      }
+      return errorRatios;
   	} else {
-  		return 0.0;
+  		return errorRatios;
   	}  	
   }
   
@@ -456,7 +498,18 @@ public:
   	ss << kmer.toFasta() << " " << rev.toFasta() << " " << countGC(kmer.toFasta()) << "\t" << note << std::endl;
   	return ss.str();
   }
-  std::string pretty( const Kmer &kmer, TrackingData &data ) {
+  std::string prettyW( const Kmer &kmer, WeakDataType &data ) {
+  	std::stringstream ss;
+  	ss << data << "\t";
+
+  	SolidWeakWeightType scores = getPermutedScores( kmer, 1.0, 0.0 );
+  	ss << std::fixed << std::setprecision(2) << scores.first  << "\t";
+  	ss << std::fixed << std::setprecision(2) << scores.second << "\t";
+  	ss << std::fixed << std::setprecision(2) << (double)data.getCount() / (double)(scores.first+scores.second) << "\t";
+  	
+  	return pretty( kmer, ss.str() );
+  }
+  std::string prettyS( const Kmer &kmer, SolidDataType &data ) {
   	std::stringstream ss;
   	ss << data << "\t";
 
@@ -481,12 +534,12 @@ public:
   	    if ( reference.solid.exists( it->key() ) ) {
   	      // exists in reference but in this is weak: falseWeak
   	      falseWeak++;
-  	      std::cerr << "FW " << pretty( it->key(), it->value());
+  	      std::cerr << "FW " << prettyS( it->key(), it->value());
   	    } else {
   	      // Weak and not in reference: trueWeak
   	      // count later
   	      if (Options::getVerbosity() > 1)
-  	        std::cerr << "TW " << pretty( it->key(), it->value());
+  	        std::cerr << "TW " << prettyS( it->key(), it->value());
   	    }
   	  } else {
   	    thisSolidSize++;
@@ -494,11 +547,11 @@ public:
   	      // correctly matches solid in reference: trueSolid
   	  	  trueSolid++;
   	  	  if (Options::getVerbosity() > 0)
-  	  	    std::cerr << "TS " << pretty( it->key(), it->value());
+  	  	    std::cerr << "TS " << prettyS( it->key(), it->value());
   	    } else {
   	      // exists in this but not reference: falseSolid
   	      falseSolid++;
-  	      std::cerr << "FS " << pretty( it->key(), it->value());
+  	      std::cerr << "FS " << prettyS( it->key(), it->value());
   	    }
   	  }
   	}
@@ -512,7 +565,7 @@ public:
   	  } else if ( weak.exists ( it->key() )) {
       	    // exists in reference but in this is weak: falseWeak
       	    falseWeak++;
-      	    std::cerr << "FW " << pretty( it->key(), weak[ it->key() ] );
+      	    std::cerr << "FW " << prettyW( it->key(), weak[ it->key() ] );
   	  } else {
   	  	// exists in reference but not in either solid nor weak: missingSolid
   	    std::cerr << "MS " << pretty( it->key(), "N/A");
@@ -522,7 +575,7 @@ public:
   	if (Options::getVerbosity() > 2) {
   	  for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
   	    if (! reference.solid.exists( it->key() ))
-  	      std::cerr << "TW " << pretty( it->key(), it->value());
+  	      std::cerr << "TW " << prettyW( it->key(), it->value());
   	  }
   	}
   	trueWeak = thisWeakSize - falseWeak;

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.55 2009-11-26 09:03:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.56 2009-11-27 01:53:40 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -200,12 +200,34 @@ class Kmer
   };
 
 
+class TrackingDataWithAllReads;
 
 class TrackingData 
 {
 public:
-  typedef unsigned int   CountType;
+  typedef unsigned short CountType;
   typedef float          WeightType;
+  typedef unsigned int   ReadIdType;
+  typedef unsigned short PositionType;
+    
+  class ReadPosition
+  {
+   public:
+  	ReadIdType   readId;
+  	PositionType position;
+  	
+  	ReadPosition(ReadIdType _read = 0, PositionType _pos = 0) : readId(_read), position(_pos) {}
+  };
+  	
+  class ReadPositionWeight : public ReadPosition
+  {
+  public:
+  	WeightType   weight;
+  	
+  	ReadPositionWeight(ReadIdType _read = 0, PositionType _pos = 0, WeightType _weight = 0.0) : ReadPosition(_read,_pos), weight(_weight) {}
+  };
+  typedef std::vector< ReadPositionWeight > ReadPositionWeightVector;
+  
   
   static WeightType minimumWeight;
   static CountType minimumDepth;
@@ -222,6 +244,17 @@ public:
   	maxCount = 0;
   	maxWeightedCount = 0.0;
   }
+  static void setGlobals(CountType count, WeightType weightedCount) {
+  	  if (count > maxCount) 
+        maxCount = count;
+      if (weightedCount > maxWeightedCount)
+        maxWeightedCount = weightedCount;
+      
+      if (count == 1)
+        singletonCount++;
+      else if (count == 2)
+        singletonCount--;
+  }
   
 protected:
   CountType           count;
@@ -237,15 +270,12 @@ public:
   	weightedCount = 0.0;
   }
   inline bool operator==(const TrackingData &other) const {
-  	return count == other.count;// && weightedCount == other.weightedCount;
+  	return getCount() == other.getCount();// && weightedCount == other.weightedCount;
   }
   inline bool operator<(const TrackingData &other) const {
-  	return count < other.count;// || (count == other.count && weightedCount < other.weightedCount);
+  	return getCount()  < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
   }
-  inline bool operator>(const TrackingData &other) const {
-  	return count > other.count;// || (count == other.count && weightedCount > other.weightedCount);
-  }
-  bool track(double weight, bool forward, unsigned int readIdx = 0, unsigned short readPos = 0) {
+  bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
     if (weight < minimumWeight) {
       discarded++;
   	  return false;
@@ -256,87 +286,130 @@ public:
         directionBias++;
       weightedCount += weight;
       
-      if (count > maxCount) 
-        maxCount = count;
-      if (weightedCount > maxWeightedCount)
-        maxWeightedCount = weightedCount;
-      
-      if (count == 1)
-        singletonCount++;
-      else if (count == 2)
-        singletonCount--;
+      setGlobals(getCount(), getWeightedCount());
       
       return true;
     } else
       return false;
   }
 
-  inline CountType getCount() { return count; }
-  inline CountType getDirectionBias() { return directionBias; }
-  inline WeightType getWeightedCount() { return weightedCount; }
-  inline double getNormalizedDirectionBias() { return (double) directionBias / (double)count ; }
+  inline unsigned long getCount() const { return count; }
+  inline unsigned long getDirectionBias() const { return directionBias; }
+  inline double getWeightedCount() const { return weightedCount; }
+  inline double getNormalizedDirectionBias() const { return (double) directionBias / (double)count ; }
 
+  ReadPositionWeightVector getEachInstance() { 
+  	//returns count entries from read -1, position 0
+  	ReadPositionWeight dummy1((ReadIdType) -1, 0, getWeightedCount()/getCount());
+  	ReadPositionWeightVector dummy(getCount(), dummy1); 
+    return dummy;
+  }
   
-  std::string toString() {
+  std::string toString() const {
     std::stringstream ss;
     ss << count << ":" << std::fixed << std::setprecision(2) << getNormalizedDirectionBias();
     ss << ':' << std::fixed << std::setprecision(2) << ((double)weightedCount / (double)count);
     return ss.str();
   }
 
+  TrackingData &operator=(const TrackingDataWithAllReads &other);
 };
 
 class TrackingDataWithLastRead : public TrackingData
 {
 public:
-  typedef std::pair< unsigned int, unsigned short > ReadAndPositionType;
-  typedef std::vector< ReadAndPositionType > ReadAndPositionVectorType;
   
 protected:
-  ReadAndPositionType lastReadAndPosition;
+  ReadPosition readPosition;
 
 public:
-  bool track(double weight, bool forward, unsigned int readIdx, unsigned short readPos) { 
+  TrackingDataWithLastRead() : TrackingData(), readPosition() {}
+  
+  bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos) { 
   	bool ret = TrackingData::track(weight,forward);
   	if (ret)
-  	  lastReadAndPosition = ReadAndPositionType(readIdx,readPos);
+  	  readPosition = ReadPosition(readIdx,readPos);
     return ret;
   }
+  ReadPositionWeightVector getEachInstance() { 
+  	//returns count entries from read -1, position 0
+  	ReadPositionWeight dummy1(readPosition.readId, readPosition.position, getWeightedCount()/getCount());
+  	ReadPositionWeightVector dummy(getCount(), dummy1); 
+    return dummy;
+  }
+
 };
 
-class TrackingDataWithAllReads : public TrackingData
+class TrackingDataWithAllReads
 {
 public:
-  typedef std::pair< unsigned int, unsigned short > ReadAndPositionType;
-  typedef std::vector< ReadAndPositionType > ReadAndPositionVectorType;
+  typedef TrackingData::ReadPositionWeight       ReadPositionWeight;
+  typedef TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
+  typedef TrackingData::CountType                CountType;
+  typedef TrackingData::WeightType               WeightType;
+  typedef TrackingData::ReadIdType               ReadIdType;
+  typedef TrackingData::PositionType             PositionType;
   
 protected:
-  ReadAndPositionVectorType readsAndPositions;
+  unsigned int directionBias;
+  ReadPositionWeightVector instances;
 
 public:
-  bool track(double weight, bool forward, unsigned int readIdx, unsigned short readPos) { 
-  	bool ret = TrackingData::track(weight,forward);
-  	if (ret)
-  	  readsAndPositions.push_back( ReadAndPositionType(readIdx,readPos) );
-    return ret;
+  TrackingDataWithAllReads() : instances(), directionBias(0) { if(!instances.size()==0) throw; }
+  //TrackingDataWithAllReads(const TrackingDataWithAllReads &copy) : directionBias(copy.directionBias), instances(copy.instances) {}
+  
+  void reset() {
+  	instances.clear();
+  	directionBias = 0;
   }
+  inline bool operator==(const TrackingDataWithAllReads &other) const {
+  	return getCount() == other.getCount();// && weightedCount == other.weightedCount;
+  }
+  inline bool operator<(const TrackingDataWithAllReads &other) const {
+  	return getCount() < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
+  }
+  bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
+    if (weight < TrackingData::minimumWeight) {
+      TrackingData::discarded++;
+  	  return false;
+    }
+    if (forward) 
+      directionBias++;
+    
+    ReadPositionWeight rpw(readIdx, readPos, weight);
+    instances.push_back( rpw );
+    
+    TrackingData::setGlobals(getCount(), getWeightedCount());
+
+    return true;
+  }
+
+  inline unsigned long getCount() const { return instances.size(); }
+  inline unsigned long getDirectionBias() const { return directionBias; }
+  inline double getWeightedCount() const { 
+    double weightedCount = 0.0;
+    for(ReadPositionWeightVector::const_iterator it = instances.begin(); it != instances.end(); it++)
+      weightedCount += it->weight;
+    return weightedCount;
+  }
+  inline double getNormalizedDirectionBias() const { return (double) getDirectionBias() / (double) getCount() ; }
+
+  inline ReadPositionWeightVector getEachInstance() { 
+  	return instances;
+  }
+  
+  std::string toString() const {
+    std::stringstream ss;
+    ss << getCount() << ":" << std::fixed << std::setprecision(2) << getNormalizedDirectionBias();
+    ss << ':' << std::fixed << std::setprecision(2) << ((double)getWeightedCount() / (double)getCount());
+    return ss.str();
+  }
+
 };
 
-class SolidTrackingData : public TrackingData
-{
-public:
-  bool track(double weight, bool forward) {
-  	return TrackingData::track(weight, forward);
-  }
-  SolidTrackingData &operator=(TrackingData &other) {
-  	TrackingData::operator=(other);
-  	return *this;
-  }
-};
-
-//typedef TrackingData SolidTrackingData;
 
 std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
+std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob);
 
 
 
@@ -513,14 +586,17 @@ public:
        // zero fill remainder
        void *start = _add(_begin,oldSize); 
        memset(start, 0, KmerSizer::getByteSize()*(size-oldSize));
-       start =  (getValueStart() + oldSize);
-       memset(start, 0, sizeof(ValueType) * (size - oldSize));
+
+       // Values should already have been constructed
     }    
   }
     
   void _copyRange(void * srcKmer, ValueType *srcValue, IndexType idx, IndexType srcIdx, IndexType count) {
 	memcpy(_add(_begin,idx), _add(srcKmer,srcIdx), count * KmerSizer::getByteSize()); 
-	memcpy(getValueStart() + idx, srcValue + srcIdx, count * sizeof(ValueType));
+	//assignment copy Values
+	Value *startValue=getValueStart();
+	for(IndexType i=0; i<count; i++)
+	  *(startValue + idx + i) = *(srcValue + srcIdx + i);
   }
 
   void _setMemory(IndexType size, IndexType idx)//, PoolManager &pool = BoostPoolManager::get())
@@ -547,6 +623,10 @@ public:
     _begin =  memory ;
     _size = size;
     
+    // construct all unintialized Values
+    for(IndexType i = 0 ; i<size ; i++)
+  	  ::new((void*) (getValueStart() + i)) Value();
+
     if (oldBegin != NULL && memory != NULL && oldValueStart != NULL && lesserSize > 0) {
       // copy the old contents
       if (idx == MAX_INDEX || idx >= lesserSize) {
@@ -573,9 +653,13 @@ public:
       	}
       }
     }
+    
     if (oldBegin != NULL) {
       // free old memory
-      //pool.free(oldBegin, oldSize * getElementByteSize());
+      //   pool.free(oldBegin, oldSize * getElementByteSize());
+      // destruct old Values
+      for(IndexType i = 0; i < oldSize; i++)
+        (oldValueStart + i)->~Value();
       std::free(oldBegin);
     }
   }
@@ -934,6 +1018,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.56  2009-11-27 01:53:40  regan
+// refactored and got first pass at error rate by position
+//
 // Revision 1.55  2009-11-26 09:03:29  regan
 // refactored and stuff
 //

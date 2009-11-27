@@ -17,6 +17,18 @@ std::ostream &operator<<(std::ostream &stream, TrackingData &ob)
   return stream;
 };
 
+std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob)
+{
+  stream << ob.toString();
+  return stream;
+};
+
+TrackingData &TrackingData::operator=(const TrackingDataWithAllReads &copy) {
+	count = copy.getCount();
+	weightedCount = copy.getWeightedCount();
+	directionBias = copy.getDirectionBias();
+	return *this;
+}
 
 ClassicMemory ClassicMemory::singleton;
 BoostPoolManager BoostPoolManager::singleton;

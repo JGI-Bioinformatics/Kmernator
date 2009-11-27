@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.20 2009-11-26 09:03:34 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.21 2009-11-27 01:53:43 regan Exp $
 //
 
 #include <iostream>
@@ -17,7 +17,7 @@
 
 using namespace std;
 
-typedef KmerSpectrum<TrackingData,TrackingData> KS;
+typedef KmerSpectrum<TrackingData,TrackingDataWithAllReads> KS;
 
 int main(int argc, char *argv[]) {
     
@@ -31,6 +31,14 @@ int main(int argc, char *argv[]) {
     KmerSizer::set(Options::getKmerSize());
     Options::FileListType references = Options::getReferenceFiles();
     Options::FileListType inputs     = Options::getInputFiles();
+ 
+    TrackingDataWithAllReads test;
+    test.track(0.99, true, 1, 2);
+    KmerArray<TrackingDataWithAllReads> test2;
+    TEMP_KMER( blah );
+    test2.insertAt(0, blah);
+    test2.valueAt(0).track(0.98,true,2,3);
+        
     
     cerr << "Reading Reference Files" << endl;
     foreach( string referenceFile, references ) {
@@ -41,7 +49,7 @@ int main(int argc, char *argv[]) {
     }
     unsigned long numBuckets = estimateWeakKmerBucketSize( refReads, 256 );
     cerr << "targetting " << numBuckets << " buckets for reference " << endl;
-    KmerSpectrum<TrackingData,TrackingData> refSpectrum( numBuckets );
+    KS refSpectrum( numBuckets );
     refSpectrum.weak.clear();
     refSpectrum.buildKmerSpectrum( refReads, true );
     TrackingData::resetGlobalCounters();
@@ -58,7 +66,7 @@ int main(int argc, char *argv[]) {
     numBuckets = estimateWeakKmerBucketSize( reads, 64 );
     cerr << "targetting " << numBuckets << " buckets for reads " << endl;
     
-    KmerSpectrum<TrackingData,TrackingData> spectrum(numBuckets);
+    KS spectrum(numBuckets);
     cerr << MemoryUtils::getMemoryUsage() << endl;
 
     TrackingData::minimumDepth = 10;
@@ -69,7 +77,7 @@ int main(int argc, char *argv[]) {
     
     if (refReads.getSize() > 0) {
     	cerr << "Getting real error rate" << endl;
-    	spectrum.getErrorRate(refSpectrum.solid);
+    	spectrum.getErrorRates(refSpectrum.solid);
     }
     
     unsigned long promoted = spectrum.autoPromote();//spectrum.promote( Options::getSolidQuantile() );
@@ -97,6 +105,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.21  2009-11-27 01:53:43  regan
+// refactored and got first pass at error rate by position
+//
 // Revision 1.20  2009-11-26 09:03:34  regan
 // refactored and stuff
 //
