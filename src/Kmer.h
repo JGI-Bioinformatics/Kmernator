@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.56 2009-11-27 01:53:40 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.57 2009-11-27 23:16:58 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -13,6 +13,7 @@
 #include <iomanip>
 
 #include <boost/functional/hash.hpp>
+#include <boost/shared_ptr.hpp>
 
 #include "TwoBitSequence.h"
 #include "MemoryUtils.h"
@@ -200,6 +201,7 @@ class Kmer
   };
 
 
+class TrackingDataSingleton;
 class TrackingDataWithAllReads;
 
 class TrackingData 
@@ -255,6 +257,13 @@ public:
       else if (count == 2)
         singletonCount--;
   }
+  static inline bool isDiscard(WeightType weight) {
+  	if ( weight < minimumWeight ) {
+  		discarded++;
+  		return true;
+  	} else
+  	    return false;
+  }
   
 protected:
   CountType           count;
@@ -276,10 +285,9 @@ public:
   	return getCount()  < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
   }
   bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
-    if (weight < minimumWeight) {
-      discarded++;
+    if (isDiscard(weight))
   	  return false;
-    }
+    
     if (count < MAX_COUNT) {
       count++;
       if (forward) 
@@ -298,7 +306,7 @@ public:
   inline double getWeightedCount() const { return weightedCount; }
   inline double getNormalizedDirectionBias() const { return (double) directionBias / (double)count ; }
 
-  ReadPositionWeightVector getEachInstance() { 
+  ReadPositionWeightVector getEachInstance() const { 
   	//returns count entries from read -1, position 0
   	ReadPositionWeight dummy1((ReadIdType) -1, 0, getWeightedCount()/getCount());
   	ReadPositionWeightVector dummy(getCount(), dummy1); 
@@ -312,6 +320,7 @@ public:
     return ss.str();
   }
 
+  TrackingData &operator=(const TrackingDataSingleton &other);
   TrackingData &operator=(const TrackingDataWithAllReads &other);
 };
 
@@ -340,6 +349,68 @@ public:
 
 };
 
+class TrackingDataSingleton
+{
+public:
+  typedef TrackingData::ReadPositionWeight       ReadPositionWeight;
+  typedef TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
+  typedef TrackingData::CountType                CountType;
+  typedef TrackingData::WeightType               WeightType;
+  typedef TrackingData::ReadIdType               ReadIdType;
+  typedef TrackingData::PositionType             PositionType;
+
+protected:
+  ReadPositionWeight instance; // save space and store direction within sign of weight.
+  
+public:
+  TrackingDataSingleton() : instance(0,0,0.0) {}
+  ~TrackingDataSingleton() { reset(); }
+  void reset() {
+  	// construction does not set singletonCount
+  	if (instance.weight != 0.0)
+  	  TrackingData::singletonCount--;
+  	instance = ReadPositionWeight(0,0,0.0);
+  }
+  inline bool operator==(const TrackingDataSingleton &other) const {
+  	return getCount() == other.getCount();// && weightedCount == other.weightedCount;
+  }
+  inline bool operator<(const TrackingDataSingleton &other) const {
+  	return getCount() < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
+  }
+  bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
+    if (TrackingData::isDiscard(weight)) 
+  	  return false;
+    
+    instance = ReadPositionWeight(readIdx, readPos, forward ? weight : -1.0*weight);
+    
+    TrackingData::setGlobals(1, weight);
+
+    return true;
+  }
+
+  inline unsigned long getCount() const { return instance.weight == 0.0 ? 0 : 1; }
+  inline unsigned long getDirectionBias() const { return instance.weight > 0 ? 1 : 0; }
+  inline double getWeightedCount() const { 
+    return instance.weight > 0 ? instance.weight : -1.0 * instance.weight;
+  }
+  inline double getNormalizedDirectionBias() const { return (double) getDirectionBias() / (double) getCount() ; }
+
+  inline ReadPositionWeightVector getEachInstance() const {
+  	return ReadPositionWeightVector(1, instance);
+  }
+  
+  inline ReadIdType   getReadId()  { return instance.readId;   }
+  inline PositionType getPosition() { return instance.position; }
+  
+  std::string toString() const {
+    std::stringstream ss;
+    ss << getCount() << ":" << std::fixed << std::setprecision(2) << getNormalizedDirectionBias();
+    ss << ':' << std::fixed << std::setprecision(2) << ((double)getWeightedCount() / (double)getCount());
+    return ss.str();
+  }
+  	
+};
+
 class TrackingDataWithAllReads
 {
 public:
@@ -351,12 +422,11 @@ public:
   typedef TrackingData::PositionType             PositionType;
   
 protected:
-  unsigned int directionBias;
   ReadPositionWeightVector instances;
+  unsigned int directionBias;
 
 public:
-  TrackingDataWithAllReads() : instances(), directionBias(0) { if(!instances.size()==0) throw; }
-  //TrackingDataWithAllReads(const TrackingDataWithAllReads &copy) : directionBias(copy.directionBias), instances(copy.instances) {}
+  TrackingDataWithAllReads() : directionBias(0), instances() { }
   
   void reset() {
   	instances.clear();
@@ -369,14 +439,14 @@ public:
   	return getCount() < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
   }
   bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
-    if (weight < TrackingData::minimumWeight) {
-      TrackingData::discarded++;
+    if (TrackingData::isDiscard(weight))
   	  return false;
-    }
+
     if (forward) 
       directionBias++;
     
     ReadPositionWeight rpw(readIdx, readPos, weight);
+    
     instances.push_back( rpw );
     
     TrackingData::setGlobals(getCount(), getWeightedCount());
@@ -384,7 +454,7 @@ public:
     return true;
   }
 
-  inline unsigned long getCount() const { return instances.size(); }
+  inline unsigned long getCount() const { instances.size(); }
   inline unsigned long getDirectionBias() const { return directionBias; }
   inline double getWeightedCount() const { 
     double weightedCount = 0.0;
@@ -394,7 +464,7 @@ public:
   }
   inline double getNormalizedDirectionBias() const { return (double) getDirectionBias() / (double) getCount() ; }
 
-  inline ReadPositionWeightVector getEachInstance() { 
+  inline ReadPositionWeightVector getEachInstance() const {
   	return instances;
   }
   
@@ -404,11 +474,16 @@ public:
     ss << ':' << std::fixed << std::setprecision(2) << ((double)getWeightedCount() / (double)getCount());
     return ss.str();
   }
-
+  TrackingDataWithAllReads &operator=(const TrackingDataSingleton &other) {
+  	this->reset();
+  	ReadPositionWeightVector rpw = other.getEachInstance();
+  	track(other.getWeightedCount(), other.getDirectionBias() == 1, rpw[0].readId, rpw[0].position); 
+  }
 };
 
 
 std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
+std::ostream &operator<<(std::ostream &stream, TrackingDataSingleton &ob);
 std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob);
 
 
@@ -813,23 +888,27 @@ public:
       IndexType _idx;
       ElementType elementCopy;
     public:
-      Iterator(KmerArray *target, IndexType idx = 0): _tgt(target), _idx(idx) { }
+      Iterator(KmerArray *target, IndexType idx = 0): _tgt(target), _idx(idx) {
+      	setElementCopy();
+      }
       Iterator(const Iterator &copy) { *this = copy; }
       ~Iterator() {}
       Iterator& operator=(const Iterator& other) {
         _tgt = other._tgt;
         _idx = other._idx;
+        elementCopy = other.elementCopy;
         return *this;
       }
-      bool operator==(const Iterator& other) { return _idx == other._idx && _tgt == other._tgt; }
-      bool operator!=(const Iterator& other) { return _idx != other._idx || _tgt != other._tgt; }
-      Iterator& operator++() { if ( !isEnd() ) _idx++; return *this; }
+      bool operator==(const Iterator& other) const { return _idx == other._idx && _tgt == other._tgt; }
+      bool operator!=(const Iterator& other) const { return _idx != other._idx || _tgt != other._tgt; }
+      Iterator& operator++() { if ( !isEnd() ) { ++_idx; setElementCopy(); } return *this; }
       Iterator operator++(int unused) { Iterator tmp(*this) ; ++(*this); return tmp; }
-      ElementType &operator*() { return elementCopy =   _tgt->getElement(_idx); }
-      Kmer &key() { return _tgt->get(_idx); }
-      Value &value() { return _tgt->valueAt(_idx); }
-      ElementType *operator->() {  elementCopy = _tgt->getElement(_idx); return &elementCopy; }
-      bool isEnd() { return _idx == _tgt->size(); }
+      ElementType &operator*() { return elementCopy; }
+      Kmer &key() { return elementCopy.key(); }
+      Value &value() { return elementCopy.value(); }
+      ElementType *operator->() { return &elementCopy; }
+      bool isEnd() const { return _idx >= _tgt->size(); }
+      void setElementCopy() { if ( !isEnd() ) elementCopy = _tgt->getElement(_idx); }
   };
 
   Iterator begin() { return Iterator(this, 0); }
@@ -905,20 +984,32 @@ public:
    	  return isFound;
    }
    
-   bool exists(const KeyType &key, BucketType *_bucketPtr = NULL) const {
-   	 const BucketType *bucketPtr = _bucketPtr;
+   bool _exists(const KeyType &key, IndexType &existingIdx, const BucketType *bucketPtr = NULL) const {
      if (bucketPtr == NULL)
    	   bucketPtr = &getBucket(key);
    	 bool isFound;
-   	 bucketPtr->findSorted(key, isFound);
+   	 existingIdx = bucketPtr->findSorted(key, isFound);
    	 return isFound;
+   }
+   bool exists(const KeyType &key, BucketType *bucketPtr = NULL) const {
+   	 IndexType dummy;
+   	 return _exists(key, dummy, bucketPtr);
+   }
+   
+   Value *getIfExists(const KeyType &key, BucketType *bucketPtr = NULL) {
+     if (bucketPtr == NULL)
+   	   bucketPtr = &getBucket(key);
+   	 IndexType existingIdx;
+   	 if (_exists(key, existingIdx, bucketPtr))
+   	 	return &(bucketPtr->valueAt(existingIdx));
+   	 else
+   	   return NULL;
    }
    ValueType &operator[](const KeyType &key) {
      BucketType &bucket = getBucket(key);
-     bool isFound;
-     IndexType idx = bucket.findSorted(key, isFound);
-     if (isFound && idx != MAX_INDEX)
-       return bucket.valueAt(idx);
+     IndexType existingIdx;
+   	 if (_exists(key, existingIdx, &bucket))
+   	   return bucket.valueAt(existingIdx);
      else 
        return insert(key, Value(), &bucket);       
    }
@@ -1018,6 +1109,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.57  2009-11-27 23:16:58  regan
+// refactored and broke it
+//
 // Revision 1.56  2009-11-27 01:53:40  regan
 // refactored and got first pass at error rate by position
 //

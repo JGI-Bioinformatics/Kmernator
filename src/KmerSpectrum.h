@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.2 2009-11-27 01:53:40 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.3 2009-11-27 23:16:58 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -61,10 +61,14 @@ public:
   	                       >
   	                > StdAccumulatorType;
   
-  SolidMapType  solid;
-  WeakMapType   weak;
-  
-  KmerSpectrum(unsigned long buckets): weak(buckets), solid(buckets/4) 
+public:
+  SolidMapType                   solid;
+  WeakMapType                    weak;
+  KmerMap<TrackingDataSingleton> singleton;
+  bool                           hasSolids;
+
+public:
+  KmerSpectrum(unsigned long buckets): solid(buckets/8), weak(buckets/4), singleton(buckets), hasSolids(false)
   {
   	// set the minimum weight that will be used to track kmers
   	// based on the given options
@@ -77,7 +81,73 @@ public:
   KmerSpectrum &operator=(const KmerSpectrum &other) {
   	this->weak = other.weak;
   	this->solid = other.solid;
+  	this->singleton = other.singleton;
+  	this->hasSolids  = other.hasSolids;
   }
+  
+  
+  bool hasSolid( const Kmer &kmer ) const {
+  	return hasSolids && solid.exists( kmer );
+  }
+  SolidDataType *getIfExistsSolid( const Kmer &kmer ) {
+  	if (hasSolids) 
+  	  return solid.getIfExists( kmer );
+  	else
+  	  return NULL;
+  }
+  SolidDataType &getSolid( const Kmer &kmer ) {
+  	hasSolids = true;
+  	return solid[ kmer ];
+  }
+  
+  bool hasWeak( const Kmer &kmer ) const {
+  	return weak.exists( kmer );
+  }
+  WeakDataType *getIfExistsWeak( const Kmer &kmer ) {
+  	return weak.getIfExists( kmer );
+  }
+  WeakDataType &getWeak( const Kmer &kmer ) {
+  	return weak[ kmer ];
+  }
+  
+  bool hasSingleton( const Kmer &kmer ) const {
+  	return singleton.exists( kmer );
+  }
+  TrackingDataSingleton *getIfExistsSingleton( const Kmer &kmer ) {
+  	return singleton.getIfExists( kmer );
+  }
+  TrackingDataSingleton &getSingleton( const Kmer &kmer ) {
+  	return singleton[ kmer ];
+  }
+
+  class DataPointers
+  {
+  public:
+    KmerSpectrum          *spectrum;
+    SolidDataType         *solid;
+    WeakDataType          *weak;
+    TrackingDataSingleton *singleton;
+    DataPointers(KmerSpectrum &_spectrum) : spectrum(&_spectrum), solid(NULL),weak(NULL),singleton(NULL) {}
+    DataPointers(KmerSpectrum &_spectrum, const Kmer &kmer): spectrum(&_spectrum) {
+    	set(kmer);
+    }
+    void set(const Kmer &kmer) {
+    	if (spectrum->hasSolids)
+    	  solid = spectrum->getIfExistsSolid(kmer);
+    	else
+    	  solid = NULL;
+    	if (solid == NULL) {
+    	  weak = spectrum->getIfExistsWeak(kmer);
+    	  if (weak == NULL)
+    	    singleton = spectrum->getIfExistsSingleton(kmer);
+    	  else
+    	    singleton = NULL;
+    	} else {
+    	  weak = NULL;
+    	  singleton = NULL;
+    	}
+    }
+  };
   
   void printHistograms(bool solidOnly = false) {
 
@@ -221,7 +291,8 @@ public:
     	WeakElementType &element = weakHeap.front();
     	unsigned long lastCount = element.value().getCount();
         if (shouldBeSolid( element, minWeakRatio, minSolidRatio )) {
-        	solid[ element.key() ] = element.value();
+        	getSolid( element.key() ) = element.value();
+        	
         //	std::cerr << "Added " << prettyW(element.key(), element.value());
         	element.value().reset(); // to avoid double counting
         	promoted++;
@@ -344,7 +415,7 @@ public:
         SolidWeakWeightType scores = getPermutedScores( it->key(), Options::getFirstOrderWeight(), Options::getSecondOrderWeight() );
         double permuteScore = (scores.first+scores.second);
         if ( (double)data.getCount() / permuteScore > 1.0 ) {
-      	  solid[ it->key() ] = it->value();
+      	  getSolid( it->key() ) = it->value();
       	  promoted++;
         }
       }
@@ -378,21 +449,26 @@ public:
   std::vector< double > getErrorRatios(const Kmer &kmer, bool useWeighted = false) {
   	std::vector< double > errorRatios;
   	double baseValue;
-  	if ( solid.exists(kmer) ) 
-  	  baseValue = useWeighted ? solid[ kmer ].getWeightedCount() : solid[ kmer ].getCount();
-  	else if (weak.exists(kmer))
-  	  baseValue = useWeighted ? weak[ kmer ].getWeightedCount() : weak[ kmer ].getCount();
-    else 
+  	DataPointers pointers( *this, kmer );
+
+  	if ( pointers.solid != NULL ) 
+  	  baseValue = useWeighted ? pointers.solid->getWeightedCount() : pointers.solid->getCount();
+  	else if ( pointers.weak != NULL )
+  	  baseValue = useWeighted ? pointers.weak->getWeightedCount() : pointers.weak->getCount();
+    else if ( pointers.singleton != NULL )
+      baseValue = useWeighted ? pointers.singleton->getWeightedCount() : pointers.singleton->getCount();
+    else
   	  return errorRatios;
   	  
   	Kmers permutations = Kmers::permuteBases(kmer,true);
   	std::vector<double> previouslyObservedSolids;
   	std::vector< std::vector<double> > weakCounts;
   	for(int i=0; i<permutations.size(); i++) {
-  		if ( solid.exists( permutations[i] ) )
-  		  previouslyObservedSolids.push_back( useWeighted ? solid[ permutations[i] ].getWeightedCount() : solid[ permutations[i] ].getCount() );
-  		else if ( weak.exists( permutations[i] ) ) {
-  		  WeakDataType &data = weak[ permutations[i] ];
+  		pointers.set( permutations[i] );
+  		if ( pointers.solid != NULL ) {
+  		  previouslyObservedSolids.push_back( useWeighted ? pointers.solid->getWeightedCount() : pointers.solid->getCount() );
+  		} else if ( pointers.weak != NULL ) {
+  		  WeakDataType &data = *pointers.weak;
   		  double count = useWeighted ? data.getWeightedCount() : data.getCount();
   		  WeakReadPositionWeightVector positions = data.getEachInstance();
   		  std::vector< double > positionSums;
@@ -409,6 +485,11 @@ public:
   		  		weakCounts[i].push_back( count * positionSums[i] / positions.size() );
   		  	}
   		  }
+  		} else if ( pointers.singleton != NULL ) {
+  		  TrackingDataSingleton &data = *pointers.singleton;
+  		  if (weakCounts.size() < data.getPosition()+1)
+  		    weakCounts.resize(data.getPosition()+1);
+  		  weakCounts[data.getPosition()].push_back( useWeighted ? pointers.singleton->getWeightedCount() : pointers.singleton->getCount() );
   		}
   	}
   	std::vector< double > median, nonZeroCount;
@@ -451,23 +532,30 @@ public:
   	SolidWeakWeightType score(0.0,0.0);
   	if (permutationWeight == 0.0)
   	  return score;
-  	  
+  	DataPointers pointers(*this, kmer);
+
   	//std::cerr << "Permuting " << kmer->toFasta() << std::endl;
   	bool isSolid; double base = 0.0;
-  	if ( solid.exists( kmer ) ) {
-  	  base = solid[ kmer ].getCount();
+  	if ( pointers.solid != NULL ) {
+  	  base = pointers.solid->getCount();
   	  isSolid = true;
-  	} else if (weak.exists( kmer ) ) {
-  	  base = weak[ kmer ].getCount();
+  	} else if ( pointers.weak != NULL ) {
+  	  base = pointers.weak->getCount();
+  	  isSolid = false;
+  	} else if ( pointers.singleton != NULL ) {
+  	  base = pointers.singleton->getCount();
   	  isSolid = false;
   	}
   	KmerWeights permutations = KmerWeights::permuteBases(kmer, true);
   	for(int i=0; i<permutations.size(); i++) {
+  	  pointers.set( permutations[i] );
       //std::cerr << "Looking at " << permutations[i].toFasta() << std::endl;		
-  	  if( solid.exists( permutations[i] ) ) {
-  	  	score.first += solid[ permutations[i] ].getCount() * permutationWeight;
-  	  } else if ( weak.exists( permutations[i] ) ) {
-  	  	score.second += weak[ permutations[i] ].getCount() * permutationWeight;
+  	  if( pointers.solid != NULL ) {
+  	  	score.first += pointers.solid->getCount() * permutationWeight;
+  	  } else if ( pointers.weak != NULL ) {
+  	  	score.second += pointers.weak->getCount() * permutationWeight;
+  	  } else if ( pointers.singleton != NULL ) {
+  	  	score.second += pointers.singleton->getCount() * permutationWeight;
   	  }
   	  if (secondWeight > 0.0) {
   	    SolidWeakWeightType sScores = getPermutedScores( permutations[i], secondWeight );
@@ -590,24 +678,39 @@ public:
   void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false ) {
       
      TEMP_KMER (least);
-       
-     for (int j=0; j < kmers.size(); j++)
+     
+     DataPointers pointers(*this);
+     
+     unsigned long j=0;
+     for (KmerWeights::Iterator it(kmers.begin()), itEnd(kmers.end()); it != itEnd ; it++,j++)
      {
-     	bool keepDirection = kmers[j].buildLeastComplement( least);
+     	bool keepDirection = it->key().buildLeastComplement( least );
+       	double weight = it->value();
        	
-       	if ( solid.exists( least ) || isSolid ) {
+       	if ( isSolid ) {
+       	  getSolid( least ).track( weight, keepDirection, readIdx, j );
+       	} else if (! TrackingData::isDiscard( weight ) ) {
+       	  pointers.set( least );
+       	  
+       	  if (pointers.solid != NULL) {
        	  	// track solid stats
-       	  	solid[ least ].track( kmers.valueAt(j), keepDirection );
-       	} else {
+       	  	pointers.solid->track( weight, keepDirection, readIdx, j );
+       	  } else if (pointers.weak != NULL) {
        	  	// track weak stats
-       	  	if ( weak.exists( least ) ) {
-       	  	  weak[ least ].track( kmers.valueAt(j), keepDirection, readIdx, j );
-       	  	} else {
-       	  	  if ( ! weak[ least ].track( kmers.valueAt(j), keepDirection, readIdx, j ) )
-       	  	     weak.remove(least );
+       	  	pointers.weak->track( weight, keepDirection, readIdx, j );
+       	  } else {
+       	  	  if ( pointers.singleton != NULL ) {
+       	  	  	// promote singleton to weak & track
+       	  	  	WeakDataType &data = getWeak( least );
+       	  	  	data = *pointers.singleton;
+       	  	  	data.track( weight, keepDirection, readIdx, j);
+       	  	  	singleton.remove( least );
+       	  	  } else {
+       	  	  	// record this singleton
+       	  	  	bool passed = singleton[ least ].track( weight, keepDirection, readIdx, j );
+       	  	  }
        	    }
        	}
-
      }  	
   }
   
@@ -615,7 +718,7 @@ public:
   void printStats(unsigned long pos, bool solidOnly = false) {
 	//stats.printHistograms(solidOnly);
 	SolidIterator it = solid.begin();
-    std::cerr << pos << " reads, " << solid.size() << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " singleton - kmers so far ";
+    std::cerr << pos << " reads, " << solid.size() << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : " << singleton.size() << " singleton - kmers so far ";
     if(it != solid.end())
         std::cerr << it.bucket().toString() << "; ";
     std::cerr << " minDepth: " << (unsigned long)TrackingData::minimumDepth <<  std::endl;
@@ -659,8 +762,9 @@ public:
         std::cerr << copy.contrastSpectrums(spectrum) << std::endl;;
     }
     
-    for(WeakIterator it(everything.weak.begin()), itEnd(everything.weak.end()); it != itEnd; it++) 
-    	everything.solid[ it->key() ] = it->value();
+    for(WeakIterator it(everything.weak.begin()), itEnd(everything.weak.end()); it != itEnd; it++) {
+    	everything.getSolid( it->key() ) = it->value();
+    }
     everything.weak.clear();
     
     for (double minDepth = 1; minDepth < 10 ; minDepth++) {
