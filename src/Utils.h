@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.17 2009-11-26 09:03:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.18 2009-11-28 01:00:07 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -114,10 +114,10 @@ KmerWeights buildWeightedKmers(Read &read) {
   	if (i%100 == 0 || weight == 0.0) {
   	  weight = 1.0;
   	  for(SequenceLengthType j=0; j < KmerSizer::getSequenceLength(); j++) 
-  	    weight *= Read::qualityToProbability[ quals[i+j] ];
+  	    weight *= Read::qualityToProbability[ (unsigned short) quals[i+j] ];
   	} else {
-  		change = Read::qualityToProbability[ quals[i+KmerSizer::getSequenceLength()-1] ] / 
-  		         Read::qualityToProbability[ quals[i-1] ];
+  		change = Read::qualityToProbability[ (unsigned short) quals[i+KmerSizer::getSequenceLength()-1] ] / 
+  		         Read::qualityToProbability[ (unsigned short) quals[i-1] ];
   		weight *= change;
   	}
   	while( markupIdx < markups.size() && markups[markupIdx].second < i)
@@ -142,6 +142,9 @@ KmerWeights buildWeightedKmers(Read &read) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.18  2009-11-28 01:00:07  regan
+// fixed bugs and warnings
+//
 // Revision 1.17  2009-11-26 09:03:29  regan
 // refactored and stuff
 //

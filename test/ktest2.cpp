@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.21 2009-11-27 01:53:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.22 2009-11-28 01:00:10 regan Exp $
 //
 
 #include <iostream>
@@ -91,12 +91,12 @@ int main(int argc, char *argv[]) {
     	cerr << "Dumping kmer spectrum" << endl;
     	cerr << "Solid:" << endl;
     	for( KS::SolidMapType::Iterator it = spectrum.solid.begin(); it != spectrum.solid.end(); it++) {
-    	  if (it->value().getCount() > 15 && it->value().getNormalizedDirectionBias() > 0.9 || it->value().getNormalizedDirectionBias() < 0.1)
+    	  if (it->value().getCount() > 15 && (it->value().getNormalizedDirectionBias() > 0.9 || it->value().getNormalizedDirectionBias() < 0.1) )
     		cerr << "\t" << spectrum.pretty( it->key(), it->value().toString() );
     	}
     	cerr << "Weak:" << endl;
     	for( KS::WeakMapType::Iterator it = spectrum.weak.begin(); it != spectrum.weak.end(); it++) {
-    	  if (it->value().getCount() > 15 && it->value().getNormalizedDirectionBias() > 0.9 || it->value().getNormalizedDirectionBias() < 0.1)
+    	  if (it->value().getCount() > 15 && (it->value().getNormalizedDirectionBias() > 0.9 || it->value().getNormalizedDirectionBias() < 0.1) )
     		cerr << "\t" << spectrum.pretty( it->key(), it->value().toString() );
     	}
     }
@@ -105,6 +105,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.22  2009-11-28 01:00:10  regan
+// fixed bugs and warnings
+//
 // Revision 1.21  2009-11-27 01:53:43  regan
 // refactored and got first pass at error rate by position
 //

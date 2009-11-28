@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.57 2009-11-27 23:16:58 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.58 2009-11-28 01:00:07 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -24,8 +24,6 @@
 
 typedef std::tr1::shared_ptr<TwoBitEncoding> KmerSharedPtr;
 typedef unsigned long IndexType;
-
-const IndexType MAX_INDEX = (IndexType) -1;
 
 class KmerSizer
 {
@@ -191,7 +189,7 @@ class Kmer
 	     const TwoBitEncoding *firstByte = (const TwoBitEncoding *) this;
 	     if (*firstByte == 0x00 || *firstByte == 0x55 || *firstByte == 0xaa || *firstByte == 0xff) {
 	     	const TwoBitEncoding *nextByte = firstByte;
-	     	for(int i=1; i<getTwoBitLength()-1; i++)
+	     	for(unsigned int i=1; i<getTwoBitLength()-1; i++)
 	     	  if (*firstByte != *(++nextByte))
 	     	    return false;
 	     	return true;
@@ -426,7 +424,7 @@ protected:
   unsigned int directionBias;
 
 public:
-  TrackingDataWithAllReads() : directionBias(0), instances() { }
+  TrackingDataWithAllReads() : instances(), directionBias(0) { }
   
   void reset() {
   	instances.clear();
@@ -454,7 +452,7 @@ public:
     return true;
   }
 
-  inline unsigned long getCount() const { instances.size(); }
+  inline unsigned long getCount() const { return instances.size(); }
   inline unsigned long getDirectionBias() const { return directionBias; }
   inline double getWeightedCount() const { 
     double weightedCount = 0.0;
@@ -477,7 +475,8 @@ public:
   TrackingDataWithAllReads &operator=(const TrackingDataSingleton &other) {
   	this->reset();
   	ReadPositionWeightVector rpw = other.getEachInstance();
-  	track(other.getWeightedCount(), other.getDirectionBias() == 1, rpw[0].readId, rpw[0].position); 
+  	track(other.getWeightedCount(), other.getDirectionBias() == 1, rpw[0].readId, rpw[0].position);
+  	return *this;
   }
 };
 
@@ -496,6 +495,7 @@ class KmerArray
 public:
   
   typedef Value ValueType;
+  static const IndexType MAX_INDEX = (IndexType) -1;  
   
   class ElementType { 
     private:
@@ -540,13 +540,13 @@ private:
 public:
  
   KmerArray(IndexType size = 0):
-   _size(0), _begin(NULL)
+   _begin(NULL),_size(0)
   {
     resize(size);
   }
 
   KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length):
-  _size(0),_begin(NULL)
+  _begin(NULL),_size(0)
   {
     SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
     resize(numKmers);
@@ -554,7 +554,7 @@ public:
   }
 
   KmerArray(const KmerArray &copy):
-  _size(0), _begin(NULL)
+  _begin(NULL),_size(0)
   {
     *this = copy;
   }
@@ -767,7 +767,7 @@ public:
    
     TEMP_KMER(tmp);
     for(SequenceLengthType byteIdx=0; byteIdx<KmerSizer::getByteSize(); byteIdx++) { 
-  	  int max = 12;
+  	  unsigned int max = 12;
   	  if (byteIdx+1 == KmerSizer::getByteSize())
   	    max = 3*(KmerSizer::getSequenceLength()%4);
   	  if (max == 0)
@@ -945,7 +945,7 @@ public:
    }
    
    void reset() {
-     for(int i=0; i< _buckets.size(); i++)
+     for(IndexType i=0; i< _buckets.size(); i++)
        _buckets[i].reset();
    }
    void clear() {
@@ -979,7 +979,7 @@ public:
    	    bucketPtr = &getBucket(key);
    	  bool isFound;
    	  IndexType idx = bucketPtr->findSorted(key, isFound);
-   	  if (isFound && idx != MAX_INDEX)
+   	  if (isFound && idx != BucketType::MAX_INDEX)
    	    bucketPtr->remove(idx);
    	  return isFound;
    }
@@ -1016,7 +1016,7 @@ public:
    
    IndexType size() const {
    	IndexType size = 0;
-   	for(int i = 0; i<_buckets.size() ; i++)
+   	for(IndexType i = 0; i<_buckets.size() ; i++)
    	  size += _buckets[i].size();
    	return size;
    } 
@@ -1109,6 +1109,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.58  2009-11-28 01:00:07  regan
+// fixed bugs and warnings
+//
 // Revision 1.57  2009-11-27 23:16:58  regan
 // refactored and broke it
 //

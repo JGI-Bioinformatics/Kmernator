@@ -1,6 +1,6 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.9 2009-11-21 15:58:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.10 2009-11-28 01:00:07 regan Exp $
 //
- 
+
 #include <exception>
 #include <stdexcept>
 #include <iostream>
@@ -16,11 +16,19 @@ using  namespace std;
 
 class ReadFileReader
 {
+private:
+    class SequenceStreamParser;
+    
+    SequenceStreamParser  *_parser;
+    string _path; 
+    ifstream _ifs;
+    ifstream _qs;
+
 public:
 
    ReadFileReader(string fastaFilePath,string qualFilePath):
-      _path(fastaFilePath),
-      _parser(NULL)
+      _parser(NULL),
+      _path(fastaFilePath)
    {
       _ifs.open(fastaFilePath.c_str());
 
@@ -80,20 +88,13 @@ public:
        } 
     }
  
-private:
-    class SequenceStreamParser;
-    
-    SequenceStreamParser  *_parser;
-    ifstream _ifs;
-    ifstream _qs;
 
-    string _path; 
 private:
 
   class SequenceStreamParser
   {
-    unsigned long   _line;
     istream  *    _stream;
+    unsigned long   _line;    
     char          _marker;
     
   public:
@@ -307,6 +308,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.10  2009-11-28 01:00:07  regan
+// fixed bugs and warnings
+//
 // Revision 1.9  2009-11-21 15:58:29  regan
 // changed some types
 // bugfix in reading and using qual files

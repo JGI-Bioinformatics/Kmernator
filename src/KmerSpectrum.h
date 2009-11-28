@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.3 2009-11-27 23:16:58 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.4 2009-11-28 01:00:07 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -151,9 +151,7 @@ public:
   
   void printHistograms(bool solidOnly = false) {
 
-  	double maxCount = (TrackingData::maxCount);
-  	double maxWeightedCount = (TrackingData::maxWeightedCount);
-  	unsigned long numDataPoints = std::max(10ul, ((solidOnly ? 0 : weak.size()) + solid.size())/1000);
+ 	unsigned long numDataPoints = std::max(10ul, ((solidOnly ? 0 : weak.size()) + solid.size())/1000);
   
     unsigned long bins = 30;
     unsigned long cacheSize = numDataPoints;//std::max(10ul, numDataPoints / 100000);
@@ -433,13 +431,13 @@ public:
       std::vector< double > errorRatios = getErrorRatios(it->key(), useWeighted);
       if (accumulators.size() < errorRatios.size())
         accumulators.resize( errorRatios.size() );
-      for(int i = 0 ; i< errorRatios.size(); i++)
+      for(unsigned int i = 0 ; i< errorRatios.size(); i++)
         accumulators[i](errorRatios[i]);
       //std::cerr << "Error Ratio for " << it->key().toFasta() << " "  << std::fixed << std::setprecision(6) << errorRatio << std::endl;
     }
     
     MeanVectorType rates;
-    for(int i = 0 ; i< accumulators.size(); i++) {
+    for(unsigned int i = 0 ; i< accumulators.size(); i++) {
     	rates.push_back( MeanType(mean(accumulators[i]), sqrt( variance(accumulators[i]) ) ) );
         std::cerr << "Error Rate for pos " << i << ", " << std::fixed << std::setprecision(6) << rates[i].first << " +/- " << std::fixed << std::setprecision(6) << rates[i].second << std::endl;
     }
@@ -463,7 +461,7 @@ public:
   	Kmers permutations = Kmers::permuteBases(kmer,true);
   	std::vector<double> previouslyObservedSolids;
   	std::vector< std::vector<double> > weakCounts;
-  	for(int i=0; i<permutations.size(); i++) {
+  	for(unsigned int i=0; i<permutations.size(); i++) {
   		pointers.set( permutations[i] );
   		if ( pointers.solid != NULL ) {
   		  previouslyObservedSolids.push_back( useWeighted ? pointers.solid->getWeightedCount() : pointers.solid->getCount() );
@@ -474,20 +472,20 @@ public:
   		  std::vector< double > positionSums;
   		  for(WeakReadPositionWeightVectorIterator it=positions.begin(); it!=positions.end(); it++) {
   		  	unsigned short pos = it->position;
-  		  	if (positionSums.size() < pos + 1)
-  		  	  positionSums.resize(pos + 1);
+  		  	if (positionSums.size() < pos + 1ul)
+  		  	  positionSums.resize(pos + 1ul);
   		  	positionSums[pos] += useWeighted ? it->weight : 1.0;
   		  }
-  		  for(int i=0; i< positionSums.size(); i++) {
+  		  for(unsigned int i=0; i< positionSums.size(); i++) {
   		  	if(positionSums[i] > 0) {
-  		  		if (weakCounts.size() < i+1)
-  		  		  weakCounts.resize(i+1);
+  		  		if (weakCounts.size() < i+1ul)
+  		  		  weakCounts.resize(i+1ul);
   		  		weakCounts[i].push_back( count * positionSums[i] / positions.size() );
   		  	}
   		  }
   		} else if ( pointers.singleton != NULL ) {
   		  TrackingDataSingleton &data = *pointers.singleton;
-  		  if (weakCounts.size() < data.getPosition()+1)
+  		  if (weakCounts.size() < data.getPosition()+1ul)
   		    weakCounts.resize(data.getPosition()+1);
   		  weakCounts[data.getPosition()].push_back( useWeighted ? pointers.singleton->getWeightedCount() : pointers.singleton->getCount() );
   		}
@@ -497,7 +495,7 @@ public:
   	  median.resize( weakCounts.size() );
   	  nonZeroCount.resize( weakCounts.size() );
   	  errorRatios.resize( weakCounts.size() );
-  	  for(int pos = 0 ; pos < weakCounts.size(); pos++) {
+  	  for(unsigned int pos = 0 ; pos < weakCounts.size(); pos++) {
   	  	if (weakCounts[pos].size() > 0) {
   	  	  std::vector< double > &tmp = weakCounts[pos];
   		  sort(tmp.begin(), tmp.end());
@@ -510,7 +508,7 @@ public:
   	    return errorRatios;  		
   		
       // some code to correct for previously Observed Solids
-      for(int pos = 0 ; pos < weakCounts.size(); pos++) {
+      for(unsigned int pos = 0 ; pos < weakCounts.size(); pos++) {
       	  double rawErrorRatio = 0.0;
   	      double sum = baseValue;
   	      for(std::vector<double>::iterator it = previouslyObservedSolids.begin(); it!=previouslyObservedSolids.end(); it++) {
@@ -547,7 +545,7 @@ public:
   	  isSolid = false;
   	}
   	KmerWeights permutations = KmerWeights::permuteBases(kmer, true);
-  	for(int i=0; i<permutations.size(); i++) {
+  	for(unsigned int i=0; i<permutations.size(); i++) {
   	  pointers.set( permutations[i] );
       //std::cerr << "Looking at " << permutations[i].toFasta() << std::endl;		
   	  if( pointers.solid != NULL ) {
@@ -571,8 +569,8 @@ public:
   }
   
   int countGC(std::string fasta) {
-     int count=0;
-     for(int i=0; i<fasta.length(); i++)
+     unsigned int count=0;
+     for(unsigned int i=0; i<fasta.length(); i++)
        if (fasta[i] == 'G' || fasta[i] == 'C')
          count++;
      return count;
@@ -707,7 +705,7 @@ public:
        	  	  	singleton.remove( least );
        	  	  } else {
        	  	  	// record this singleton
-       	  	  	bool passed = singleton[ least ].track( weight, keepDirection, readIdx, j );
+       	  	  	singleton[ least ].track( weight, keepDirection, readIdx, j );
        	  	  }
        	    }
        	}

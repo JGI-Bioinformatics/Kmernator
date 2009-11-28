@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.14 2009-11-21 15:58:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.15 2009-11-28 01:00:07 regan Exp $
 //
 
 #include <cstring>
@@ -122,7 +122,7 @@ BaseLocationVectorType Sequence::getMarkups()
   BaseLocationVectorType markups( size );
   if (size > 0) {
   	BaseLocationType *ptr = _getMarkupBases();
-  	for(int i=0; i<size; i++)
+  	for(unsigned int i=0; i<size; i++)
   	  markups.push_back( *(ptr++) );
   }
   return markups;
@@ -199,7 +199,7 @@ string Read::getFormattedQuals()
 {
   string quals = getQuals();
   stringstream ss;
-  for(int i =0; i < quals.length(); i++)
+  for(unsigned int i =0; i < quals.length(); i++)
   {
      ss << (int)quals[i]-64 << ' ';  
   }
@@ -207,6 +207,9 @@ string Read::getFormattedQuals()
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.15  2009-11-28 01:00:07  regan
+// fixed bugs and warnings
+//
 // Revision 1.14  2009-11-21 15:58:29  regan
 // changed some types
 // bugfix in reading and using qual files

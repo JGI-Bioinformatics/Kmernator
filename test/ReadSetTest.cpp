@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.5 2009-11-07 00:28:38 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.6 2009-11-28 01:00:10 regan Exp $
 //
  
 
@@ -16,7 +16,7 @@ void testZeroReads()
 {
 	Read s;
 	
-	BOOST_CHECK_EQUAL( 0, s.getLength() );
+	BOOST_CHECK_EQUAL( 0ul, s.getLength() );
 	BOOST_CHECK_EQUAL( "", s.getQuals() );
 	BOOST_CHECK_EQUAL( "", s.getFasta() );
 	BOOST_CHECK_EQUAL( "", s.getName()  );
@@ -41,7 +41,7 @@ void testFastQFile(string filename)
     store.appendFastq(filename);
 
     string fastq;
-    for (int i=0 ; i < store.getSize(); i++)
+    for (unsigned int i=0 ; i < store.getSize(); i++)
     {
        fastq += store.getRead(i).toFastq();
     }
@@ -58,7 +58,7 @@ void testFastaWithQualFile(string f,string q)
     store.appendFasta(f,q);
 
     string fasta,qual;
-    for (int i=0 ; i < store.getSize(); i++)
+    for (unsigned int i=0 ; i < store.getSize(); i++)
     {
        Read &s = store.getRead(i);
 
@@ -85,6 +85,9 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.6  2009-11-28 01:00:10  regan
+// fixed bugs and warnings
+//
 // Revision 1.5  2009-11-07 00:28:38  cfurman
 // ReadSet now takes fasta, fastq or  fasta+qual files.
 //
