@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.4 2009-11-28 01:00:07 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.5 2009-11-29 19:04:45 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -533,16 +533,15 @@ public:
   	DataPointers pointers(*this, kmer);
 
   	//std::cerr << "Permuting " << kmer->toFasta() << std::endl;
-  	bool isSolid; double base = 0.0;
+  	bool isSolid = false;
+  	double base = 0.0;
   	if ( pointers.solid != NULL ) {
   	  base = pointers.solid->getCount();
   	  isSolid = true;
   	} else if ( pointers.weak != NULL ) {
   	  base = pointers.weak->getCount();
-  	  isSolid = false;
   	} else if ( pointers.singleton != NULL ) {
   	  base = pointers.singleton->getCount();
-  	  isSolid = false;
   	}
   	KmerWeights permutations = KmerWeights::permuteBases(kmer, true);
   	for(unsigned int i=0; i<permutations.size(); i++) {

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.58 2009-11-28 01:00:07 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.59 2009-11-29 19:04:45 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -362,10 +362,10 @@ protected:
   
 public:
   TrackingDataSingleton() : instance(0,0,0.0) {}
-  ~TrackingDataSingleton() { reset(); }
+
   void reset() {
-  	// construction does not set singletonCount
-  	if (instance.weight != 0.0)
+  	// destructor should not call this
+  	if (getCount() == 1)
   	  TrackingData::singletonCount--;
   	instance = ReadPositionWeight(0,0,0.0);
   }
@@ -422,13 +422,15 @@ public:
 protected:
   ReadPositionWeightVector instances;
   unsigned int directionBias;
+  WeightType weightedCount; // for performance reasons
 
 public:
-  TrackingDataWithAllReads() : instances(), directionBias(0) { }
+  TrackingDataWithAllReads() : instances(), directionBias(0), weightedCount(0.0) { }
   
   void reset() {
   	instances.clear();
   	directionBias = 0;
+  	weightedCount = 0.0;
   }
   inline bool operator==(const TrackingDataWithAllReads &other) const {
   	return getCount() == other.getCount();// && weightedCount == other.weightedCount;
@@ -446,6 +448,7 @@ public:
     ReadPositionWeight rpw(readIdx, readPos, weight);
     
     instances.push_back( rpw );
+    weightedCount += weight;
     
     TrackingData::setGlobals(getCount(), getWeightedCount());
 
@@ -454,7 +457,8 @@ public:
 
   inline unsigned long getCount() const { return instances.size(); }
   inline unsigned long getDirectionBias() const { return directionBias; }
-  inline double getWeightedCount() const { 
+  inline double getWeightedCount() const { return weightedCount; }
+  double _getWeightedCount() const { 
     double weightedCount = 0.0;
     for(ReadPositionWeightVector::const_iterator it = instances.begin(); it != instances.end(); it++)
       weightedCount += it->weight;
@@ -474,8 +478,11 @@ public:
   }
   TrackingDataWithAllReads &operator=(const TrackingDataSingleton &other) {
   	this->reset();
-  	ReadPositionWeightVector rpw = other.getEachInstance();
-  	track(other.getWeightedCount(), other.getDirectionBias() == 1, rpw[0].readId, rpw[0].position);
+  	if (other.getCount() > 0) {
+  	  directionBias = other.getDirectionBias();
+  	  instances = other.getEachInstance();
+  	  weightedCount = _getWeightedCount();
+  	}
   	return *this;
   }
 };
@@ -625,9 +632,9 @@ public:
   	return ElementType( get(idx), valueAt(idx) );
   }
   
-  IndexType size() const { return _size; }
+  inline IndexType size() const { return _size; }
 
-  IndexType getElementByteSize() const { 
+  inline IndexType getElementByteSize() const { 
   	return (KmerSizer::getByteSize() + sizeof(ValueType)); 
   }
   
@@ -886,29 +893,29 @@ public:
     private:
       KmerArray *_tgt;
       IndexType _idx;
-      ElementType elementCopy;
+      ElementType thisElement;
     public:
       Iterator(KmerArray *target, IndexType idx = 0): _tgt(target), _idx(idx) {
-      	setElementCopy();
+      	setElement();
       }
       Iterator(const Iterator &copy) { *this = copy; }
       ~Iterator() {}
       Iterator& operator=(const Iterator& other) {
         _tgt = other._tgt;
         _idx = other._idx;
-        elementCopy = other.elementCopy;
+        thisElement = other.thisElement;
         return *this;
       }
       bool operator==(const Iterator& other) const { return _idx == other._idx && _tgt == other._tgt; }
       bool operator!=(const Iterator& other) const { return _idx != other._idx || _tgt != other._tgt; }
-      Iterator& operator++() { if ( !isEnd() ) { ++_idx; setElementCopy(); } return *this; }
+      Iterator& operator++() { if ( !isEnd() ) { ++_idx; setElement(); } return *this; }
       Iterator operator++(int unused) { Iterator tmp(*this) ; ++(*this); return tmp; }
-      ElementType &operator*() { return elementCopy; }
-      Kmer &key() { return elementCopy.key(); }
-      Value &value() { return elementCopy.value(); }
-      ElementType *operator->() { return &elementCopy; }
+      ElementType &operator*() { return thisElement; }
+      Kmer &key() { return thisElement.key(); }
+      Value &value() { return thisElement.value(); }
+      ElementType *operator->() { return &thisElement; }
       bool isEnd() const { return _idx >= _tgt->size(); }
-      void setElementCopy() { if ( !isEnd() ) elementCopy = _tgt->getElement(_idx); }
+      void setElement() { if ( !isEnd() ) thisElement = _tgt->getElement(_idx); }
   };
 
   Iterator begin() { return Iterator(this, 0); }
@@ -952,17 +959,17 @@ public:
    	 reset();
      _buckets.resize(1); // iterators require at least 1
    }
-   BucketType &getBucket(long hash) {
+   inline BucketType &getBucket(long hash) {
    	return _buckets[hash % _buckets.size()];
    }
-   const BucketType &getBucket(long hash) const {
+   inline const BucketType &getBucket(long hash) const {
    	return _buckets[hash % _buckets.size()];
    }
    
-   BucketType &getBucket(const KeyType &key)  {
+   inline BucketType &getBucket(const KeyType &key)  {
      return getBucket(key.hash());
    }
-   const BucketType &getBucket(const KeyType &key) const {
+   inline const BucketType &getBucket(const KeyType &key) const {
      return getBucket(key.hash());
    }
 
@@ -1109,6 +1116,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.59  2009-11-29 19:04:45  regan
+// optimized a bit, fixed a few bugs
+//
 // Revision 1.58  2009-11-28 01:00:07  regan
 // fixed bugs and warnings
 //
