@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.59 2009-11-29 19:04:45 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.60 2009-12-14 05:31:35 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <vector>
+#include <algorithm>
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
@@ -512,7 +513,9 @@ public:
       ElementType(): _key(NULL), _value(NULL) {}
   	  ElementType(Kmer &key, ValueType &value): _key(&key), _value(&value) {}
 
+  	  const Kmer &key() const { return *_key; }
   	  Kmer &key() { return *_key; }
+  	  const ValueType &value() const { return *_value; }
   	  ValueType &value()   { return *_value; }
   	  inline bool operator==(const ElementType &other) const {
   	  	if (this->_value != NULL && other._value != NULL)
@@ -535,33 +538,36 @@ public:
   };
 
 private:
-  void * _begin; // safer than Kmer *: prevents incorrect ptr arithmetic: _begin+1 , use _add instead
+  void     *_begin; // safer than Kmer *: prevents incorrect ptr arithmetic: _begin+1 , use _add instead
   IndexType _size;
+  IndexType _capacity;
 
 private:
-  static void *_add(void *ptr,IndexType i)  {return ((char *)ptr + i * KmerSizer::getByteSize());}
+  static inline const void *_add(const void *ptr, IndexType i) 
+                                                   { return ((char *)ptr + i * KmerSizer::getByteSize()); }
+  static inline void *_add(void *ptr,IndexType i)  { return ((char *)ptr + i * KmerSizer::getByteSize()); }
   
-  const Kmer &get(IndexType index) const    { return *(Kmer *)_add(_begin,index); }
-  Kmer &get(IndexType index)                { return *(Kmer *)_add(_begin,index); }
+  inline const Kmer &get(IndexType index) const    { return *(Kmer *)_add(_begin,index); }
+  inline Kmer &get(IndexType index)                { return *(Kmer *)_add(_begin,index); }
 
 public:
  
   KmerArray(IndexType size = 0):
-   _begin(NULL),_size(0)
+   _begin(NULL),_size(0),_capacity(0)
   {
     resize(size);
   }
 
   KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length):
-  _begin(NULL),_size(0)
+  _begin(NULL),_size(0),_capacity(0)
   {
     SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
-    resize(numKmers);
+    resize(numKmers, MAX_INDEX, false);
     build(twoBit,length);
   }
 
   KmerArray(const KmerArray &copy):
-  _begin(NULL),_size(0)
+  _begin(NULL),_size(0),_capacity(0)
   {
     *this = copy;
   }
@@ -576,32 +582,39 @@ public:
     if (this == &other)
   	  return *this;
     reset();
-    resize(other.size());
+    reserve(other.size());
     if (size() == 0)
       return *this;
     if (_begin == NULL)
        throw std::runtime_error("Could not allocate memory in KmerArray operator=()");
+  
+    _copyRange(other._begin,other.getValueStart(),0,0,_size,false);
     
-    memcpy(_begin,other._begin,_size*getElementByteSize());
     return *this;
   }
 
   const Kmer &operator[](IndexType index) const
   {
-    if (index >= _size)
+    if (index >= size())
        throw std::invalid_argument("attempt to access index greater than size in KmerArray operator[] const"); 
     return get(index);
   }
   Kmer &operator[](IndexType index)
   {
-    if (index >= _size)
+    if (index >= size())
        throw std::invalid_argument("attempt to access index greater than size in KmerArray operator[]"); 
     return get(index);
   }
   
-  ValueType *getValueStart() const {
-  	if (size() > 0)
-  	  return (ValueType*) _add(_begin,size());
+  const ValueType *getValueStart() const {
+  	if (capacity() > 0) 
+  	  return (ValueType*) _add(_begin,capacity());
+  	else
+  	  return NULL;
+  }
+  ValueType *getValueStart() {
+  	if (capacity() > 0) 
+  	  return (ValueType*) _add(_begin,capacity());
   	else
   	  return NULL;
   }
@@ -632,33 +645,41 @@ public:
   	return ElementType( get(idx), valueAt(idx) );
   }
   
-  inline IndexType size() const { return _size; }
-
-  inline IndexType getElementByteSize() const { 
+  static inline IndexType getElementByteSize() { 
   	return (KmerSizer::getByteSize() + sizeof(ValueType)); 
   }
-  
-  void reset()//PoolManager &pool = BoostPoolManager::get())
+
+  void reset()
   {
     if (_begin != NULL) {
-      //pool.free(test, size() * getElementByteSize());
+      // destruct old Values
+      for(IndexType i = 0; i < _capacity; i++)
+        (getValueStart() + i)->~Value();
+      // free memory    	
       std::free(_begin);
     } 
     _begin = NULL;
     _size = 0;
+    _capacity = 0;
   }
 
+  inline IndexType size() const { return _size; }
+  inline IndexType capacity() const { return _capacity; }
+  inline bool empty() const { return _size == 0; }
+  void reserve(IndexType size) { resize(size, MAX_INDEX, false); };
+  
+  
   void resize(IndexType size) {
-  	resize(size, MAX_INDEX);
+  	resize(size, MAX_INDEX, false);
   }
-  void resize(IndexType size, IndexType idx)//, PoolManager &pool = BoostPoolManager::get())
+  void resize(IndexType size, IndexType idx, bool reserveExtra = true)
   {
     if (size == _size)
       return;
     IndexType oldSize = _size;
     
     // alloc / realloc memory
-    _setMemory(size, idx);//, pool);
+    _setMemory(size, idx, reserveExtra);
       
     if(_begin == NULL && size > 0) {
        throw std::runtime_error("Could not allocate memory in KmerArray resize()");
@@ -673,75 +694,108 @@ public:
     }    
   }
     
-  void _copyRange(void * srcKmer, ValueType *srcValue, IndexType idx, IndexType srcIdx, IndexType count) {
-	memcpy(_add(_begin,idx), _add(srcKmer,srcIdx), count * KmerSizer::getByteSize()); 
+  void _copyRange(const void * srcKmer, const ValueType *srcValue, IndexType idx, IndexType srcIdx, IndexType count, bool isOverlapped = false) {
+	
+	if (isOverlapped)
+	  memmove(_add(_begin,idx), _add(srcKmer,srcIdx), count * KmerSizer::getByteSize()); 
+	else
+	  memcpy(_add(_begin,idx), _add(srcKmer,srcIdx), count * KmerSizer::getByteSize()); 
+
 	//assignment copy Values
-	Value *startValue=getValueStart();
-	for(IndexType i=0; i<count; i++)
-	  *(startValue + idx + i) = *(srcValue + srcIdx + i);
+	Value *dstValue=getValueStart();	
+	if (isOverlapped) {// && dstValue + idx > srcValue + srcIdx) {
+	  Value *tmp = new Value[count];  
+	  for(IndexType i=0; i<count; i++)
+	    tmp[i] = *(srcValue + srcIdx + i);
+	  for(IndexType i=0; i<count; i++)
+	    *(dstValue + idx + i) = tmp[i];
+	  delete [] tmp;
+	} else {
+	  // copy forward, without a temp buffer, is safe
+	  for(IndexType i=0; i<count; i++)
+	    *(dstValue + idx + i) = *(srcValue + srcIdx + i);
+	}
   }
 
-  void _setMemory(IndexType size, IndexType idx)//, PoolManager &pool = BoostPoolManager::get())
-  {
-    void *memory    = NULL;
-    
+  void _setMemory(IndexType size, IndexType idx, bool reserveExtra = true)
+  {    
+    // preserve old pointers and metrics
     void  *oldBegin = _begin;
-    
-    if (size != 0 ) {
-    	// allocate new memory
-    	//memory = pool.malloc( size * getElementByteSize() );
-        memory = std::malloc( size * getElementByteSize() );
-        
-        if(memory == NULL) {
-           throw std::runtime_error("Could not allocate memory in KmerArray _setMemory()");
-        }        
-    }
     IndexType oldSize = _size;
+    IndexType oldCapacity = _capacity;
     IndexType lesserSize = std::min(size,oldSize);
-    ValueType *oldValueStart;
-    if (oldSize > 0) {
+    ValueType *oldValueStart = NULL;
+    if (oldCapacity > 0) {
     	oldValueStart = getValueStart();
     }
-    _begin =  memory ;
+    
+    bool memChanged = false;
+    if (size == 0) {
+    	// ignore reserveExtra for zero resize
+    	if ( _capacity > 0 ) {
+    	    _capacity = 0;
+    	    _begin = NULL;
+    		memChanged = true;
+    	}
+    } else if ((size > _capacity) || (_capacity > size && !reserveExtra))  {
+    	// allocate new memory
+    	if (reserveExtra)
+    	  _capacity = std::max( (IndexType) (size*1.2), (IndexType) (size+10));
+    	else
+    	  _capacity = size;
+        void *memory = std::malloc( _capacity * getElementByteSize() );
+        if(memory == NULL) {
+           std::cerr << "Attempt to malloc " << _capacity * getElementByteSize() << std::endl;
+           throw std::runtime_error("Could not allocate memory in KmerArray _setMemory()");
+        }        
+        _begin = memory;
+        memChanged = true;
+    }   
+    
     _size = size;
     
-    // construct all unintialized Values
-    for(IndexType i = 0 ; i<size ; i++)
-  	  ::new((void*) (getValueStart() + i)) Value();
-
-    if (oldBegin != NULL && memory != NULL && oldValueStart != NULL && lesserSize > 0) {
+    if (memChanged && _begin != NULL) {
+      // construct all values that are newly allocated
+      for(IndexType i = 0 ; i < _capacity ; i++)
+  	    ::new((void*) (getValueStart() + i)) Value();
+    }
+    
+    if (_begin != NULL && oldBegin != NULL && oldValueStart != NULL && lesserSize > 0) {
       // copy the old contents
       if (idx == MAX_INDEX || idx >= lesserSize) {
-      	// copy all records in order (default ; end is trimmed or expanded)
-      	_copyRange(oldBegin,oldValueStart, 0, 0, lesserSize);
+      	if (memChanged) {
+      	  // copy all records in order (default ; end is trimmed or expanded)
+      	  _copyRange(oldBegin,oldValueStart, 0, 0, lesserSize);
+        } else {
+      	  // noop
+      	}
       } else {      	
       	// shrink or expand.
       	
-      	// the first record(s) leading to idx will be copied
-      	if (idx > 0) {
+      	if (memChanged && idx > 0) {
+      	  // the first record(s) leading to idx will be copied	
       	  _copyRange(oldBegin, oldValueStart, 0, 0, idx);
       	}
       	
       	if (lesserSize == size) {
       	  // shrink: skipping the old record at idx
       	  if (idx < size) {
-      	  	_copyRange(oldBegin, oldValueStart, idx, idx+1, lesserSize-idx);
+      	  	_copyRange(oldBegin, oldValueStart, idx, idx+1, lesserSize-idx, !memChanged);
       	  }
       	} else {
-      	  // expand: leaving new (uninitialized) record at idx
+      	  // expand: leaving new (uninitialized/unchanged) record at idx
       	  if (idx < oldSize) {
-      	  	_copyRange(oldBegin, oldValueStart, idx+1, idx, lesserSize-idx);
+      	  	_copyRange(oldBegin, oldValueStart, idx+1, idx, lesserSize-idx, !memChanged);
       	  }
       	}
       }
     }
     
-    if (oldBegin != NULL) {
-      // free old memory
-      //   pool.free(oldBegin, oldSize * getElementByteSize());
+    if (memChanged && oldBegin != NULL) {
       // destruct old Values
-      for(IndexType i = 0; i < oldSize; i++)
+      for(IndexType i = 0; i < oldCapacity; i++)
         (oldValueStart + i)->~Value();
+      // free old memory
       std::free(oldBegin);
     }
   }
@@ -813,6 +867,7 @@ public:
        targetIsFound = false;
        return 0;
     }
+    max--; // never let mid == size()
   	IndexType mid;
   	int comp;
   	do {
@@ -1116,6 +1171,10 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.60  2009-12-14 05:31:35  regan
+// optimized array resizing to malloc at logarithmic stepping
+// fixed a bug in KmerArray<>::findSorted
+//
 // Revision 1.59  2009-11-29 19:04:45  regan
 // optimized a bit, fixed a few bugs
 //
