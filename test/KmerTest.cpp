@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.33 2009-11-28 01:00:10 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.34 2009-12-14 05:32:15 regan Exp $
 //
  
 
@@ -340,7 +340,6 @@ void testKmerArray(SequenceLengthType size)
   // now reduce
   copy.resize(oldSize);
   mem2 = copy[0].get();
-  BOOST_CHECK( mem1 != mem2 );
   
   BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size() );
   for (unsigned int i=0; i<kmersFloat.size() ; i++) {
@@ -606,6 +605,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.34  2009-12-14 05:32:15  regan
+// optimized array resizing to malloc at logarithmic stepping
+//
 // Revision 1.33  2009-11-28 01:00:10  regan
 // fixed bugs and warnings
 //
