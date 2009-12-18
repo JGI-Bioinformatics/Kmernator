@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.5 2009-11-11 07:57:23 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.6 2009-12-18 19:04:20 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
@@ -21,6 +21,30 @@
 #include <iomanip>
 #include <unistd.h>
 #include <fstream>
+
+#include <execinfo.h>
+
+class StackTrace
+{
+public:
+  static std::string getStackTrace() {
+  	std::stringstream ss;
+  	
+  	void *array[200];
+  	size_t size,i;
+  	char **strings;
+  	
+  	size=backtrace(array,200);
+  	strings = backtrace_symbols(array,size);
+  	
+  	for(i = 0; i<size; i++)
+  	  ss << strings[i] << std::endl;
+  	  
+  	free(strings);
+  	
+  	return ss.str();
+  }
+};
 
 class PoolManager
 {
@@ -141,6 +165,9 @@ public:
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.6  2009-12-18 19:04:20  regan
+// helpe function to print a stack trace
+//
 // Revision 1.5  2009-11-11 07:57:23  regan
 // built framework for autoPromote (not working) - make_heap is broken
 //
