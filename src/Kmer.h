@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.60 2009-12-14 05:31:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.61 2009-12-18 19:05:09 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -12,12 +12,19 @@
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
+#include <sys/time.h>
 
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
 
 #include "TwoBitSequence.h"
 #include "MemoryUtils.h"
+
+#if(1)
+#define _USE_OPENMP
+//#define _USE_THREADSAFE_KMER
+#include <omp.h>
+#endif
 
 #ifndef MAX_KMER_SIZE
 #define MAX_KMER_SIZE 1024
@@ -161,6 +168,7 @@ class Kmer
 	     TwoBitSequence::reverseComplement((TwoBitEncoding*)_data(), (TwoBitEncoding*)output._data(), getLength());
 	   }
 	   
+	   // returns true if this is the least complement, false otherwise
 	   bool buildLeastComplement(Kmer &output) const
 	   {
 	   	 buildReverseComplement(output);
@@ -246,15 +254,25 @@ public:
   	maxWeightedCount = 0.0;
   }
   static void setGlobals(CountType count, WeightType weightedCount) {
-  	  if (count > maxCount) 
+  	  if (count > maxCount) {
         maxCount = count;
-      if (weightedCount > maxWeightedCount)
+  	  }
+      if (weightedCount > maxWeightedCount) {
         maxWeightedCount = weightedCount;
+      }
       
-      if (count == 1)
+      if (count == 1) {
+        #ifdef _USE_THREADSAFE_KMER
+        #pragma omp atomic
+        #endif
         singletonCount++;
-      else if (count == 2)
+      }
+      else if (count == 2) {
+        #ifdef _USE_THREADSAFE_KMER
+        #pragma omp atomic
+        #endif
         singletonCount--;
+      }
   }
   static inline bool isDiscard(WeightType weight) {
   	if ( weight < minimumWeight ) {
@@ -283,21 +301,28 @@ public:
   inline bool operator<(const TrackingData &other) const {
   	return getCount()  < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
   }
+  
   bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
     if (isDiscard(weight))
   	  return false;
     
     if (count < MAX_COUNT) {
+      #ifdef _USE_THREADSAFE_KMER
+      #pragma omp critical
+	  #endif
+      {    	
       count++;
       if (forward) 
         directionBias++;
       weightedCount += weight;
+      }
       
       setGlobals(getCount(), getWeightedCount());
       
       return true;
     } else
       return false;
+   
   }
 
   inline unsigned long getCount() const { return count; }
@@ -376,10 +401,13 @@ public:
   inline bool operator<(const TrackingDataSingleton &other) const {
   	return getCount() < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
   }
+  
   bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
     if (TrackingData::isDiscard(weight)) 
   	  return false;
-    
+  	#ifdef _USE_THREADSAFE_KMER
+    #pragma omp critical
+	#endif
     instance = ReadPositionWeight(readIdx, readPos, forward ? weight : -1.0*weight);
     
     TrackingData::setGlobals(1, weight);
@@ -439,10 +467,14 @@ public:
   inline bool operator<(const TrackingDataWithAllReads &other) const {
   	return getCount() < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
   }
+  
   bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
     if (TrackingData::isDiscard(weight))
   	  return false;
-
+  	#ifdef _USE_THREADSAFE_KMER
+    #pragma omp critical
+	#endif
+	{
     if (forward) 
       directionBias++;
     
@@ -450,7 +482,7 @@ public:
     
     instances.push_back( rpw );
     weightedCount += weight;
-    
+	}
     TrackingData::setGlobals(getCount(), getWeightedCount());
 
     return true;
@@ -509,9 +541,37 @@ public:
     private:
   	  Kmer *_key; 
   	  ValueType *_value;
+  	  KmerArray *_array;
     public:
-      ElementType(): _key(NULL), _value(NULL) {}
-  	  ElementType(Kmer &key, ValueType &value): _key(&key), _value(&value) {}
+      ElementType(): _key(NULL), _value(NULL), _array(NULL) { }
+  	  ElementType(Kmer &key, ValueType &value, KmerArray &array): _key(&key), _value(&value), _array(&array) { setLock(); }
+  	  ElementType(const ElementType &copy): _key(NULL), _value(NULL), _array(NULL) {
+  	  	*this = copy;
+  	  }
+  	  ~ElementType() { reset(); }
+  	  ElementType &operator=(const ElementType &copy) {
+  	  	reset();
+  	  	_key = copy._key;
+  	  	_value = copy._value;
+  	  	_array = copy._array;
+  	  	setLock();
+  	  	return *this;
+  	  }
+  	  void reset() {
+  	  	unsetLock();
+  	  	_key = NULL;
+  	  	_value = NULL;
+  	  	_array = NULL;
+  	  }
+  	  inline bool isValid() const { return _array != NULL; }
+  	  void setLock() {
+  	  	if (isValid())
+  	  	  _array->setSharedLock();
+  	  }
+  	  void unsetLock() {
+  	  	if (isValid())
+  	  	  _array->unsetSharedLock();
+  	  }
 
   	  const Kmer &key() const { return *_key; }
   	  Kmer &key() { return *_key; }
@@ -538,43 +598,205 @@ public:
   };
 
 private:
-  void     *_begin; // safer than Kmer *: prevents incorrect ptr arithmetic: _begin+1 , use _add instead
-  IndexType _size;
-  IndexType _capacity;
+  void                   *_begin; // safer than Kmer *: prevents incorrect ptr arithmetic: _begin+1 , use _add instead
+  IndexType               _size;
+  IndexType               _capacity;
+  
+
+#ifdef _USE_THREADSAFE_KMER
+
+  typedef std::vector< omp_nest_lock_t > LockVector;
+  mutable omp_nest_lock_t                _lock;
+  mutable LockVector                     _sharedLocks;
+
+private:
+ 
+  // thread locking routines
+  void initLock()         const { omp_init_nest_lock(&_lock);     initSharedLocks(); }
+  void destroyLock()      const { omp_destroy_nest_lock(&_lock);  destroySharedLocks(); }
+  void initSharedLocks()  const { 
+  	_sharedLocks.clear();
+  	_sharedLocks.resize( omp_get_num_procs() );
+  	for(unsigned int i=0; i < _sharedLocks.size(); i++)
+  	  omp_init_nest_lock( &(_sharedLocks[i]) );
+  }
+  void destroySharedLocks() const {
+  	for(unsigned int i=0; i < _sharedLocks.size(); i++)
+  	  omp_destroy_nest_lock( &(_sharedLocks[i]) );
+  	_sharedLocks.clear();
+  }
+  
+  inline void setLock()   const { omp_set_nest_lock(&_lock);         }
+  inline bool testLock()  const { return omp_test_nest_lock(&_lock); }
+  inline void unsetLock() const { omp_unset_nest_lock(&_lock);       }
+
+
+public:
+  // TODO make a true shared lock without a severe performance penalty
+
+  void setSharedLock() const {
+  	if (_sharedLocks.empty())
+  	  return;
+  	unsigned int myThread = omp_get_thread_num();
+  	bool gotShared = false;
+  	while (!gotShared) {
+  		
+  		bool gotExclusive = false;
+  		if (testLock()) {
+  		    gotShared = omp_test_nest_lock( &( _sharedLocks[myThread] ) );
+  			unsetLock();
+  			gotExclusive = true;
+  		}
+  		if (! gotShared ) {
+  			
+  				//std::stringstream ss;
+  	            //ss  << "Waiting for shared lock: " << this << " " << myThread << "/" << _sharedLocks.size() << " " << gotExclusive << std::endl;
+  		        //#pragma omp critical
+  		        //{ std::cerr << ss.str(); }
+  		        usleep(1);
+  			  			
+  		} 		
+    }
+
+  	//std::stringstream ss2;
+  	//ss2 << "Got shared lock: " << this << " " << myThread << "/" << _sharedLocks.size() <<std::endl << StackTrace::getStackTrace();
+  	//#pragma omp critical
+  	//{ std::cerr <<  ss2.str(); }
+  	
+  }
+  
+  inline void unsetSharedLock() const { 
+  	if (_sharedLocks.empty())
+  	  return;
+  	unsigned int myThread = omp_get_thread_num();  
+  	omp_unset_nest_lock( &( _sharedLocks[ myThread ] ) );
+    //std::stringstream ss;
+  	//ss  << "Rel shared lock: " << this << " " << myThread <<std::endl;
+    
+    //#pragma omp critical
+    //{ std::cerr << ss.str(); } 
+  }
+
+  inline void setExclusiveLock() const {  
+  	if (_sharedLocks.empty())
+  	  return;
+  	//std::stringstream ss;
+  	//ss << "Trying exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() <<std::endl << StackTrace::getStackTrace(); 
+  	//#pragma omp critical
+    //{ std::cerr << ss.str(); }
+    bool gotExclusive = false;
+  	while(!gotExclusive) {
+  	
+  	   gotExclusive = true;
+  	   if (testLock()) {
+  	   	 unsigned int i = 0;
+  	     for(; i < _sharedLocks.size() ; i++) {
+  	        if (! omp_test_nest_lock( &( _sharedLocks[i] ) )) {
+  	        	gotExclusive = false;
+  				break;
+  			}
+  	     }
+  		 if (! gotExclusive) {
+  		 	// unset acquired locks
+  		 	unsetLock();
+  		 	for(unsigned int j = 0; j<i ; j++)
+  		 	  omp_unset_nest_lock( &( _sharedLocks[j] ) );
+  		 	//std::stringstream ss2;
+  	        //ss2 << "Waiting for exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() << " failed to get shared " << i << std::endl;
+  	        //#pragma omp critical
+  	        //{ std::cerr << ss2.str(); }
+  	        usleep(1);
+  		 }
+  	   } else {
+  	   	 gotExclusive = false;
+  	   }
+  	   
+  	}
+  	//std::stringstream ss3;
+  	//ss3 <<"Got exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() <<std::endl;
+  	//#pragma omp critical
+    //{ std::cerr << ss3.str(); }
+  }
+  inline void unsetExclusiveLock() const { 
+  	if (_sharedLocks.empty())
+  	  return;
+  	  //throw std::runtime_error("unsetExclusiveLock() called while under readOnlyOptimization mode");
+  	
+  	unsetLock();
+  	// unset acquired shared locks
+  	for(unsigned int j = 0 ; j < _sharedLocks.size() ; j++)
+        omp_unset_nest_lock( &( _sharedLocks[j] ) );
+        
+  	//std::stringstream ss;
+  	//ss << "Rel exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() <<std::endl;
+  	//#pragma omp critical
+  	//{ std::cerr << ss.str(); }
+  }
+  
+#else // _USE_THREADSAFE_KMER
+
+private:
+  void initLock()            const { }
+  void destroyLock()         const { }
+  void initSharedLocks()     const { }
+  void destroySharedLocks()  const { }
+public:
+  inline void setSharedLock() const { }
+  inline void unsetSharedLock() const { }
+  inline void setExclusiveLock()const { }
+  inline void unsetExclusiveLock() const { }
+
+#endif //  _USE_THREADSAFE_KMER
+
 
 private:
   static inline const void *_add(const void *ptr, IndexType i) 
                                                    { return ((char *)ptr + i * KmerSizer::getByteSize()); }
   static inline void *_add(void *ptr,IndexType i)  { return ((char *)ptr + i * KmerSizer::getByteSize()); }
   
-  inline const Kmer &get(IndexType index) const    { return *(Kmer *)_add(_begin,index); }
-  inline Kmer &get(IndexType index)                { return *(Kmer *)_add(_begin,index); }
+  // these are never thread safe!
+  inline const Kmer &get(IndexType index) const    { return *((Kmer *) _add(_begin,index)); }
+  inline Kmer &get(IndexType index)                { return *((Kmer *) _add(_begin,index)); }
 
+
+public:
+  void setReadOnlyOptimization() const {
+  	destroyLock();
+  }
+  void unsetReadOnlyOptimization() {
+  	initLock();
+  }
+  
+  
 public:
  
   KmerArray(IndexType size = 0):
    _begin(NULL),_size(0),_capacity(0)
   {
+  	initLock();
     resize(size);
   }
 
-  KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length):
+  KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false):
   _begin(NULL),_size(0),_capacity(0)
   {
+  	initLock();
     SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
     resize(numKmers, MAX_INDEX, false);
-    build(twoBit,length);
+    build(twoBit,length, leastComplement);
   }
 
   KmerArray(const KmerArray &copy):
   _begin(NULL),_size(0),_capacity(0)
   {
+  	initLock();
     *this = copy;
   }
    
   ~KmerArray()
   {
      reset();
+     destroyLock();
   }
 
   KmerArray &operator=(const KmerArray &other)
@@ -582,23 +804,48 @@ public:
     if (this == &other)
   	  return *this;
     reset();
+  	setExclusiveLock();
     reserve(other.size());
-    if (size() == 0)
+    if (size() == 0) {
+      unsetExclusiveLock();
       return *this;
+    }
     if (_begin == NULL)
        throw std::runtime_error("Could not allocate memory in KmerArray operator=()");
   
     _copyRange(other._begin,other.getValueStart(),0,0,_size,false);
     
+    unsetExclusiveLock();
     return *this;
   }
+  
+protected:
+  // never thread safe!
+  const ValueType *getValueStart() const {
+  	if (capacity() > 0) 
+  	  return (ValueType*) _add(_begin,capacity());
+  	else
+  	  return NULL;
+  }
+  
+  // never thread safe!
+  ValueType *getValueStart() {
+  	if (capacity() > 0) 
+  	  return (ValueType*) _add(_begin,capacity());
+  	else
+  	  return NULL;
+  }
 
+public:
+  // never thread safe!
   const Kmer &operator[](IndexType index) const
   {
     if (index >= size())
        throw std::invalid_argument("attempt to access index greater than size in KmerArray operator[] const"); 
     return get(index);
   }
+  
+  // never thread safe!
   Kmer &operator[](IndexType index)
   {
     if (index >= size())
@@ -606,18 +853,8 @@ public:
     return get(index);
   }
   
-  const ValueType *getValueStart() const {
-  	if (capacity() > 0) 
-  	  return (ValueType*) _add(_begin,capacity());
-  	else
-  	  return NULL;
-  }
-  ValueType *getValueStart() {
-  	if (capacity() > 0) 
-  	  return (ValueType*) _add(_begin,capacity());
-  	else
-  	  return NULL;
-  }
+  
+  // never thread safe!
   const ValueType &valueAt(IndexType index) const
   {
     if (index >= _size)
@@ -626,6 +863,8 @@ public:
   	}
     return *( getValueStart() + index );
   }
+  
+  // never thread safe!
   ValueType &valueAt(IndexType index)
   {
     if (index >= _size)
@@ -635,14 +874,14 @@ public:
     return *( getValueStart() + index );
   }
 
-
+public:
   const ElementType getElement(IndexType idx) const
   {
-  	return ElementType( get(idx), valueAt(idx) );
+  	return ElementType( get(idx), valueAt(idx), *this );
   }
   ElementType getElement(IndexType idx)
   {
-  	return ElementType( get(idx), valueAt(idx) );
+  	return ElementType( get(idx), valueAt(idx), *this );
   }
   
   static inline IndexType getElementByteSize() { 
@@ -651,6 +890,8 @@ public:
 
   void reset()
   {
+  	setExclusiveLock();
+  	
     if (_begin != NULL) {
       // destruct old Values
       for(IndexType i = 0; i < _capacity; i++)
@@ -661,6 +902,8 @@ public:
     _begin = NULL;
     _size = 0;
     _capacity = 0;
+    
+    unsetExclusiveLock();
   }
 
   inline IndexType size() const { return _size; }
@@ -678,6 +921,7 @@ public:
       return;
     IndexType oldSize = _size;
     
+    setExclusiveLock();
     // alloc / realloc memory
     _setMemory(size, idx, reserveExtra);
       
@@ -691,7 +935,8 @@ public:
        memset(start, 0, KmerSizer::getByteSize()*(size-oldSize));
 
        // Values should already have been constructed
-    }    
+    }
+    unsetExclusiveLock();
   }
     
   void _copyRange(const void * srcKmer, const ValueType *srcValue, IndexType idx, IndexType srcIdx, IndexType count, bool isOverlapped = false) {
@@ -799,11 +1044,10 @@ public:
       std::free(oldBegin);
     }
   }
-    
-
-
-  void build(TwoBitEncoding *twoBit, SequenceLengthType length)
+  
+  void build(TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false)
   {
+  	setExclusiveLock();
     SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
     if (_size != numKmers)
       throw std::invalid_argument("attempt to build an incorrectly sized KmerArray in KmerArray build()"); ;
@@ -821,7 +1065,15 @@ public:
         }
       }
     }
+    if (leastComplement) {
+      TEMP_KMER(least);
+      for(SequenceLengthType i=0; i < numKmers ; i++)
+        if (! kmers[i].buildLeastComplement(least) )
+          kmers[i] = least;
+    }
+    unsetExclusiveLock();
   }
+  
   // return a KmerArray that has one entry for each possible single-base substitution
   static KmerArray permuteBases(const Kmer &kmer, bool leastComplement = false ) {
     KmerArray kmers( KmerSizer::getSequenceLength() * 3 );
@@ -847,17 +1099,25 @@ public:
     }
     return kmers;
   }
-  
-  
 
-  IndexType find(const Kmer &target) const {
+protected:
+  IndexType _find(const Kmer &target) const {
     for(IndexType i=0; i<_size; i++)
-      if (target.compare(get(i)) == 0)
+      if (target.compare(get(i)) == 0) {
         return i;
+      }
     return MAX_INDEX;
   }
-
-  IndexType findSorted(const Kmer &target, bool &targetIsFound) const {
+public:
+  IndexType find(const Kmer &target) const {
+    setSharedLock();
+    IndexType idx = _find(target);
+    unsetSharedLock();
+    return idx;
+  }
+  
+protected:
+  IndexType _findSorted(const Kmer &target, bool &targetIsFound) const {
   	// binary search
   	IndexType min = 0;
   	IndexType max = size();
@@ -882,54 +1142,115 @@ public:
   	  targetIsFound = true;
   	else
   	  targetIsFound = false;
+  	
   	return mid + (comp>0 && size()>mid?1:0);
   }
+  
+public:
+  IndexType findSorted(const Kmer &target, bool &targetIsFound) const {
+ 	setSharedLock();
+ 	IndexType idx = _findSorted(target, targetIsFound);
+ 	unsetSharedLock();
+ 	return idx;
+  }
 
-  void insertAt(IndexType idx, const Kmer &target) {
+protected:
+  void _insertAt(IndexType idx, const Kmer &target) {
   	if (idx > size())
   	  throw std::invalid_argument("attempt to access index greater than size in KmerArray insertAt");
   	resize(size() + 1, idx);
   	get(idx) = target;
   }
+  void _insertAt(IndexType idx, const Kmer &target, const Value &value) {
+  	_insertAt(idx, target);
+  	valueAt(idx) = value;
+  }
+
+public:  
+  void insertAt(IndexType idx, const Kmer &target) {
+  	setExclusiveLock();
+  	_insertAt(idx, target);
+  	unsetExclusiveLock();
+  }
+  void insertAt(IndexType idx, const Kmer &target, const Value &value) {
+  	setExclusiveLock();
+  	_insertAt(idx,target,value);
+  	unsetExclusiveLock();
+  }
   
   IndexType append(const Kmer &target) {
-  	IndexType idx = size();
-   	insertAt(size(), target);
+  	setExclusiveLock();
+   	IndexType idx = _insertAt(size(), target);
+   	unsetExclusiveLock();
+   	return idx;
+  }
+  IndexType append(const Kmer &target, const Value &value) {
+  	setExclusiveLock();
+   	IndexType idx = _insertAt(size(), target, value);
+   	unsetExclusiveLock();
    	return idx;
   }
 
-  IndexType insertSorted(const Kmer &target) {
+protected:
+  IndexType _insertSorted(const Kmer &target) {
   	bool isFound;
   	IndexType idx = findSorted(target, isFound);
   	if (!isFound)
-  	  insertAt(idx, target);
+  	  _insertAt(idx, target);
   	return idx;
   }
-
+  IndexType _insertSorted(const Kmer &target, const Value &value) {
+  	IndexType idx = _insertSorted(target);
+  	valueAt(idx) = value;
+  	return idx;
+  }
+  
+public:
+  IndexType insertSorted(const Kmer &target) {
+  	setExclusiveLock();
+  	IndexType idx = _insertSorted(target);
+  	unsetExclusiveLock();
+  	return idx;
+  }
+  IndexType insertSorted(const Kmer &target, const Value &value) {
+  	setExclusiveLock();
+  	IndexType idx = _insertSorted(target,value);
+  	unsetExclusiveLock();
+  	return idx;
+  }
+  
   void remove(const Kmer &target) {
+  	setExclusiveLock();
   	bool isFound;
   	IndexType idx = find(target, isFound);
   	if (isFound)
   	  remove(idx);
+  	unsetExclusiveLock();
   }
   void remove(IndexType idx) {
+  	setExclusiveLock();
     resize(size()-1,idx);
+    unsetExclusiveLock();
   }
+  
   void swap(IndexType idx1, IndexType idx2) {
-  	if (idx1 == idx2)
+  	if (idx1 == idx2) 
   	  return;
   	if (idx1 >= size() || idx2 >= size())
   	  throw std::invalid_argument("attempt to access index greater than size in KmerArray swap()");
   	  
+  	setExclusiveLock();
   	get(idx1).swap(get(idx2));
   	if (sizeof(ValueType) > 0) {
   	  ValueType tmp = valueAt(idx1);
   	  valueAt(idx1) = valueAt(idx2);
   	  valueAt(idx2) = tmp; 
   	}
+  	unsetExclusiveLock();
   }
 
   std::string toString() {
+  	setSharedLock();
   	std::stringstream ss;
   	ss <<  "{";
   	IndexType idx=0;
@@ -939,6 +1260,7 @@ public:
   	if (idx < size())
   	    ss << " ... " << size() - idx << " more ";
   	ss << "}";
+  	unsetSharedLock();
   	return ss.str();
   }
 
@@ -1014,6 +1336,16 @@ public:
    	 reset();
      _buckets.resize(1); // iterators require at least 1
    }
+   
+   void setReadOnlyOptimization() {
+   	for(unsigned int i = 0; i<_buckets.size(); i++)
+   	  _buckets[i].setReadOnlyOptimization();
+   }
+   void unsetReadOnlyOptimization() {
+   	for(unsigned int i = 0; i<_buckets.size(); i++)
+   	  _buckets[i].unsetReadOnlyOptimization();
+   }
+   
    inline BucketType &getBucket(long hash) {
    	return _buckets[hash % _buckets.size()];
    }
@@ -1028,52 +1360,84 @@ public:
      return getBucket(key.hash());
    }
 
-   ValueType &insert(const KeyType &key, const ValueType &value, BucketType *bucketPtr = NULL) {
-   	  if (bucketPtr == NULL)
-   	    bucketPtr = &getBucket(key);
-   	    
-   	  IndexType idx = bucketPtr->insertSorted(key);
-   	  return bucketPtr->valueAt(idx) = value;
+   ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
+   	  bucket.setExclusiveLock();
+   	  IndexType idx = bucket.insertSorted(key,value);
+   	  ElementType element = bucket.getElement(idx);
+   	  bucket.unsetExclusiveLock();
+   	  return element;
    }
+   ElementType insert(const KeyType &key, const ValueType &value) {
+     return insert(key,value, getBucket(key));
+   }
+   
 
-   bool remove(const KeyType &key, BucketType *bucketPtr = NULL) {
-   	  if (bucketPtr == NULL)
-   	    bucketPtr = &getBucket(key);
+   bool remove(const KeyType &key, BucketType &bucket) {
    	  bool isFound;
-   	  IndexType idx = bucketPtr->findSorted(key, isFound);
+   	  bucket.setExclusiveLock();
+   	  IndexType idx = bucket.findSorted(key, isFound);
    	  if (isFound && idx != BucketType::MAX_INDEX)
-   	    bucketPtr->remove(idx);
+   	    bucket.remove(idx);
+   	  bucket.unsetExclusiveLock();
    	  return isFound;
    }
+   bool remove(const KeyType &key) {
+   	  return remove(key, getBucket(key));
+   }
    
-   bool _exists(const KeyType &key, IndexType &existingIdx, const BucketType *bucketPtr = NULL) const {
-     if (bucketPtr == NULL)
-   	   bucketPtr = &getBucket(key);
+   bool _exists(const KeyType &key, IndexType &existingIdx, const BucketType &bucket) const {
    	 bool isFound;
-   	 existingIdx = bucketPtr->findSorted(key, isFound);
+   	 existingIdx = bucket.findSorted(key, isFound);
    	 return isFound;
    }
-   bool exists(const KeyType &key, BucketType *bucketPtr = NULL) const {
-   	 IndexType dummy;
-   	 return _exists(key, dummy, bucketPtr);
+   bool _exists(const KeyType &key, IndexType &existingIdx) const {
+   	 return _exists(key,existingIdx, getBucket(key));
    }
    
-   Value *getIfExists(const KeyType &key, BucketType *bucketPtr = NULL) {
-     if (bucketPtr == NULL)
-   	   bucketPtr = &getBucket(key);
-   	 IndexType existingIdx;
-   	 if (_exists(key, existingIdx, bucketPtr))
-   	 	return &(bucketPtr->valueAt(existingIdx));
-   	 else
-   	   return NULL;
+   bool exists(const KeyType &key, const BucketType &bucket) const {
+   	 IndexType dummy;
+   	 return _exists(key, dummy, bucket);
    }
+   bool exists(const KeyType &key) const {
+   	 return exists(key, getBucket(key));
+   }
+   
+   ElementType getElementIfExists(const KeyType &key, BucketType &bucket) {
+   	 IndexType existingIdx;
+   	 ElementType element;
+     bucket.setSharedLock();
+   	 if (_exists(key, existingIdx, bucket))
+   	 	element = bucket.getElement(existingIdx);
+   	 bucket.unsetSharedLock();
+   	 return element;
+   }
+   ElementType getElementIfExists(const KeyType &key) {
+   	 return getElementIfExists(key, getBucket(key));
+   }
+
+   ElementType getElement(const KeyType &key, BucketType &bucket) {
+     IndexType existingIdx;
+   	 ElementType element;
+   	 bucket.setExclusiveLock();
+   	 if (_exists(key, existingIdx, bucket))
+   	   element = bucket.getElement(existingIdx);
+     else 
+       element = insert(key, Value(), bucket);
+     bucket.unsetExclusiveLock();
+     return element;
+   }
+   ElementType getElement(const KeyType &key) {
+   	 return getElement(key, getBucket(key));
+   }
+   
+   // not thread safe!
    ValueType &operator[](const KeyType &key) {
      BucketType &bucket = getBucket(key);
      IndexType existingIdx;
-   	 if (_exists(key, existingIdx, &bucket))
+   	 if (_exists(key, existingIdx, bucket))
    	   return bucket.valueAt(existingIdx);
      else 
-       return insert(key, Value(), &bucket);       
+       return insert(key, Value(), bucket).value();       
    }
    
    IndexType size() const {
@@ -1171,6 +1535,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.61  2009-12-18 19:05:09  regan
+// added compile-time thread-safety option to kmer classes
+//
 // Revision 1.60  2009-12-14 05:31:35  regan
 // optimized array resizing to malloc at logarithmic stepping
 // fixed a bug in KmerArray<>::findSorted

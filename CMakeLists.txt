@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.16 2009-11-26 09:03:32 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.17 2009-12-18 19:05:07 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -11,26 +11,31 @@ set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
 
 set(Boost_USE_MULTITHREADED ON)
-set(Booost_USE_SINGLETHREADED OFF)
+set(Boost_USE_SINGLETHREADED OFF)
 
 find_package( OpenMP )
-find_package ( Boost 1.40.0 COMPONENTS regex mpi)
+if(OPENMP_FOUND)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_CXX_FLAGS}") 
+endif()
+
+find_package ( Boost 1.41.0 COMPONENTS regex mpi)
 if(Boost_FOUND)
   include_directories(${BOOST_INCLUDE_DIRS})
   link_directories(${BOOST_LIB_DIRS})
 else()
-  if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2)
+  set(BOOST_INSTALL_VER boost-1.40.0.cmake2)
+  if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/${BOOST_INSTALL_VER})
     message("Unpacking Distro Version of Boost")
-    execute_process(COMMAND tar -xzf ${CMAKE_CURRENT_SOURCE_DIR}/opt/boost-1.40.0.cmake2.tar.gz )
+    execute_process(COMMAND tar -xzf ${CMAKE_CURRENT_SOURCE_DIR}/opt/${BOOST_INSTALL_VER}.tar.gz )
   endif()
-  add_subdirectory( ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 EXCLUDE_FROM_ALL)
+  add_subdirectory( ${CMAKE_CURRENT_BINARY_DIR}/${BOOST_INSTALL_VER} ${CMAKE_CURRENT_BINARY_DIR}/${BOOST_INSTALL_VER} EXCLUDE_FROM_ALL)
   add_custom_target( boost_subset ALL)
   add_dependencies( boost_subset boost_mpi-mt-static 
                                  boost_regex-mt-static 
                                  boost_test_exec_monitor-mt-static
                                  boost_unit_test_framework-mt-static
                                  boost_program_options-mt-static)
-  include_directories( ${CMAKE_CURRENT_BINARY_DIR}/boost-1.40.0.cmake2 )
+  include_directories( ${CMAKE_CURRENT_BINARY_DIR}/${BOOST_INSTALL_VER} )
   link_directories( ${CMAKE_CURRENT_BINARY_DIR}/lib )
 endif()
 
@@ -44,6 +49,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.17  2009-12-18 19:05:07  regan
+# added compile-time thread-safety option to kmer classes
+#
 # Revision 1.16  2009-11-26 09:03:32  regan
 # refactored and stuff
 #

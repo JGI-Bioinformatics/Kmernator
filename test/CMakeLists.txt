@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.15 2009-11-07 00:28:38 cfurman Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.16 2009-12-18 19:05:12 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -14,6 +14,7 @@ IF(CXX_FLAGS)
   SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
 ENDIF(CXX_FLAGS)
 
+
 add_executable( TwoBitSequenceTest TwoBitSequenceTest )
 target_link_libraries( TwoBitSequenceTest TwoBitSequence
                                           boost_test_exec_monitor-mt 
@@ -27,14 +28,21 @@ target_link_libraries( ReadSetTest ReadSet
                                    boost_test_exec_monitor-mt 
                                    boost_unit_test_framework-mt )
 add_test( ReadSetTest ReadSetTest )
-                                          
-
+                            
+set_source_files_properties( KmerTest
+                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                          )
+                                                                                                           
 add_executable( KmerTest KmerTest )
 target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet
                                 boost_test_exec_monitor-mt 
-                                boost_unit_test_framework-mt )
+                                boost_unit_test_framework-mt
+                                 )
 add_test( KmerTest KmerTest )
 
+set_source_files_properties( ktest2
+                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                          )
 
 add_executable( ktest2 ktest2 )
 target_link_libraries( ktest2 Sequence Kmer
@@ -49,6 +57,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.16  2009-12-18 19:05:12  regan
+# added compile-time thread-safety option to kmer classes
+#
 # Revision 1.15  2009-11-07 00:28:38  cfurman
 # ReadSet now takes fasta, fastq or  fasta+qual files.
 #

@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/src/CMakeLists.txt,v 1.8 2009-11-26 09:03:30 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/src/CMakeLists.txt,v 1.9 2009-12-18 19:05:09 regan Exp $
 #
 # KoMer/src/CmakeLists.txt
 #
@@ -17,6 +17,10 @@ ENDIF(CXX_FLAGS)
 #set_source_files_properties( ReadSet
 #                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
 #                          )
+
+set_source_files_properties( Kmer
+                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                          )
                           
 add_library( TwoBitSequence TwoBitSequence )
 add_library( Sequence Sequence TwoBitSequence )
@@ -25,6 +29,9 @@ add_library( ReadSet ReadSet )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.9  2009-12-18 19:05:09  regan
+# added compile-time thread-safety option to kmer classes
+#
 # Revision 1.8  2009-11-26 09:03:30  regan
 # refactored and stuff
 #
