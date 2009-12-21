@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.11 2009-12-21 07:54:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.12 2009-12-21 22:04:38 regan Exp $
 //
 
 #include <exception>
@@ -96,13 +96,23 @@ private:
     istream  *    _stream;
     unsigned long   _line;    
     char          _marker;
+
+  protected:
+    string _nameBuffer;
+    string _basesBuffer;
+    string _qualsBuffer;
+    string _lineBuffer;
     
   public:
-    string nextLine () {
+    inline string &nextLine(string &buffer) {
         _line++;
-        string line;
-        getline(*_stream,line);
-        return line;
+        buffer.clear();
+    	getline(*_stream, buffer);
+    	return buffer;
+    }
+    inline string &nextLine () {
+         nextLine(_lineBuffer);
+        return _lineBuffer;
     }
     
     SequenceStreamParser(istream &stream,char marker) : _stream(&stream), _line(0),_marker(marker) {  }
@@ -113,18 +123,20 @@ private:
     bool endOfStream()         { return _stream->eof();}
     int  peek()                { return _stream->peek();}
 
-    virtual string getName()
+    virtual string &getName()
     {
-        string name = nextLine();
+        nextLine(_nameBuffer);
       
-        while (name.length() == 0) // skip empty lines at end of stream
+        while (_nameBuffer.length() == 0) // skip empty lines at end of stream
         {
-          if (endOfStream())
-              return string();
-          name = nextLine();
+          if (endOfStream()) {
+          	_nameBuffer.clear();
+          	return _nameBuffer;
+          }
+          nextLine(_nameBuffer);
         }
 
-        if (name[0] != _marker)
+        if (_nameBuffer[0] != _marker)
           throw  runtime_error((string("Missing '") + _marker + "'").c_str());
 
 //         char *space = strchr(name,' ');
@@ -134,11 +146,11 @@ private:
 //         if (tab !=NULL)
 //             tab = '\0';
 
-      return name.substr(1);
+      return _nameBuffer.erase(0,1);
     }
     
-    virtual string getBases() = 0;
-    virtual string getQuals() = 0;
+    virtual string &getBases() = 0;
+    virtual string &getQuals() = 0;
   };
 
 
@@ -148,60 +160,59 @@ private:
   public:
     FastqStreamParser(istream &s) : SequenceStreamParser(s,'@') { }
 
-    string getBases()
+    string &getBases()
     {
-      string bases = nextLine();
+      nextLine(_basesBuffer);
 
-      if (bases.empty()  || bases.length() == bases.max_size())
+      if (_basesBuffer.empty()  || _basesBuffer.length() == _basesBuffer.max_size())
           throw  runtime_error("Missing or too many bases");
 
-      string qualName = nextLine();
+      string &qualName = nextLine();
       if (qualName.empty() || qualName[0] != '+')
           throw  runtime_error("Missing '+'");
 
-      return bases;
+      return _basesBuffer;
     }
 
-    string getQuals() { return nextLine(); }
+    string &getQuals() { return nextLine(_qualsBuffer); }
   };
 
 
   class FastaStreamParser : public SequenceStreamParser
   {
     static const char fasta_marker = '>';
-    string _qualString;
     
   public:
 
     FastaStreamParser(istream &s) : SequenceStreamParser(s,fasta_marker) {    }
   
-    virtual string getBases()
+    virtual string &getBases()
     {
-      string bases = getBasesOrQuals();
-      _qualString.assign(bases.length(),255); // TODO make 255 a const ??
+      string &bases = getBasesOrQuals();
+      _qualsBuffer.assign(bases.length(),255); // TODO make 255 a const ??
       return bases;
     }
     
-    virtual string getQuals() {  return _qualString; }
+    virtual string &getQuals() {  return _qualsBuffer; }
     
-    string getBasesOrQuals()
+    virtual string &getBasesOrQuals()
     {
-      string dataString;
+      _basesBuffer.clear();
       while (!endOfStream())
       {
-         string data = nextLine();
+         nextLine();
           
-          if (data.empty())
+          if (_lineBuffer.empty())
             break;
             
-         dataString += data;
-         if ( dataString.size() == dataString.max_size())
+         _basesBuffer += _lineBuffer;
+         if ( _basesBuffer.size() == _basesBuffer.max_size())
             throw  runtime_error("Sequence/Qual too large to read");
           
           if (peek() == fasta_marker)
             break;
       }
-      return dataString;
+      return _basesBuffer;
     }
 
   };
@@ -215,32 +226,33 @@ private:
     FastaQualStreamParser(istream &fastaStream,istream &qualStream) : FastaStreamParser(fastaStream) , _qualParser(qualStream)
     {   }
 
-    string getName() {
-      string qualName = _qualParser.getName();
-      string name     =  FastaStreamParser::getName();
+    string &getName() {
+      string &qualName = _qualParser.getName();
+      string &name     =  FastaStreamParser::getName();
       if (name != qualName)
         throw runtime_error("fasta and quals have different names");
       return name;
     }
 
-    string getBases() {
+    string &getBases() {
       return getBasesOrQuals( );
     }
 
-    string getQuals() {
-      string qualValues = _qualParser.getBasesOrQuals();
-
+    string &getQuals() {
+      // odd, but it works
+      string &qualValues = _qualParser.getBasesOrQuals(); 
       istringstream ss(qualValues);
-      string quals;
+
+      _qualsBuffer.clear();
       while (!ss.eof()) {
         int qVal;
         ss >> qVal;
         if (ss.fail())
           break;
         qVal += 64;
-        quals.push_back(qVal);
+        _qualsBuffer.push_back(qVal);
       }
-      return quals;
+      return _qualsBuffer;
     }
   };
 };
@@ -335,6 +347,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.12  2009-12-21 22:04:38  regan
+// minor optimization
+//
 // Revision 1.11  2009-12-21 07:54:18  regan
 // minor parallelization of reading files step
 //
