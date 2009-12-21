@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.61 2009-12-18 19:05:09 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.62 2009-12-21 06:34:26 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -16,6 +16,7 @@
 
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/cstdint.hpp>
 
 #include "TwoBitSequence.h"
 #include "MemoryUtils.h"
@@ -71,8 +72,11 @@ public:
 
 class Kmer
 	{
+	public:
+	   typedef unsigned long NumberType;
+	   
     private:
-       static boost::hash<std::string> &getHasher() { static boost::hash<std::string> hasher; return hasher; }
+       inline static boost::hash<NumberType> &getHasher() { static boost::hash<NumberType> hasher; return hasher; }
 	   Kmer(); // never construct, just use as cast
 	
 	#ifdef STRICT_MEM_CHECK
@@ -87,13 +91,40 @@ class Kmer
 	   void *_data()  { return this;}
 	#endif
 	
+       static NumberType toNumber(const Kmer &kmer) {
+       	  NumberType val;
+       	  switch(KmerSizer::getTwoBitLength()) {
+       	  	case 1:  val =   (NumberType) *((boost::uint8_t *)   kmer.getTwoBitSequence()); 
+       	  	         break;
+       	  	case 2:  val =   (NumberType) *((boost::uint16_t *)  kmer.getTwoBitSequence()); 
+       	  	         break;
+       	  	case 3:  val = (((NumberType) *((boost::uint16_t *)  kmer.getTwoBitSequence()))<<8)
+       	  	              +  (NumberType) *((boost::uint8_t *)  (kmer.getTwoBitSequence()+2)); 
+       	  	         break;
+       	  	case 4:  val =   (NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence()); 
+       	  	         break;
+       	  	case 5:  val = (((NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence()))<<8)
+       	  	              +  (NumberType) *((boost::uint8_t *)  (kmer.getTwoBitSequence()+4));
+       	  	         break;
+       	  	case 6:  val = (((NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence()))<<16)
+       	  	              +  (NumberType) *((boost::uint16_t *) (kmer.getTwoBitSequence()+4)); 
+       	  	         break;
+       	  	case 7:  val = (((NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence()))<<24)
+       	  	              +(((NumberType) *((boost::uint16_t *) (kmer.getTwoBitSequence()+4)))<<8)
+       	  	              +  (NumberType) *((boost::uint8_t *)  (kmer.getTwoBitSequence()+6)); 
+       	  	         break;
+       	  	default: val =  (NumberType) *((boost::uint64_t *) kmer.getTwoBitSequence());
+       	  }
+       	  return val;
+       }
+	
 	public:
 	   
 	   Kmer(const Kmer &copy) {
 	   	  *this = copy;
 	   }
 	   
-	   int compare(const Kmer &other) const
+	   inline int compare(const Kmer &other) const
 	   {
 	     return memcmp(_data(), other._data(), getTwoBitLength());
 	   }
@@ -108,31 +139,31 @@ class Kmer
 	   }
 
 
-       Kmer *get() {
+       inline Kmer *get() {
          return this;
        }
        
-	   bool operator ==(const Kmer &other) const
+	   inline bool operator ==(const Kmer &other) const
 	   {
 	      return compare(other) == 0;
 	   }
-	   bool operator !=(const Kmer &other) const
+	   inline bool operator !=(const Kmer &other) const
 	   {
 	   	  return compare(other) != 0;
 	   }
-	   bool operator <(const Kmer &other) const
+	   inline bool operator <(const Kmer &other) const
 	   {
 	   	  return compare(other) < 0;
 	   }
-	   bool operator <=(const Kmer &other) const
+	   inline bool operator <=(const Kmer &other) const
 	   {
 	   	  return compare(other) <= 0;
 	   }
-	   bool operator >(const Kmer &other) const
+	   inline bool operator >(const Kmer &other) const
 	   {
 	   	  return compare(other) > 0;
 	   }
-	   bool operator >=(const Kmer &other) const
+	   inline bool operator >=(const Kmer &other) const
 	   {
 	   	  return compare(other) >= 0;
 	   }
@@ -146,19 +177,19 @@ class Kmer
 	   }
 
 	
-	   TwoBitEncoding *getTwoBitSequence() const
+	   inline TwoBitEncoding *getTwoBitSequence() const
 	   {
 	     return (TwoBitEncoding *)_data();
 	   }
-	   SequenceLengthType getTwoBitLength() const
+	   inline SequenceLengthType getTwoBitLength() const
 	   {
 	   	 return KmerSizer::getTwoBitLength();
 	   }
-	   SequenceLengthType getByteSize() const
+	   inline SequenceLengthType getByteSize() const
 	   {
 	   	 return KmerSizer::getByteSize();
 	   }
-	   SequenceLengthType getLength() const
+	   inline SequenceLengthType getLength() const
 	   {
 	   	 return KmerSizer::getSequenceLength();
 	   }
@@ -188,9 +219,13 @@ class Kmer
 	   {
 	   	  return TwoBitSequence::getFasta(getTwoBitSequence(), getTwoBitLength()*4);
 	   }
-	   long hash() const
+	   inline NumberType toNumber() const
 	   {
-	     return getHasher()(std::string((const char *)getTwoBitSequence(), getTwoBitLength()));
+	   	 return Kmer::toNumber(*this);
+	   }
+	   inline NumberType hash() const
+	   {
+	     return getHasher()(toNumber(*this));
 	   }
 	   // check for trivial patterns AAAAA... GGGGG.... etc
 	   bool isTrivial() const
@@ -888,20 +923,21 @@ public:
   	return (KmerSizer::getByteSize() + sizeof(ValueType)); 
   }
 
-  void reset()
+  void reset(bool releaseMemory = true)
   {
   	setExclusiveLock();
   	
-    if (_begin != NULL) {
+    if (_begin != NULL && releaseMemory) {
       // destruct old Values
       for(IndexType i = 0; i < _capacity; i++)
         (getValueStart() + i)->~Value();
       // free memory    	
       std::free(_begin);
-    } 
-    _begin = NULL;
+      
+      _begin = NULL;
+      _capacity = 0;
+    }
     _size = 0;
-    _capacity = 0;
     
     unsetExclusiveLock();
   }
@@ -1180,13 +1216,15 @@ public:
   
   IndexType append(const Kmer &target) {
   	setExclusiveLock();
-   	IndexType idx = _insertAt(size(), target);
+   	IndexType idx = size();
+   	_insertAt(idx, target);
    	unsetExclusiveLock();
    	return idx;
   }
   IndexType append(const Kmer &target, const Value &value) {
   	setExclusiveLock();
-   	IndexType idx = _insertAt(size(), target, value);
+   	IndexType idx = size();
+   	_insertAt(idx, target, value);
    	unsetExclusiveLock();
    	return idx;
   }
@@ -1309,6 +1347,7 @@ class KmerMap
 public:
    typedef Kmer KeyType;
    typedef Value ValueType;
+   typedef Kmer::NumberType NumberType;
    typedef KmerArray<Value> BucketType;
    typedef typename BucketType::Iterator BucketTypeIterator;
    typedef typename BucketType::ElementType ElementType;
@@ -1318,10 +1357,27 @@ public:
 
 private:
    BucketsVector _buckets;
+   NumberType BUCKET_MASK;
    
 public:
    KmerMap(IndexType bucketCount = 1024) {
-     _buckets.resize(bucketCount);
+   	
+   	 // ensure buckets are a precicise power of two
+   	 // with at least bucketCount buckets
+   	 NumberType powerOf2 = bucketCount;
+   	 if (powerOf2 == 0) {
+   	    powerOf2 = 1;
+     } else if ( (powerOf2 & (powerOf2 -1)) == 0 ) {
+   	 	// argument is a power of 2
+   	 } else {
+   	 	powerOf2--;
+   	 	for (unsigned int i = 1; i < sizeof(NumberType)*8 ; i<<=1)
+   	 	    powerOf2 |= powerOf2 >> i;
+   	 	powerOf2++;
+   	 }  	 
+   	 
+   	 BUCKET_MASK = powerOf2 - 1;
+     _buckets.resize(powerOf2);
    }
    ~KmerMap() 
    {
@@ -1346,18 +1402,42 @@ public:
    	  _buckets[i].unsetReadOnlyOptimization();
    }
    
-   inline BucketType &getBucket(long hash) {
-   	return _buckets[hash % _buckets.size()];
+   inline unsigned short getLocalThreadId(NumberType hash, unsigned short numThreads) const {
+   	 // use the bottom bits of hash which are (used to sort by bucket)
+   	 // partition by numThreads blocks
+   	 return (hash & BUCKET_MASK) / (_buckets.size() / numThreads + 1);
    }
-   inline const BucketType &getBucket(long hash) const {
-   	return _buckets[hash % _buckets.size()];
+   inline unsigned short getLocalThreadId(const KeyType &key, unsigned short numThreads) const {
+     return getLocalThreadId(key.hash(), numThreads);
+   }
+   inline unsigned short getDistributedThreadId(NumberType hash, unsigned short numThreads) const {
+   	 // use top bits of hash (unused to sort by bucket)
+   	 // partition roundrobin by numThreads
+   	 return (hash >> 32 & BUCKET_MASK) % numThreads;
+   }
+   inline unsigned short getDistributedThreadId(const KeyType &key, unsigned short numThreads) const {
+   	 return getDistributedThreadId(key.hash(), numThreads);
+   }
+   
+   inline NumberType getBucketIdx(NumberType hash) const {
+   	 return hash & BUCKET_MASK;
+   }
+   inline NumberType getBucketIdx(const KeyType &key) const {
+   	 return getBucketIdx(key.hash());
+   }
+   
+   inline BucketType &getBucket(NumberType hash) {
+   	return _buckets[getBucketIdx(hash)];
+   }
+   inline const BucketType &getBucket(NumberType hash) const {
+   	return _buckets[getBucketIdx(hash)];
    }
    
    inline BucketType &getBucket(const KeyType &key)  {
-     return getBucket(key.hash());
+     return getBucket(getBucketIdx(key));
    }
    inline const BucketType &getBucket(const KeyType &key) const {
-     return getBucket(key.hash());
+     return getBucket(getBucketIdx(key));
    }
 
    ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
@@ -1535,6 +1615,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.62  2009-12-21 06:34:26  regan
+// used openmp and clever partitioning to speed up building spectrum
+//
 // Revision 1.61  2009-12-18 19:05:09  regan
 // added compile-time thread-safety option to kmer classes
 //

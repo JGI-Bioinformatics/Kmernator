@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.18 2009-11-28 01:00:07 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.19 2009-12-21 06:34:26 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -101,8 +101,8 @@ unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKm
 
 
 
-KmerWeights buildWeightedKmers(Read &read) {
-  KmerWeights kmers(read.getTwoBitSequence(), read.getLength());
+KmerWeights buildWeightedKmers(Read &read, bool leastComplement = false) {
+  KmerWeights kmers(read.getTwoBitSequence(), read.getLength(), leastComplement);
   std::string quals = read.getQuals();
   SequenceLengthType markupIdx = 0;
   
@@ -142,6 +142,9 @@ KmerWeights buildWeightedKmers(Read &read) {
 
 //
 // $Log: Utils.h,v $
+// Revision 1.19  2009-12-21 06:34:26  regan
+// used openmp and clever partitioning to speed up building spectrum
+//
 // Revision 1.18  2009-11-28 01:00:07  regan
 // fixed bugs and warnings
 //
