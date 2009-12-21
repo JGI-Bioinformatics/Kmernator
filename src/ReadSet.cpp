@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.10 2009-11-28 01:00:07 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.11 2009-12-21 07:54:18 regan Exp $
 //
 
 #include <exception>
@@ -280,12 +280,39 @@ void ReadSet::addRead(Read &read) {
 void ReadSet::appendFasta(string fastaFilePath,string qualFilePath)
 {
     ReadFileReader reader(fastaFilePath,qualFilePath);
-    string name,bases,quals;
-    while (reader.nextRead(name,bases,quals))
+    
+    long batchSize = 100000;
+    long batchIdx = 0;
+    std::string names[batchSize];
+    std::string bases[batchSize];
+    std::string quals[batchSize];
+    unsigned long tmpBaseCount = 0;
+    bool hasNext = true;
+    while (hasNext)
     {
-       Read read(name, bases, quals);
-       addRead( read );
+    	// single threaded reading...
+        for(long idx = 0 ; idx < batchSize; idx++)
+          if( ! reader.nextRead(names[idx],bases[idx],quals[idx]) ) {
+          	hasNext = false;
+          	batchSize = idx;
+          	break;
+          }
+        
+        // allocate space
+        _reads.resize( batchIdx + batchSize );
+        
+        
+        #pragma omp parallel for reduction(+:tmpBaseCount)
+		for(long idx = 0; idx < batchSize ; idx++) {
+	      Read read(names[idx], bases[idx], quals[idx]);
+		  _reads[batchIdx+idx] = read;
+		  tmpBaseCount += read.getLength();
+		}
+		  
+		batchIdx += batchSize;
     }
+    _baseCount += tmpBaseCount;
+    
 }
 
 
@@ -308,6 +335,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.11  2009-12-21 07:54:18  regan
+// minor parallelization of reading files step
+//
 // Revision 1.10  2009-11-28 01:00:07  regan
 // fixed bugs and warnings
 //
