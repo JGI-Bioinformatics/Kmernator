@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.6 2009-12-18 19:04:20 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.7 2009-12-22 23:12:00 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
@@ -128,6 +128,9 @@ class MemoryUtils
 {
 public:
 
+    static time_t getLastCall() { static time_t last = 0; time_t copy = last; time(&last); return copy; }
+    static time_t getTime() { time_t copy; time(&copy); return copy - getLastCall(); }
+    
 	static std::string getMemoryUsage()
 	{
 	  std::stringstream ss;
@@ -136,7 +139,7 @@ public:
 	    throw std::runtime_error("Could not probe memory");
 	    
 	  double t = (double)usage.ru_utime.tv_sec + (double)usage.ru_utime.tv_usec / 1000000.0;     
-	  ss << " utime: " << std::fixed << std::setprecision(1) << t;
+	  ss << "time: " << getTime() << " utime: " << std::fixed << std::setprecision(1) << t;
 	  
 	  t = usage.ru_stime.tv_sec + (double)usage.ru_stime.tv_usec / 1000000.0;       
 	  ss << " stime: " << std::fixed << std::setprecision(1) << t;
@@ -165,6 +168,9 @@ public:
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.7  2009-12-22 23:12:00  regan
+// added wall time to stats
+//
 // Revision 1.6  2009-12-18 19:04:20  regan
 // helpe function to print a stack trace
 //
