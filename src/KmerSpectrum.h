@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.7 2009-12-21 06:34:26 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.8 2009-12-22 18:31:15 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -27,6 +27,7 @@
 using namespace boost;
 using namespace boost::accumulators;
 
+#include "config.h"
 #include "TwoBitSequence.h"
 #include "Kmer.h"
 

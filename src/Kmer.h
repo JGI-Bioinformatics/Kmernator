@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.62 2009-12-21 06:34:26 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.63 2009-12-22 18:31:14 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -18,14 +18,9 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/cstdint.hpp>
 
+#include "config.h"
 #include "TwoBitSequence.h"
 #include "MemoryUtils.h"
-
-#if(1)
-#define _USE_OPENMP
-//#define _USE_THREADSAFE_KMER
-#include <omp.h>
-#endif
 
 #ifndef MAX_KMER_SIZE
 #define MAX_KMER_SIZE 1024
@@ -1615,6 +1610,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.63  2009-12-22 18:31:14  regan
+// moved Open MP includes to a central config file
+//
 // Revision 1.62  2009-12-21 06:34:26  regan
 // used openmp and clever partitioning to speed up building spectrum
 //
