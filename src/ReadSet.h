@@ -1,9 +1,11 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.8 2009-11-07 00:28:41 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.9 2009-12-22 18:31:41 regan Exp $
 //
 
 #ifndef _READ_SET_H
 #define _READ_SET_H
 #include <string>
+
+#include "config.h"
 #include "Sequence.h"
 
 
@@ -21,6 +23,8 @@ public:
     ~ReadSet();
 
     void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
+    void appendFastaBlockedOMP(std::string fastaFilePath, std::string qualFilePath = "");
+    void appendFastaBatchedOMP(std::string fastaFilePath, std::string qualFilePath = "");
     void appendFastq(std::string fastqFilePath);
 
     ReadSetSizeType getSize();
@@ -50,6 +54,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.9  2009-12-22 18:31:41  regan
+// parallelized reading fastq if openmp is enabled
+//
 // Revision 1.8  2009-11-07 00:28:41  cfurman
 // ReadSet now takes fasta, fastq or  fasta+qual files.
 //

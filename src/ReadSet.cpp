@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.12 2009-12-21 22:04:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.13 2009-12-22 18:31:41 regan Exp $
 //
 
 #include <exception>
@@ -87,7 +87,29 @@ public:
           throw runtime_error(error.str());
        } 
     }
+    
+    unsigned long getFileSize()
+    {
+    	ifstream::streampos current = _ifs.tellg();
+    	_ifs.seekg(0, ios_base::end);
+    	unsigned long size = _ifs.tellg();
+    	_ifs.seekg(current);
+    	return size;
+    }
  
+    unsigned long getBlockSize(unsigned int numThreads)
+    {
+        return getFileSize() / numThreads;
+    }
+    
+    unsigned long getPos()
+    {
+    	return _ifs.tellg();
+    }
+    
+    void seekToNextRecord(unsigned long minimumPos) {
+    	_parser->seekToNextRecord(minimumPos);
+    }
 
 private:
 
@@ -151,6 +173,24 @@ private:
     
     virtual string &getBases() = 0;
     virtual string &getQuals() = 0;
+    virtual void seekToNextRecord(unsigned long minimumPos)
+    {
+    	// get to the first line after the pos
+    	if (minimumPos > 0) {
+    	  _stream->seekg(minimumPos - 1);
+    	  if (endOfStream())
+    	    return;
+    	  if (peek() == '\n')
+    	    _stream->seekg(minimumPos);
+    	  else
+    	    nextLine();
+    	}
+    	else
+    	  _stream->seekg(0);
+    	while(_stream->peek() != _marker && ! endOfStream())
+    	  nextLine();
+    }
+    
   };
 
 
@@ -292,6 +332,94 @@ void ReadSet::addRead(Read &read) {
 void ReadSet::appendFasta(string fastaFilePath,string qualFilePath)
 {
     ReadFileReader reader(fastaFilePath,qualFilePath);
+    string name,bases,quals;
+    while (reader.nextRead(name,bases,quals))
+    {
+       Read read(name, bases, quals);
+       addRead( read );
+    }
+}
+
+
+#ifdef _USE_OPENMP
+
+void ReadSet::appendFastaBlockedOMP(string fastaFilePath,string qualFilePath)
+{
+  unsigned long numReads[ omp_get_num_procs() ];
+  unsigned long seekPos[ omp_get_num_procs() ];
+  for(int i = 0; i < omp_get_num_procs(); i++)
+    numReads[i] = 0;
+  ReadSet myReads;
+  
+  unsigned long startIdx = _reads.size();
+  unsigned long blockSize = 0;
+  unsigned long tmpBaseCount = 0;
+  #pragma omp parallel private(myReads) reduction(+:tmpBaseCount)
+  {
+    ReadFileReader reader(fastaFilePath,qualFilePath);
+    unsigned long numThreads = omp_get_num_threads();    
+    
+    #pragma omp single
+	{
+		blockSize = reader.getBlockSize(numThreads);
+		if (blockSize < 100)
+		  blockSize = 100;
+	}
+	reader.seekToNextRecord( blockSize * omp_get_thread_num() );
+	seekPos[ omp_get_thread_num() ] = reader.getPos();
+
+    string name,bases,quals;
+    bool hasNext = omp_get_thread_num() < numThreads;
+    if (hasNext)
+      hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
+    
+    if (!hasNext)
+      seekPos[ omp_get_thread_num() ] = 0;
+    
+    #pragma omp barrier
+	if (hasNext && omp_get_thread_num() != 0 && seekPos[omp_get_thread_num()] == seekPos[omp_get_thread_num()-1])
+	  hasNext = false;
+
+	//#pragma omp critical
+	//{ std::cerr << omp_get_thread_num() << " " << blockSize << " seeked to " << reader.getPos() << " will read: " << hasNext << std::endl; }
+    
+    while (hasNext && reader.nextRead(name,bases,quals))
+    {
+       Read read(name, bases, quals);
+       myReads.addRead( read );
+       tmpBaseCount += read.getLength();
+       hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
+    }
+    numReads[ omp_get_thread_num() ] = myReads.getSize();
+
+	//#pragma omp critical
+	//{ std::cerr << omp_get_thread_num() << " " << blockSize << " finished at " << reader.getPos() << " with " << myReads.getSize() << " " << numReads[ omp_get_thread_num() ]<< std::endl; }
+    
+    #pragma omp barrier
+	
+	#pragma omp single
+    {
+    	unsigned long newReads = 0; 
+    	for(int i=0; i<omp_get_num_procs(); i++) {
+    	  unsigned long tmp = newReads;
+    	  newReads += numReads[i];
+    	  numReads[i] = tmp;
+    	}
+        
+        _reads.resize(startIdx + newReads);
+    }
+    
+  	for(unsigned long j = 0; j <  myReads.getSize(); j++)
+  	  _reads[startIdx + numReads[ omp_get_thread_num() ] + j] = myReads.getRead(j);
+  }
+  _baseCount += tmpBaseCount;
+  
+}
+
+// not used as it speeds up only marginally
+void ReadSet::appendFastaBatchedOMP(string fastaFilePath,string qualFilePath)
+{
+    ReadFileReader reader(fastaFilePath,qualFilePath);
     
     long batchSize = 100000;
     long batchIdx = 0;
@@ -327,13 +455,19 @@ void ReadSet::appendFasta(string fastaFilePath,string qualFilePath)
     
 }
 
+void ReadSet::appendFastq(string fastaFilePath)
+{
+   appendFastaBlockedOMP(fastaFilePath);
+}
+
+#else // _USE_OPENMP
 
 void ReadSet::appendFastq(string fastaFilePath)
 {
    appendFasta(fastaFilePath);
 }
 
-
+#endif // _USE_OPENMP
 
 ReadSetSizeType ReadSet::getSize()
 {
@@ -347,6 +481,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.13  2009-12-22 18:31:41  regan
+// parallelized reading fastq if openmp is enabled
+//
 // Revision 1.12  2009-12-21 22:04:38  regan
 // minor optimization
 //
