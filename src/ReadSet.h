@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.9 2009-12-22 18:31:41 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.10 2009-12-23 07:16:52 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -6,10 +6,12 @@
 #include <string>
 
 #include "config.h"
+#include "Options.h"
 #include "Sequence.h"
 
 
 typedef unsigned int ReadSetSizeType;
+class ReadFileReader;
 
 class ReadSet {
     std::vector<Read> _reads;
@@ -22,15 +24,24 @@ public:
     ReadSet();
     ~ReadSet();
 
-    void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
-    void appendFastaBlockedOMP(std::string fastaFilePath, std::string qualFilePath = "");
-    void appendFastaBatchedOMP(std::string fastaFilePath, std::string qualFilePath = "");
-    void appendFastq(std::string fastqFilePath);
+    void appendAnyFile(std::string filePath, std::string filePath2 = "");
+    void appendAllFiles(Options::FileListType &files);
+
+    void append(ReadSet &reads);
 
     ReadSetSizeType getSize();
     unsigned long getBaseCount() {return _baseCount;}
 
     Read &getRead(ReadSetSizeType index);
+
+protected:
+    void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
+    void appendFasta(ReadFileReader &reader);
+    
+    void appendFastq(std::string fastqFilePath);
+    void appendFastqBlockedOMP(std::string fastaFilePath, std::string qualFilePath = "");
+    void appendFastqBatchedOMP(std::string fastaFilePath, std::string qualFilePath = "");
+
 };
 
 
@@ -54,6 +65,10 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.10  2009-12-23 07:16:52  regan
+// fixed reading of fasta files
+// parallelized reading of multiple files
+//
 // Revision 1.9  2009-12-22 18:31:41  regan
 // parallelized reading fastq if openmp is enabled
 //

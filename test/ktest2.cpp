@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.22 2009-11-28 01:00:10 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.23 2009-12-23 07:16:50 regan Exp $
 //
 
 #include <iostream>
@@ -41,12 +41,10 @@ int main(int argc, char *argv[]) {
         
     
     cerr << "Reading Reference Files" << endl;
-    foreach( string referenceFile, references ) {
-    	cerr << "Reading Reference: " << referenceFile << endl;
-    	refReads.appendFastq( referenceFile.c_str() );
-    	cerr << "loaded " << refReads.getSize() << " Reads, " << refReads.getBaseCount() << " Bases " << endl;
-        cerr << MemoryUtils::getMemoryUsage() << endl; 
-    }
+    refReads.appendAllFiles( references );
+    cerr << "loaded " << refReads.getSize() << " Reads, " << refReads.getBaseCount() << " Bases " << endl;
+    cerr << MemoryUtils::getMemoryUsage() << endl; 
+    
     unsigned long numBuckets = estimateWeakKmerBucketSize( refReads, 256 );
     cerr << "targetting " << numBuckets << " buckets for reference " << endl;
     KS refSpectrum( numBuckets );
@@ -56,12 +54,10 @@ int main(int argc, char *argv[]) {
     cerr << MemoryUtils::getMemoryUsage() << endl;
     
     cerr << "Reading Input Files" << endl;
-    foreach( string inputFile, inputs ) {
-      cerr << "reading " << inputFile << endl;
-      reads.appendFastq(inputFile);
-      cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases " << endl;
-      cerr << MemoryUtils::getMemoryUsage() << endl;
-    }
+    reads.appendAllFiles(inputs);
+    cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases " << endl;
+    cerr << MemoryUtils::getMemoryUsage() << endl;
+    
     
     numBuckets = estimateWeakKmerBucketSize( reads, 64 );
     cerr << "targetting " << numBuckets << " buckets for reads " << endl;
@@ -105,6 +101,10 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.23  2009-12-23 07:16:50  regan
+// fixed reading of fasta files
+// parallelized reading of multiple files
+//
 // Revision 1.22  2009-11-28 01:00:10  regan
 // fixed bugs and warnings
 //

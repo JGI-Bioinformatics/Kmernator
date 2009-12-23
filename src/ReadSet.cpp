@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.13 2009-12-22 18:31:41 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.14 2009-12-23 07:16:52 regan Exp $
 //
 
 #include <exception>
@@ -102,13 +102,16 @@ public:
         return getFileSize() / numThreads;
     }
     
-    unsigned long getPos()
+    inline unsigned long getPos()
     {
-    	return _ifs.tellg();
+    	return _parser->getPos();
     }
     
     void seekToNextRecord(unsigned long minimumPos) {
     	_parser->seekToNextRecord(minimumPos);
+    }
+    int getType() {
+    	return _parser->getType();
     }
 
 private:
@@ -118,6 +121,7 @@ private:
     istream  *    _stream;
     unsigned long   _line;    
     char          _marker;
+    unsigned long   _pos;
 
   protected:
     string _nameBuffer;
@@ -130,6 +134,7 @@ private:
         _line++;
         buffer.clear();
     	getline(*_stream, buffer);
+    	_pos += buffer.length()+1;
     	return buffer;
     }
     inline string &nextLine () {
@@ -137,7 +142,7 @@ private:
         return _lineBuffer;
     }
     
-    SequenceStreamParser(istream &stream,char marker) : _stream(&stream), _line(0),_marker(marker) {  }
+    SequenceStreamParser(istream &stream,char marker) : _stream(&stream), _line(0),_marker(marker),_pos(0) {  }
 
     virtual ~SequenceStreamParser() {  }
     
@@ -173,22 +178,33 @@ private:
     
     virtual string &getBases() = 0;
     virtual string &getQuals() = 0;
+    virtual int getType() = 0;
+    
+    virtual unsigned long getPos() {
+    	return _pos;
+    }
     virtual void seekToNextRecord(unsigned long minimumPos)
     {
     	// get to the first line after the pos
     	if (minimumPos > 0) {
-    	  _stream->seekg(minimumPos - 1);
+    	  _pos = minimumPos -1;
+    	  _stream->seekg(_pos);
     	  if (endOfStream())
     	    return;
-    	  if (peek() == '\n')
-    	    _stream->seekg(minimumPos);
+    	  if (peek() == '\n') {
+    	    _pos = minimumPos;
+    	    _stream->seekg(_pos);
+    	  }
     	  else
     	    nextLine();
     	}
-    	else
+    	else {
+    	  _pos = 0;
     	  _stream->seekg(0);
+    	}
     	while(_stream->peek() != _marker && ! endOfStream())
     	  nextLine();
+    	
     }
     
   };
@@ -215,6 +231,7 @@ private:
     }
 
     string &getQuals() { return nextLine(_qualsBuffer); }
+    int getType() { return 0; }
   };
 
 
@@ -254,7 +271,7 @@ private:
       }
       return _basesBuffer;
     }
-
+    int getType() { return 1; }
   };
 
 
@@ -294,6 +311,7 @@ private:
       }
       return _qualsBuffer;
     }
+    int getType() { return 1; }
   };
 };
 
@@ -329,9 +347,59 @@ void ReadSet::addRead(Read &read) {
 	_baseCount += read.getLength();
 }
 
+void ReadSet::appendAnyFile(string filePath, string filePath2)
+{
+	ReadFileReader reader(filePath, filePath2);
+	switch (reader.getType()) {
+		case 0: appendFastq(filePath); break;
+		case 1: appendFasta(reader);
+	}
+}
+
+void ReadSet::appendAllFiles(Options::FileListType &files)
+{
+	
+    #ifdef _USE_OPENMP
+	ReadSet myReads[ omp_get_num_procs() ];
+	#pragma omp parallel for
+	#endif
+	for(long i = 0; i < (long) files.size(); i++) {
+		#ifdef _USE_OPENMP
+		#pragma omp critical
+		#endif
+		{ std::cerr << "reading " << files[i] << std::endl; }
+		
+		#ifdef _USE_OPENMP
+		myReads[ omp_get_thread_num() ].		
+		#endif
+		
+		appendAnyFile(files[i]);
+	}
+	#ifdef _USE_OPENMP
+	for(int i = 0; i< omp_get_num_procs(); i++)
+	  append(myReads[i]);
+	#endif	  
+}
+
+void ReadSet::append(ReadSet &reads)
+{
+    unsigned long oldSize = _reads.size();
+    unsigned long newSize = oldSize + reads._reads.size();
+    _reads.resize(newSize);
+    #ifdef _USE_OPENMP
+	#pragma omp parallel for
+	#endif
+	for(long i = 0; i < (long) reads._reads.size(); i++)
+	  _reads[ oldSize + i ] = reads._reads[i];
+}
+
 void ReadSet::appendFasta(string fastaFilePath,string qualFilePath)
 {
     ReadFileReader reader(fastaFilePath,qualFilePath);
+    appendFasta(reader);
+}
+void ReadSet::appendFasta(ReadFileReader &reader)
+{
     string name,bases,quals;
     while (reader.nextRead(name,bases,quals))
     {
@@ -343,19 +411,19 @@ void ReadSet::appendFasta(string fastaFilePath,string qualFilePath)
 
 #ifdef _USE_OPENMP
 
-void ReadSet::appendFastaBlockedOMP(string fastaFilePath,string qualFilePath)
+void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
 {
   unsigned long numReads[ omp_get_num_procs() ];
   unsigned long seekPos[ omp_get_num_procs() ];
   for(int i = 0; i < omp_get_num_procs(); i++)
     numReads[i] = 0;
-  ReadSet myReads;
   
   unsigned long startIdx = _reads.size();
   unsigned long blockSize = 0;
   unsigned long tmpBaseCount = 0;
-  #pragma omp parallel private(myReads) reduction(+:tmpBaseCount)
+  #pragma omp parallel reduction(+:tmpBaseCount)
   {
+  	ReadSet myReads;
     ReadFileReader reader(fastaFilePath,qualFilePath);
     unsigned long numThreads = omp_get_num_threads();    
     
@@ -388,6 +456,7 @@ void ReadSet::appendFastaBlockedOMP(string fastaFilePath,string qualFilePath)
        Read read(name, bases, quals);
        myReads.addRead( read );
        tmpBaseCount += read.getLength();
+       // todo look into getPos() to optimize
        hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
     }
     numReads[ omp_get_thread_num() ] = myReads.getSize();
@@ -417,7 +486,7 @@ void ReadSet::appendFastaBlockedOMP(string fastaFilePath,string qualFilePath)
 }
 
 // not used as it speeds up only marginally
-void ReadSet::appendFastaBatchedOMP(string fastaFilePath,string qualFilePath)
+void ReadSet::appendFastqBatchedOMP(string fastaFilePath,string qualFilePath)
 {
     ReadFileReader reader(fastaFilePath,qualFilePath);
     
@@ -457,7 +526,7 @@ void ReadSet::appendFastaBatchedOMP(string fastaFilePath,string qualFilePath)
 
 void ReadSet::appendFastq(string fastaFilePath)
 {
-   appendFastaBlockedOMP(fastaFilePath);
+   appendFastqBlockedOMP(fastaFilePath);
 }
 
 #else // _USE_OPENMP
@@ -481,6 +550,10 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.14  2009-12-23 07:16:52  regan
+// fixed reading of fasta files
+// parallelized reading of multiple files
+//
 // Revision 1.13  2009-12-22 18:31:41  regan
 // parallelized reading fastq if openmp is enabled
 //

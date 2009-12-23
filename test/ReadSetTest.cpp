@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.6 2009-11-28 01:00:10 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.7 2009-12-23 07:16:50 regan Exp $
 //
  
 
@@ -38,7 +38,7 @@ void testFastQFile(string filename)
     string fileContents = getFileContents(filename);
     
     ReadSet store;
-    store.appendFastq(filename);
+    store.appendAnyFile(filename);
 
     string fastq;
     for (unsigned int i=0 ; i < store.getSize(); i++)
@@ -55,7 +55,7 @@ void testFastaWithQualFile(string f,string q)
     string qFile = getFileContents(q);
          
     ReadSet store;
-    store.appendFasta(f,q);
+    store.appendAnyFile(f,q);
 
     string fasta,qual;
     for (unsigned int i=0 ; i < store.getSize(); i++)
@@ -85,6 +85,10 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.7  2009-12-23 07:16:50  regan
+// fixed reading of fasta files
+// parallelized reading of multiple files
+//
 // Revision 1.6  2009-11-28 01:00:10  regan
 // fixed bugs and warnings
 //
