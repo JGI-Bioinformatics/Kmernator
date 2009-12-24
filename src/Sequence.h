@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.8 2009-11-07 00:28:41 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.9 2009-12-24 00:55:57 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -12,7 +12,9 @@
 
 class Sequence
 {
-
+public:
+  typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
+  
 protected:
   SequenceLengthType _length;
 
@@ -39,7 +41,7 @@ public:
   void  setSequence(std::string fasta);
 
   SequenceLengthType getLength();
-  std::string getFasta();
+  std::string getFasta(SequenceLengthType trimOffset = -1);
   BaseLocationVectorType getMarkups();
 
   SequenceLengthType getTwoBitEncodingSequenceLength();
@@ -75,10 +77,10 @@ public:
   void  setRead(std::string name, std::string fasta, std::string qualBytes);
 
   std::string getName();
-  std::string getQuals();
+  std::string getQuals(SequenceLengthType trimOffset = -1);
 
-  std::string toFastq();
-  std::string getFormattedQuals();
+  std::string toFastq(SequenceLengthType trimOffset = -1, std::string label = "");
+  std::string getFormattedQuals(SequenceLengthType trimOffset = -1);
 
   
   static double qualityToProbability[256];
@@ -89,6 +91,11 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.9  2009-12-24 00:55:57  regan
+// made const iterators
+// fixed some namespace issues
+// added support to output trimmed reads
+//
 // Revision 1.8  2009-11-07 00:28:41  cfurman
 // ReadSet now takes fasta, fastq or  fasta+qual files.
 //

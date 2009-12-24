@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.15 2009-11-06 16:59:11 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.16 2009-12-24 00:55:57 regan Exp $
 //
 
 #include <cstring>
@@ -121,7 +121,7 @@ void TwoBitSequence::applyMarkup(char *bases, BaseLocationVectorType markupBases
 void TwoBitSequence::applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, BaseLocationType *markupBases)
 {
   if (markupBasesSize > 0) {
-    for (BaseLocationType *ptr = markupBases; ptr < markupBases+markupBasesSize; ptr++)
+    for (BaseLocationType *ptr = markupBases; ptr < markupBases+markupBasesSize && ptr->second < bases.length(); ptr++)
         bases[ptr->second] = ptr->first;
   }
 }
@@ -188,6 +188,11 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLe
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.16  2009-12-24 00:55:57  regan
+// made const iterators
+// fixed some namespace issues
+// added support to output trimmed reads
+//
 // Revision 1.15  2009-11-06 16:59:11  regan
 // added base substitution/permutations table and build function
 //

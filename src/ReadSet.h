@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.10 2009-12-23 07:16:52 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.11 2009-12-24 00:55:57 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -10,10 +10,13 @@
 #include "Sequence.h"
 
 
-typedef unsigned int ReadSetSizeType;
 class ReadFileReader;
 
 class ReadSet {
+public:
+    typedef unsigned int ReadSetSizeType;
+    
+private:
     std::vector<Read> _reads;
     unsigned long _baseCount;
     
@@ -48,7 +51,7 @@ protected:
 class ReadIndexScore
 {
 public:
-   ReadSetSizeType readIndex;
+   ReadSet::ReadSetSizeType readIndex;
    float score; 
 };
 
@@ -65,6 +68,11 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.11  2009-12-24 00:55:57  regan
+// made const iterators
+// fixed some namespace issues
+// added support to output trimmed reads
+//
 // Revision 1.10  2009-12-23 07:16:52  regan
 // fixed reading of fasta files
 // parallelized reading of multiple files

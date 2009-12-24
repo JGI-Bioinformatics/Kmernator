@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.15 2009-11-28 01:00:07 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.16 2009-12-24 00:55:57 regan Exp $
 //
 
 #include <cstring>
@@ -82,11 +82,14 @@ void Sequence::reset()
   _data = nullSequence;
 }
 
-string Sequence::getFasta()
+string Sequence::getFasta(SequenceLengthType trimOffset)
 {
   if(_data == nullSequence)
     return string("");
-  string fasta = TwoBitSequence::getFasta(getTwoBitSequence() ,getLength());
+  SequenceLengthType len = getLength();
+  if ( trimOffset < len )
+    len = trimOffset;
+  string fasta = TwoBitSequence::getFasta(getTwoBitSequence(), len);
   TwoBitSequence::applyMarkup(fasta, *_getMarkupBasesCount(), _getMarkupBases());
 
   return fasta;
@@ -185,21 +188,24 @@ string Read::getName()
     return string(_getName());    
 }
 
-string Read::getQuals()
+string Read::getQuals(SequenceLengthType trimOffset)
 {
-  return  string(_getQual(), _length);
+  return  string(_getQual(), ( trimOffset <= _length ? trimOffset : _length) );
 }
 
 
-string Read::toFastq()
+string Read::toFastq(SequenceLengthType trimOffset, std::string label)
 {
-  return  string ('@' + getName() + "\n" + getFasta() + "\n+\n" + getQuals() + "\n" )  ;
+  return  string ('@' + getName() + (label.length() > 0 ? " " + label : "") + "\n" + getFasta(trimOffset) + "\n+\n" + getQuals(trimOffset) + "\n" )  ;
 }
-string Read::getFormattedQuals()
+string Read::getFormattedQuals(SequenceLengthType trimOffset)
 {
   string quals = getQuals();
   stringstream ss;
-  for(unsigned int i =0; i < quals.length(); i++)
+  SequenceLengthType len = quals.length();
+  if (trimOffset < len)
+    len = trimOffset;
+  for(unsigned int i =0; i < len; i++)
   {
      ss << (int)quals[i]-64 << ' ';  
   }
@@ -207,6 +213,11 @@ string Read::getFormattedQuals()
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.16  2009-12-24 00:55:57  regan
+// made const iterators
+// fixed some namespace issues
+// added support to output trimmed reads
+//
 // Revision 1.15  2009-11-28 01:00:07  regan
 // fixed bugs and warnings
 //

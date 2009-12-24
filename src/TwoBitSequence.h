@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.14 2009-11-06 16:59:11 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.15 2009-12-24 00:55:57 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -7,13 +7,16 @@
 #include <string>
 #include <vector>
 
+namespace TwoBitSequenceBase {
 typedef unsigned int SequenceLengthType;
 typedef unsigned char TwoBitEncoding;
 typedef TwoBitEncoding *TwoBitEncodingPtr;
 
-
 typedef std::pair<char,SequenceLengthType>  BaseLocationType;
 typedef std::vector<BaseLocationType> BaseLocationVectorType;
+}
+
+using namespace TwoBitSequenceBase;
 
 class TwoBitSequence // yee hah!
 {
@@ -51,6 +54,11 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.15  2009-12-24 00:55:57  regan
+// made const iterators
+// fixed some namespace issues
+// added support to output trimmed reads
+//
 // Revision 1.14  2009-11-06 16:59:11  regan
 // added base substitution/permutations table and build function
 //

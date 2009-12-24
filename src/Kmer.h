@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.64 2009-12-24 00:39:22 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.65 2009-12-24 00:55:57 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -22,12 +22,15 @@
 #include "TwoBitSequence.h"
 #include "MemoryUtils.h"
 
+using namespace TwoBitSequenceBase;
+
 #ifndef MAX_KMER_SIZE
 #define MAX_KMER_SIZE 1024
 #endif
 
 typedef std::tr1::shared_ptr<TwoBitEncoding> KmerSharedPtr;
 typedef unsigned long IndexType;
+
 
 class KmerSizer
 {
@@ -395,7 +398,7 @@ public:
   	  readPosition = ReadPosition(readIdx,readPos);
     return ret;
   }
-  ReadPositionWeightVector getEachInstance() { 
+  ReadPositionWeightVector getEachInstance() const { 
   	//returns count entries from read -1, position 0
   	ReadPositionWeight dummy1(readPosition.readId, readPosition.position, getWeightedCount()/getCount());
   	ReadPositionWeightVector dummy(getCount(), dummy1); 
@@ -457,8 +460,8 @@ public:
   	return ReadPositionWeightVector(1, instance);
   }
   
-  inline ReadIdType   getReadId()  { return instance.readId;   }
-  inline PositionType getPosition() { return instance.position; }
+  inline ReadIdType   getReadId()  const { return instance.readId;   }
+  inline PositionType getPosition() const { return instance.position; }
   
   std::string toString() const {
     std::stringstream ss;
@@ -1305,11 +1308,16 @@ public:
       KmerArray *_tgt;
       IndexType _idx;
       ElementType thisElement;
+      
+      void setElement() { if ( !isEnd() ) thisElement = _tgt->getElement(_idx); }
+      
     public:
       Iterator(KmerArray *target, IndexType idx = 0): _tgt(target), _idx(idx) {
       	setElement();
       }
       Iterator(const Iterator &copy) { *this = copy; }
+      Iterator() : _tgt(NULL), _idx(0), thisElement() {}
+      
       ~Iterator() {}
       Iterator& operator=(const Iterator& other) {
         _tgt = other._tgt;
@@ -1326,12 +1334,35 @@ public:
       Value &value() { return thisElement.value(); }
       ElementType *operator->() { return &thisElement; }
       bool isEnd() const { return _idx >= _tgt->size(); }
-      void setElement() { if ( !isEnd() ) thisElement = _tgt->getElement(_idx); }
+  };
+  class ConstIterator : public std::iterator<std::forward_iterator_tag, KmerArray>
+  {
+    private:
+      Iterator _iterator;
+    public:
+  	  ConstIterator(KmerArray *target, IndexType idx = 0): _iterator(target,idx) {}
+      ConstIterator(const ConstIterator &copy) { *this = copy; }
+      ConstIterator() : _iterator() {}
+      ConstIterator& operator=(const ConstIterator& other) {
+        _iterator = other._iterator;
+        return *this;
+      }
+      bool operator==(const ConstIterator& other) const { return _iterator == other._iterator; }
+      bool operator!=(const ConstIterator& other) const { return _iterator != other._iterator; }
+      ConstIterator& operator++() { ++_iterator; return *this; }
+      ConstIterator operator++(int unused) { return ConstIterator(_iterator++); }
+      const ElementType &operator*() const { return _iterator.operator*(); }
+      const Kmer &key() const { return _iterator.key(); }
+      const Value &value() const { return _iterator.value(); }
+      const ElementType *operator->() { return _iterator.operator->(); }
+      bool isEnd() const { return _iterator.isEnd(); }
   };
 
   Iterator begin() { return Iterator(this, 0); }
   Iterator end()   { return Iterator(this, size()); }
 
+  ConstIterator begin() const { return ConstIterator(this,0); }
+  ConstIterator end()   const { return ConstIterator(this,size()); }
 };
 
 
@@ -1434,6 +1465,9 @@ public:
    }
    inline const BucketType &getBucket(const KeyType &key) const {
      return getBucket(getBucketIdx(key));
+   }
+   inline unsigned long getNumBuckets() const {
+   	 return _buckets.size();
    }
 
    ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
@@ -1545,12 +1579,8 @@ public:
      BucketsVectorIterator _iBucket;
      BucketTypeIterator  _iElement;
 
-     void _moveToNextValidElement()  {
-      while(_iElement == _iBucket->end() && ++_iBucket != _target->_buckets.end())
-        _iElement = _iBucket->begin();
-     }
-          
-      Iterator(KmerMap *target):    
+    public:
+     Iterator(KmerMap *target):    
       _target(target),
       _iBucket(target->_buckets.begin()),
       _iElement(_iBucket->begin())
@@ -1558,20 +1588,46 @@ public:
        _moveToNextValidElement();
      }
 
-      Iterator(KmerMap *target,bool endConstructor):
-      _target(target),
-      _iBucket(target->_buckets.end()), 
-      _iElement((_iBucket-1)->end())    // Assumes at least 1 bucket.
-     {
-
+     Iterator(const Iterator &copy) {
+     	_target = copy._target;
+     	_iBucket = copy._iBucket;
+     	_iElement = copy._iElement;
      }
 
+     Iterator(KmerMap *target, BucketsVectorIterator bucketPtr):
+     _target(target),
+     _iBucket(bucketPtr),
+     _iElement() 
+     {
+     	if (!isEnd())
+     	  _iElement = _iBucket->begin();
+     	_moveToNextValidElement();
+     }
+     
+     Iterator(KmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr):
+     _target(target),
+     _iBucket(bucketPtr),
+     _iElement(elementPtr) 
+     {
+     }
+
+     private:
+     inline bool isEnd() const {
+     	return _iBucket == _target->_buckets.end();
+     }
+     
+     void _moveToNextValidElement()  {
+       while( (!isEnd()) && _iElement == _iBucket->end() && ++_iBucket != _target->_buckets.end())
+         _iElement = _iBucket->begin();
+     }
+          
+     
      public:
         
-      bool operator==(const Iterator& other) 
-      { return _iBucket == other._iBucket && _iElement == other._iElement; }
+      bool operator==(const Iterator& other) const
+      { return _iBucket == other._iBucket && (isEnd() || _iElement == other._iElement); }
       
-      bool operator!=(const Iterator& other) 
+      bool operator!=(const Iterator& other) const
       { return !(*this == other); }
 
       Iterator& operator++() 
@@ -1584,19 +1640,50 @@ public:
       Iterator operator++(int unused) 
       { Iterator tmp(*this) ; ++(*this); return tmp; }
 
-      ElementType &operator*()  { return *_iElement;        }
-      ElementType *operator->() { return &(*_iElement);     }
+      ElementType &operator*()              { return *_iElement;        }
+      const ElementType &operator*()  const { return *_iElement;        }
+      ElementType *operator->()             { return &(*_iElement);     }
+      const ElementType *operator->() const { return &(*_iElement);     }
 
-      Kmer &key()               { return _iElement.key();   }
-      Value &value()            { return _iElement.value(); }
+      Kmer &key()                { return _iElement.key();   }
+      const Kmer &key() const    { return _iElement.key();   }
+      Value &value()             { return _iElement.value(); }
+      const Value &value() const { return _iElement.value(); }
 
       BucketType &bucket() { return *_iBucket; }
+      const BucketType &bucket() const { return *_iBucket; }
+      
       IndexType bucketIndex() { return (_iBucket - _target->_buckets.begin()); }
+      const IndexType bucketIndex() const { return (_iBucket - _target->_buckets.begin()); }
 
   };
-
+  
+  class ConstIterator : public std::iterator<std::forward_iterator_tag, KmerMap>
+  {
+  private:
+    Iterator _iterator;
+  public:
+    ConstIterator(KmerMap *target) : _iterator(target) {}
+    ConstIterator(const ConstIterator &copy) : _iterator(copy._iterator) {}
+    ConstIterator(KmerMap *target, BucketsVectorIterator bucketPtr) : _iterator(target,bucketPtr) {}
+    ConstIterator(KmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr): _iterator(target,bucketPtr,elementPtr) {}
+    bool operator==(const ConstIterator& other) const { return _iterator == other._iterator; }
+    bool operator!=(const ConstIterator& other) const { return _iterator != other._iterator; }
+    ConstIterator& operator++() { ++_iterator; return *this; }
+    ConstIterator  operator++(int unused) { return ConstIterator(_iterator++); }
+    const ElementType &operator*() const { return _iterator.operator*(); }
+    const ElementType *operator->() const { return _iterator.operator->(); }
+    const Kmer &key() const { return _iterator.key(); }
+    const Value &value() const { return _iterator.value(); }
+    const BucketType &bucket() const { return _iterator.bucket(); }
+    const IndexType bucketIndex() const { return _iterator.bucketIndex(); }    
+  };
+  
   Iterator begin()  { return Iterator(this);     }
-  Iterator end()    { return Iterator(this,true);}
+  Iterator end()    { return Iterator(this,_buckets.end());}
+  
+  ConstIterator begin() const { return Iterator(this); }
+  ConstIterator end()   const { return Iterator(this, _buckets.end());}
 
 };
 
@@ -1611,6 +1698,11 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.65  2009-12-24 00:55:57  regan
+// made const iterators
+// fixed some namespace issues
+// added support to output trimmed reads
+//
 // Revision 1.64  2009-12-24 00:39:22  cfurman
 // getAverageWeight() added
 //

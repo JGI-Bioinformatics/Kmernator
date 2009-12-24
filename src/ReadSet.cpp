@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.14 2009-12-23 07:16:52 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.15 2009-12-24 00:55:57 regan Exp $
 //
 
 #include <exception>
@@ -391,6 +391,7 @@ void ReadSet::append(ReadSet &reads)
 	#endif
 	for(long i = 0; i < (long) reads._reads.size(); i++)
 	  _reads[ oldSize + i ] = reads._reads[i];
+	_baseCount += reads._baseCount;
 }
 
 void ReadSet::appendFasta(string fastaFilePath,string qualFilePath)
@@ -538,7 +539,7 @@ void ReadSet::appendFastq(string fastaFilePath)
 
 #endif // _USE_OPENMP
 
-ReadSetSizeType ReadSet::getSize()
+ReadSet::ReadSetSizeType ReadSet::getSize()
 {
   return _reads.size();
 }
@@ -550,6 +551,11 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.15  2009-12-24 00:55:57  regan
+// made const iterators
+// fixed some namespace issues
+// added support to output trimmed reads
+//
 // Revision 1.14  2009-12-23 07:16:52  regan
 // fixed reading of fasta files
 // parallelized reading of multiple files
