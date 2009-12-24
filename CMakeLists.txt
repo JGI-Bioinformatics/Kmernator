@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.17 2009-12-18 19:05:07 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.18 2009-12-24 00:38:45 cfurman Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -46,9 +46,12 @@ link_directories( src )
 add_subdirectory( test )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
-
+add_subdirectory( apps )
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.18  2009-12-24 00:38:45  cfurman
+# CompareSpectrum application added
+#
 # Revision 1.17  2009-12-18 19:05:07  regan
 # added compile-time thread-safety option to kmer classes
 #
