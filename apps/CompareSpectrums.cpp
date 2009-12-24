@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.1 2009-11-27 23:28:07 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.2 2009-12-24 00:54:08 regan Exp $
 //
 
 #include <iostream>
@@ -160,16 +160,13 @@ int main(int argc, char *argv[])
     CS_Options::FileListType fileList2  = CS_Options::getFileSet2();
    
     cerr << "Reading 1st file set:";
-    foreach( string file, fileList1 ) {
-        readSet1.appendFastq( file  );
-    }
+    readSet1.appendAllFiles( fileList1 );
+    
     cerr << " loaded " << readSet1.getSize() << " Reads, " << readSet1.getBaseCount() << " Bases " << endl;
 
     
     cerr << "Reading 2nd file set:" ;
-    foreach( string file, fileList2 ) {
-       readSet2.appendFastq(file);
-     }
+    readSet2.appendAllFiles(fileList2);
     cerr << " loaded " << readSet2.getSize() << " Reads, " << readSet2.getBaseCount() << " Bases " << endl;
  
    KmerSolidMap m1,m2;
@@ -199,6 +196,10 @@ int main(int argc, char *argv[])
 
 //
 // $Log: CompareSpectrums.cpp,v $
+// Revision 1.2  2009-12-24 00:54:08  regan
+// fixed reading of fasta files
+// parallelized reading of multiple files
+//
 // Revision 1.1  2009-11-27 23:28:07  cfurman
 // CompareSpectrum application added
 //
