@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.19 2009-12-21 06:34:26 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.20 2009-12-24 00:56:11 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -23,9 +23,10 @@
 #include <boost/accumulators/statistics/weighted_density.hpp>
 #include <boost/accumulators/statistics/median.hpp>
 #include <boost/accumulators/statistics/weighted_p_square_quantile.hpp>
+#include <boost/foreach.hpp>
+#define foreach BOOST_FOREACH
 
 
-using namespace boost;
 using namespace boost::accumulators;
 
 #include "TwoBitSequence.h"
@@ -136,12 +137,77 @@ KmerWeights buildWeightedKmers(Read &read, bool leastComplement = false) {
   return kmers;
 }
 
+template< typename M >
+class ReadSelector
+{
+public:
+  struct ReadTrimType { 
+  	ReadSet::ReadSetSizeType readIdx;
+    Sequence::SequenceLengthType trimOffset; 
+    std::string label;
+         };
+  typedef M DataType;
+  typedef typename DataType::ReadPositionWeightVector ReadPositionWeightVector;
+  typedef KmerMap<DataType> KMType;
+  typedef typename KMType::ConstIterator KMIterator;
+  typedef KmerMap<unsigned short> KMCacheType;
+  typedef std::vector< ReadTrimType > ReadTrimVector;
 
+private:
+  const ReadSet &_reads;
+  const KMType &_map;
+  ReadTrimVector _picks;
+
+public:
+  ReadSelector(const ReadSet &reads, const KMType &map): _reads(reads), _map(map), _picks() { }
+  
+  const ReadTrimVector &getPicks() const {
+  	return _picks;
+  }
+  
+  std::ostream &writePicks(std::ostream &os) const {
+  	foreach( ReadTrimType readTrim, _picks)
+  	  os << _reads.getRead( readTrim.readIdx ).toFastq( readTrim.trimOffset, readTrim.label );
+  	return os;
+  }
+  
+  void pickLeastCoveringSubset() {
+  	KMCacheType visits = KMCacheType(_map.getNumBuckets());
+  	
+  	std::vector< SequenceLengthType > readHits;
+  	readHits.resize( _reads.getSize() );
+  	KMIterator it( _map.begin() ), end( _map.end() );
+  	for(; it != end; it++) {
+  		const DataType &data = it->value();
+  		ReadPositionWeightVector rpos = data.getEachInstance();
+  		for(unsigned int i=0; i< rpos.size(); i++) {
+  			readHits[ rpos[i].readId ]++;
+  		}
+  	}
+  	#ifdef _USE_OPENMP
+
+    #else
+	
+	#endif  	
+  }
+  
+  void pickAllCovering() {
+  	
+  }
+  
+  void pickCoverageNormalizedSubset() {
+  	
+  }
+  
+};
 
 #endif
 
 //
 // $Log: Utils.h,v $
+// Revision 1.20  2009-12-24 00:56:11  regan
+// started class to output picked reads
+//
 // Revision 1.19  2009-12-21 06:34:26  regan
 // used openmp and clever partitioning to speed up building spectrum
 //
