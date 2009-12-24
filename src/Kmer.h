@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.63 2009-12-22 18:31:14 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.64 2009-12-24 00:39:22 cfurman Exp $
 //
 
 #ifndef _KMER_H
@@ -358,6 +358,7 @@ public:
   inline unsigned long getCount() const { return count; }
   inline unsigned long getDirectionBias() const { return directionBias; }
   inline double getWeightedCount() const { return weightedCount; }
+  inline double getAverageWeight() const { return weightedCount/count; }
   inline double getNormalizedDirectionBias() const { return (double) directionBias / (double)count ; }
 
   ReadPositionWeightVector getEachInstance() const { 
@@ -1610,6 +1611,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.64  2009-12-24 00:39:22  cfurman
+// getAverageWeight() added
+//
 // Revision 1.63  2009-12-22 18:31:14  regan
 // moved Open MP includes to a central config file
 //
