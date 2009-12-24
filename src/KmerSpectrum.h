@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.8 2009-12-22 18:31:15 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.9 2009-12-24 00:40:48 cfurman Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -269,7 +269,7 @@ public:
     for(; mapIt != mapEnd; mapIt++ ) {
       WeakDataType &data = mapIt->value();
       if (data.getCount() >= minKmerCount && data.getWeightedCount() >= minKmerWeightedCount) {
-        weakHeap.push_back( *mapIt );
+          weakHeap.push_back( *mapIt );
       }
     }
     
@@ -292,19 +292,19 @@ public:
     unsigned long promotedInBatch = 0;
 
     while ( weakHeap.begin() != weakHeap.end() ) {
-    	WeakElementType &element = weakHeap.front();
-    	unsigned long lastCount = element.value().getCount();
+        WeakElementType &element = weakHeap.front();
+        unsigned long lastCount = element.value().getCount();
         if (shouldBeSolid( element, minWeakRatio, minSolidRatio )) {
         	SolidElementType solidElement = getSolid( element.key() );
         	solidElement.value() = element.value();
         	
         //	std::cerr << "Added " << prettyW(element.key(), element.value());
         	element.value().reset(); // to avoid double counting
-        	promoted++;
+           promoted++; 
         	promotedInBatch++;
         } else {
        // 	std::cerr << "Skipping " << prettyW(element.key(), element.value());
-        }
+        }       
         if (++count == 1000) {
           std::cerr << "Added " << promotedInBatch << ", Heap size: " <<  weakHeap.size() << " lastCount: " << lastCount << std::endl;
         	if (promotedInBatch == 0)
@@ -322,7 +322,7 @@ public:
   }
   
   bool shouldBeSolid( WeakElementType &weakElement, double minWeakRatio, double minSolidRatio ) {
-  	Kmer &kmer = weakElement.key();
+    	Kmer &kmer = weakElement.key();
   	WeakDataType &data = weakElement.value();
   	SolidWeakWeightType permutedScores = getPermutedScores(kmer, 1.0, 0.0);
   	if (   permutedScores.first  <= minSolidRatio  * data.getCount()
@@ -330,7 +330,7 @@ public:
         )
   	    return true;
     else
-        return false;  	
+  	    return false;
   }
   
     //repeat:
@@ -432,7 +432,7 @@ public:
   }
   
   MeanVectorType getErrorRates( SolidMapType &solidReference, bool useWeighted = false ) {
-  	
+ 
   	std::vector< StdAccumulatorType > accumulators;
     for( SolidIterator it = solidReference.begin(); it != solidReference.end(); it++) {
       std::vector< double > errorRatios = getErrorRatios(it->key(), useWeighted);
@@ -850,8 +850,8 @@ public:
     #endif
 	
     printStats(store.getSize(), isSolid);    
-    if (!isSolid)
-      printHistograms();
+     if (!isSolid)
+       printHistograms();
   }
 
   static void experimentOnSpectrum( KmerSpectrum &spectrum ) {
@@ -881,6 +881,212 @@ public:
     }
   }
 
+   void analyseSingletons()
+   {
+       int found = 0;
+       for(WeakIterator it( weak.begin()), itEnd( weak.end()); it != itEnd; it++) {
+        Kmers permutations = Kmers::permuteBases(it->key(), true);
+        for(int i=0; i<permutations.size(); i++) {
+           if (singleton.exists( permutations[i] )) {
+ 
+              it->value().track(1.0, true);
+               
+              found++;
+          }
+        }
+      }
+      std::cerr << "Singleton permutations found in weak : " << found << std::endl;
+   }
+
+   void findSecondOrderPermutations(const Kmer &kmer)
+   {
+     Kmers permutations = Kmers::permuteBases(kmer, true);
+     for(int i=0; i<permutations.size(); i++) {
+ 
+        Kmers permutations2 = Kmers::permuteBases(permutations[i],true);
+        for (int j = i ; j<permutations2.size(); j++) {
+           if (permutations2[j] != kmer)
+           // if  (SolidDataType *s = solid.getIfExists(permutations2[j])  )
+           {
+              std::cerr << "   " << permutations2[j].toFasta()  /*<< " : " << s->getCount() */ << std::endl ;
+           }
+        }
+     }
+     std::cerr << "\n";
+   }
+
+
+   bool noFirstOrderMatch(const WeakElementType &element)
+   {
+
+     int count = element.value().getCount();
+ 
+        
+     count *= 3;
+     const Kmer &kmer = element.key();
+     Kmers permutations = Kmers::permuteBases(kmer, true);
+     for(int i=0; i<permutations.size(); i++) {
+     /*
+     SolidDataType *s = solid.getIfExists(permutations[i]);
+             if (s &&  s->getCount() > count)
+               return false;
+     */          
+     WeakDataType *w = weak.getIfExists(permutations[i]);
+             if (w &&  w->getCount() > count)
+               return false;
+               
+     }
+     return true;
+   }
+
+   bool noSecondOrderMatch(const WeakElementType &element)
+   {
+
+ 
+     int count = element.value().getCount();
+        
+     count *= 2;
+     const Kmer &kmer = element.key();
+     Kmers permutations = Kmers::permuteBases(kmer, true);
+     for(int i=0; i<permutations.size(); i++) {
+     SolidDataType *s = solid.getIfExists(permutations[i]);
+        Kmers permutations2 = Kmers::permuteBases(permutations[i],true);
+        for (int j = i ; j<permutations2.size(); j++) {
+           if (permutations2[j] != kmer) {           
+             WeakDataType *w = weak.getIfExists(permutations2[j]);
+             if (w &&  w->getCount() > count)
+               return false;
+           }
+        }
+     }
+     return true;
+   }
+/*
+   bool noSecondOrderMatch(const WeakElementType &element)
+   {
+
+      Kmers unique((32*3)*(32*3));
+
+      const Kmer &kmer = element.key();
+      Kmers permutations = Kmers::permuteBases(kmer, true);
+      for(int i=0; i<permutations.size(); i++) {
+        SolidDataType *s = solid.getIfExists(permutations[i]);
+        Kmers permutations2 = Kmers::permuteBases(permutations[i],true);
+        for (int j = i ; j<permutations2.size(); j++) {
+            unique.insertSorted(permutations2[j]);
+        }
+      }
+      int count = element.value().getCount();
+      
+      for (int i =0; i < unique.size(); i++) {
+        if (unique[i] != kmer) {
+          SolidDataType *s = solid.getIfExists(unique[i]);
+          if (s &&  s->getCount() > count)
+            return false;
+        }
+      }
+      return true;
+   }*/
+
+  unsigned long filter(KmerSpectrum &reference)
+  {
+
+    typedef std::vector< WeakElementType > HeapType;
+    HeapType weakHeap;
+    
+   
+  
+    unsigned long promoted = 0;
+ 
+    const unsigned long minKmerCount = 1;
+    unsigned long count = 0;
+     unsigned long falseSolids =0;
+
+    unsigned long secondOrderTrue = 0;
+    unsigned long secondOrderFalse = 0;
+    unsigned long weightCorrect =0;
+    unsigned long weightIncorrect =0;
+
+    WeakIterator mapIt  = weak.begin();
+    WeakIterator mapEnd = weak.end();
+    for(; mapIt != mapEnd; mapIt++ )
+    {
+      
+        WeakElementType &element = *mapIt;
+        unsigned long lastCount = element.value().getCount();
+
+        if (lastCount < minKmerCount)
+           continue;
+           
+        bool noBias = true;
+        if (lastCount > 20)
+        {
+           double dirBias  = element.value().getNormalizedDirectionBias();
+            noBias =  (dirBias > 0.02 && dirBias < 0.98);
+            if (!noBias) {
+              
+
+               weakHeap.push_back( element);
+            }
+        }
+
+       double minWeight =  0.8;
+       bool enoughWeight = element.value().getAverageWeight() > minWeight; 
+
+       bool inRef = (reference.solid.exists( element.key()));
+        
+        if ( //   noBias &&
+        //      enoughWeight &&
+          //    noFirstOrderMatch(element)&&
+        //      noSecondOrderMatch(element)&&
+           1)
+        {
+          SolidElementType solidElement = getSolid( element.key() );
+            solidElement.value() = element.value();
+           if (!inRef) {
+                 // std::cerr << "FS " << prettyS( element.key(), element.value());
+                 falseSolids++;
+           }
+           promoted++; 
+        }       
+ 
+//         if (enoughWeight == inRef)
+//            weightCorrect++;
+//         else
+//            weightIncorrect++;
+//          
+//  
+//         if (count++ == 100000    ) {
+//         //  std::cerr << "Weight test:  " << weightCorrect << ":" << weightIncorrect << " Heap size: " <<  weakHeap.size() << " lastCount: " << lastCount << std::endl;
+//  
+//               count = 0;
+//  
+//         }
+    }
+ 
+
+ 
+    std::make_heap( weakHeap.begin(), weakHeap.end() );
+
+    std::cerr << " Heap size: " <<  weakHeap.size() << std::endl;
+
+    int i=0;
+    while ( weakHeap.begin() != weakHeap.end() ) {
+        WeakElementType &element = weakHeap.front();
+        bool inRef = reference.solid.exists( element.key());
+        const char * st =  (inRef) ? "*" : " ";
+         std::cerr << "DB " << st  << prettyS( element.key(), element.value());
+
+        std::cout << "> Kmer" << ++i << std::endl;
+        std::cout << element.key().toFasta() << std::endl;
+         
+        std::pop_heap(weakHeap.begin(), weakHeap.end());
+        weakHeap.pop_back();
+    }
+    
+    for(SolidIterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++)
+         weak.remove( it->key() );
+  }
 };
 
 #endif
