@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.15 2009-12-24 00:55:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.16 2010-01-05 06:44:39 regan Exp $
 //
 
 #include <exception>
@@ -438,7 +438,7 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
 	seekPos[ omp_get_thread_num() ] = reader.getPos();
 
     string name,bases,quals;
-    bool hasNext = omp_get_thread_num() < numThreads;
+    bool hasNext = omp_get_thread_num() < (long) numThreads;
     if (hasNext)
       hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
     
@@ -551,6 +551,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.16  2010-01-05 06:44:39  regan
+// fixed warnings
+//
 // Revision 1.15  2009-12-24 00:55:57  regan
 // made const iterators
 // fixed some namespace issues

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.2 2009-12-24 00:54:08 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.3 2010-01-05 06:44:37 regan Exp $
 //
 
 #include <iostream>
@@ -138,7 +138,7 @@ void buildKmerMap(KmerSolidMap &m, ReadSet &store)
    for (unsigned int i=0 ; i < store.getSize(); i++) {
     KmerWeights kmers = buildWeightedKmers(store.getRead(i));
 
-    for (int j=0; j < kmers.size(); j++)
+    for (unsigned int j=0; j < kmers.size(); j++)
     {
         TEMP_KMER (least);
         bool keepDirection = kmers[j].buildLeastComplement( least);
@@ -196,6 +196,9 @@ int main(int argc, char *argv[])
 
 //
 // $Log: CompareSpectrums.cpp,v $
+// Revision 1.3  2010-01-05 06:44:37  regan
+// fixed warnings
+//
 // Revision 1.2  2009-12-24 00:54:08  regan
 // fixed reading of fasta files
 // parallelized reading of multiple files

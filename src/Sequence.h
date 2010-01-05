@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.9 2009-12-24 00:55:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.10 2010-01-05 06:44:39 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -14,6 +14,7 @@ class Sequence
 {
 public:
   typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
+  const static SequenceLengthType MAX_SEQUENCE_LENGTH = (SequenceLengthType) -1;
   
 protected:
   SequenceLengthType _length;
@@ -41,7 +42,7 @@ public:
   void  setSequence(std::string fasta);
 
   SequenceLengthType getLength();
-  std::string getFasta(SequenceLengthType trimOffset = -1);
+  std::string getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH);
   BaseLocationVectorType getMarkups();
 
   SequenceLengthType getTwoBitEncodingSequenceLength();
@@ -77,10 +78,10 @@ public:
   void  setRead(std::string name, std::string fasta, std::string qualBytes);
 
   std::string getName();
-  std::string getQuals(SequenceLengthType trimOffset = -1);
+  std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH);
 
-  std::string toFastq(SequenceLengthType trimOffset = -1, std::string label = "");
-  std::string getFormattedQuals(SequenceLengthType trimOffset = -1);
+  std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "");
+  std::string getFormattedQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH);
 
   
   static double qualityToProbability[256];
@@ -91,6 +92,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.10  2010-01-05 06:44:39  regan
+// fixed warnings
+//
 // Revision 1.9  2009-12-24 00:55:57  regan
 // made const iterators
 // fixed some namespace issues

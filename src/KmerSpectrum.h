@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.9 2009-12-24 00:40:48 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.10 2010-01-05 06:44:39 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -1086,6 +1086,8 @@ public:
     
     for(SolidIterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++)
          weak.remove( it->key() );
+         
+    return promoted;
   }
 };
 
