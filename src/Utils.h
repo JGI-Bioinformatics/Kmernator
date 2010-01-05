@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.20 2009-12-24 00:56:11 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.21 2010-01-05 06:43:47 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -115,10 +115,10 @@ KmerWeights buildWeightedKmers(Read &read, bool leastComplement = false) {
   	if (i%100 == 0 || weight == 0.0) {
   	  weight = 1.0;
   	  for(SequenceLengthType j=0; j < KmerSizer::getSequenceLength(); j++) 
-  	    weight *= Read::qualityToProbability[ (unsigned short) quals[i+j] ];
+  	    weight *= Read::qualityToProbability[ (unsigned char) quals[i+j] ];
   	} else {
-  		change = Read::qualityToProbability[ (unsigned short) quals[i+KmerSizer::getSequenceLength()-1] ] / 
-  		         Read::qualityToProbability[ (unsigned short) quals[i-1] ];
+  		change = Read::qualityToProbability[ (unsigned char) quals[i+KmerSizer::getSequenceLength()-1] ] / 
+  		         Read::qualityToProbability[ (unsigned char) quals[i-1] ];
   		weight *= change;
   	}
   	while( markupIdx < markups.size() && markups[markupIdx].second < i)
@@ -205,6 +205,9 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.21  2010-01-05 06:43:47  regan
+// bugfix
+//
 // Revision 1.20  2009-12-24 00:56:11  regan
 // started class to output picked reads
 //
