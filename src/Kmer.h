@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.65 2009-12-24 00:55:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.66 2010-01-06 15:20:24 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -45,7 +45,7 @@ private:
 public:
 
   static inline KmerSizer &getSingleton() { return singleton; }
-  static void set(SequenceLengthType sequenceLength, IndexType extraBytes=0)
+  static void set(SequenceLengthType sequenceLength)
   {
     KmerSizer &singleton = getSingleton();
     singleton._sequenceLength = sequenceLength;
@@ -1698,6 +1698,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.66  2010-01-06 15:20:24  regan
+// code to screen out primers
+//
 // Revision 1.65  2009-12-24 00:55:57  regan
 // made const iterators
 // fixed some namespace issues

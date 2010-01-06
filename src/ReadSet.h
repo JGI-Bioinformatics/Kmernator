@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.11 2009-12-24 00:55:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.12 2010-01-06 15:20:24 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -29,7 +29,8 @@ public:
 
     void appendAnyFile(std::string filePath, std::string filePath2 = "");
     void appendAllFiles(Options::FileListType &files);
-
+    void appendFastaFile(std::string &is);
+    
     void append(ReadSet &reads);
 
     ReadSetSizeType getSize();
@@ -68,6 +69,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.12  2010-01-06 15:20:24  regan
+// code to screen out primers
+//
 // Revision 1.11  2009-12-24 00:55:57  regan
 // made const iterators
 // fixed some namespace issues

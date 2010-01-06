@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.16 2010-01-05 06:44:39 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.17 2010-01-06 15:20:24 regan Exp $
 //
 
 #include <exception>
@@ -23,6 +23,7 @@ private:
     string _path; 
     ifstream _ifs;
     ifstream _qs;
+    istringstream _iss;
 
 public:
 
@@ -53,6 +54,10 @@ public:
           _parser = new FastaStreamParser(_ifs);
       }
       
+    }
+    
+    ReadFileReader(string &fasta) : _iss(fasta) {
+    	_parser = new FastaStreamParser(_iss);
     }
     
     ~ReadFileReader()
@@ -409,6 +414,12 @@ void ReadSet::appendFasta(ReadFileReader &reader)
     }
 }
 
+void ReadSet::appendFastaFile(string &str)
+{
+	ReadFileReader reader(str);
+	appendFasta(reader);
+}
+
 
 #ifdef _USE_OPENMP
 
@@ -551,6 +562,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.17  2010-01-06 15:20:24  regan
+// code to screen out primers
+//
 // Revision 1.16  2010-01-05 06:44:39  regan
 // fixed warnings
 //

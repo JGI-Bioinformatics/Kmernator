@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.10 2010-01-05 06:44:39 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.11 2010-01-06 15:20:24 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -79,6 +79,7 @@ public:
 
   std::string getName();
   std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH);
+  void zeroQuals(SequenceLengthType offset, SequenceLengthType length);
 
   std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "");
   std::string getFormattedQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH);
@@ -92,6 +93,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.11  2010-01-06 15:20:24  regan
+// code to screen out primers
+//
 // Revision 1.10  2010-01-05 06:44:39  regan
 // fixed warnings
 //

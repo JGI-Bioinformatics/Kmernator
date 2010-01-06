@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.23 2009-12-23 07:16:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.24 2010-01-06 15:20:27 regan Exp $
 //
 
 #include <iostream>
@@ -27,6 +27,8 @@ int main(int argc, char *argv[]) {
     ReadSet refReads, reads;
 
     cerr << MemoryUtils::getMemoryUsage() << endl;
+    
+    FilterKnownOddities filter;
     
     KmerSizer::set(Options::getKmerSize());
     Options::FileListType references = Options::getReferenceFiles();
@@ -58,6 +60,10 @@ int main(int argc, char *argv[]) {
     cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases " << endl;
     cerr << MemoryUtils::getMemoryUsage() << endl;
     
+    cerr << "Applying filter to Input Files" << endl;
+    unsigned long filtered = filter.applyFilter(reads);
+    cerr << "filter affected " << filtered << " Reads " << endl;
+    cerr << MemoryUtils::getMemoryUsage() << endl;
     
     numBuckets = estimateWeakKmerBucketSize( reads, 64 );
     cerr << "targetting " << numBuckets << " buckets for reads " << endl;
@@ -101,6 +107,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.24  2010-01-06 15:20:27  regan
+// code to screen out primers
+//
 // Revision 1.23  2009-12-23 07:16:50  regan
 // fixed reading of fasta files
 // parallelized reading of multiple files

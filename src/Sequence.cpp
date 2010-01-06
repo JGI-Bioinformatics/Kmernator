@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.16 2009-12-24 00:55:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.17 2010-01-06 15:20:24 regan Exp $
 //
 
 #include <cstring>
@@ -179,7 +179,14 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes )
    strcpy(_getName(), name.c_str());
 }
 
-
+void Read::zeroQuals(SequenceLengthType offset, SequenceLengthType length)
+{
+	char *qualPtr = _getQual();
+	for(unsigned int i=0;i<offset;i++)
+	  qualPtr++;
+	for(unsigned int i=0;i<length;i++)
+	  *(qualPtr++) = '\0';	
+}
 string Read::getName()
 {
   if(_data == nullSequence)
@@ -213,6 +220,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset)
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.17  2010-01-06 15:20:24  regan
+// code to screen out primers
+//
 // Revision 1.16  2009-12-24 00:55:57  regan
 // made const iterators
 // fixed some namespace issues

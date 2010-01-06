@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.21 2010-01-05 06:43:47 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.22 2010-01-06 15:20:24 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -25,6 +25,8 @@
 #include <boost/accumulators/statistics/weighted_p_square_quantile.hpp>
 #include <boost/foreach.hpp>
 #define foreach BOOST_FOREACH
+
+#include <boost/unordered_map.hpp>
 
 
 using namespace boost::accumulators;
@@ -201,10 +203,112 @@ public:
   
 };
 
+class FilterKnownOddities
+{
+private:
+  ReadSet sequences;
+  boost::unordered_map< unsigned long, std::string > descriptions;
+  typedef boost::unordered_map< unsigned long, unsigned long > CountMap;
+  CountMap counts;
+  unsigned long mask;
+  unsigned short length;
+public:
+  FilterKnownOddities(int _length = 16) : length(_length) {
+  	std::string fasta = getFasta();
+  	sequences.appendFastaFile( fasta );
+  	mask = ((unsigned long) -1) & ~( 0x01<<(65-length/2)- 1 );
+  	prepareMaps();
+  }
+  
+  void prepareMaps() {
+  	unsigned long oldKmerLength = KmerSizer::getSequenceLength();
+  	KmerSizer::set(length);
+  	
+  	TEMP_KMER(reverse);
+  	unsigned long key;
+  	for(unsigned int i = 0 ; i < sequences.getSize() ; i++) {
+  		// TODO fix bit-shift boundaries, make 4 masks or make peace with sloppy frameshifts
+  		
+  		Read &read = sequences.getRead(i);
+  		KmerWeights kmers = buildWeightedKmers(read);
+  		for(unsigned int j = 0; j < kmers.size(); j++) {
+  			kmers[j].buildReverseComplement(reverse);  	        
+  			
+  	        key = *( (unsigned long *) kmers[j].get() ) & mask;
+  	        descriptions[ key ] = std::string(read.getName());
+  	        counts[ key ] = 0;  	        
+  	        
+  	        key = *( (unsigned long *) reverse.get() ) & mask;
+  	        descriptions[ key ] = std::string(read.getName() + "-reverse");
+  	        counts[ key ] = 0;
+  		}
+  	}
+  	
+  	KmerSizer::set(oldKmerLength);
+  }
+  
+  unsigned long applyFilter(ReadSet &reads) {
+  	unsigned long affectedCount = 0;
+  	for(unsigned long i = 0; i < reads.getSize(); i++) {
+  		Read &read = reads.getRead(i);
+  		bool wasAffected = false;
+  		
+  		TwoBitEncoding *ptr = read.getTwoBitSequence();
+  		CountMap::iterator it;
+  		unsigned long lastByte = read.getTwoBitEncodingSequenceLength() - TwoBitSequence::fastaLengthToTwoBitLength(length);
+  		for(unsigned long bytes = 0; bytes < lastByte ; bytes++) {
+  			unsigned long key = *((unsigned long *) ptr) & mask;
+  			it = counts.find( key );
+  			if (it != counts.end()) {
+  				counts[key]++;
+  				read.zeroQuals( bytes * 4, length);
+  				if (!wasAffected) {
+  				  wasAffected = true;
+  				  affectedCount++;
+  				}
+  			}
+  		}
+  		
+  	}
+  	return affectedCount;
+  }
+  
+  
+  const ReadSet &getSequences() { return sequences; }
+  std::string getFasta() {
+  	// TODO logic to check Options
+  	std::stringstream ss;
+  	ss << ">PE-Adaptor-P" << std::endl;
+  	ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG" << std::endl;
+  	ss << ">PE-PCR-PRIMER1" << std::endl;
+  	ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
+  	ss << ">PE-PCR-PRIMER2" << std::endl;
+  	ss << "CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
+  	ss << ">SE-Adaptor-P" << std::endl;
+  	ss << "GATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG" << std::endl;
+   	ss << ">SE-Primer2" << std::endl;
+  	ss << "CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT" << std::endl;
+  	ss << ">Homopolymer-A" << std::endl;
+  	ss << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
+  	ss << ">Homopolymer-C" << std::endl;
+  	ss << "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" << std::endl;
+  	ss << ">Homopolymer-G" << std::endl;
+  	ss << "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG" << std::endl;
+  	ss << ">Homopolymer-T" << std::endl;
+  	ss << "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT" << std::endl;
+    return ss.str();
+  }
+  
+};
+
+
 #endif
 
 //
 // $Log: Utils.h,v $
+// Revision 1.22  2010-01-06 15:20:24  regan
+// code to screen out primers
+//
 // Revision 1.21  2010-01-05 06:43:47  regan
 // bugfix
 //
