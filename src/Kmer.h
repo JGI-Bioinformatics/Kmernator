@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.66 2010-01-06 15:20:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.67 2010-01-08 06:22:27 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -88,7 +88,7 @@ class Kmer
 	   const void *_data() const { return this;}
 	   void *_data()  { return this;}
 	#endif
-	
+	   // safely returns lowbits 64-bit numeric version of any sized kmer
        static NumberType toNumber(const Kmer &kmer) {
        	  NumberType val;
        	  switch(KmerSizer::getTwoBitLength()) {
@@ -96,20 +96,20 @@ class Kmer
        	  	         break;
        	  	case 2:  val =   (NumberType) *((boost::uint16_t *)  kmer.getTwoBitSequence()); 
        	  	         break;
-       	  	case 3:  val = (((NumberType) *((boost::uint16_t *)  kmer.getTwoBitSequence()))<<8)
-       	  	              +  (NumberType) *((boost::uint8_t *)  (kmer.getTwoBitSequence()+2)); 
+       	  	case 3:  val = (((NumberType) *((boost::uint16_t *)  kmer.getTwoBitSequence())))
+       	  	              |(((NumberType) *((boost::uint8_t *)  (kmer.getTwoBitSequence()+2)))<<16); 
        	  	         break;
        	  	case 4:  val =   (NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence()); 
        	  	         break;
-       	  	case 5:  val = (((NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence()))<<8)
-       	  	              +  (NumberType) *((boost::uint8_t *)  (kmer.getTwoBitSequence()+4));
+       	  	case 5:  val = (((NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence())))
+       	  	              |(((NumberType) *((boost::uint8_t *)  (kmer.getTwoBitSequence()+4)))<<32);
        	  	         break;
-       	  	case 6:  val = (((NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence()))<<16)
-       	  	              +  (NumberType) *((boost::uint16_t *) (kmer.getTwoBitSequence()+4)); 
+       	  	case 6:  val = (((NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence())))
+       	  	              |(((NumberType) *((boost::uint16_t *) (kmer.getTwoBitSequence()+4)))<<32); 
        	  	         break;
-       	  	case 7:  val = (((NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence()))<<24)
-       	  	              +(((NumberType) *((boost::uint16_t *) (kmer.getTwoBitSequence()+4)))<<8)
-       	  	              +  (NumberType) *((boost::uint8_t *)  (kmer.getTwoBitSequence()+6)); 
+       	  	case 7:  val = (((NumberType) *((boost::uint32_t *)  kmer.getTwoBitSequence())))
+       	  	              |(((NumberType) *((boost::uint16_t *) (kmer.getTwoBitSequence()+4)))<<32)
+       	  	              |(((NumberType) *((boost::uint8_t *)  (kmer.getTwoBitSequence()+6)))<<48); 
        	  	         break;
        	  	default: val =  (NumberType) *((boost::uint64_t *) kmer.getTwoBitSequence());
        	  }
@@ -815,9 +815,13 @@ public:
   _begin(NULL),_size(0),_capacity(0)
   {
   	initLock();
-    SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
-    resize(numKmers, MAX_INDEX, false);
-    build(twoBit,length, leastComplement);
+  	if (KmerSizer::getSequenceLength() <= length) {
+      SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
+      resize(numKmers, MAX_INDEX, false);
+      build(twoBit,length, leastComplement);
+  	} else {
+  	  resize(0);
+  	}
   }
 
   KmerArray(const KmerArray &copy):
@@ -1698,6 +1702,10 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.67  2010-01-08 06:22:27  regan
+// fixed toNumber to have the correct bit ordering (pointers go backwards in memory!)
+// removed a thow when the kmer size is too short
+//
 // Revision 1.66  2010-01-06 15:20:24  regan
 // code to screen out primers
 //
