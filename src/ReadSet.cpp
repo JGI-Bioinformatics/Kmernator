@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.17 2010-01-06 15:20:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.18 2010-01-08 06:23:07 regan Exp $
 //
 
 #include <exception>
@@ -366,7 +366,9 @@ void ReadSet::appendAllFiles(Options::FileListType &files)
 	
     #ifdef _USE_OPENMP
 	ReadSet myReads[ omp_get_num_procs() ];
-	#pragma omp parallel for
+	int oldNested = omp_get_nested();
+	omp_set_nested(1);
+	#pragma omp parallel for schedule(dynamic)
 	#endif
 	for(long i = 0; i < (long) files.size(); i++) {
 		#ifdef _USE_OPENMP
@@ -375,12 +377,19 @@ void ReadSet::appendAllFiles(Options::FileListType &files)
 		{ std::cerr << "reading " << files[i] << std::endl; }
 		
 		#ifdef _USE_OPENMP
+		// append int this thread's ReadSet buffer (note: line continues)
 		myReads[ omp_get_thread_num() ].		
 		#endif
-		
 		appendAnyFile(files[i]);
+		
+		#ifdef _USE_OPENMP
+		#pragma omp critical
+		#endif
+		{ std::cerr << "finished reading " << files[i] << std::endl; }
 	}
 	#ifdef _USE_OPENMP
+	omp_set_nested(oldNested);
+	{ std::cerr << "concatenating ReadSet buffers" << std::endl; }
 	for(int i = 0; i< omp_get_num_procs(); i++)
 	  append(myReads[i]);
 	#endif	  
@@ -444,6 +453,7 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
 		blockSize = reader.getBlockSize(numThreads);
 		if (blockSize < 100)
 		  blockSize = 100;
+		std::cerr << "Reading " << fastaFilePath << " with " << numThreads << " threads" << std::endl;
 	}
 	reader.seekToNextRecord( blockSize * omp_get_thread_num() );
 	seekPos[ omp_get_thread_num() ] = reader.getPos();
@@ -562,6 +572,9 @@ Read &ReadSet::getRead(ReadSetSizeType index)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.18  2010-01-08 06:23:07  regan
+// fixed to support nested parallel reading of files
+//
 // Revision 1.17  2010-01-06 15:20:24  regan
 // code to screen out primers
 //
