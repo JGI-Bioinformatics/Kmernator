@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.11 2010-01-06 15:20:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.12 2010-01-08 06:24:42 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -29,7 +29,10 @@ using namespace boost::accumulators;
 
 #include "config.h"
 #include "TwoBitSequence.h"
+#include "Sequence.h"
+#include "ReadSet.h"
 #include "Kmer.h"
+#include "Utils.h"
 
 template< typename S, typename W>
 class KmerSpectrum
@@ -90,7 +93,23 @@ public:
   	this->singleton = other.singleton;
   	this->hasSolids  = other.hasSolids;
   }
-  
+
+  static unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKmersPerBucket = 64) {
+	unsigned long baseCount = store.getBaseCount();
+	if (baseCount == 0 || store.getSize() == 0)
+	  return 128;
+	unsigned long avgSequenceLength = baseCount / store.getSize();
+	unsigned long kmersPerRead = (avgSequenceLength - KmerSizer::getSequenceLength() + 1);
+	if (kmersPerRead > avgSequenceLength + 1)
+	  throw std::invalid_argument("Attempting to use a kmer greater than the avgerage sequence length");
+	unsigned long rawKmers = kmersPerRead * store.getSize();
+	// assume 1% error rate
+	unsigned long estimatedUniqueKmers = rawKmers * ( std::max(pow(1.01, KmerSizer::getSequenceLength()),2.0) - 1.0 );
+	unsigned long targetBuckets = estimatedUniqueKmers / targetKmersPerBucket;
+	unsigned long maxBuckets = 128*1024*1024;
+	unsigned long minBuckets = 128;
+	return std::max( std::min(targetBuckets,maxBuckets), minBuckets );
+  }  
   
   bool hasSolid( const Kmer &kmer ) const {
   	return hasSolids && solid.exists( kmer );
@@ -741,10 +760,10 @@ public:
 	//stats.printHistograms(solidOnly);
 	SolidIterator it = solid.begin();
     std::cerr << pos << " reads, " << solid.size() << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : " << singleton.size() << " singleton - kmers so far ";
-    if(it != solid.end())
-        std::cerr << it.bucket().toString() << "; ";
-    std::cerr << " minDepth: " << (unsigned long)TrackingData::minimumDepth <<  std::endl;
-    std::cerr << MemoryUtils::getMemoryUsage() << std::endl;     
+    //if(it != solid.end())
+    //    std::cerr << it.bucket().toString() << "; ";
+    //std::cerr << " minDepth: " << (unsigned long)TrackingData::minimumDepth <<  std::endl;
+    std::cerr << std::endl << MemoryUtils::getMemoryUsage() << std::endl;     
   }
 
   inline unsigned int getSMPThread( Kmer &kmer, unsigned int numThreads ) {
@@ -768,13 +787,22 @@ public:
 	
     #ifdef _USE_OPENMP
 	
+	  #pragma omp parallel
+	  {
+	  	int threads = omp_get_num_threads();
+	  	#pragma omp single
+	  	{
+	  		std::cerr << "Executing parallel buildKmerSpectrum with " << threads << " and " << solid.getNumBuckets() << " buckets" << std::endl;
+	  	}
+	  }
+	  
+	  
 	  // allocate a square matrix of buffers: KmerWeights[writingThread][readingThread]
 	  KmerWeights kmerBuffers[omp_get_num_procs()][omp_get_num_procs()];
 	  KmerWeights kmers;
 	  typedef std::pair< long, long > ReadPosType;
-	  std::vector< ReadPosType > startReadIdx[ omp_get_num_procs() ][ omp_get_num_procs() ];
-
-      int numProcs = omp_get_num_procs();
+	  int numProcs = omp_get_num_procs();
+	  std::vector< ReadPosType > startReadIdx[ numProcs ][ numProcs ];
 
 	  long batchIdx = 0;
 	  long batch = 1000000;
@@ -797,7 +825,7 @@ public:
 	       long readIdx = batchIdx + i;
 	       if (readIdx >= store.getSize() )
 	         continue;
-	  	   kmers = buildWeightedKmers(store.getRead( readIdx ));
+	  	   kmers = KmerReadUtils::buildWeightedKmers(store.getRead( readIdx ));
 	  	   for (long j = 0; j < omp_get_num_threads(); j++)
 	  	     startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 	  	   for (IndexType j = 0 ; j < kmers.size(); j++) {
@@ -838,7 +866,7 @@ public:
 	
 	    for (long i=0 ; i < (long) store.getSize(); i++)
         {
-         KmerWeights kmers = buildWeightedKmers(store.getRead(i));
+         KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead(i));
        
          append(kmers, i, isSolid);
 

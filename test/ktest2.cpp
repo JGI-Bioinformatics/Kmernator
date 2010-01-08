@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.24 2010-01-06 15:20:27 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.25 2010-01-08 06:24:53 regan Exp $
 //
 
 #include <iostream>
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     cerr << "loaded " << refReads.getSize() << " Reads, " << refReads.getBaseCount() << " Bases " << endl;
     cerr << MemoryUtils::getMemoryUsage() << endl; 
     
-    unsigned long numBuckets = estimateWeakKmerBucketSize( refReads, 256 );
+    unsigned long numBuckets = KS::estimateWeakKmerBucketSize( refReads, 256 );
     cerr << "targetting " << numBuckets << " buckets for reference " << endl;
     KS refSpectrum( numBuckets );
     refSpectrum.weak.clear();
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
     cerr << "filter affected " << filtered << " Reads " << endl;
     cerr << MemoryUtils::getMemoryUsage() << endl;
     
-    numBuckets = estimateWeakKmerBucketSize( reads, 64 );
+    numBuckets = KS::estimateWeakKmerBucketSize( reads, 64 );
     cerr << "targetting " << numBuckets << " buckets for reads " << endl;
     
     KS spectrum(numBuckets);
@@ -107,6 +107,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.25  2010-01-08 06:24:53  regan
+// refactored some code
+//
 // Revision 1.24  2010-01-06 15:20:27  regan
 // code to screen out primers
 //
