@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.1 2009-11-27 23:28:07 cfurman Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.2 2010-01-08 18:34:51 regan Exp $
 #
  
 cmake_minimum_required(VERSION 2.6)
@@ -12,7 +12,9 @@ IF(CXX_FLAGS)
   SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
 ENDIF(CXX_FLAGS)
 
- 
+ set_source_files_properties( CompareSpectrums
+                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
 add_executable( CompareSpectrums CompareSpectrums )
 target_link_libraries( CompareSpectrums Sequence Kmer
                               ReadSet
@@ -21,6 +23,10 @@ target_link_libraries( CompareSpectrums Sequence Kmer
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.2  2010-01-08 18:34:51  regan
+# refactored a bit
+# enabled openmp parallelizations
+#
 # Revision 1.1  2009-11-27 23:28:07  cfurman
 # CompareSpectrum application added
 #

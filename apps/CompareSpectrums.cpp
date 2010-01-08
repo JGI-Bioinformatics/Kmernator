@@ -1,12 +1,13 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.3 2010-01-05 06:44:37 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.4 2010-01-08 18:34:51 regan Exp $
 //
 
 #include <iostream>
- 
 
+#include "config.h"
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "Utils.h"
+#include "KmerSpectrum.h"
  
 
 //#include "Options.h"
@@ -14,6 +15,7 @@
 namespace po = boost::program_options;
 
 typedef KmerMap<TrackingData> KmerSolidMap;
+typedef KmerSpectrum< TrackingData, TrackingData > KS;
 
 class CS_Options
 {
@@ -118,35 +120,35 @@ public:
 
 using namespace std;
 
-
+typedef std::vector< unsigned long > NumbersVector;
  
-static unsigned long  countCommonKmers(KmerSolidMap &m1, KmerSolidMap &m2)
+// returns:
+//  0: the common count of unique kmers
+//  1: the cumulative count of the common kmers from map 1
+//  2: the cumulative count of the common kmers from map 2
+//  3: the total cumulative count of all kmers from map 1
+//  4: the total cumulative count of all kmers from map 2
+static NumbersVector  countCommonKmers(KmerSolidMap &m1, KmerSolidMap &m2)
 {
-    unsigned long common = 0;
+    NumbersVector ret(5);
     
     for(KmerSolidMap::Iterator it(m1.begin()), itEnd(m1.end()); it != itEnd; it++)
     {
-        if (m2.exists(it->key()))
-          common++;
+    	ret[3] += it->value().getCount();
+    	KmerSolidMap::ElementType element = m2.getElementIfExists(it->key());
+    	if (element.isValid()) {
+          ret[0]++;
+          ret[1] += it->value().getCount();
+          ret[2] += element.value().getCount();
+        }
     }
-
-    return common;
-}
-
-void buildKmerMap(KmerSolidMap &m, ReadSet &store)
-{
-   for (unsigned int i=0 ; i < store.getSize(); i++) {
-    KmerWeights kmers = buildWeightedKmers(store.getRead(i));
-
-    for (unsigned int j=0; j < kmers.size(); j++)
+    for(KmerSolidMap::Iterator it(m2.begin()), itEnd(m2.end()); it != itEnd; it++)
     {
-        TEMP_KMER (least);
-        bool keepDirection = kmers[j].buildLeastComplement( least);
-        m[ least ].track( kmers.valueAt(j), keepDirection );
+    	ret[4] += it->value().getCount();
     }
-  }
+    return ret;
 }
- 
+
 int main(int argc, char *argv[])
 {
  
@@ -164,27 +166,35 @@ int main(int argc, char *argv[])
     
     cerr << " loaded " << readSet1.getSize() << " Reads, " << readSet1.getBaseCount() << " Bases " << endl;
 
-    
     cerr << "Reading 2nd file set:" ;
     readSet2.appendAllFiles(fileList2);
     cerr << " loaded " << readSet2.getSize() << " Reads, " << readSet2.getBaseCount() << " Bases " << endl;
  
-   KmerSolidMap m1,m2;
+    KS ks1(KS::estimateWeakKmerBucketSize(readSet1));
+    KS ks2(KS::estimateWeakKmerBucketSize(readSet2));
+   
+    KmerSolidMap &m1 = ks1.solid;
+    KmerSolidMap &m2 = ks2.solid;
 
-   cerr << "Building map 1\n";
-   buildKmerMap(m1,readSet1);
+    cerr << "Building map 1\n";
+    ks1.buildKmerSpectrum(readSet1, true);
     
-   TrackingData::resetGlobalCounters();
+    TrackingData::resetGlobalCounters();
 
-   cerr << "Building map 2\n";
-   buildKmerMap(m2,readSet2);
+    cerr << "Building map 2\n";
+    ks2.buildKmerSpectrum(readSet2, true);
 
-   cerr << "Counting common Kmers\n";
-   unsigned long common = countCommonKmers(m1,m2);
+    cerr << "Counting common Kmers\n";
+    NumbersVector common = countCommonKmers(m1,m2);
 
-   cout << endl;
-   cout << "Set 1\tSet 2\tCommon\t% Set1\t% Set2\n";
-   cout << m1.size() << '\t' << m2.size()<< '\t'<< common << '\t'  <<  setprecision(4) << (common*100.0)/m1.size() << '\t' <<  (common*100.0)/m2.size() << endl;
+    cout << endl;
+    cout << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
+    cout << m1.size() << '\t' << m2.size()<< '\t'<< common[0] << '\t'  
+      << setprecision(4) 
+      << (common[0]*100.0)/m1.size() << '\t' 
+      << (common[1]*100.0/common[3]) << "\t" 
+      << (common[0]*100.0)/m2.size() << "\t"
+      << (common[2]*100.0/common[4]) << endl;
    
 }
 
@@ -196,6 +206,10 @@ int main(int argc, char *argv[])
 
 //
 // $Log: CompareSpectrums.cpp,v $
+// Revision 1.4  2010-01-08 18:34:51  regan
+// refactored a bit
+// enabled openmp parallelizations
+//
 // Revision 1.3  2010-01-05 06:44:37  regan
 // fixed warnings
 //
