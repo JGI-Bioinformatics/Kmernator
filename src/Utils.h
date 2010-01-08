@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.22 2010-01-06 15:20:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.23 2010-01-08 06:25:18 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -27,10 +27,12 @@
 #define foreach BOOST_FOREACH
 
 #include <boost/unordered_map.hpp>
+#include <boost/lexical_cast.hpp>
 
 
 using namespace boost::accumulators;
 
+#include "config.h"
 #include "TwoBitSequence.h"
 #include "Kmer.h"
 #include "Sequence.h"
@@ -85,59 +87,44 @@ typedef BucketedData< double, FourByte  > DoubleToFourByte;
 typedef BucketedData< double, EightByte > DoubleToEightByte;
 
 
-unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKmersPerBucket ) {
-	unsigned long baseCount = store.getBaseCount();
-	if (baseCount == 0 || store.getSize() == 0)
-	  return 128;
-	unsigned long avgSequenceLength = baseCount / store.getSize();
-	unsigned long kmersPerRead = (avgSequenceLength - KmerSizer::getSequenceLength() + 1);
-	if (kmersPerRead > avgSequenceLength + 1)
-	  throw std::invalid_argument("Attempting to use a kmer greater than the avgerage sequence length");
-	unsigned long rawKmers = kmersPerRead * store.getSize();
-	// assume 1% error rate
-	unsigned long estimatedUniqueKmers = rawKmers * ( std::max(pow(1.01, KmerSizer::getSequenceLength()),2.0) - 1.0 );
-	unsigned long targetBuckets = estimatedUniqueKmers / targetKmersPerBucket;
-	unsigned long maxBuckets = 128*1024*1024;
-	unsigned long minBuckets = 128;
-	return std::max( std::min(targetBuckets,maxBuckets), minBuckets );
-}
-
-
-
-KmerWeights buildWeightedKmers(Read &read, bool leastComplement = false) {
-  KmerWeights kmers(read.getTwoBitSequence(), read.getLength(), leastComplement);
-  std::string quals = read.getQuals();
-  SequenceLengthType markupIdx = 0;
-  
-  BaseLocationVectorType markups = read.getMarkups();
-  double weight = 0.0;
-  double change = 0.0;
-  
-  for(SequenceLengthType i=0; i< kmers.size(); i++) {
-  	if (i%100 == 0 || weight == 0.0) {
-  	  weight = 1.0;
-  	  for(SequenceLengthType j=0; j < KmerSizer::getSequenceLength(); j++) 
-  	    weight *= Read::qualityToProbability[ (unsigned char) quals[i+j] ];
-  	} else {
-  		change = Read::qualityToProbability[ (unsigned char) quals[i+KmerSizer::getSequenceLength()-1] ] / 
-  		         Read::qualityToProbability[ (unsigned char) quals[i-1] ];
-  		weight *= change;
-  	}
-  	while( markupIdx < markups.size() && markups[markupIdx].second < i)
-  	  markupIdx++;
-  	if (markupIdx < markups.size() && markups[markupIdx].second < i+KmerSizer::getSequenceLength()) {
-  	    weight = 0.0;
-//  	    std::cerr << "markupAt " << markups[markupIdx].first << " " << markups[markupIdx].second << "\t";
-    }
-    if (kmers[i].isTrivial())
-        weight = 0.0;
-  	kmers.valueAt(i) = weight;
-//  	std::cerr << i << ":" << std::fixed << std::setprecision(3) << quals[i+KmerSizer::getSequenceLength()-1] << "-" << change << "/" << weight << "\t";
-  	
+class KmerReadUtils 
+{
+public:
+  static KmerWeights buildWeightedKmers(Read &read, bool leastComplement = false) {
+	  KmerWeights kmers(read.getTwoBitSequence(), read.getLength(), leastComplement);
+	  std::string quals = read.getQuals();
+	  SequenceLengthType markupIdx = 0;
+	  
+	  BaseLocationVectorType markups = read.getMarkups();
+	  double weight = 0.0;
+	  double change = 0.0;
+	  
+	  for(SequenceLengthType i=0; i< kmers.size(); i++) {
+	  	if (i%100 == 0 || weight == 0.0) {
+	  	  weight = 1.0;
+	  	  for(SequenceLengthType j=0; j < KmerSizer::getSequenceLength(); j++) 
+	  	    weight *= Read::qualityToProbability[ (unsigned char) quals[i+j] ];
+	  	} else {
+	  		change = Read::qualityToProbability[ (unsigned char) quals[i+KmerSizer::getSequenceLength()-1] ] / 
+	  		         Read::qualityToProbability[ (unsigned char) quals[i-1] ];
+	  		weight *= change;
+	  	}
+	  	while( markupIdx < markups.size() && markups[markupIdx].second < i)
+	  	  markupIdx++;
+	  	if (markupIdx < markups.size() && markups[markupIdx].second < i+KmerSizer::getSequenceLength()) {
+	  	    weight = 0.0;
+	//  	    std::cerr << "markupAt " << markups[markupIdx].first << " " << markups[markupIdx].second << "\t";
+	    }
+	    if (kmers[i].isTrivial())
+	        weight = 0.0;
+	  	kmers.valueAt(i) = weight;
+	//  	std::cerr << i << ":" << std::fixed << std::setprecision(3) << quals[i+KmerSizer::getSequenceLength()-1] << "-" << change << "/" << weight << "\t";
+	  	
+	  }
+	//  std::cerr << std::endl;
+	  return kmers;
   }
-//  std::cerr << std::endl;
-  return kmers;
-}
+};
 
 template< typename M >
 class ReadSelector
@@ -205,48 +192,96 @@ public:
 
 class FilterKnownOddities
 {
+public:
+  typedef boost::unordered_map< Kmer::NumberType, std::string > DescriptionMap;
+  typedef boost::unordered_map< Kmer::NumberType, unsigned long > CountMap;
+  typedef std::vector< unsigned long > PatternVector;
+
 private:
   ReadSet sequences;
-  boost::unordered_map< unsigned long, std::string > descriptions;
-  typedef boost::unordered_map< unsigned long, unsigned long > CountMap;
+  DescriptionMap descriptions;
   CountMap counts;
-  unsigned long mask;
+  Kmer::NumberType mask;
   unsigned short length;
+  
 public:
-  FilterKnownOddities(int _length = 16) : length(_length) {
+  FilterKnownOddities(int _length = 24, int numErrors = 0) : length(_length) {
   	std::string fasta = getFasta();
   	sequences.appendFastaFile( fasta );
-  	mask = ((unsigned long) -1) & ~( 0x01<<(65-length/2)- 1 );
-  	prepareMaps();
+  	// mask is low bits
+  	mask = 1;
+  	mask <<= (64-(length/2));
+  	mask--;
+  	prepareMaps(numErrors);
   }
   
-  void prepareMaps() {
+  void prepareMaps(int numErrors) {
   	unsigned long oldKmerLength = KmerSizer::getSequenceLength();
   	KmerSizer::set(length);
   	
   	TEMP_KMER(reverse);
-  	unsigned long key;
   	for(unsigned int i = 0 ; i < sequences.getSize() ; i++) {
-  		// TODO fix bit-shift boundaries, make 4 masks or make peace with sloppy frameshifts
+  		// TODO refine search around byte-boundary problem
   		
   		Read &read = sequences.getRead(i);
-  		KmerWeights kmers = buildWeightedKmers(read);
+  		KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read);
   		for(unsigned int j = 0; j < kmers.size(); j++) {
-  			kmers[j].buildReverseComplement(reverse);  	        
   			
-  	        key = *( (unsigned long *) kmers[j].get() ) & mask;
-  	        descriptions[ key ] = std::string(read.getName());
-  	        counts[ key ] = 0;  	        
-  	        
-  	        key = *( (unsigned long *) reverse.get() ) & mask;
-  	        descriptions[ key ] = std::string(read.getName() + "-reverse");
-  	        counts[ key ] = 0;
+  			_setMaps( kmers[j].toNumber() , read.getName() + "@" + boost::lexical_cast<std::string>(j));  			
+   			kmers[j].buildReverseComplement(reverse);  	        
+  		  	_setMaps( reverse.toNumber()  , read.getName() + "-reverse@" + boost::lexical_cast<std::string>(j));
+  		  	std::cerr << "buliding " << read.getName() << " at " << j << "\t" << kmers[j].toFasta() << " " << reverse.toFasta() << " " << kmers[j].toNumber() << std::endl;		
   		}
+  		
+  	}
+  	for (int error = 0 ; error < numErrors; error++) {
+  		// build a vector of all patterns
+  		
+  		PatternVector patterns;
+  		patterns.reserve(descriptions.size());
+  		for(DescriptionMap::iterator it = descriptions.begin(); it != descriptions.end(); it++)
+  		  patterns.push_back(it->first);
+  		
+  		for(PatternVector::iterator it = patterns.begin(); it != patterns.end(); it++) {
+  		  KmerWeights kmers = KmerWeights::permuteBases( *( (Kmer *) &(*it) ) );
+  		  for(unsigned int j = 0; j < kmers.size(); j++) {
+  		  	kmers[j].buildReverseComplement(reverse);
+  		  	
+  		  	_setMaps( kmers[j].toNumber(), descriptions[*it] + "-error" + boost::lexical_cast<std::string>(error));
+  			
+  	        _setMaps( reverse.toNumber() , descriptions[*it] + "-reverror" + boost::lexical_cast<std::string>(error));
+  	        
+  		  }
+  		}
+  		
+  		// permute bases
+  		// store new patterns (if new)
+  	}
+  	Kmer::NumberType tmp[10];
+  	for(int i=0;i<10;i++)
+  	  tmp[i] = 0;
+  	std::cerr << "Filter size " << descriptions.size() << " " << mask << std::endl;
+  	foreach( DescriptionMap::value_type _desc, descriptions) {
+      tmp[0] = _desc.first;
+      
+  	  std::cerr << "Filter "  << ((Kmer *)&tmp[0])->toFasta() << " " << _desc.first << " " << _desc.second << std::endl;
   	}
   	
   	KmerSizer::set(oldKmerLength);
   }
   
+  void _setMapsBitShifted(Kmer::NumberType chunk, std::string description) {
+  	for(int shift=0; shift<4; shift++) {
+      Kmer::NumberType key = (chunk<<shift) & mask;
+      _setMaps(key, description);
+    }  
+  }
+  void _setMaps( Kmer::NumberType key, std::string description) {
+  	if (descriptions.find(key) == descriptions.end()) {
+      	descriptions[key] = description;
+      	counts[key] = 0;
+    }
+  }
   unsigned long applyFilter(ReadSet &reads) {
   	unsigned long affectedCount = 0;
   	for(unsigned long i = 0; i < reads.getSize(); i++) {
@@ -255,20 +290,36 @@ public:
   		
   		TwoBitEncoding *ptr = read.getTwoBitSequence();
   		CountMap::iterator it;
-  		unsigned long lastByte = read.getTwoBitEncodingSequenceLength() - TwoBitSequence::fastaLengthToTwoBitLength(length);
-  		for(unsigned long bytes = 0; bytes < lastByte ; bytes++) {
-  			unsigned long key = *((unsigned long *) ptr) & mask;
-  			it = counts.find( key );
-  			if (it != counts.end()) {
-  				counts[key]++;
-  				read.zeroQuals( bytes * 4, length);
-  				if (!wasAffected) {
-  				  wasAffected = true;
-  				  affectedCount++;
-  				}
-  			}
-  		}
+  		long lastByte = read.getTwoBitEncodingSequenceLength();
+  	    long lastLoop =  lastByte - TwoBitSequence::fastaLengthToTwoBitLength(length);
   		
+  		Kmer::NumberType chunk = 0;
+  		for(long bytes = -TwoBitSequence::fastaLengthToTwoBitLength(length); bytes < lastLoop ; bytes++) {
+  			// shift one byte
+  			chunk <<= 8;
+  			chunk |= *(ptr++);
+  			
+  			if (bytes >= 0) {
+  			  Kmer::NumberType key;
+  			  for(int baseShift = 0 ; baseShift <4 ; baseShift++) {
+  			  	if (baseShift == 1 && bytes == 0)
+  			  	  continue;
+  			  	key = (chunk>> (baseShift*2)) & mask;
+  			    it = counts.find( key );
+  			    if (it != counts.end()) {
+  				  counts[key]++;
+  				  unsigned long offset = bytes * 4 - baseShift;
+  				  read.zeroQuals( offset, length);
+  				  if (!wasAffected) {
+  				    wasAffected = true;
+  			  	    affectedCount++;
+  				    std::cerr << "FilterMatch to " << descriptions[key] << " at " << offset << "\t" << read.getFasta() << std::endl;
+  				  }
+  			    }
+  			  }
+  		   }
+  			
+  		}
   	}
   	return affectedCount;
   }
@@ -278,16 +329,18 @@ public:
   std::string getFasta() {
   	// TODO logic to check Options
   	std::stringstream ss;
-  	ss << ">PE-Adaptor-P" << std::endl;
-  	ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG" << std::endl;
-  	ss << ">PE-PCR-PRIMER1" << std::endl;
-  	ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
-  	ss << ">PE-PCR-PRIMER2" << std::endl;
-  	ss << "CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
-  	ss << ">SE-Adaptor-P" << std::endl;
-  	ss << "GATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG" << std::endl;
-   	ss << ">SE-Primer2" << std::endl;
-  	ss << "CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT" << std::endl;
+  	ss << ">PrimerDimer" << std::endl;
+  	ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGAGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTTG" << std::endl;
+  	//ss << ">PE-Adaptor-P" << std::endl;
+  	//ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG" << std::endl;
+  	//ss << ">PE-PCR-PRIMER1" << std::endl;
+  	//ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
+  	//ss << ">PE-PCR-PRIMER2" << std::endl;
+  	//ss << "CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
+  	//ss << ">SE-Adaptor-P" << std::endl;
+  	//ss << "GATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG" << std::endl;
+   	//ss << ">SE-Primer2" << std::endl;
+  	//ss << "CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT" << std::endl;
   	ss << ">Homopolymer-A" << std::endl;
   	ss << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   	ss << ">Homopolymer-C" << std::endl;
@@ -306,6 +359,10 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.23  2010-01-08 06:25:18  regan
+// refactored some code
+// still working on FilterKnownOddities
+//
 // Revision 1.22  2010-01-06 15:20:24  regan
 // code to screen out primers
 //
