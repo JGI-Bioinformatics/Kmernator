@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.13 2010-01-11 19:14:10 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.14 2010-01-11 21:28:36 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -758,9 +758,9 @@ public:
 
   void printStats(unsigned long pos, bool solidOnly = false, bool fullStats = false) {
 	//stats.printHistograms(solidOnly);
-    std::cerr << pos << " reads, " << solid.size();
+    std::cerr << pos << " reads";
     if (fullStats) {
-    	std::cerr << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : " << singleton.size() << " singleton - kmers so far ";
+    	std::cerr << ", " << solid.size() << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : " << singleton.size() << " singleton - kmers so far ";
     }
     std::cerr << std::endl << MemoryUtils::getMemoryUsage() << std::endl;     
   }
