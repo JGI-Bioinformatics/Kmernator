@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.12 2010-01-08 06:24:42 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.13 2010-01-11 19:14:10 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -756,13 +756,12 @@ public:
   }
   
 
-  void printStats(unsigned long pos, bool solidOnly = false) {
+  void printStats(unsigned long pos, bool solidOnly = false, bool fullStats = false) {
 	//stats.printHistograms(solidOnly);
-	SolidIterator it = solid.begin();
-    std::cerr << pos << " reads, " << solid.size() << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : " << singleton.size() << " singleton - kmers so far ";
-    //if(it != solid.end())
-    //    std::cerr << it.bucket().toString() << "; ";
-    //std::cerr << " minDepth: " << (unsigned long)TrackingData::minimumDepth <<  std::endl;
+    std::cerr << pos << " reads, " << solid.size();
+    if (fullStats) {
+    	std::cerr << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : " << singleton.size() << " singleton - kmers so far ";
+    }
     std::cerr << std::endl << MemoryUtils::getMemoryUsage() << std::endl;     
   }
 
@@ -877,7 +876,7 @@ public:
       
     #endif
 	
-    printStats(store.getSize(), isSolid);    
+    printStats(store.getSize(), isSolid, true);    
      if (!isSolid)
        printHistograms();
   }

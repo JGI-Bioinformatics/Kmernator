@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.24 2010-01-11 05:40:09 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.25 2010-01-11 19:14:10 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -285,7 +285,10 @@ public:
   }
   unsigned long applyFilter(ReadSet &reads) {
   	unsigned long affectedCount = 0;
-  	for(unsigned long i = 0; i < reads.getSize(); i++) {
+  	#ifdef _USE_OPENMP
+    #pragma omp parallel for schedule(dynamic) reduction(+:affectedCount)
+	#endif
+  	for(long i = 0; i < (long) reads.getSize(); i++) {
   		Read &read = reads.getRead(i);
   		bool wasAffected = false;
   		
@@ -376,6 +379,9 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.25  2010-01-11 19:14:10  regan
+// minor performance enhancements
+//
 // Revision 1.24  2010-01-11 05:40:09  regan
 // believe that FilterKnownOddities is working
 //
