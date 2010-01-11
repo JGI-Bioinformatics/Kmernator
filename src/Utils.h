@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.23 2010-01-08 06:25:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.24 2010-01-11 05:40:09 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <iomanip>
 #include <cstdlib>
 #include <vector>
 #include <algorithm>
@@ -203,14 +204,16 @@ private:
   CountMap counts;
   Kmer::NumberType mask;
   unsigned short length;
+  unsigned short maskBytes;
   
 public:
-  FilterKnownOddities(int _length = 24, int numErrors = 0) : length(_length) {
+  FilterKnownOddities(int _length = 24, int numErrors = 2) : length(_length) {
   	std::string fasta = getFasta();
   	sequences.appendFastaFile( fasta );
   	// mask is low bits
+  	maskBytes = TwoBitSequence::fastaLengthToTwoBitLength(length);
   	mask = 1;
-  	mask <<= (64-(length/2));
+  	mask <<= (length*2);
   	mask--;
   	prepareMaps(numErrors);
   }
@@ -230,8 +233,7 @@ public:
   			_setMaps( kmers[j].toNumber() , read.getName() + "@" + boost::lexical_cast<std::string>(j));  			
    			kmers[j].buildReverseComplement(reverse);  	        
   		  	_setMaps( reverse.toNumber()  , read.getName() + "-reverse@" + boost::lexical_cast<std::string>(j));
-  		  	std::cerr << "buliding " << read.getName() << " at " << j << "\t" << kmers[j].toFasta() << " " << reverse.toFasta() << " " << kmers[j].toNumber() << std::endl;		
-  		}
+   		}
   		
   	}
   	for (int error = 0 ; error < numErrors; error++) {
@@ -247,9 +249,9 @@ public:
   		  for(unsigned int j = 0; j < kmers.size(); j++) {
   		  	kmers[j].buildReverseComplement(reverse);
   		  	
-  		  	_setMaps( kmers[j].toNumber(), descriptions[*it] + "-error" + boost::lexical_cast<std::string>(error));
+  		  	_setMaps( kmers[j].toNumber(), descriptions[*it] + "-error" + boost::lexical_cast<std::string>(error) + "/" + boost::lexical_cast<std::string>(j));
   			
-  	        _setMaps( reverse.toNumber() , descriptions[*it] + "-reverror" + boost::lexical_cast<std::string>(error));
+  	        _setMaps( reverse.toNumber() , descriptions[*it] + "-reverror" + boost::lexical_cast<std::string>(error) + "/" + boost::lexical_cast<std::string>(j));
   	        
   		  }
   		}
@@ -260,12 +262,11 @@ public:
   	Kmer::NumberType tmp[10];
   	for(int i=0;i<10;i++)
   	  tmp[i] = 0;
-  	std::cerr << "Filter size " << descriptions.size() << " " << mask << std::endl;
-  	foreach( DescriptionMap::value_type _desc, descriptions) {
-      tmp[0] = _desc.first;
-      
-  	  std::cerr << "Filter "  << ((Kmer *)&tmp[0])->toFasta() << " " << _desc.first << " " << _desc.second << std::endl;
-  	}
+  	std::cerr << "Filter size " << descriptions.size() << " " << std::setbase(16) << mask << std::setbase(10) << std::endl;
+  	//foreach( DescriptionMap::value_type _desc, descriptions) {
+    //  tmp[0] = _desc.first;
+  	//  std::cerr << "Filter "  << ((Kmer *)&tmp[0])->toFasta() << " " << _desc.first << " " << _desc.second << std::endl;
+  	//}
   	
   	KmerSizer::set(oldKmerLength);
   }
@@ -288,32 +289,48 @@ public:
   		Read &read = reads.getRead(i);
   		bool wasAffected = false;
   		
-  		TwoBitEncoding *ptr = read.getTwoBitSequence();
-  		CountMap::iterator it;
-  		long lastByte = read.getTwoBitEncodingSequenceLength();
-  	    long lastLoop =  lastByte - TwoBitSequence::fastaLengthToTwoBitLength(length);
+  		//std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
   		
+  		unsigned long lastByte = read.getTwoBitEncodingSequenceLength() - 1;
+  		if (lastByte < maskBytes) 
+  		  continue;
+  		  
+  		TwoBitEncoding *ptr = read.getTwoBitSequence() + lastByte;
+  		CountMap::iterator it;
+
   		Kmer::NumberType chunk = 0;
-  		for(long bytes = -TwoBitSequence::fastaLengthToTwoBitLength(length); bytes < lastLoop ; bytes++) {
+  		for(unsigned long loop = lastByte + maskBytes; loop >= maskBytes ; loop--) {
   			// shift one byte
   			chunk <<= 8;
-  			chunk |= *(ptr++);
-  			
-  			if (bytes >= 0) {
+  			chunk |= *(ptr--);
+  			unsigned long bytes = loop - maskBytes;
+  			//{
+  			//	unsigned long maskedChunk = chunk & mask;
+  			//    std::cerr << read.getName() << " " << bytes << " " 
+  			//        <<  TwoBitSequence::getFasta( (TwoBitEncoding *) &chunk, 32) << "\t" 
+  			//        << TwoBitSequence::getFasta( (TwoBitEncoding *) &maskedChunk, 32)<< std::endl;
+  			//}		
+  			if (loop <= lastByte + 1) {  
   			  Kmer::NumberType key;
   			  for(int baseShift = 0 ; baseShift <4 ; baseShift++) {
-  			  	if (baseShift == 1 && bytes == 0)
-  			  	  continue;
+                if (loop > lastByte && baseShift != 0)
+                  break;
   			  	key = (chunk>> (baseShift*2)) & mask;
+  
+   			    //std::cerr << bytes << "\t" << std::setbase(16) << key << "\t" << chunk << std::setbase(10) << std::endl;
+  
   			    it = counts.find( key );
   			    if (it != counts.end()) {
   				  counts[key]++;
-  				  unsigned long offset = bytes * 4 - baseShift;
+  				  unsigned long offset = bytes * 4 + baseShift;
   				  read.zeroQuals( offset, length);
   				  if (!wasAffected) {
   				    wasAffected = true;
   			  	    affectedCount++;
-  				    std::cerr << "FilterMatch to " << descriptions[key] << " at " << offset << "\t" << read.getFasta() << std::endl;
+  				    if (0)
+  				      std::cerr << "FilterMatch to " << read.getName() 
+  				        << " against " << descriptions[key] << " at " << offset << "\t" 
+  				        << read.getFasta() << "\t" << std::setbase(16) << key << "\t" << chunk << std::setbase(10) << std::endl;
   				  }
   			    }
   			  }
@@ -359,6 +376,9 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.24  2010-01-11 05:40:09  regan
+// believe that FilterKnownOddities is working
+//
 // Revision 1.23  2010-01-08 06:25:18  regan
 // refactored some code
 // still working on FilterKnownOddities
