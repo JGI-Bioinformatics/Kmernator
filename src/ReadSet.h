@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.13 2010-01-13 00:26:49 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.14 2010-01-13 23:47:44 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -57,14 +57,17 @@ public:
     inline ReadSetSizeType getPairSize() const { return _pairs.size(); }
     
     inline bool isValidRead(ReadSetSizeType index) const { return index < getSize(); }
-    Read &getRead(ReadSetSizeType index);
+    
+    inline Read &getRead(ReadSetSizeType index) { return _reads[index]; }
+    inline const Read &getRead(ReadSetSizeType index) const { return _reads[index]; }
     
 
     // by default no pairs are identified
-    void identifyPairs();
+    ReadSetSizeType identifyPairs();
     
     // may return either as MAX_READ_IDX
-    Pair &getPair(ReadSetSizeType pairIndex) { return _pairs[pairIndex]; }
+    inline Pair &getPair(ReadSetSizeType pairIndex) { return _pairs[pairIndex]; }
+    inline const Pair &getPair(ReadSetSizeType pairIndex) const { return _pairs[pairIndex]; }
 
 protected:
     void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
@@ -98,6 +101,10 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.14  2010-01-13 23:47:44  regan
+// made const class modifications
+// fixed identify pairs
+//
 // Revision 1.13  2010-01-13 00:26:49  regan
 // fixed some parallelism
 // started pair indentification

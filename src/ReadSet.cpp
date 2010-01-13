@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.19 2010-01-13 00:26:49 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.20 2010-01-13 23:47:44 regan Exp $
 //
 
 #include <exception>
@@ -587,11 +587,6 @@ void ReadSet::appendFastq(string fastaFilePath)
 
 #endif // _USE_OPENMP
 
-Read &ReadSet::getRead(ReadSetSizeType index)
-{
-  return _reads[index];
-}
-
 std::string _commonName(const std::string &readName)
 {
 	return readName.substr(0, readName.length() - 1);
@@ -599,19 +594,20 @@ std::string _commonName(const std::string &readName)
 int _readNum(const std::string &readName)
 {
 	int retVal = 0;
-	char c = readName[ readName.length() - 1];
+	int len = readName.length();
+	char c = readName[ len - 1];
 	switch (c) {
-		case '1':
+		case '1': if (readName[len-2] != '/')  break;
 		case 'A':
 		case 'F': retVal = 1; break;
-		case '2':
+		case '2': if (readName[len-2] != '/')  break;
 		case 'B':
 		case 'R': retVal = 2; break;
 	}
 	return retVal;
 }
 
-void ReadSet::identifyPairs()
+ReadSet::ReadSetSizeType ReadSet::identifyPairs()
 {
   ReadSetSizeType size = getSize();
   
@@ -626,7 +622,7 @@ void ReadSet::identifyPairs()
     readIdx++; // start with the next read
   }
   if (size <= readIdx)
-    return;
+    return _pairs.size();
   
   boost::unordered_map< std::string, ReadSetSizeType > unmatchedNames;
   boost::unordered_map< std::string, ReadSetSizeType >::iterator unmatchedIt;
@@ -667,17 +663,23 @@ void ReadSet::identifyPairs()
         pair.read2 = readIdx;
       else
         pair.read1 = readIdx;
-      unmatchedNames[ common ] = _pairs.size();
+      if (readNum > 0)
+        unmatchedNames[ common ] = _pairs.size();
       _pairs.push_back(pair);
     }
     	
     readIdx++;
   }
   
+  return _pairs.size();
 }
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.20  2010-01-13 23:47:44  regan
+// made const class modifications
+// fixed identify pairs
+//
 // Revision 1.19  2010-01-13 00:26:49  regan
 // fixed some parallelism
 // started pair indentification
