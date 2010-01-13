@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.7 2009-12-23 07:16:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.8 2010-01-13 07:20:10 regan Exp $
 //
  
 
@@ -39,6 +39,9 @@ void testFastQFile(string filename)
     
     ReadSet store;
     store.appendAnyFile(filename);
+    store.identifyPairs();
+
+    BOOST_CHECK_EQUAL(store.getSize() / 2, store.getPairSize());
 
     string fastq;
     for (unsigned int i=0 ; i < store.getSize(); i++)
@@ -47,6 +50,13 @@ void testFastQFile(string filename)
     }
  
     BOOST_CHECK_EQUAL(fileContents, fastq);
+    
+    for (unsigned int i = 0 ; i < store.getPairSize(); i++)
+    {
+    	ReadSet::Pair &pair = store.getPair(i);
+    	BOOST_CHECK( store.isValidRead( pair.read1 ) == true );
+    	BOOST_CHECK( store.isValidRead( pair.read2 ) == true );
+    }
 } 
   
 void testFastaWithQualFile(string f,string q)
@@ -57,6 +67,10 @@ void testFastaWithQualFile(string f,string q)
     ReadSet store;
     store.appendAnyFile(f,q);
 
+    store.identifyPairs();
+
+    BOOST_CHECK_EQUAL(store.getSize() / 2, store.getPairSize());
+    
     string fasta,qual;
     for (unsigned int i=0 ; i < store.getSize(); i++)
     {
@@ -73,8 +87,15 @@ void testFastaWithQualFile(string f,string q)
  
     BOOST_CHECK_EQUAL(fFile, fasta);
     BOOST_CHECK_EQUAL(qFile,qual);
-}
 
+    for (unsigned int i = 0 ; i < store.getPairSize(); i++)
+    {
+    	ReadSet::Pair &pair = store.getPair(i);
+    	BOOST_CHECK( store.isValidRead( pair.read1 ) == true );
+    	BOOST_CHECK( store.isValidRead( pair.read2 ) == true );
+    }
+    
+}
 
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
@@ -85,6 +106,10 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.8  2010-01-13 07:20:10  regan
+// refactored filter
+// checkpoint on read picker
+//
 // Revision 1.7  2009-12-23 07:16:50  regan
 // fixed reading of fasta files
 // parallelized reading of multiple files

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.26 2010-01-13 00:25:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.27 2010-01-13 07:20:08 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -11,27 +11,8 @@
 #include <vector>
 #include <algorithm>
 
-#include <boost/accumulators/accumulators.hpp>
-#include <boost/accumulators/statistics/stats.hpp>
-#include <boost/accumulators/statistics/variance.hpp>
-#include <boost/accumulators/statistics/weighted_variance.hpp>
-#include <boost/accumulators/statistics/mean.hpp>
-#include <boost/accumulators/statistics/density.hpp>
-#include <boost/accumulators/statistics/sum.hpp>
-#include <boost/accumulators/statistics/error_of.hpp>
-#include <boost/accumulators/statistics/error_of_mean.hpp>
-#include <boost/accumulators/statistics/weighted_mean.hpp>
-#include <boost/accumulators/statistics/weighted_density.hpp>
-#include <boost/accumulators/statistics/median.hpp>
-#include <boost/accumulators/statistics/weighted_p_square_quantile.hpp>
 #include <boost/foreach.hpp>
 #define foreach BOOST_FOREACH
-
-#include <boost/unordered_map.hpp>
-#include <boost/lexical_cast.hpp>
-
-
-using namespace boost::accumulators;
 
 #include "config.h"
 #include "TwoBitSequence.h"
@@ -134,39 +115,83 @@ template< typename M >
 class ReadSelector
 {
 public:
-  struct ReadTrimType { 
-  	ReadSet::ReadSetSizeType readIdx;
-    Sequence::SequenceLengthType trimOffset; 
+  typedef ReadSet::ReadSetSizeType ReadSetSizeType;
+  typedef Sequence::SequenceLengthType SequenceLengthType;
+  class ReadTrimType {
+    SequenceLengthType trimOffset;
+    float score;
     std::string label;
-         };
+    ReadTrimType() : trimOffset(0), score(0.0), label() {}
+  };
   typedef M DataType;
   typedef typename DataType::ReadPositionWeightVector ReadPositionWeightVector;
   typedef KmerMap<DataType> KMType;
   typedef typename KMType::ConstIterator KMIterator;
+  typedef typename KMType::ElementType ElementType;
   typedef KmerMap<unsigned short> KMCacheType;
   typedef std::vector< ReadTrimType > ReadTrimVector;
+  typedef std::vector< ReadSetSizeType > PicksVector;
 
 private:
   const ReadSet &_reads;
   const KMType &_map;
-  ReadTrimVector _picks;
+  ReadTrimVector _trims;
+  PicksVector _picks;
 
 public:
-  ReadSelector(const ReadSet &reads, const KMType &map): _reads(reads), _map(map), _picks() { }
-  
-  const ReadTrimVector &getPicks() const {
-  	return _picks;
+  ReadSelector(const ReadSet &reads, const KMType &map): _reads(reads), _map(map), _trims(), _picks() 
+  { 
+  	scoreAndTrimReads();
   }
-  
-  std::ostream &writePicks(std::ostream &os) const {
-  	foreach( ReadTrimType readTrim, _picks)
-  	  os << _reads.getRead( readTrim.readIdx ).toFastq( readTrim.trimOffset, readTrim.label );
-  	return os;
+
+  void pickAllPassingReads(float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
+  	if (_reads.getPairSize() > 0)
+  	  // pick pairs of reads
+  	  for(long i = 0; i < (long) _reads.getPairSize(); i++) {
+  		ReadSet::Pair &pair = _reads.getPair(i);
+  		if ( _reads.isValidRead(pair.read1) )
+  		  if ( _trims[pair.read1].score < minimumScore || _trims[pair.read1].trimOffset < minimumLength-1)
+  		     continue;
+        if ( _reads.isValidRead(pair.read2) )
+  		  if ( _trims[pair.read2].score < minimumScore || _trims[pair.read2].trimOffset < minimumLength-1)
+  		     continue;  
+  		_picks.push_back(i);		
+  	  }
+  	else
+  	  // pick individual reads
+  	  for(long i = 0; i < (long) _reads.getSize(); i++) {
+  	  	if (_trims[i].score < minimumScore || _trims[i].trimOffset < minimumLength-1)
+  		  continue;
+  		_picks.push_back(i);
+  	  }
+  }
+    
+  void scoreAndTrimReads() {
+  	_trims.resize(_reads.getSize());
+  	#ifdef _USE_OPENMP
+    #pragma omp parallel for schedule(dynamic)
+	#endif
+  	for(long i = 0; i < (long) _reads.getSize(); i++) {
+  		Read &read = _reads.getRead(i);
+  		ReadTrimType &trim = _trims[i];
+  		
+  		KmerArray<char> kmers(read.getTwoBitSequence(), read.getLength(), true);
+  		for(unsigned long j = 0; j < kmers.size(); j++) {
+  			ElementType elem = _map.getElementIfExists(kmers[j]);
+  			if (elem.isValid()) {
+  				trim.trimOffset++;
+  				trim.score += elem.getWeightedCount();
+  			} else
+  			    break;
+  		}
+  		if (trim.trimOffset > 0) {
+  		  trim.trimOffset += KmerSizer::getSequenceLength() - 1;
+  		  // TODO label the read
+  		}
+  	}
   }
   
   void pickLeastCoveringSubset() {
-  	KMCacheType visits = KMCacheType(_map.getNumBuckets());
-  	
   	std::vector< SequenceLengthType > readHits;
   	readHits.resize( _reads.getSize() );
   	KMIterator it( _map.begin() ), end( _map.end() );
@@ -191,197 +216,38 @@ public:
   void pickCoverageNormalizedSubset() {
   	
   }
+
+  const ReadTrimVector &getPairedPicks() const {
+  	return _picks;
+  }
+  
+  std::ostream &writePicks(std::ostream &os) const {
+  	foreach( ReadSetSizeType pairIdx, _picks) {
+  	  ReadSet::Pair &pair = _reads.getPair(pairIdx);
+  	  if (_reads.isValidRead(pair.read1)) {
+  	  	ReadTrimType &readTrim = _trims[pair.read1];
+  	    os << _reads.getRead( pair.read1 ).toFastq( readTrim.trimOffset, readTrim.label );
+  	  }
+  	  if (_reads.isValidRead(pair.read2)) {
+  	  	ReadTrimType &readTrim = _trims[pair.read2];
+  	    os << _reads.getRead( pair.read2 ).toFastq( readTrim.trimOffset, readTrim.label );
+  	  }  	  
+  	}
+  	return os;
+  }
   
 };
 
-class FilterKnownOddities
-{
-public:
-  typedef boost::unordered_map< Kmer::NumberType, std::string > DescriptionMap;
-  typedef boost::unordered_map< Kmer::NumberType, unsigned long > CountMap;
-  typedef std::vector< unsigned long > PatternVector;
-
-private:
-  ReadSet sequences;
-  DescriptionMap descriptions;
-  CountMap counts;
-  Kmer::NumberType mask;
-  unsigned short length;
-  unsigned short maskBytes;
-  
-public:
-  FilterKnownOddities(int _length = 24, int numErrors = 2) : length(_length) {
-  	std::string fasta = getFasta();
-  	sequences.appendFastaFile( fasta );
-  	// mask is low bits
-  	maskBytes = TwoBitSequence::fastaLengthToTwoBitLength(length);
-  	mask = 1;
-  	mask <<= (length*2);
-  	mask--;
-  	prepareMaps(numErrors);
-  }
-  
-  void prepareMaps(int numErrors) {
-  	unsigned long oldKmerLength = KmerSizer::getSequenceLength();
-  	KmerSizer::set(length);
-  	
-  	TEMP_KMER(reverse);
-  	for(unsigned int i = 0 ; i < sequences.getSize() ; i++) {
-  		// TODO refine search around byte-boundary problem
-  		
-  		Read &read = sequences.getRead(i);
-  		KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read);
-  		for(unsigned int j = 0; j < kmers.size(); j++) {
-  			
-  			_setMaps( kmers[j].toNumber() , read.getName() + "@" + boost::lexical_cast<std::string>(j));  			
-   			kmers[j].buildReverseComplement(reverse);  	        
-  		  	_setMaps( reverse.toNumber()  , read.getName() + "-reverse@" + boost::lexical_cast<std::string>(j));
-   		}
-  		
-  	}
-  	for (int error = 0 ; error < numErrors; error++) {
-  		// build a vector of all patterns
-  		
-  		PatternVector patterns;
-  		patterns.reserve(descriptions.size());
-  		for(DescriptionMap::iterator it = descriptions.begin(); it != descriptions.end(); it++)
-  		  patterns.push_back(it->first);
-  		
-  		for(PatternVector::iterator it = patterns.begin(); it != patterns.end(); it++) {
-  		  KmerWeights kmers = KmerWeights::permuteBases( *( (Kmer *) &(*it) ) );
-  		  for(unsigned int j = 0; j < kmers.size(); j++) {
-  		  	kmers[j].buildReverseComplement(reverse);
-  		  	
-  		  	_setMaps( kmers[j].toNumber(), descriptions[*it] + "-error" + boost::lexical_cast<std::string>(error) + "/" + boost::lexical_cast<std::string>(j));
-  			
-  	        _setMaps( reverse.toNumber() , descriptions[*it] + "-reverror" + boost::lexical_cast<std::string>(error) + "/" + boost::lexical_cast<std::string>(j));
-  	        
-  		  }
-  		}
-  		
-  		// permute bases
-  		// store new patterns (if new)
-  	}
-  	Kmer::NumberType tmp[10];
-  	for(int i=0;i<10;i++)
-  	  tmp[i] = 0;
-  	std::cerr << "Filter size " << descriptions.size() << " " << std::setbase(16) << mask << std::setbase(10) << std::endl;
-  	//foreach( DescriptionMap::value_type _desc, descriptions) {
-    //  tmp[0] = _desc.first;
-  	//  std::cerr << "Filter "  << ((Kmer *)&tmp[0])->toFasta() << " " << _desc.first << " " << _desc.second << std::endl;
-  	//}
-  	
-  	KmerSizer::set(oldKmerLength);
-  }
-  
-  void _setMapsBitShifted(Kmer::NumberType chunk, std::string description) {
-  	for(int shift=0; shift<4; shift++) {
-      Kmer::NumberType key = (chunk<<shift) & mask;
-      _setMaps(key, description);
-    }  
-  }
-  void _setMaps( Kmer::NumberType key, std::string description) {
-  	if (descriptions.find(key) == descriptions.end()) {
-      	descriptions[key] = description;
-      	counts[key] = 0;
-    }
-  }
-  unsigned long applyFilter(ReadSet &reads) {
-  	unsigned long affectedCount = 0;
-  	#ifdef _USE_OPENMP
-    #pragma omp parallel for schedule(dynamic) reduction(+:affectedCount)
-	#endif
-  	for(long i = 0; i < (long) reads.getSize(); i++) {
-  		Read &read = reads.getRead(i);
-  		bool wasAffected = false;
-  		
-  		//std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
-  		
-  		unsigned long lastByte = read.getTwoBitEncodingSequenceLength() - 1;
-  		if (lastByte < maskBytes) 
-  		  continue;
-  		  
-  		TwoBitEncoding *ptr = read.getTwoBitSequence() + lastByte;
-  		CountMap::iterator it;
-
-  		Kmer::NumberType chunk = 0;
-  		for(unsigned long loop = lastByte + maskBytes; loop >= maskBytes ; loop--) {
-  			// shift one byte
-  			chunk <<= 8;
-  			chunk |= *(ptr--);
-  			unsigned long bytes = loop - maskBytes;
-  			//{
-  			//	unsigned long maskedChunk = chunk & mask;
-  			//    std::cerr << read.getName() << " " << bytes << " " 
-  			//        <<  TwoBitSequence::getFasta( (TwoBitEncoding *) &chunk, 32) << "\t" 
-  			//        << TwoBitSequence::getFasta( (TwoBitEncoding *) &maskedChunk, 32)<< std::endl;
-  			//}		
-  			if (loop <= lastByte + 1) {  
-  			  Kmer::NumberType key;
-  			  for(int baseShift = 0 ; baseShift <4 ; baseShift++) {
-                if (loop > lastByte && baseShift != 0)
-                  break;
-  			  	key = (chunk>> (baseShift*2)) & mask;
-  
-   			    //std::cerr << bytes << "\t" << std::setbase(16) << key << "\t" << chunk << std::setbase(10) << std::endl;
-  
-  			    it = counts.find( key );
-  			    if (it != counts.end()) {
-  				  counts[key]++;
-  				  unsigned long offset = bytes * 4 + baseShift;
-  				  read.zeroQuals( offset, length);
-  				  if (!wasAffected) {
-  				    wasAffected = true;
-  			  	    affectedCount++;
-  				    if (0)
-  				      std::cerr << "FilterMatch to " << read.getName() 
-  				        << " against " << descriptions[key] << " at " << offset << "\t" 
-  				        << read.getFasta() << "\t" << std::setbase(16) << key << "\t" << chunk << std::setbase(10) << std::endl;
-  				  }
-  			    }
-  			  }
-  		   }
-  			
-  		}
-  	}
-  	return affectedCount;
-  }
-  
-  
-  const ReadSet &getSequences() { return sequences; }
-  std::string getFasta() {
-  	// TODO logic to check Options
-  	std::stringstream ss;
-  	ss << ">PrimerDimer" << std::endl;
-  	ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGAGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTTG" << std::endl;
-  	//ss << ">PE-Adaptor-P" << std::endl;
-  	//ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG" << std::endl;
-  	//ss << ">PE-PCR-PRIMER1" << std::endl;
-  	//ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
-  	//ss << ">PE-PCR-PRIMER2" << std::endl;
-  	//ss << "CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
-  	//ss << ">SE-Adaptor-P" << std::endl;
-  	//ss << "GATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG" << std::endl;
-   	//ss << ">SE-Primer2" << std::endl;
-  	//ss << "CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT" << std::endl;
-  	ss << ">Homopolymer-A" << std::endl;
-  	ss << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
-  	ss << ">Homopolymer-C" << std::endl;
-  	ss << "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" << std::endl;
-  	ss << ">Homopolymer-G" << std::endl;
-  	ss << "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG" << std::endl;
-  	ss << ">Homopolymer-T" << std::endl;
-  	ss << "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT" << std::endl;
-    return ss.str();
-  }
-  
-};
 
 
 #endif
 
 //
 // $Log: Utils.h,v $
+// Revision 1.27  2010-01-13 07:20:08  regan
+// refactored filter
+// checkpoint on read picker
+//
 // Revision 1.26  2010-01-13 00:25:43  regan
 // use less memory for reference sequences and those without quality
 //
