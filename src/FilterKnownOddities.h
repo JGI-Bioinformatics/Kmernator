@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.1 2010-01-13 07:20:08 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.2 2010-01-13 23:48:51 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -14,6 +14,7 @@
 #include "config.h"
 #include "Kmer.h"
 #include "ReadSet.h"
+#include "KmerReadUtils.h"
 
 
 class FilterKnownOddities

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.27 2010-01-13 07:20:08 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.28 2010-01-13 23:48:51 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -69,181 +69,15 @@ typedef BucketedData< double, FourByte  > DoubleToFourByte;
 typedef BucketedData< double, EightByte > DoubleToEightByte;
 
 
-class KmerReadUtils 
-{
-public:
-  static KmerWeights buildWeightedKmers(Read &read, bool leastComplement = false) {
-	  KmerWeights kmers(read.getTwoBitSequence(), read.getLength(), leastComplement);
-	  std::string quals = read.getQuals();
-	  SequenceLengthType markupIdx = 0;
-	  
-	  BaseLocationVectorType markups = read.getMarkups();
-	  double weight = 0.0;
-	  double change = 0.0;
-	  bool isRef = false;
-	  if (quals.length()>0 && quals[0] == Read::REF_QUAL)
-	    isRef = true;
-	  
-	  for(SequenceLengthType i=0; i< kmers.size(); i++) {
-	  	if (isRef) {
-	  	  weight = 1.0;
-	  	} else if (i%100 == 0 || weight == 0.0) {
-	  	  weight = 1.0;
-	  	  for(SequenceLengthType j=0; j < KmerSizer::getSequenceLength(); j++) 
-	  	    weight *= Read::qualityToProbability[ (unsigned char) quals[i+j] ];
-	  	} else {
-	  		change = Read::qualityToProbability[ (unsigned char) quals[i+KmerSizer::getSequenceLength()-1] ] / 
-	  		         Read::qualityToProbability[ (unsigned char) quals[i-1] ];
-	  		weight *= change;
-	  	}
-	  	while( markupIdx < markups.size() && markups[markupIdx].second < i)
-	  	  markupIdx++;
-	  	if (markupIdx < markups.size() && markups[markupIdx].second < i+KmerSizer::getSequenceLength()) {
-	  	    weight = 0.0;
-	//  	    std::cerr << "markupAt " << markups[markupIdx].first << " " << markups[markupIdx].second << "\t";
-	    }
-	  	kmers.valueAt(i) = weight;
-	//  	std::cerr << i << ":" << std::fixed << std::setprecision(3) << quals[i+KmerSizer::getSequenceLength()-1] << "-" << change << "/" << weight << "\t";
-	  	
-	  }
-	//  std::cerr << std::endl;
-	  return kmers;
-  }
-};
-
-template< typename M >
-class ReadSelector
-{
-public:
-  typedef ReadSet::ReadSetSizeType ReadSetSizeType;
-  typedef Sequence::SequenceLengthType SequenceLengthType;
-  class ReadTrimType {
-    SequenceLengthType trimOffset;
-    float score;
-    std::string label;
-    ReadTrimType() : trimOffset(0), score(0.0), label() {}
-  };
-  typedef M DataType;
-  typedef typename DataType::ReadPositionWeightVector ReadPositionWeightVector;
-  typedef KmerMap<DataType> KMType;
-  typedef typename KMType::ConstIterator KMIterator;
-  typedef typename KMType::ElementType ElementType;
-  typedef KmerMap<unsigned short> KMCacheType;
-  typedef std::vector< ReadTrimType > ReadTrimVector;
-  typedef std::vector< ReadSetSizeType > PicksVector;
-
-private:
-  const ReadSet &_reads;
-  const KMType &_map;
-  ReadTrimVector _trims;
-  PicksVector _picks;
-
-public:
-  ReadSelector(const ReadSet &reads, const KMType &map): _reads(reads), _map(map), _trims(), _picks() 
-  { 
-  	scoreAndTrimReads();
-  }
-
-  void pickAllPassingReads(float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
-  	if (_reads.getPairSize() > 0)
-  	  // pick pairs of reads
-  	  for(long i = 0; i < (long) _reads.getPairSize(); i++) {
-  		ReadSet::Pair &pair = _reads.getPair(i);
-  		if ( _reads.isValidRead(pair.read1) )
-  		  if ( _trims[pair.read1].score < minimumScore || _trims[pair.read1].trimOffset < minimumLength-1)
-  		     continue;
-        if ( _reads.isValidRead(pair.read2) )
-  		  if ( _trims[pair.read2].score < minimumScore || _trims[pair.read2].trimOffset < minimumLength-1)
-  		     continue;  
-  		_picks.push_back(i);		
-  	  }
-  	else
-  	  // pick individual reads
-  	  for(long i = 0; i < (long) _reads.getSize(); i++) {
-  	  	if (_trims[i].score < minimumScore || _trims[i].trimOffset < minimumLength-1)
-  		  continue;
-  		_picks.push_back(i);
-  	  }
-  }
-    
-  void scoreAndTrimReads() {
-  	_trims.resize(_reads.getSize());
-  	#ifdef _USE_OPENMP
-    #pragma omp parallel for schedule(dynamic)
-	#endif
-  	for(long i = 0; i < (long) _reads.getSize(); i++) {
-  		Read &read = _reads.getRead(i);
-  		ReadTrimType &trim = _trims[i];
-  		
-  		KmerArray<char> kmers(read.getTwoBitSequence(), read.getLength(), true);
-  		for(unsigned long j = 0; j < kmers.size(); j++) {
-  			ElementType elem = _map.getElementIfExists(kmers[j]);
-  			if (elem.isValid()) {
-  				trim.trimOffset++;
-  				trim.score += elem.getWeightedCount();
-  			} else
-  			    break;
-  		}
-  		if (trim.trimOffset > 0) {
-  		  trim.trimOffset += KmerSizer::getSequenceLength() - 1;
-  		  // TODO label the read
-  		}
-  	}
-  }
-  
-  void pickLeastCoveringSubset() {
-  	std::vector< SequenceLengthType > readHits;
-  	readHits.resize( _reads.getSize() );
-  	KMIterator it( _map.begin() ), end( _map.end() );
-  	for(; it != end; it++) {
-  		const DataType &data = it->value();
-  		ReadPositionWeightVector rpos = data.getEachInstance();
-  		for(unsigned int i=0; i< rpos.size(); i++) {
-  			readHits[ rpos[i].readId ]++;
-  		}
-  	}
-  	#ifdef _USE_OPENMP
-
-    #else
-	
-	#endif  	
-  }
-  
-  void pickAllCovering() {
-  	
-  }
-  
-  void pickCoverageNormalizedSubset() {
-  	
-  }
-
-  const ReadTrimVector &getPairedPicks() const {
-  	return _picks;
-  }
-  
-  std::ostream &writePicks(std::ostream &os) const {
-  	foreach( ReadSetSizeType pairIdx, _picks) {
-  	  ReadSet::Pair &pair = _reads.getPair(pairIdx);
-  	  if (_reads.isValidRead(pair.read1)) {
-  	  	ReadTrimType &readTrim = _trims[pair.read1];
-  	    os << _reads.getRead( pair.read1 ).toFastq( readTrim.trimOffset, readTrim.label );
-  	  }
-  	  if (_reads.isValidRead(pair.read2)) {
-  	  	ReadTrimType &readTrim = _trims[pair.read2];
-  	    os << _reads.getRead( pair.read2 ).toFastq( readTrim.trimOffset, readTrim.label );
-  	  }  	  
-  	}
-  	return os;
-  }
-  
-};
-
 
 
 #endif
 
 //
 // $Log: Utils.h,v $
+// Revision 1.28  2010-01-13 23:48:51  regan
+// refactored
+//
 // Revision 1.27  2010-01-13 07:20:08  regan
 // refactored filter
 // checkpoint on read picker

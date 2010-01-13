@@ -1,12 +1,14 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.26 2010-01-13 07:20:10 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.27 2010-01-13 23:49:11 regan Exp $
 //
 
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
 
+#include "config.h"
 #include "ReadSet.h"
 #include "Kmer.h"
+#include "KmerReadUtils.h"
 #include "Utils.h"
 #include "FilterKnownOddities.h"
 #include "KmerSpectrum.h"
@@ -108,6 +110,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.27  2010-01-13 23:49:11  regan
+// refactored
+//
 // Revision 1.26  2010-01-13 07:20:10  regan
 // refactored filter
 // checkpoint on read picker

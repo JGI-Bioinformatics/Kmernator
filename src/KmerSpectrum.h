@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.15 2010-01-13 00:25:19 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.16 2010-01-13 23:48:51 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -23,8 +23,6 @@
 #include <boost/accumulators/statistics/median.hpp>
 #include <boost/accumulators/statistics/weighted_p_square_quantile.hpp>
 
-
-using namespace boost;
 using namespace boost::accumulators;
 
 #include "config.h"
@@ -32,7 +30,7 @@ using namespace boost::accumulators;
 #include "Sequence.h"
 #include "ReadSet.h"
 #include "Kmer.h"
-#include "Utils.h"
+#include "KmerReadUtils.h"
 
 template< typename S, typename W>
 class KmerSpectrum
@@ -227,7 +225,7 @@ public:
   	  directionWAcc( data.getNormalizedDirectionBias(),                     weight = data.getCount() );
   	}
   	
-    typedef iterator_range< std::vector< std::pair<double, double> >::iterator > HistogramType;
+    typedef boost::iterator_range< std::vector< std::pair<double, double> >::iterator > HistogramType;
   	HistogramType countHist          = density(countAcc);
   	HistogramType weightedCountHist  = density(weightedCountAcc);
   	HistogramType directionHist      = density(directionAcc);
