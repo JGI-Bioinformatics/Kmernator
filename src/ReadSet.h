@@ -1,9 +1,10 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.12 2010-01-06 15:20:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.13 2010-01-13 00:26:49 regan Exp $
 //
 
 #ifndef _READ_SET_H
 #define _READ_SET_H
 #include <string>
+#include <boost/unordered_map.hpp>
 
 #include "config.h"
 #include "Options.h"
@@ -15,10 +16,27 @@ class ReadFileReader;
 class ReadSet {
 public:
     typedef unsigned int ReadSetSizeType;
+    static const ReadSetSizeType MAX_READ_IDX = (unsigned int) -1;
+    class Pair {
+    public:
+    	ReadSetSizeType read1;
+    	ReadSetSizeType read2;
+    	
+    	Pair() : read1(MAX_READ_IDX), read2(MAX_READ_IDX) {}
+    	Pair(ReadSetSizeType _read1) : read1(_read1), read2(MAX_READ_IDX) {}
+    	Pair(ReadSetSizeType _read1, ReadSetSizeType _read2) : read1(_read1), read2(_read2) {}
+    	Pair(const Pair &copy) : read1(copy.read1), read2(copy.read2) {} 
+    	bool operator==(const Pair &other) const { return (read1 == other.read1) && (read2 == other.read2); }
+    	bool operator<(const Pair &other) const { return lesser() < other.lesser(); }
+    	inline ReadSetSizeType lesser() const { return (read1 < read2 ? read1 : read2); }
+    };
+    
+    typedef std::vector< Pair > PairedIndexType;
     
 private:
     std::vector<Read> _reads;
     unsigned long _baseCount;
+    PairedIndexType _pairs;
     
 private:
     void addRead(Read &read);
@@ -33,10 +51,20 @@ public:
     
     void append(ReadSet &reads);
 
-    ReadSetSizeType getSize();
-    unsigned long getBaseCount() {return _baseCount;}
+    inline ReadSetSizeType getSize() const { return _reads.size(); }
+    unsigned long getBaseCount() const {return _baseCount;}
 
+    inline ReadSetSizeType getPairSize() const { return _pairs.size(); }
+    
+    inline bool isValidRead(ReadSetSizeType index) const { return index < getSize(); }
     Read &getRead(ReadSetSizeType index);
+    
+
+    // by default no pairs are identified
+    void identifyPairs();
+    
+    // may return either as MAX_READ_IDX
+    Pair &getPair(ReadSetSizeType pairIndex) { return _pairs[pairIndex]; }
 
 protected:
     void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
@@ -45,6 +73,7 @@ protected:
     void appendFastq(std::string fastqFilePath);
     void appendFastqBlockedOMP(std::string fastaFilePath, std::string qualFilePath = "");
     void appendFastqBatchedOMP(std::string fastaFilePath, std::string qualFilePath = "");
+    
 
 };
 
@@ -69,6 +98,10 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.13  2010-01-13 00:26:49  regan
+// fixed some parallelism
+// started pair indentification
+//
 // Revision 1.12  2010-01-06 15:20:24  regan
 // code to screen out primers
 //
