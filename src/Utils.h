@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.25 2010-01-11 19:14:10 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.26 2010-01-13 00:25:43 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -99,9 +99,14 @@ public:
 	  BaseLocationVectorType markups = read.getMarkups();
 	  double weight = 0.0;
 	  double change = 0.0;
+	  bool isRef = false;
+	  if (quals.length()>0 && quals[0] == Read::REF_QUAL)
+	    isRef = true;
 	  
 	  for(SequenceLengthType i=0; i< kmers.size(); i++) {
-	  	if (i%100 == 0 || weight == 0.0) {
+	  	if (isRef) {
+	  	  weight = 1.0;
+	  	} else if (i%100 == 0 || weight == 0.0) {
 	  	  weight = 1.0;
 	  	  for(SequenceLengthType j=0; j < KmerSizer::getSequenceLength(); j++) 
 	  	    weight *= Read::qualityToProbability[ (unsigned char) quals[i+j] ];
@@ -116,8 +121,6 @@ public:
 	  	    weight = 0.0;
 	//  	    std::cerr << "markupAt " << markups[markupIdx].first << " " << markups[markupIdx].second << "\t";
 	    }
-	    if (kmers[i].isTrivial())
-	        weight = 0.0;
 	  	kmers.valueAt(i) = weight;
 	//  	std::cerr << i << ":" << std::fixed << std::setprecision(3) << quals[i+KmerSizer::getSequenceLength()-1] << "-" << change << "/" << weight << "\t";
 	  	
@@ -379,6 +382,9 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.26  2010-01-13 00:25:43  regan
+// use less memory for reference sequences and those without quality
+//
 // Revision 1.25  2010-01-11 19:14:10  regan
 // minor performance enhancements
 //

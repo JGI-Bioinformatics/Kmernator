@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.17 2010-01-06 15:20:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.18 2010-01-13 00:24:30 regan Exp $
 //
 
 #include <cstring>
@@ -163,7 +163,7 @@ char * Read::_getQual()
 
 char * Read::_getName()
 {
-  return (char *)(_getQual() + _length);
+  return (char *)(_getQual() + _qualLength());
 }
 
 
@@ -173,20 +173,27 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes )
    if ( fasta.length() != qualBytes.length())
       throw new std::invalid_argument("fasta length != qual length for name = " + name);
 
-   Sequence::setSequence(fasta,qualBytes.length() + (name.length() + 1) );
+   // set quality to one byte if this is a reference (or fasta without quality scores)
+   if (qualBytes.length() > 1 && qualBytes[0] == REF_QUAL)
+     qualBytes = string(1, REF_QUAL);
+     
+   Sequence::setSequence(fasta, qualBytes.length() + (name.length() + 1) );
 
-   memcpy(_getQual(), qualBytes.c_str(), _length);
+   memcpy(_getQual(), qualBytes.c_str(), qualBytes.length());
    strcpy(_getName(), name.c_str());
 }
 
 void Read::zeroQuals(SequenceLengthType offset, SequenceLengthType length)
 {
 	char *qualPtr = _getQual();
+	if ( *qualPtr == REF_QUAL )
+	  return;
 	for(unsigned int i=0;i<offset;i++)
 	  qualPtr++;
 	for(unsigned int i=0;i<length;i++)
 	  *(qualPtr++) = '\0';	
 }
+
 string Read::getName()
 {
   if(_data == nullSequence)
@@ -197,9 +204,23 @@ string Read::getName()
 
 string Read::getQuals(SequenceLengthType trimOffset)
 {
-  return  string(_getQual(), ( trimOffset <= _length ? trimOffset : _length) );
+  char * qualPtr = _getQual();
+  SequenceLengthType len = ( trimOffset <= _length ? trimOffset : _length);
+  if ( len > 0 && *qualPtr == REF_QUAL )
+    return string( len, REF_QUAL );
+  else
+    return string( qualPtr, len );
 }
 
+SequenceLengthType Read::_qualLength()
+{
+    if (_length == 0)
+      return 0;
+    else if ( *(_getQual()) == REF_QUAL )
+      return 1;
+    else
+      return _length;
+}
 
 string Read::toFastq(SequenceLengthType trimOffset, std::string label)
 {
@@ -220,6 +241,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset)
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.18  2010-01-13 00:24:30  regan
+// use less memory for reference sequences and those without quality
+//
 // Revision 1.17  2010-01-06 15:20:24  regan
 // code to screen out primers
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.11 2010-01-06 15:20:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.12 2010-01-13 00:24:30 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -53,6 +53,9 @@ public:
 
 class Read : public Sequence
 {
+public:
+  static const char REF_QUAL = 0xff;
+  
 private:
 
 	/*
@@ -66,6 +69,7 @@ private:
 
   char * _getQual();
   char * _getName();
+  SequenceLengthType _qualLength();
 
   static int qualityToProbabilityInitialized;
   static int initializeQualityToProbability();
@@ -93,6 +97,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.12  2010-01-13 00:24:30  regan
+// use less memory for reference sequences and those without quality
+//
 // Revision 1.11  2010-01-06 15:20:24  regan
 // code to screen out primers
 //
