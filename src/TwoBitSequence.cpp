@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.16 2009-12-24 00:55:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.17 2010-01-13 23:34:59 regan Exp $
 //
 
 #include <cstring>
@@ -118,10 +118,10 @@ void TwoBitSequence::applyMarkup(char *bases, BaseLocationVectorType markupBases
   for(BaseLocationVectorType::iterator ptr = markupBases.begin(); ptr != markupBases.end() ; ptr++)
     bases[ptr->second] = ptr->first;
 }
-void TwoBitSequence::applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, BaseLocationType *markupBases)
+void TwoBitSequence::applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, const BaseLocationType *markupBases)
 {
   if (markupBasesSize > 0) {
-    for (BaseLocationType *ptr = markupBases; ptr < markupBases+markupBasesSize && ptr->second < bases.length(); ptr++)
+    for (const BaseLocationType *ptr = markupBases; ptr < markupBases+markupBasesSize && ptr->second < bases.length(); ptr++)
         bases[ptr->second] = ptr->first;
   }
 }
@@ -188,6 +188,9 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut, SequenceLe
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.17  2010-01-13 23:34:59  regan
+// made const class modifications
+//
 // Revision 1.16  2009-12-24 00:55:57  regan
 // made const iterators
 // fixed some namespace issues

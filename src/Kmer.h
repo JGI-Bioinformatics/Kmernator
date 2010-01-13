@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.68 2010-01-13 00:23:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.69 2010-01-13 23:34:17 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -140,7 +140,9 @@ class Kmer
        inline Kmer *get() {
          return this;
        }
-       
+       inline const Kmer *get() const {
+         return this;
+       }
 	   inline bool operator ==(const Kmer &other) const
 	   {
 	      return compare(other) == 0;
@@ -175,9 +177,13 @@ class Kmer
 	   }
 
 	
-	   inline TwoBitEncoding *getTwoBitSequence() const
+	   inline TwoBitEncoding *getTwoBitSequence()
 	   {
 	     return (TwoBitEncoding *)_data();
+	   }
+	   inline const TwoBitEncoding *getTwoBitSequence() const
+	   {
+	     return (const TwoBitEncoding *)_data();
 	   }
 	   inline SequenceLengthType getTwoBitLength() const
 	   {
@@ -194,7 +200,7 @@ class Kmer
 	
 	   void buildReverseComplement(Kmer &output) const
 	   {
-	     TwoBitSequence::reverseComplement((TwoBitEncoding*)_data(), (TwoBitEncoding*)output._data(), getLength());
+	     TwoBitSequence::reverseComplement(getTwoBitSequence(), output.getTwoBitSequence(), getLength());
 	   }
 	   
 	   // returns true if this is the least complement, false otherwise
@@ -547,7 +553,73 @@ std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
 std::ostream &operator<<(std::ostream &stream, TrackingDataSingleton &ob);
 std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob);
 
+template <typename T>
+class TrackingDataMinimal
+{
+public:
+	typedef T DataType;
+	typedef typename TrackingData::CountType CountType;
+    typedef typename TrackingData::WeightType WeightType;
+    typedef typename TrackingData::ReadIdType ReadIdType;
+    typedef typename TrackingData::PositionType PositionType;
+	typedef typename TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
+	 
+private:
+    DataType count;
 
+public:
+    TrackingDataMinimal() : count(0) {}
+    void reset() { count = 0; }
+    
+    bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos) 
+    {
+    	if (TrackingData::isDiscard(weight))
+    	  return false;
+    	DataType test = (DataType) weight;
+    	// handle both integers and floats "properly"
+    	if (test < weight)
+    	  count += 1;
+    	else
+    	  count += weight;
+    	return true;
+    }
+    inline unsigned long getCount() const { return count; }
+    inline unsigned long getDirectionBias() const { return count / 2; }
+    inline double getWeightedCount() const { return count; }    
+    inline double getNormalizedDirectionBias() const { return 0.5 ; }
+    ReadPositionWeightVector getEachInstance() const 
+    {
+    	return ReadPositionWeightVector(0);
+    }
+    
+    std::string toString() const {
+      std::stringstream ss;
+      ss << getCount();
+      return ss.str();
+    }
+    TrackingDataMinimal &operator=(const TrackingData &other) {
+  	  count = (DataType) other.getWeightedCount();
+  	  return *this;
+    }TrackingDataMinimal &operator=(const TrackingDataWithAllReads &other) {
+  	  count = (DataType) other.getWeightedCount();
+  	  return *this;
+    }
+    TrackingDataMinimal &operator=(const TrackingDataSingleton &other) {
+  	  count = (DataType) other.getWeightedCount();
+  	  return *this;
+    }
+};
+
+typedef TrackingDataMinimal<unsigned char> TrackingDataMinimal1;
+typedef TrackingDataMinimal<unsigned short> TrackingDataMinimal2;
+typedef TrackingDataMinimal<unsigned int> TrackingDataMinimal4;
+typedef TrackingDataMinimal<float> TrackingDataMinimal8;
+
+template <typename T>
+std::ostream &operator<<(std::ostream &stream, TrackingDataMinimal<T> &ob) {
+	stream << ob.toString();
+	return stream;
+};
 
 
 template<typename Value>
@@ -561,12 +633,12 @@ public:
   
   class ElementType { 
     private:
-  	  Kmer *_key; 
-  	  ValueType *_value;
-  	  KmerArray *_array;
+  	  const Kmer *_key; 
+  	  const ValueType *_value;
+  	  const KmerArray *_array;
     public:
       ElementType(): _key(NULL), _value(NULL), _array(NULL) { }
-  	  ElementType(Kmer &key, ValueType &value, KmerArray &array): _key(&key), _value(&value), _array(&array) { setLock(); }
+  	  ElementType(const Kmer &key, const ValueType &value, const KmerArray &array): _key(&key), _value(&value), _array(&array) { setLock(); }
   	  ElementType(const ElementType &copy): _key(NULL), _value(NULL), _array(NULL) {
   	  	*this = copy;
   	  }
@@ -596,9 +668,9 @@ public:
   	  }
 
   	  const Kmer &key() const { return *_key; }
-  	  Kmer &key() { return *_key; }
+  	  Kmer &key() { return const_cast<Kmer&>(*_key); }
   	  const ValueType &value() const { return *_value; }
-  	  ValueType &value()   { return *_value; }
+  	  ValueType &value()   { return const_cast<ValueType&>(*_value); }
   	  inline bool operator==(const ElementType &other) const {
   	  	if (this->_value != NULL && other._value != NULL)
   	  	  return *(this->_value) == *(other._value);
@@ -799,7 +871,7 @@ public:
     resize(size);
   }
 
-  KmerArray(TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false):
+  KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false):
   _begin(NULL),_size(0),_capacity(0)
   {
   	initLock();
@@ -1072,7 +1144,7 @@ public:
     }
   }
   
-  void build(TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false)
+  void build(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false)
   {
   	setExclusiveLock();
     SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
@@ -1086,7 +1158,7 @@ public:
 	#endif
     for(long bytes=0; bytes < numBytes; bytes++) {
       SequenceLengthType i = bytes * 4;
-      TwoBitEncoding *ref = twoBit+i/4;
+      const TwoBitEncoding *ref = twoBit+i/4;
       for (int bitShift=0; bitShift < 4 && i+bitShift < numKmers; bitShift++) {
         TwoBitSequence::shiftLeft(ref, kmers[i+bitShift].get(), KmerSizer::getTwoBitLength(), bitShift, bitShift != 0);
         TwoBitEncoding *lastByte = kmers[i+bitShift].getTwoBitSequence()+KmerSizer::getTwoBitLength()-1;
@@ -1123,9 +1195,9 @@ public:
   	  for(SequenceLengthType j=0; j<max; j++) {
   	    SequenceLengthType kmerIdx = byteIdx*12+j;
         tmp = kmer;
-        TwoBitEncoding *ptr = (TwoBitEncoding*) &tmp;
+        TwoBitEncoding *ptr = tmp.getTwoBitSequence();
         ptr += byteIdx;
-        *ptr = TwoBitSequence::permutations[ ((TwoBitEncoding)*ptr)*12 + j ];
+        *ptr = TwoBitSequence::permutations[ ((const TwoBitEncoding)*ptr)*12 + j ];
         if (leastComplement)
           tmp.buildLeastComplement( kmers[kmerIdx] );
         else
@@ -1386,6 +1458,8 @@ private:
    BucketsVector _buckets;
    NumberType BUCKET_MASK;
    
+   inline const KmerMap &_constThis() const { return *this; }
+
 public:
    KmerMap(IndexType bucketCount = 1024) {
    	
@@ -1453,19 +1527,20 @@ public:
    	 return getBucketIdx(key.hash());
    }
    
-   inline BucketType &getBucket(NumberType hash) {
-   	return _buckets[getBucketIdx(hash)];
-   }
    inline const BucketType &getBucket(NumberType hash) const {
    	return _buckets[getBucketIdx(hash)];
    }
-   
-   inline BucketType &getBucket(const KeyType &key)  {
-     return getBucket(getBucketIdx(key));
+   inline BucketType &getBucket(NumberType hash) {
+   	return const_cast<BucketType &>( _constThis().getBucket(hash) );
    }
+   
    inline const BucketType &getBucket(const KeyType &key) const {
      return getBucket(getBucketIdx(key));
    }
+   inline BucketType &getBucket(const KeyType &key)  {
+     return const_cast<BucketType &>( _constThis().getBucket(key) );
+   }
+   
    inline unsigned long getNumBuckets() const {
    	 return _buckets.size();
    }
@@ -1511,7 +1586,16 @@ public:
    bool exists(const KeyType &key) const {
    	 return exists(key, getBucket(key));
    }
-   
+      
+   const ElementType getElementIfExists(const KeyType &key, const BucketType &bucket) const {
+   	 IndexType existingIdx;
+   	 ElementType element;
+     bucket.setSharedLock();
+   	 if (_exists(key, existingIdx, bucket))
+   	 	element = bucket.getElement(existingIdx);
+   	 bucket.unsetSharedLock();
+   	 return element;
+   }
    ElementType getElementIfExists(const KeyType &key, BucketType &bucket) {
    	 IndexType existingIdx;
    	 ElementType element;
@@ -1521,10 +1605,14 @@ public:
    	 bucket.unsetSharedLock();
    	 return element;
    }
+   
+   const ElementType getElementIfExists(const KeyType &key) const {
+   	 return getElementIfExists(key, getBucket(key));
+   }
    ElementType getElementIfExists(const KeyType &key) {
    	 return getElementIfExists(key, getBucket(key));
    }
-
+   
    ElementType getElement(const KeyType &key, BucketType &bucket) {
      IndexType existingIdx;
    	 ElementType element;
@@ -1552,7 +1640,10 @@ public:
    
    IndexType size() const {
    	IndexType size = 0;
-   	for(IndexType i = 0; i<_buckets.size() ; i++)
+   	#ifdef _USE_OPENMP
+	#pragma omp parallel for reduction(+:size) if(_buckets.size()>1000000)
+	#endif
+   	for(long i = 0; i < (long) _buckets.size() ; i++)
    	  size += _buckets[i].size();
    	return size;
    } 
@@ -1698,6 +1789,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.69  2010-01-13 23:34:17  regan
+// made const class modifications
+//
 // Revision 1.68  2010-01-13 00:23:31  regan
 // added open mp to build kmers for long references
 //
