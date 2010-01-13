@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.18 2010-01-13 00:24:30 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.19 2010-01-13 21:16:00 cfurman Exp $
 //
 
 #include <cstring>
@@ -134,19 +134,24 @@ BaseLocationVectorType Sequence::getMarkups()
 /*------------------------------------ READ ----------------------------------------*/
 
 double Read::qualityToProbability[256];
-int Read::initializeQualityToProbability() 
+int Read::initializeQualityToProbability(unsigned char minQualityScore)
 {
   for (int i=0; i<256; i++) {
   	qualityToProbability[i] = 0;
   }
   int start = 64;
-  for (int i = start ; i < 164 ; i++ )
+  for (int i = start + minQualityScore; i < 164 ; i++ )
     qualityToProbability[i] = 1.0 - pow(10.0,( ( start - i ) / 10.0 ));
 
   qualityToProbability[255] = 1.0; // for reads with no quality data
   return 1;
 }
-int Read::qualityToProbabilityInitialized = Read::initializeQualityToProbability();
+int Read::qualityToProbabilityInitialized = Read::initializeQualityToProbability(0);
+
+void Read::setMinQualityScore( unsigned char minQualityScore)
+{
+  Read::initializeQualityToProbability(minQualityScore); 
+}
 
 
 Read::Read(std::string name, std::string fasta, std::string qualBytes)
@@ -241,6 +246,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset)
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.19  2010-01-13 21:16:00  cfurman
+// added setMinQualityScore
+//
 // Revision 1.18  2010-01-13 00:24:30  regan
 // use less memory for reference sequences and those without quality
 //

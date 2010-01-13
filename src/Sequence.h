@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.12 2010-01-13 00:24:30 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.13 2010-01-13 21:16:00 cfurman Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -72,7 +72,7 @@ private:
   SequenceLengthType _qualLength();
 
   static int qualityToProbabilityInitialized;
-  static int initializeQualityToProbability();
+  static int initializeQualityToProbability( unsigned char minQualityScore=0);
   
 public:
 
@@ -90,13 +90,16 @@ public:
 
   
   static double qualityToProbability[256];
-  
+  static void setMinQualityScore( unsigned char minQualityScore);
 };
 
 #endif
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.13  2010-01-13 21:16:00  cfurman
+// added setMinQualityScore
+//
 // Revision 1.12  2010-01-13 00:24:30  regan
 // use less memory for reference sequences and those without quality
 //
