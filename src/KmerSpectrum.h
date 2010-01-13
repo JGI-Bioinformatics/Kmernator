@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.14 2010-01-11 21:28:36 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.15 2010-01-13 00:25:19 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -785,62 +785,74 @@ public:
 	singleton.reset();
 	
     #ifdef _USE_OPENMP
-	
-	  #pragma omp parallel
-	  {
-	  	int threads = omp_get_num_threads();
-	  	#pragma omp single
-	  	{
-	  		std::cerr << "Executing parallel buildKmerSpectrum with " << threads << " and " << solid.getNumBuckets() << " buckets" << std::endl;
-	  	}
-	  }
+
+	  int numThreads = omp_get_max_threads();
 	  
-	  
-	  // allocate a square matrix of buffers: KmerWeights[writingThread][readingThread]
-	  KmerWeights kmerBuffers[omp_get_num_procs()][omp_get_num_procs()];
+      // allocate a square matrix of buffers: KmerWeights[writingThread][readingThread]
+	  KmerWeights kmerBuffers[ numThreads ][ numThreads ];
 	  KmerWeights kmers;
 	  typedef std::pair< long, long > ReadPosType;
-	  int numProcs = omp_get_num_procs();
-	  std::vector< ReadPosType > startReadIdx[ numProcs ][ numProcs ];
+	  std::vector< ReadPosType > startReadIdx[ numThreads ][ numThreads ];
 
 	  long batchIdx = 0;
 	  long batch = 1000000;
+	  if (store.getSize() < batch)
+	    batch = store.getSize() / 10 + 1;
+	
+	  #pragma omp parallel num_threads(numThreads)
+	  {
+	    if (numThreads != omp_get_num_threads())
+	       throw "OMP thread count mis-match";
+
+	  	#pragma omp single
+	  	{
+	  		std::cerr << "Executing parallel buildKmerSpectrum with " << numThreads << std::endl;
+	  	}
+	  }
+	  
 	  while (batchIdx < (long) store.getSize()) 
 	  {
 	  	printStats(batchIdx, isSolid); 
-	    #pragma omp parallel
+	    for(int tmpThread1=0 ; tmpThread1 < numThreads; tmpThread1++)
 	    {	    	
-	    	for(int i = 0; i < numProcs; i++) {
-	    	   kmerBuffers [ omp_get_thread_num() ][ i ].reset(false);
-	    	   startReadIdx[ omp_get_thread_num() ][ i ].resize(0);
-	    	   startReadIdx[ omp_get_thread_num() ][ i ].reserve(batch);
+	    	for(int tmpThread2 = 0; tmpThread2 < numThreads; tmpThread2++) {
+	    	   kmerBuffers [ tmpThread1 ][ tmpThread2 ].reset(false);
+	    	   startReadIdx[ tmpThread1 ][ tmpThread2 ].resize(0);
+	    	   startReadIdx[ tmpThread1 ][ tmpThread2 ].reserve(batch);
 	    	}	    
 	    }
 	    //std::cerr << "Reallocated buffers" << std::endl;
 	    
-	    #pragma omp parallel for private(kmers)
+	    #pragma omp parallel for private(kmers) schedule(dynamic) num_threads(numThreads)
 	    for (long i=0 ; i < batch; i++)
 	    {
 	       long readIdx = batchIdx + i;
 	       if (readIdx >= store.getSize() )
 	         continue;
 	  	   kmers = KmerReadUtils::buildWeightedKmers(store.getRead( readIdx ));
-	  	   for (long j = 0; j < omp_get_num_threads(); j++)
+	  	   for (long j = 0; j < numThreads; j++)
 	  	     startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 	  	   for (IndexType j = 0 ; j < kmers.size(); j++) {
-	  	 	 kmerBuffers[ omp_get_thread_num() ][ getSMPThread( kmers[j], omp_get_num_threads() ) ].append(kmers[j], kmers.valueAt(j));
+	  	 	 kmerBuffers[ omp_get_thread_num() ][ getSMPThread( kmers[j], numThreads ) ].append(kmers[j], kmers.valueAt(j));
 	  	   }
 	    }
 	    //std::cerr << "Loaded buffers" << std::endl;
-	    //for(long i=0; i<numProcs; i++)
-	    //  for (long j=0; j<numProcs; j++)
-	    //    std::cerr << i << "," << j << "\t" << startReadIdx[i][j].size() << "\t" << kmerBuffers[i][j].size() << std::endl;
+	    //for(long i=0; i<numThreads; i++) {
+	   //   std::cerr << i ;
+	   //   for (long j=0; j<numThreads; j++) {
+	   //     std::cerr << "\t" << kmerBuffers[i][j].size();
+	   //   }
+	   //   std::cerr << std::endl;
+	   // }
 	        
-	    #pragma omp parallel
+	    #pragma omp parallel num_threads(numThreads)
 	    {
 	    	//#pragma omp critical
 	    	//{ std::cerr << "running with " << omp_get_num_threads() << " this is " << omp_get_thread_num() << std::endl; }
-	    	for(int threads = 0 ; threads < omp_get_num_threads(); threads++) 
+	    	if (numThreads != omp_get_num_threads())
+	    	  throw "OMP thread count mis-match";
+	    	  
+	    	for(int threads = 0 ; threads < numThreads; threads++) 
 	    	{
 	    		for(unsigned long idx = 0; idx < startReadIdx[ threads ][ omp_get_thread_num() ].size(); idx++)
 	    	    {
@@ -856,18 +868,19 @@ public:
 	    	    	  append(kmerBuffers[threads][ omp_get_thread_num() ], readPos.first, isSolid, startIdx, len);
 	    	    }
 	    	}
+	    	//std::cerr << omp_get_thread_num() << ", ";
 	    }
-	    //std::cerr << "appended buffers" << std::endl;
+	    //std::cerr << " appended buffers" << std::endl;
 	    batchIdx += batch; 
 	  }
 
     #else // not using OpenMP
 	
-	    for (long i=0 ; i < (long) store.getSize(); i++)
-        {
-         KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead(i));
+	  for (long i=0 ; i < (long) store.getSize(); i++)
+      {
+        KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead(i));
        
-         append(kmers, i, isSolid);
+        append(kmers, i, isSolid);
 
         if (i % 1000000 == 0) {
        	  printStats(i, isSolid);  
