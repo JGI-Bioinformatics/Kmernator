@@ -5,6 +5,8 @@
 #define _USE_OPENMP
 //#define _USE_THREADSAFE_KMER
 #include <omp.h>
+const int OMP_NESTED_DEFAULT = omp_get_nested();
+const int OMP_DYNAMIC_DEFAULT = omp_get_dynamic();
 #endif
 
 #endif
