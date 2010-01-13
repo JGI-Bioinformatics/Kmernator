@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.19 2010-01-13 21:16:00 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.20 2010-01-13 23:46:46 regan Exp $
 //
 
 #include <cstring>
@@ -82,7 +82,7 @@ void Sequence::reset()
   _data = nullSequence;
 }
 
-string Sequence::getFasta(SequenceLengthType trimOffset)
+string Sequence::getFasta(SequenceLengthType trimOffset) const
 {
   if(_data == nullSequence)
     return string("");
@@ -94,37 +94,49 @@ string Sequence::getFasta(SequenceLengthType trimOffset)
 
   return fasta;
 }
-TwoBitEncoding *Sequence::getTwoBitSequence()
+
+const TwoBitEncoding *Sequence::getTwoBitSequence() const
 {
    return _data.get();
-
 }
-SequenceLengthType *Sequence::_getMarkupBasesCount()
+TwoBitEncoding *Sequence::getTwoBitSequence()
+{
+   return const_cast<TwoBitEncoding*>( constThis().getTwoBitSequence() );
+}
+
+const SequenceLengthType *Sequence::_getMarkupBasesCount() const
 {
   return  (SequenceLengthType *)(getTwoBitSequence() + getTwoBitEncodingSequenceLength());
 }
+SequenceLengthType *Sequence::_getMarkupBasesCount() {
+  return const_cast<SequenceLengthType*>( constThis()._getMarkupBasesCount() );
+}
 
-BaseLocationType *Sequence::_getMarkupBases()
+const BaseLocationType *Sequence::_getMarkupBases() const
 {
    return (BaseLocationType *)(_getMarkupBasesCount()+1);
 }
+BaseLocationType *Sequence::_getMarkupBases()
+{
+   return const_cast<BaseLocationType *>( constThis()._getMarkupBases() );
+}
 
-SequenceLengthType Sequence::getLength()
+SequenceLengthType Sequence::getLength() const
 {
   return _length;
 }
 
-SequenceLengthType Sequence::getTwoBitEncodingSequenceLength()
+SequenceLengthType Sequence::getTwoBitEncodingSequenceLength() const
 {
   return TwoBitSequence::fastaLengthToTwoBitLength(getLength());;
 }
 
-BaseLocationVectorType Sequence::getMarkups()
+BaseLocationVectorType Sequence::getMarkups() const
 {
   SequenceLengthType size =  *_getMarkupBasesCount();
   BaseLocationVectorType markups( size );
   if (size > 0) {
-  	BaseLocationType *ptr = _getMarkupBases();
+  	const BaseLocationType *ptr = _getMarkupBases();
   	for(unsigned int i=0; i<size; i++)
   	  markups.push_back( *(ptr++) );
   }
@@ -161,16 +173,23 @@ Read::Read(std::string name, std::string fasta, std::string qualBytes)
 
 
 
-char * Read::_getQual()
+const char * Read::_getQual() const
 {
   return (char *)(_getMarkupBases() + *_getMarkupBasesCount());
 }
+char * Read::_getQual()
+{
+  return const_cast<char*>( constThis()._getQual() );
+}
 
-char * Read::_getName()
+const char * Read::_getName() const
 {
   return (char *)(_getQual() + _qualLength());
 }
-
+char * Read::_getName()
+{
+  return const_cast<char*>( constThis()._getName() );
+}
 
 
 void Read::setRead(std::string name, std::string fasta, std::string qualBytes )
@@ -199,7 +218,7 @@ void Read::zeroQuals(SequenceLengthType offset, SequenceLengthType length)
 	  *(qualPtr++) = '\0';	
 }
 
-string Read::getName()
+string Read::getName() const
 {
   if(_data == nullSequence)
     return string("");
@@ -207,9 +226,9 @@ string Read::getName()
     return string(_getName());    
 }
 
-string Read::getQuals(SequenceLengthType trimOffset)
+string Read::getQuals(SequenceLengthType trimOffset) const
 {
-  char * qualPtr = _getQual();
+  const char * qualPtr = _getQual();
   SequenceLengthType len = ( trimOffset <= _length ? trimOffset : _length);
   if ( len > 0 && *qualPtr == REF_QUAL )
     return string( len, REF_QUAL );
@@ -217,7 +236,7 @@ string Read::getQuals(SequenceLengthType trimOffset)
     return string( qualPtr, len );
 }
 
-SequenceLengthType Read::_qualLength()
+SequenceLengthType Read::_qualLength() const
 {
     if (_length == 0)
       return 0;
@@ -227,11 +246,11 @@ SequenceLengthType Read::_qualLength()
       return _length;
 }
 
-string Read::toFastq(SequenceLengthType trimOffset, std::string label)
+string Read::toFastq(SequenceLengthType trimOffset, std::string label) const
 {
   return  string ('@' + getName() + (label.length() > 0 ? " " + label : "") + "\n" + getFasta(trimOffset) + "\n+\n" + getQuals(trimOffset) + "\n" )  ;
 }
-string Read::getFormattedQuals(SequenceLengthType trimOffset)
+string Read::getFormattedQuals(SequenceLengthType trimOffset) const
 {
   string quals = getQuals();
   stringstream ss;
@@ -246,6 +265,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset)
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.20  2010-01-13 23:46:46  regan
+// made const class modifications
+//
 // Revision 1.19  2010-01-13 21:16:00  cfurman
 // added setMinQualityScore
 //

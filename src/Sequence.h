@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.13 2010-01-13 21:16:00 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.14 2010-01-13 23:46:46 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -15,6 +15,9 @@ class Sequence
 public:
   typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
   const static SequenceLengthType MAX_SEQUENCE_LENGTH = (SequenceLengthType) -1;
+
+private:
+  inline const Sequence &constThis() const { return *this; }
   
 protected:
   SequenceLengthType _length;
@@ -27,7 +30,9 @@ protected:
   std::tr1::shared_ptr<unsigned char> _data;
 
   SequenceLengthType *_getMarkupBasesCount();
+  const SequenceLengthType *_getMarkupBasesCount() const;
   BaseLocationType   *_getMarkupBases();
+  const BaseLocationType   *_getMarkupBases() const;
 
   void reset();
 
@@ -41,12 +46,13 @@ public:
 
   void  setSequence(std::string fasta);
 
-  SequenceLengthType getLength();
-  std::string getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH);
-  BaseLocationVectorType getMarkups();
+  SequenceLengthType getLength() const;
+  std::string getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
+  BaseLocationVectorType getMarkups() const;
 
-  SequenceLengthType getTwoBitEncodingSequenceLength();
+  SequenceLengthType getTwoBitEncodingSequenceLength() const;
   TwoBitEncoding *getTwoBitSequence();
+  const TwoBitEncoding *getTwoBitSequence() const;
 
 };
 
@@ -55,6 +61,9 @@ class Read : public Sequence
 {
 public:
   static const char REF_QUAL = 0xff;
+
+private:
+  inline const Read &constThis() const { return *this; }
   
 private:
 
@@ -68,8 +77,10 @@ private:
 
 
   char * _getQual();
+  const char * _getQual() const;
   char * _getName();
-  SequenceLengthType _qualLength();
+  const char * _getName() const;
+  SequenceLengthType _qualLength() const;
 
   static int qualityToProbabilityInitialized;
   static int initializeQualityToProbability( unsigned char minQualityScore=0);
@@ -81,12 +92,12 @@ public:
 
   void  setRead(std::string name, std::string fasta, std::string qualBytes);
 
-  std::string getName();
-  std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH);
+  std::string getName() const;
+  std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
   void zeroQuals(SequenceLengthType offset, SequenceLengthType length);
 
-  std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "");
-  std::string getFormattedQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH);
+  std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "") const;
+  std::string getFormattedQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
 
   
   static double qualityToProbability[256];
@@ -97,6 +108,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.14  2010-01-13 23:46:46  regan
+// made const class modifications
+//
 // Revision 1.13  2010-01-13 21:16:00  cfurman
 // added setMinQualityScore
 //
