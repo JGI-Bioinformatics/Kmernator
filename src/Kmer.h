@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.67 2010-01-08 06:22:27 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.68 2010-01-13 00:23:31 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -225,19 +225,7 @@ class Kmer
 	   {
 	     return getHasher()(toNumber(*this));
 	   }
-	   // check for trivial patterns AAAAA... GGGGG.... etc
-	   bool isTrivial() const
-	   {
-	     const TwoBitEncoding *firstByte = (const TwoBitEncoding *) this;
-	     if (*firstByte == 0x00 || *firstByte == 0x55 || *firstByte == 0xaa || *firstByte == 0xff) {
-	     	const TwoBitEncoding *nextByte = firstByte;
-	     	for(unsigned int i=1; i<getTwoBitLength()-1; i++)
-	     	  if (*firstByte != *(++nextByte))
-	     	    return false;
-	     	return true;
-	     } else
-	        return false;
-	   }
+	   
   };
 
 
@@ -1092,7 +1080,12 @@ public:
       throw std::invalid_argument("attempt to build an incorrectly sized KmerArray in KmerArray build()"); ;
 
     KmerArray &kmers = *this;
-    for(SequenceLengthType i=0; i < numKmers ; i+=4) {
+    long numBytes = (numKmers + 3) / 4;
+    #ifdef _USE_OPENMP
+	#pragma omp parallel for if(numKmers >= 10000)
+	#endif
+    for(long bytes=0; bytes < numBytes; bytes++) {
+      SequenceLengthType i = bytes * 4;
       TwoBitEncoding *ref = twoBit+i/4;
       for (int bitShift=0; bitShift < 4 && i+bitShift < numKmers; bitShift++) {
         TwoBitSequence::shiftLeft(ref, kmers[i+bitShift].get(), KmerSizer::getTwoBitLength(), bitShift, bitShift != 0);
@@ -1106,7 +1099,10 @@ public:
     }
     if (leastComplement) {
       TEMP_KMER(least);
-      for(SequenceLengthType i=0; i < numKmers ; i++)
+      #ifdef _USE_OPENMP
+	  #pragma omp parallel for if(numKmers >= 10000)
+	  #endif
+      for(long i=0; i < (long) numKmers ; i++)
         if (! kmers[i].buildLeastComplement(least) )
           kmers[i] = least;
     }
@@ -1434,7 +1430,7 @@ public:
    }
    
    inline unsigned short getLocalThreadId(NumberType hash, unsigned short numThreads) const {
-   	 // use the bottom bits of hash which are (used to sort by bucket)
+   	 // use the bottom bits of hash (which are used to sort by bucket)
    	 // partition by numThreads blocks
    	 return (hash & BUCKET_MASK) / (_buckets.size() / numThreads + 1);
    }
@@ -1702,6 +1698,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.68  2010-01-13 00:23:31  regan
+// added open mp to build kmers for long references
+//
 // Revision 1.67  2010-01-08 06:22:27  regan
 // fixed toNumber to have the correct bit ordering (pointers go backwards in memory!)
 // removed a thow when the kmer size is too short
