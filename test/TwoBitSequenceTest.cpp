@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.5 2009-10-27 22:13:43 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.6 2010-01-13 23:49:23 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -115,25 +115,25 @@ void testCompressUncompress()
   
   BaseLocationVectorType markup;
   markup = TwoBitSequence::compressSequence(fasta1, bin);
-  BOOST_CHECK_EQUAL( markup.size(), 0 );
+  BOOST_CHECK_EQUAL( markup.size(), 0ul );
   
   TwoBitSequence::uncompressSequence(bin, std::strlen(fasta1), fasta);
   BOOST_CHECK_EQUAL( fasta1, fasta );
 
   markup = TwoBitSequence::compressSequence(fasta2, bin);
-  BOOST_CHECK_EQUAL( markup.size(), 0 );
+  BOOST_CHECK_EQUAL( markup.size(), 0ul );
   
   TwoBitSequence::uncompressSequence(bin, std::strlen(fasta2), fasta);
   BOOST_CHECK_EQUAL( fasta2, fasta );
   
   markup = TwoBitSequence::compressSequence(fasta3, bin);
-  BOOST_CHECK_EQUAL( markup.size(), 0 );
+  BOOST_CHECK_EQUAL( markup.size(), 0ul );
   
   TwoBitSequence::uncompressSequence(bin, std::strlen(fasta3), fasta);
   BOOST_CHECK_EQUAL( fasta3, fasta );
 
   markup = TwoBitSequence::compressSequence(fasta4, bin);
-  BOOST_CHECK_EQUAL( markup.size(), 0 );
+  BOOST_CHECK_EQUAL( markup.size(), 0ul );
   
   TwoBitSequence::uncompressSequence(bin, std::strlen(fasta4), fasta);
   BOOST_CHECK_EQUAL( fasta4, fasta );
@@ -147,61 +147,61 @@ void testMarkup()
   
   BaseLocationVectorType markup;
   markup = TwoBitSequence::compressSequence(n1, bin);
-  BOOST_CHECK_EQUAL( markup.size(), 1 );
+  BOOST_CHECK_EQUAL( markup.size(), 1ul );
   BOOST_CHECK_EQUAL( markup[0].first, 'N');
-  BOOST_CHECK_EQUAL( markup[0].second, 0);
+  BOOST_CHECK_EQUAL( markup[0].second, 0ul);
   TwoBitSequence::uncompressSequence(bin, std::strlen(n1), fasta);
   TwoBitSequence::applyMarkup(fasta, markup);
   BOOST_CHECK_EQUAL( n1, fasta );
   
   markup = TwoBitSequence::compressSequence(n2, bin);
-  BOOST_CHECK_EQUAL( markup.size(), 2 );
+  BOOST_CHECK_EQUAL( markup.size(), 2ul );
   BOOST_CHECK_EQUAL( markup[0].first, 'N');
-  BOOST_CHECK_EQUAL( markup[0].second, 0);
+  BOOST_CHECK_EQUAL( markup[0].second, 0ul);
   BOOST_CHECK_EQUAL( markup[1].first, 'N');
-  BOOST_CHECK_EQUAL( markup[1].second, 5);
+  BOOST_CHECK_EQUAL( markup[1].second, 5ul);
   TwoBitSequence::uncompressSequence(bin, std::strlen(n2), fasta);
   TwoBitSequence::applyMarkup(fasta, markup);
   BOOST_CHECK_EQUAL( n2, fasta );
   
   markup = TwoBitSequence::compressSequence(n3, bin);
-  BOOST_CHECK_EQUAL( markup.size(), 3 );
+  BOOST_CHECK_EQUAL( markup.size(), 3ul );
   BOOST_CHECK_EQUAL( markup[0].first, 'N');
-  BOOST_CHECK_EQUAL( markup[0].second, 0);
+  BOOST_CHECK_EQUAL( markup[0].second, 0ul);
   BOOST_CHECK_EQUAL( markup[1].first, 'N');
-  BOOST_CHECK_EQUAL( markup[1].second, 5);
+  BOOST_CHECK_EQUAL( markup[1].second, 5ul);
   BOOST_CHECK_EQUAL( markup[2].first, 'N');
-  BOOST_CHECK_EQUAL( markup[2].second, 10);
+  BOOST_CHECK_EQUAL( markup[2].second, 10ul);
   TwoBitSequence::uncompressSequence(bin, std::strlen(n3), fasta);
   TwoBitSequence::applyMarkup(fasta, markup);
   BOOST_CHECK_EQUAL( n3, fasta );
   
   markup = TwoBitSequence::compressSequence(n4, bin);
-  BOOST_CHECK_EQUAL( markup.size(), 4 );
+  BOOST_CHECK_EQUAL( markup.size(), 4ul );
   BOOST_CHECK_EQUAL( markup[0].first, 'N');
-  BOOST_CHECK_EQUAL( markup[0].second, 0);
+  BOOST_CHECK_EQUAL( markup[0].second, 0ul);
   BOOST_CHECK_EQUAL( markup[1].first, 'N');
-  BOOST_CHECK_EQUAL( markup[1].second, 5);
+  BOOST_CHECK_EQUAL( markup[1].second, 5ul);
   BOOST_CHECK_EQUAL( markup[2].first, 'N');
-  BOOST_CHECK_EQUAL( markup[2].second, 10);
+  BOOST_CHECK_EQUAL( markup[2].second, 10ul);
   BOOST_CHECK_EQUAL( markup[3].first, 'N');
-  BOOST_CHECK_EQUAL( markup[3].second, 15);
+  BOOST_CHECK_EQUAL( markup[3].second, 15ul);
   TwoBitSequence::uncompressSequence(bin, std::strlen(n4), fasta);
   TwoBitSequence::applyMarkup(fasta, markup);
   BOOST_CHECK_EQUAL( n4, fasta );
   
   markup = TwoBitSequence::compressSequence(n5, bin);
-  BOOST_CHECK_EQUAL( markup.size(), 5 );
+  BOOST_CHECK_EQUAL( markup.size(), 5ul );
   BOOST_CHECK_EQUAL( markup[0].first, 'N');
-  BOOST_CHECK_EQUAL( markup[0].second, 0);
+  BOOST_CHECK_EQUAL( markup[0].second, 0ul);
   BOOST_CHECK_EQUAL( markup[1].first, 'N');
-  BOOST_CHECK_EQUAL( markup[1].second, 5);
+  BOOST_CHECK_EQUAL( markup[1].second, 5ul);
   BOOST_CHECK_EQUAL( markup[2].first, 'N');
-  BOOST_CHECK_EQUAL( markup[2].second, 10);
+  BOOST_CHECK_EQUAL( markup[2].second, 10ul);
   BOOST_CHECK_EQUAL( markup[3].first, 'N');
-  BOOST_CHECK_EQUAL( markup[3].second, 15);
+  BOOST_CHECK_EQUAL( markup[3].second, 15ul);
   BOOST_CHECK_EQUAL( markup[4].first, 'N');
-  BOOST_CHECK_EQUAL( markup[4].second, 23);
+  BOOST_CHECK_EQUAL( markup[4].second, 23ul);
   TwoBitSequence::uncompressSequence(bin, std::strlen(n5), fasta);
   TwoBitSequence::applyMarkup(fasta, markup);
   BOOST_CHECK_EQUAL( n5, fasta );
@@ -218,6 +218,9 @@ BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 
 //
 // $Log: TwoBitSequenceTest.cpp,v $
+// Revision 1.6  2010-01-13 23:49:23  regan
+// fixed warnings
+//
 // Revision 1.5  2009-10-27 22:13:43  cfurman
 // removed bit shift table
 //
