@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.16 2010-01-13 23:48:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.17 2010-01-14 00:47:29 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -31,6 +31,7 @@ using namespace boost::accumulators;
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "KmerReadUtils.h"
+#include "Options.h"
 
 template< typename S, typename W>
 class KmerSpectrum
@@ -80,6 +81,8 @@ public:
   	// set the minimum weight that will be used to track kmers
   	// based on the given options
   	TrackingData::minimumWeight = Options::getMinKmerQuality();
+  	// apply the minimum quality automatically
+    Read::setMinQualityScore( Options::getMinQuality() );
   }
   ~KmerSpectrum() {}
   KmerSpectrum(const KmerSpectrum &copy) {
@@ -756,11 +759,11 @@ public:
 
   void printStats(unsigned long pos, bool solidOnly = false, bool fullStats = false) {
 	//stats.printHistograms(solidOnly);
-    std::cerr << pos << " reads";
+    std::cerr << pos << " reads" << "\t" ;
     if (fullStats) {
-    	std::cerr << ", " << solid.size() << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : " << singleton.size() << " singleton - kmers so far ";
+    	std::cerr << ", " << solid.size() << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : " << singleton.size() << " singleton - kmers so far " << std::endl;
     }
-    std::cerr << std::endl << MemoryUtils::getMemoryUsage() << std::endl;     
+    std::cerr << MemoryUtils::getMemoryUsage() << std::endl;     
   }
 
   inline unsigned int getSMPThread( Kmer &kmer, unsigned int numThreads ) {
