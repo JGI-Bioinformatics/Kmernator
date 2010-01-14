@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.4 2010-01-08 18:34:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.5 2010-01-14 00:46:51 regan Exp $
 //
 
 #include <iostream>
@@ -6,7 +6,6 @@
 #include "config.h"
 #include "ReadSet.h"
 #include "Kmer.h"
-#include "Utils.h"
 #include "KmerSpectrum.h"
  
 
@@ -14,8 +13,8 @@
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
-typedef KmerMap<TrackingData> KmerSolidMap;
-typedef KmerSpectrum< TrackingData, TrackingData > KS;
+typedef KmerMap<TrackingDataMinimal1> KmerSolidMap;
+typedef KmerSpectrum< TrackingDataMinimal1, TrackingDataMinimal1 > KS;
 
 class CS_Options
 {
@@ -33,6 +32,7 @@ private:
   FileListType referenceFiles;
   FileListType inputFiles;
   unsigned int kmerSize;
+  bool perRead1;
  
   
 public:
@@ -40,6 +40,7 @@ public:
   static inline FileListType        &getFileSet1()   { return getOptions().referenceFiles; }
   static inline FileListType        &getFileSet2()       { return getOptions().inputFiles; }
   static inline unsigned int        &getKmerSize()         { return getOptions().kmerSize; }
+  static inline bool                &getPerRead1()          { return getOptions().perRead1; }
  
     
   static bool parseOpts(int argc, char *argv[]) {
@@ -50,15 +51,15 @@ public:
             ("help", "produce help message")
  
             ("file-set-1", po::value< FileListType >(), "1st file(s)")
- 
-            ("kmer-size", po::value< unsigned int >(), "kmer size")
+            ("kmer-size", po::value< unsigned int >(),  "kmer size")
             ("file-set-2", po::value< FileListType >(), "2nd file(s)")
+            ("per-read1",   po::value< bool >(),     "compare for each read in set 1")
          ;
 
         po::positional_options_description &p = getOptions().p;
         p.add("kmer-size", 1);
         p.add("file-set-1", 1);
-        p.add("file-set-2", -1);
+        p.add("file-set-2", -1); 
        
         po::variables_map &vm = getOptions().vm;        
         po::store(po::command_line_parser(argc, argv).
@@ -99,6 +100,13 @@ public:
             std::cerr << desc << "There was no kmer size specified!" << std::endl;
             return false;
         }        
+        
+        if (vm.count("per-read1")) {
+            getPerRead1() = vm["per-read1"].as< bool >();
+            std::cerr << "per-read1: " << getPerRead1() << std::endl;
+        } else {
+        	getPerRead1() = false;
+        }
     }
     catch(std::exception& e) {
         std::cerr << "error: " << e.what() << std::endl;
@@ -170,8 +178,8 @@ int main(int argc, char *argv[])
     readSet2.appendAllFiles(fileList2);
     cerr << " loaded " << readSet2.getSize() << " Reads, " << readSet2.getBaseCount() << " Bases " << endl;
  
-    KS ks1(KS::estimateWeakKmerBucketSize(readSet1));
-    KS ks2(KS::estimateWeakKmerBucketSize(readSet2));
+    KS ks1(KS::estimateWeakKmerBucketSize(readSet1)*8);
+    KS ks2(KS::estimateWeakKmerBucketSize(readSet2)*8);
    
     KmerSolidMap &m1 = ks1.solid;
     KmerSolidMap &m2 = ks2.solid;
@@ -186,6 +194,9 @@ int main(int argc, char *argv[])
 
     cerr << "Counting common Kmers\n";
     NumbersVector common = countCommonKmers(m1,m2);
+    
+    // TODO fix check common to iterater through same-bucketed KmerMaps in sorted order (fast)
+    // TODO if perRead1, iterate through common matches and output non-zero % matches
 
     cout << endl;
     cout << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
@@ -206,6 +217,9 @@ int main(int argc, char *argv[])
 
 //
 // $Log: CompareSpectrums.cpp,v $
+// Revision 1.5  2010-01-14 00:46:51  regan
+// refactor and other changes
+//
 // Revision 1.4  2010-01-08 18:34:51  regan
 // refactored a bit
 // enabled openmp parallelizations
