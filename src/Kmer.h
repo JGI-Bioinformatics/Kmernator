@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.69 2010-01-13 23:34:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.70 2010-01-14 03:25:34 cfurman Exp $
 //
 
 #ifndef _KMER_H
@@ -227,9 +227,78 @@ class Kmer
 	   {
 	   	 return Kmer::toNumber(*this);
 	   }
+       
+ 
+      uint32_t jenkins_one_at_a_time_hash(unsigned char *key, size_t key_len) const
+      {
+          uint32_t hash = 0;
+          size_t i;
+
+          for (i = 0; i < key_len; i++) {
+              hash += key[i];
+              hash += (hash << 10);
+              hash ^= (hash >> 6);
+          }
+          hash += (hash << 3);
+          hash ^= (hash >> 11);
+          hash += (hash << 15);
+          return hash;
+      }
+
+
+      uint64_t MurmurHash64A ( const void * key, int len, unsigned int seed ) const
+      {
+          const uint64_t m = 0xc6a4a7935bd1e995;
+          const int r = 47;
+
+          uint64_t h = seed ^ (len * m);
+
+          const uint64_t * data = (const uint64_t *)key;
+          const uint64_t * end = data + (len/8);
+
+          while(data != end)
+          {
+              uint64_t k = *data++;
+
+              k *= m;
+              k ^= k >> r;
+              k *= m;
+
+              h ^= k;
+              h *= m;
+          }
+
+          const unsigned char * data2 = (const unsigned char*)data;
+
+          switch(len & 7)
+          {
+          case 7: h ^= uint64_t(data2[6]) << 48;
+          case 6: h ^= uint64_t(data2[5]) << 40;
+          case 5: h ^= uint64_t(data2[4]) << 32;
+          case 4: h ^= uint64_t(data2[3]) << 24;
+          case 3: h ^= uint64_t(data2[2]) << 16;
+          case 2: h ^= uint64_t(data2[1]) << 8;
+          case 1: h ^= uint64_t(data2[0]);
+                  h *= m;
+          };
+
+          h ^= h >> r;
+          h *= m;
+          h ^= h >> r;
+
+          return h;
+      }
+       
 	   inline NumberType hash() const
 	   {
-	     return getHasher()(toNumber(*this));
+          //  boost::hash<long long > hasher; return  (toNumber());
+
+         // return getHasher()(toNumber());
+
+         // boost::hash<std::string> hasher ; return hasher((toFasta( )));
+
+         return jenkins_one_at_a_time_hash((unsigned char *)getTwoBitSequence(),getTwoBitLength());
+        // return MurmurHash64A(getTwoBitSequence(),getTwoBitLength(),0xDEADBEEF);
 	   }
 	   
   };
@@ -1661,6 +1730,18 @@ public:
   	return ss.str();
   }
 
+  IndexType maxBucket()
+  {
+    IndexType biggest = 0;
+    IndexType imax;
+    for(IndexType i = 0; i<_buckets.size() ; i++)
+        if (_buckets[i].size() > biggest)
+        {
+          imax = i;
+          biggest = _buckets[i].size();
+        }
+    return biggest;
+  }
 public:
   class Iterator : public std::iterator<std::forward_iterator_tag, KmerMap>
   {
@@ -1789,6 +1870,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.70  2010-01-14 03:25:34  cfurman
+// fixed non-existent boost hashing
+//
 // Revision 1.69  2010-01-13 23:34:17  regan
 // made const class modifications
 //
