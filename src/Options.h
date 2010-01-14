@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.3 2010-01-14 00:47:44 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.4 2010-01-14 01:17:48 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -35,6 +35,7 @@ private:
   double        firstOrderWeight;
   double        secondOrderWeight;
   unsigned int  minQuality;
+  unsigned int  minDepth;
   
 public:
 
@@ -48,6 +49,7 @@ public:
   static inline double              &getFirstOrderWeight() { return getOptions().firstOrderWeight; }
   static inline double              &getSecondOrderWeight(){ return getOptions().secondOrderWeight; }
   static inline unsigned int        &getMinQuality()       { return getOptions().minQuality; }
+  static inline unsigned int        &getMinDepth()         { return getOptions().minDepth; }
     
   static bool parseOpts(int argc, char *argv[]) {
     try {
@@ -63,6 +65,7 @@ public:
             ("output-file", po::value< std::string >(), "output file or dir")
             ("min-kmer-quality", po::value< double >()->default_value(0.25), "minimum quality-adjusted kmer probability (0-1)")
             ("min-quality-score", po::value< unsigned int >()->default_value(10), "minimum quality score over entire kmer")
+            ("min-depth", po::value< unsigned int >()->default_value(10), "minimum depth for a solid kmer")
             ("first-order-weight", po::value< double >()->default_value(0.10), "first order permuted bases weight")
             ("second-order-weight", po::value< double >()->default_value(0.00), "second order permuted bases weight")
         ;
@@ -109,7 +112,10 @@ public:
         	std::cerr << desc << "There were no input files specified!" << std::endl;
         	return false;
         }
-        
+        if (vm.count("output-file")) {
+        	getOutputFile() = vm["output-file"].as< std::string >();
+        	std::cerr << "Output file (or dir) is: " << getOutputFile() << std::endl;
+        }
         
      
         // set solid-quantile
@@ -123,6 +129,10 @@ public:
         // set minimum quality score
         getMinQuality() = vm["min-quality-score"].as< unsigned int >();
         std::cerr << "min-quality-score is: " << getMinQuality() << std::endl;
+        
+        // set minimum depth
+        getMinDepth() = vm["min-depth"].as< unsigned int >();
+        std::cerr << "min-depth is: " << getMinDepth() << std::endl;
         
         // set permuted weights
         getFirstOrderWeight() = vm["first-order-weight"].as< double >();
@@ -146,6 +156,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.4  2010-01-14 01:17:48  regan
+// working out options
+//
 // Revision 1.3  2010-01-14 00:47:44  regan
 // added two common options
 //

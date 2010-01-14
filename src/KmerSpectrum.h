@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.17 2010-01-14 00:47:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.18 2010-01-14 01:17:48 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -81,6 +81,7 @@ public:
   	// set the minimum weight that will be used to track kmers
   	// based on the given options
   	TrackingData::minimumWeight = Options::getMinKmerQuality();
+  	TrackingData::minimumDepth  = Options::getMinDepth();
   	// apply the minimum quality automatically
     Read::setMinQualityScore( Options::getMinQuality() );
   }

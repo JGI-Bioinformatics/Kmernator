@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.1 2010-01-13 23:32:19 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.2 2010-01-14 01:17:53 regan Exp $
 //
 
 #include <iostream>
@@ -57,7 +57,20 @@ int main(int argc, char *argv[]) {
 
     cerr << "Picking reads: " << endl;
     RS selector(reads, spectrum.weak);
-    long picked = selector.pickAllPassingPairs();
+    long picked;
+    if (reads.hasPairs())
+      picked = selector.pickAllPassingPairs(Options::getMinDepth());
+    else
+      picked = selector.pickAllPassingReads(Options::getMinDepth());
     cerr << "Picked " << picked << " / " << reads.getSize() << " reads" << endl;
+    
+    std::string outputFile = Options::getOutputFile();
+    if (!outputFile.empty()) {
+    	cerr << "Writing reads to output file: " << outputFile << endl;
+    	ofstream out;
+    	out.open(outputFile.c_str());
+    	selector.writePicks(out);
+    	out.close();
+    }
     
 }

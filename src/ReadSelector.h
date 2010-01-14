@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.2 2010-01-14 00:49:52 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.3 2010-01-14 01:17:48 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -26,11 +26,11 @@ public:
   typedef ReadSet::ReadSetSizeType ReadSetSizeType;
   class ReadTrimType {
   public:
-    SequenceLengthType trimOffset;
+    SequenceLengthType trimLength;
     float score;
     std::string label;
     bool isAvailable;
-    ReadTrimType() : trimOffset(0), score(0.0), label(), isAvailable(true){}
+    ReadTrimType() : trimLength(0), score(0.0), label(), isAvailable(true){}
   };
   typedef M DataType;
   typedef typename DataType::ReadPositionWeightVector ReadPositionWeightVector;
@@ -73,7 +73,7 @@ public:
   	if (! isPassingRead(readIdx) )
   	  return false;
   	ReadTrimType &trim = _trims[readIdx];
-  	return trim.isAvailable && trim.score >= minimumScore && trim.trimOffset > minimumLength;
+  	return trim.isAvailable && trim.score >= minimumScore && trim.trimLength > minimumLength;
   }
   
   int pickAllPassingReads(float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
@@ -110,14 +110,14 @@ public:
   		for(unsigned long j = 0; j < kmers.size(); j++) {
   			const ElementType elem = _map.getElementIfExists(kmers[j]);
   			if (elem.isValid()) {
-  				trim.trimOffset++;
+  				trim.trimLength++;
   				trim.score += elem.value().getWeightedCount();
   			} else
   			    break;
   		}
-  		if (trim.trimOffset > 0) {
-  		  trim.trimOffset += KmerSizer::getSequenceLength() - 1;
-  		  trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimOffset+1 );
+  		if (trim.trimLength > 0) {
+  		  trim.trimLength += KmerSizer::getSequenceLength() - 1;
+  		  trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength );
   		} else {
   		  trim.isAvailable = false;
   		}
@@ -156,8 +156,8 @@ public:
   
   std::ostream &writePicks(std::ostream &os) const {
   	foreach( ReadSetSizeType readIdx, _picks) {
-  	  ReadTrimType &trim = _trims[readIdx];
-  	  os << _reads.getRead( readIdx ).toFastq( trim.trimOffset, trim.label );  	  	  
+  	  const ReadTrimType &trim = _trims[readIdx];
+  	  os << _reads.getRead( readIdx ).toFastq( trim.trimLength, trim.label );  	  	  
   	}
   	return os;
   }
