@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.3 2010-01-14 01:17:48 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.4 2010-01-14 18:04:14 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -73,7 +73,7 @@ public:
   	if (! isPassingRead(readIdx) )
   	  return false;
   	ReadTrimType &trim = _trims[readIdx];
-  	return trim.isAvailable && trim.score >= minimumScore && trim.trimLength > minimumLength;
+  	return trim.isAvailable && trim.score >= minimumScore && trim.trimLength >= minimumLength;
   }
   
   int pickAllPassingReads(float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {

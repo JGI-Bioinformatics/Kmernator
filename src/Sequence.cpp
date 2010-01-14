@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.20 2010-01-13 23:46:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.21 2010-01-14 18:04:14 regan Exp $
 //
 
 #include <cstring>
@@ -151,8 +151,8 @@ int Read::initializeQualityToProbability(unsigned char minQualityScore)
   for (int i=0; i<256; i++) {
   	qualityToProbability[i] = 0;
   }
-  int start = 64;
-  for (int i = start + minQualityScore; i < 164 ; i++ )
+  int start = FASTQ_START_CHAR;
+  for (int i = start + minQualityScore; i < FASTQ_START_CHAR + 100 ; i++ )
     qualityToProbability[i] = 1.0 - pow(10.0,( ( start - i ) / 10.0 ));
 
   qualityToProbability[255] = 1.0; // for reads with no quality data
@@ -215,7 +215,7 @@ void Read::zeroQuals(SequenceLengthType offset, SequenceLengthType length)
 	for(unsigned int i=0;i<offset;i++)
 	  qualPtr++;
 	for(unsigned int i=0;i<length;i++)
-	  *(qualPtr++) = '\0';	
+	  *(qualPtr++) = FASTQ_START_CHAR;	
 }
 
 string Read::getName() const
@@ -265,6 +265,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.21  2010-01-14 18:04:14  regan
+// bugfixes
+//
 // Revision 1.20  2010-01-13 23:46:46  regan
 // made const class modifications
 //

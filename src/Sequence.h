@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.14 2010-01-13 23:46:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.15 2010-01-14 18:04:14 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -61,6 +61,7 @@ class Read : public Sequence
 {
 public:
   static const char REF_QUAL = 0xff;
+  static const char FASTQ_START_CHAR = 64;
 
 private:
   inline const Read &constThis() const { return *this; }
@@ -108,6 +109,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.15  2010-01-14 18:04:14  regan
+// bugfixes
+//
 // Revision 1.14  2010-01-13 23:46:46  regan
 // made const class modifications
 //
