@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.2 2009-11-09 19:37:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.3 2010-01-14 00:47:44 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -25,25 +25,29 @@ private:
   po::variables_map vm;
   
   // cache of variables (for inline lookup and defaults)
-  FileListType referenceFiles;
-  FileListType inputFiles;
-  unsigned int kmerSize;
-  double       solidQuantile;
-  double       minKmerQuality;
-  unsigned int verbosity;
-  double       firstOrderWeight;
-  double       secondOrderWeight;
+  FileListType  referenceFiles;
+  FileListType  inputFiles;
+  std::string   outputFile;
+  unsigned int  kmerSize;
+  double        solidQuantile;
+  double        minKmerQuality;
+  unsigned int  verbosity;
+  double        firstOrderWeight;
+  double        secondOrderWeight;
+  unsigned int  minQuality;
   
 public:
 
   static inline FileListType        &getReferenceFiles()   { return getOptions().referenceFiles; }
   static inline FileListType        &getInputFiles()       { return getOptions().inputFiles; }
+  static inline std::string         &getOutputFile()       { return getOptions().outputFile; }
   static inline unsigned int        &getKmerSize()         { return getOptions().kmerSize; }
   static inline double              &getSolidQuantile()    { return getOptions().solidQuantile; }
   static inline double              &getMinKmerQuality()   { return getOptions().minKmerQuality; }
   static inline unsigned int        &getVerbosity()        { return getOptions().verbosity; }
   static inline double              &getFirstOrderWeight() { return getOptions().firstOrderWeight; }
   static inline double              &getSecondOrderWeight(){ return getOptions().secondOrderWeight; }
+  static inline unsigned int        &getMinQuality()       { return getOptions().minQuality; }
     
   static bool parseOpts(int argc, char *argv[]) {
     try {
@@ -56,7 +60,9 @@ public:
             ("solid-quantile", po::value< double >()->default_value(0.05), "quantile threshold for solid kmers (0-1)")
             ("kmer-size", po::value< unsigned int >(), "kmer size")
             ("input-file", po::value< FileListType >(), "input file(s)")
-            ("min-kmer-quality", po::value< double >()->default_value(0.01), "minimum quality-adjusted kmer probability (0-1)")
+            ("output-file", po::value< std::string >(), "output file or dir")
+            ("min-kmer-quality", po::value< double >()->default_value(0.25), "minimum quality-adjusted kmer probability (0-1)")
+            ("min-quality-score", po::value< unsigned int >()->default_value(10), "minimum quality score over entire kmer")
             ("first-order-weight", po::value< double >()->default_value(0.10), "first order permuted bases weight")
             ("second-order-weight", po::value< double >()->default_value(0.00), "second order permuted bases weight")
         ;
@@ -103,6 +109,8 @@ public:
         	std::cerr << desc << "There were no input files specified!" << std::endl;
         	return false;
         }
+        
+        
      
         // set solid-quantile
       	getSolidQuantile() = vm["solid-quantile"].as< double >();
@@ -111,6 +119,10 @@ public:
         // set kmer quality
         getMinKmerQuality() = vm["min-kmer-quality"].as< double >();
         std::cerr << "min-kmer-quality is: " << getMinKmerQuality() << std::endl;
+        
+        // set minimum quality score
+        getMinQuality() = vm["min-quality-score"].as< unsigned int >();
+        std::cerr << "min-quality-score is: " << getMinQuality() << std::endl;
         
         // set permuted weights
         getFirstOrderWeight() = vm["first-order-weight"].as< double >();
@@ -134,6 +146,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.3  2010-01-14 00:47:44  regan
+// added two common options
+//
 // Revision 1.2  2009-11-09 19:37:17  regan
 // enhanced some debugging / analysis output
 //
