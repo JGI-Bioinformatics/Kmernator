@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.5 2010-01-14 00:46:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.6 2010-01-14 19:27:43 regan Exp $
 //
 
 #include <iostream>
@@ -13,8 +13,9 @@
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
-typedef KmerMap<TrackingDataMinimal1> KmerSolidMap;
-typedef KmerSpectrum< TrackingDataMinimal1, TrackingDataMinimal1 > KS;
+typedef TrackingDataMinimal4 DataType;
+typedef KmerMap<DataType> KmerSolidMap;
+typedef KmerSpectrum< DataType, DataType > KS;
 
 class CS_Options
 {
@@ -217,6 +218,9 @@ int main(int argc, char *argv[])
 
 //
 // $Log: CompareSpectrums.cpp,v $
+// Revision 1.6  2010-01-14 19:27:43  regan
+// bugfixes
+//
 // Revision 1.5  2010-01-14 00:46:51  regan
 // refactor and other changes
 //
