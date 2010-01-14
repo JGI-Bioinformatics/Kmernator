@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.18 2010-01-14 01:17:48 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.19 2010-01-14 20:24:38 cfurman Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -191,7 +191,7 @@ public:
   	                       >
   	                > StdAccumulatorType;
   	StdAccumulatorType countAcc( tag::density::num_bins = bins, tag::density::cache_size = cacheSize         );
-  	StdAccumulatorType weightedCountAcc( tag::density::num_bins = bins, tag::density::cache_size = cacheSize  );
+  	StdAccumulatorType weightedCountAcc( tag::density::num_bins = bins, tag::density::cache_size = cacheSize   );
   	StdAccumulatorType directionAcc( tag::density::num_bins = bins, tag::density::cache_size = cacheSize  );
   	                
   	typedef
@@ -202,7 +202,7 @@ public:
   	                double
   	                > WeightedAccumulatorType;
   	WeightedAccumulatorType countWAcc( tag::weighted_density::num_bins = bins, tag::weighted_density::cache_size = cacheSize         );
-   	WeightedAccumulatorType weightedCountWAcc( tag::weighted_density::num_bins = bins, tag::weighted_density::cache_size = cacheSize  );
+   	WeightedAccumulatorType weightedCountWAcc( tag::weighted_density::num_bins = bins, tag::weighted_density::cache_size =  cacheSize );
   	WeightedAccumulatorType directionWAcc( tag::weighted_density::num_bins = bins, tag::weighted_density::cache_size = cacheSize  );
    	  	
    	if (!solidOnly) {
@@ -237,38 +237,41 @@ public:
    	HistogramType countHistW         = weighted_density(countWAcc);
   	HistogramType weightedCountHistW = weighted_density(weightedCountWAcc);
   	HistogramType directionHistW     = weighted_density(directionWAcc);
-   	
-  	std::cerr << "Counts, Weights and Directions" << std::endl;
+
+
+    std::cerr << std::fixed << std::setprecision(3);
+  	
+    std::cerr << "Counts, Weights and Directions" << std::endl;
   	
   	std::cerr << "Counts:\t";
-  	std::cerr << std::fixed << std::setprecision(2) << mean(countAcc) << "/" << median(countAcc) << " +-";
-  	std::cerr << std::fixed << std::setprecision(2) << sqrt(variance(countAcc)) << "\t";
-  	std::cerr << std::fixed << std::setprecision(2) << mean(countWAcc) << " +-";
-  	std::cerr << std::fixed << std::setprecision(2) << sqrt(variance(countWAcc)) << "\t";
+    std::cerr << mean(countAcc) << "/" << median(countAcc) << " +-";
+  	std::cerr << sqrt(variance(countAcc)) << "\t";
+  	std::cerr << mean(countWAcc) << " +-";
+  	std::cerr << sqrt(variance(countWAcc)) << "\t";
   
-  	std::cerr << "WeightedCounts:\t";
-  	std::cerr << std::fixed << std::setprecision(2) << mean(weightedCountAcc) << "/" << median(weightedCountAcc) << " +-";
-  	std::cerr << std::fixed << std::setprecision(2) << sqrt(variance(weightedCountAcc)) << "\t";
-  	std::cerr << std::fixed << std::setprecision(2) << weighted_mean(weightedCountWAcc) << " +-";
-  	std::cerr << std::fixed << std::setprecision(2) << sqrt(weighted_variance(weightedCountWAcc)) << "\t";
+  	std::cerr << "Weights:\t";
+  	std::cerr << mean(weightedCountAcc) << "/" << median(weightedCountAcc) << " +-";
+  	std::cerr << sqrt(variance(weightedCountAcc)) << "\t";
+  	std::cerr << weighted_mean(weightedCountWAcc) << " +-";
+  	std::cerr << sqrt(weighted_variance(weightedCountWAcc)) << "\t";
   	
   	std::cerr << std::endl;
   	
   	for (int i=0; i < countHist.size(); i++) {
-  		std::cerr << std::fixed << std::setprecision(2) << countHist[i].first << "\t";
-  		std::cerr << std::fixed << std::setprecision(2) << countHist[i].second*100.0<< "\t";
+  		std::cerr << countHist[i].first << "\t";
+  		std::cerr << countHist[i].second*100.0<< "\t";
   		//assert(countHist[i].first == countHistW[i].first);
-  		std::cerr << std::fixed << std::setprecision(2) << countHistW[i].second *100.0<< "\t"; 
+  		std::cerr << countHistW[i].second *100.0<< "\t|\t";
   		
-  		std::cerr << std::fixed << std::setprecision(2) << weightedCountHist[i].first  << "\t";
-  		std::cerr << std::fixed << std::setprecision(2) << weightedCountHist[i].second*100.0 << "\t";
+  		std::cerr << weightedCountHist[i].first  << "\t";
+  		std::cerr << weightedCountHist[i].second*100.0 << "\t";
   		//assert(weightedCountHist[i].first == weightedCountHistW[i].first);
-  		std::cerr << std::fixed << std::setprecision(2) << weightedCountHistW[i].second*100.0 << "\t";
+  		std::cerr << weightedCountHistW[i].second*100.0 << "\t";
   		
-  		std::cerr << std::fixed << std::setprecision(2) << directionHist[i].first  << "\t";
-  		std::cerr << std::fixed << std::setprecision(2) << directionHist[i].second *100.0<< "\t"; 
+  		std::cerr << directionHist[i].first  << "\t";
+  		std::cerr << directionHist[i].second *100.0<< "\t";
   		//assert(directionHist[i].first == directionHistW[i].first);
-   		std::cerr << std::fixed << std::setprecision(2) << directionHistW[i].second *100.0<< "\t"; 
+   		std::cerr << directionHistW[i].second *100.0<< "\t";
    		
   		std::cerr << std::endl;
   	}
@@ -380,7 +383,7 @@ public:
     
     
   
-  
+
   unsigned long promote(double probabilityQuantile) {
   	unsigned long promoted = 0;
     
@@ -453,7 +456,7 @@ public:
   }
   
   MeanVectorType getErrorRates( SolidMapType &solidReference, bool useWeighted = false ) {
- 
+
   	std::vector< StdAccumulatorType > accumulators;
     for( SolidIterator it = solidReference.begin(); it != solidReference.end(); it++) {
       std::vector< double > errorRatios = getErrorRatios(it->key(), useWeighted);
@@ -553,7 +556,7 @@ public:
   		return errorRatios;
   	}  	
   }
-  
+
   SolidWeakWeightType getPermutedScores( const Kmer &kmer, double permutationWeight = 0.1, double secondWeight = 0.0 ) {
   	SolidWeakWeightType score(0.0,0.0);
   	if (permutationWeight == 0.0)
@@ -767,6 +770,21 @@ public:
     std::cerr << MemoryUtils::getMemoryUsage() << std::endl;     
   }
 
+
+  void printBucketStats(unsigned long pos, bool solidOnly = false, bool fullStats = false) {
+	//stats.printHistograms(solidOnly);
+    std::cerr << pos << ": ";
+    
+    unsigned long ss = solid.size();
+    unsigned long buckets = solid.getNumBuckets();
+    static unsigned long prev_ss = 0;
+    std::cerr << ss << " added : " << ss - prev_ss << ",  average:"
+    << ss/buckets << " Max:" << solid.maxBucket() << " "  << MemoryUtils::getMemoryUsage() << std::endl;
+    prev_ss = ss;
+
+     
+  }
+
   inline unsigned int getSMPThread( Kmer &kmer, unsigned int numThreads ) {
   	// return the smallest KmerMap in the spectrum's getLocalThreadId()
   	TEMP_KMER(tmp)
@@ -958,13 +976,12 @@ public:
    }
 
 
-   bool noFirstOrderMatch(const WeakElementType &element)
+   bool firstOrderMatch(const WeakElementType &element)
    {
-
+     const int multiple = 5;
      int count = element.value().getCount();
  
-        
-     count *= 3;
+     count *= multiple;
      const Kmer &kmer = element.key();
      Kmers permutations = Kmers::permuteBases(kmer, true);
      for(int i=0; i<permutations.size(); i++) {
@@ -973,12 +990,13 @@ public:
              if (s &&  s->getCount() > count)
                return false;
      */          
-     WeakDataType *w = weak.getIfExists(permutations[i]);
-             if (w &&  w->getCount() > count)
-               return false;
-               
+       if (weak.exists(permutations[i])) {
+         WeakElementType  w = weak.getElement(permutations[i]);
+         if (w.value().getCount() > count)
+            return true;
+       }           
      }
-     return true;
+     return false;
    }
 
    bool noSecondOrderMatch(const WeakElementType &element)
@@ -987,7 +1005,7 @@ public:
  
      int count = element.value().getCount();
         
-     count *= 2;
+     count *= 10;
      const Kmer &kmer = element.key();
      Kmers permutations = Kmers::permuteBases(kmer, true);
      for(int i=0; i<permutations.size(); i++) {
@@ -1030,6 +1048,26 @@ public:
       return true;
    }*/
 
+  void calcWeightStats(double &mean, double &deviation)
+  {
+
+ 
+    StdAccumulatorType weightAcc;
+ 
+     for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
+      WeakDataType &data = it->value();
+ 
+      weightAcc(data.getAverageWeight()  );
+ 
+     }
+ 
+    mean =  boost::accumulators::mean(weightAcc);
+    deviation =  sqrt( boost::accumulators::variance(weightAcc));
+  
+  }
+
+
+
   unsigned long filter(KmerSpectrum &reference)
   {
 
@@ -1037,17 +1075,34 @@ public:
     HeapType weakHeap;
     
    
-  
     unsigned long promoted = 0;
  
-    const unsigned long minKmerCount = 1;
+    const unsigned long minKmerCount = 3;
     unsigned long count = 0;
      unsigned long falseSolids =0;
 
     unsigned long secondOrderTrue = 0;
     unsigned long secondOrderFalse = 0;
-    unsigned long weightCorrect =0;
-    unsigned long weightIncorrect =0;
+    unsigned long pq_count =   0;
+    unsigned long pq_correct = 0;
+    unsigned long pq_wrong =   0;
+
+    unsigned long gq_count =   0;
+    unsigned long gq_correct = 0;
+    unsigned long gq_wrong =   0;
+
+    unsigned long fo_count =   0;
+    unsigned long fo_correct = 0;
+    unsigned long fo_wrong =   0;
+
+
+    double mean,deviation;
+    calcWeightStats(mean,deviation);
+
+    double poorQualityCutoff = 0.779;// mean - 3 * deviation;
+    double goodQualityCutoff = mean  + (1.00 - mean) * 0.9;
+
+    std::cerr << mean << " +-" << deviation << " => cutoffs: " << poorQualityCutoff << " " << goodQualityCutoff << "\n";
 
     WeakIterator mapIt  = weak.begin();
     WeakIterator mapEnd = weak.end();
@@ -1060,71 +1115,107 @@ public:
         if (lastCount < minKmerCount)
            continue;
            
-        bool noBias = true;
-        if (lastCount > 20)
-        {
-           double dirBias  = element.value().getNormalizedDirectionBias();
-            noBias =  (dirBias > 0.02 && dirBias < 0.98);
-            if (!noBias) {
-              
-
-               weakHeap.push_back( element);
-            }
-        }
-
-       double minWeight =  0.8;
-       bool enoughWeight = element.value().getAverageWeight() > minWeight; 
-
-       bool inRef = (reference.solid.exists( element.key()));
-        
-        if ( //   noBias &&
-        //      enoughWeight &&
-          //    noFirstOrderMatch(element)&&
-        //      noSecondOrderMatch(element)&&
-           1)
-        {
-          SolidElementType solidElement = getSolid( element.key() );
-            solidElement.value() = element.value();
-           if (!inRef) {
-                 // std::cerr << "FS " << prettyS( element.key(), element.value());
-                 falseSolids++;
-           }
-           promoted++; 
-        }       
- 
-//         if (enoughWeight == inRef)
-//            weightCorrect++;
-//         else
-//            weightIncorrect++;
-//          
-//  
-//         if (count++ == 100000    ) {
-//         //  std::cerr << "Weight test:  " << weightCorrect << ":" << weightIncorrect << " Heap size: " <<  weakHeap.size() << " lastCount: " << lastCount << std::endl;
-//  
-//               count = 0;
-//  
+//         bool noBias = true;
+//         if (lastCount > 20)
+//         {
+//            double dirBias  = element.value().getNormalizedDirectionBias();
+//             noBias =  (dirBias > 0.02 && dirBias < 0.98);
+// //             if (!noBias) {
+// //               
+// // 
+// //                weakHeap.push_back( element);
+// //             }
 //         }
-    }
- 
 
  
-    std::make_heap( weakHeap.begin(), weakHeap.end() );
+      count++;
+       bool inRef = reference.solid.exists( element.key());
+       
+       bool poorQuality = element.value().getAverageWeight() < poorQualityCutoff;
+       bool goodQuality = element.value().getAverageWeight() > goodQualityCutoff;
+        
+        /*        
+        if (poorQuality)
+        {
+          pq_count++;
+           if (!inRef)
+              pq_correct++;
+           else
+           {
+             pq_wrong++;
+              //std::cerr << "FP "   << prettyS( element.key(), element.value());
+          }
+        }else*/
+         if (firstOrderMatch(element))
+        {
+          fo_count++;
+           if (!inRef)
+              fo_correct++;
+           else
+           {
+             fo_wrong++;
+              //std::cerr << "FP "   << prettyS( element.key(), element.value());
+          }
 
-    std::cerr << " Heap size: " <<  weakHeap.size() << std::endl;
+        }
+/*
+        if (goodQuality)
+        {
+          gq_count++;
+           if (inRef)
+              gq_correct++;
+           else
+           {
+             gq_wrong++;
+              //std::cerr << "FP "   << prettyS( element.key(), element.value());
+          }
+        }*/
 
-    int i=0;
-    while ( weakHeap.begin() != weakHeap.end() ) {
-        WeakElementType &element = weakHeap.front();
-        bool inRef = reference.solid.exists( element.key());
-        const char * st =  (inRef) ? "*" : " ";
-         std::cerr << "DB " << st  << prettyS( element.key(), element.value());
 
-        std::cout << "> Kmer" << ++i << std::endl;
-        std::cout << element.key().toFasta() << std::endl;
+        
+//         if ( //   noBias &&
+//         //      enoughWeight &&
+//           //    noFirstOrderMatch(element)&&
+//         //      noSecondOrderMatch(element)&&
+//            1)
+//         {
+//           SolidElementType solidElement = getSolid( element.key() );
+//             solidElement.value() = element.value();
+//            if (!inRef) {
+//                  // std::cerr << "FS " << prettyS( element.key(), element.value());
+//                  falseSolids++;
+//            }
+//            promoted++; 
+//         }       
+//  
+
+
+       
+
          
-        std::pop_heap(weakHeap.begin(), weakHeap.end());
-        weakHeap.pop_back();
     }
+ 
+      std::cerr << "Poor Quality: " << pq_count <<  " ("  << pq_count*100.0/count <<  "%) Correct:  " << pq_correct << " Wrong: " << pq_wrong   << std::endl;
+  //    std::cerr << "Good Quality: " << gq_count <<  " ("  << gq_count*100.0/count <<  "%) Correct:  " << gq_correct << " Wrong: " << gq_wrong   << std::endl;
+   std::cerr << "1st Order  : " << fo_count <<  " ("  << fo_count*100.0/count <<  "%) Correct:  " << fo_correct << " Wrong: " << fo_wrong   << std::endl;
+ 
+//     std::make_heap( weakHeap.begin(), weakHeap.end() );
+// 
+//     std::cerr << " Heap size: " <<  weakHeap.size() << std::endl;
+// 
+//     int i=0;
+//     while ( weakHeap.begin() != weakHeap.end() ) {
+//         WeakElementType &element = weakHeap.front();
+//         bool inRef = reference.solid.exists( element.key());
+//         const char * st =  (inRef) ? "*" : " ";
+//          std::cerr << "DB " << st  << prettyS( element.key(), element.value());
+// 
+//         std::cout << "> Kmer" << ++i << std::endl;
+//         std::cout << element.key().toFasta() << std::endl;
+//          
+//         std::pop_heap(weakHeap.begin(), weakHeap.end());
+//         weakHeap.pop_back();
+//     }
     
     for(SolidIterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++)
          weak.remove( it->key() );
