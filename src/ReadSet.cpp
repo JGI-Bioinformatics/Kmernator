@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.20 2010-01-13 23:47:44 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.21 2010-01-14 00:50:07 regan Exp $
 //
 
 #include <exception>
@@ -337,17 +337,6 @@ std::ifstream::pos_type _fileSize(ifstream &f)
 }*/
 
 
-ReadSet::ReadSet():
-_baseCount(0)
-{
-
-}
-
-ReadSet::~ReadSet()
-{
-   
-}
-
 void ReadSet::addRead(Read &read) {
 	_reads.push_back( read );
 	_baseCount += read.getLength();
@@ -676,6 +665,9 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs()
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.21  2010-01-14 00:50:07  regan
+// fixes
+//
 // Revision 1.20  2010-01-13 23:47:44  regan
 // made const class modifications
 // fixed identify pairs

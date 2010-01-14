@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.1 2010-01-13 23:48:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.2 2010-01-14 00:49:52 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -10,6 +10,7 @@
 
 #include <vector>
 
+#include <boost/lexical_cast.hpp>
 #include <boost/foreach.hpp>
 #define foreach BOOST_FOREACH
 
@@ -65,6 +66,8 @@ public:
   bool isPassingRead(ReadSetSizeType readIdx) {
   	if (! _reads.isValidRead(readIdx) )
   	  return false;
+  	else
+  	  return true;
   }
   bool isPassingRead(ReadSetSizeType readIdx, float minimumScore, SequenceLengthType minimumLength) {
   	if (! isPassingRead(readIdx) )
@@ -114,7 +117,9 @@ public:
   		}
   		if (trim.trimOffset > 0) {
   		  trim.trimOffset += KmerSizer::getSequenceLength() - 1;
-  		  // TODO label the read
+  		  trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimOffset+1 );
+  		} else {
+  		  trim.isAvailable = false;
   		}
   	}
   }

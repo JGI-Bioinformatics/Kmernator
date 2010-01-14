@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.14 2010-01-13 23:47:44 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.15 2010-01-14 00:50:07 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -42,8 +42,8 @@ private:
     void addRead(Read &read);
     
 public:
-    ReadSet();
-    ~ReadSet();
+    ReadSet():_baseCount(0) {}
+    ~ReadSet() {}
 
     void appendAnyFile(std::string filePath, std::string filePath2 = "");
     void appendAllFiles(Options::FileListType &files);
@@ -64,6 +64,7 @@ public:
 
     // by default no pairs are identified
     ReadSetSizeType identifyPairs();
+    bool hasPairs() { return getPairSize() != 0 && getPairSize() < getSize(); }
     
     // may return either as MAX_READ_IDX
     inline Pair &getPair(ReadSetSizeType pairIndex) { return _pairs[pairIndex]; }
@@ -101,6 +102,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.15  2010-01-14 00:50:07  regan
+// fixes
+//
 // Revision 1.14  2010-01-13 23:47:44  regan
 // made const class modifications
 // fixed identify pairs
