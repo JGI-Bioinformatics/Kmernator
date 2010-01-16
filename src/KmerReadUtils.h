@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.1 2010-01-13 23:48:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.2 2010-01-16 01:06:13 regan Exp $
 //
 
 #ifndef _KMER_READ_UTILS_H
@@ -22,7 +22,7 @@ public:
 	  for(SequenceLengthType i=0; i< kmers.size(); i++) {
 	  	if (isRef) {
 	  	  weight = 1.0;
-	  	} else if (i%100 == 0 || weight == 0.0) {
+	  	} else if (i%1024 == 0 || weight == 0.0) {
 	  	  weight = 1.0;
 	  	  for(SequenceLengthType j=0; j < KmerSizer::getSequenceLength(); j++) 
 	  	    weight *= Read::qualityToProbability[ (unsigned char) quals[i+j] ];

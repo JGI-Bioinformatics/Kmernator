@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.19 2010-01-14 20:24:38 cfurman Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.20 2010-01-16 01:06:01 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -102,8 +102,7 @@ public:
 	  return 128;
 	unsigned long avgSequenceLength = baseCount / store.getSize();
 	unsigned long kmersPerRead = (avgSequenceLength - KmerSizer::getSequenceLength() + 1);
-	if (kmersPerRead > avgSequenceLength + 1)
-	  throw std::invalid_argument("Attempting to use a kmer greater than the avgerage sequence length");
+
 	unsigned long rawKmers = kmersPerRead * store.getSize();
 	// assume 1% error rate
 	unsigned long estimatedUniqueKmers = rawKmers * ( std::max(pow(1.01, KmerSizer::getSequenceLength()),2.0) - 1.0 );
