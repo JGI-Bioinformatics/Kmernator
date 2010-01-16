@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.27 2010-01-13 23:49:11 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.28 2010-01-16 01:07:40 regan Exp $
 //
 
 #include <iostream>
@@ -22,9 +22,20 @@ using namespace std;
 
 typedef KmerSpectrum<TrackingData,TrackingDataWithAllReads> KS;
 
+class Ktest2Options : Options
+{
+public:
+	static bool parseOpts(int argc, char *argv[])
+	{
+		getPosDesc().add("kmer-size", 1);
+        getPosDesc().add("input-file", -1);
+		return Options::parseOpts(argc, argv);
+	}
+};
+
 int main(int argc, char *argv[]) {
     
-    if (!Options::parseOpts(argc,argv))
+    if (!Ktest2Options::parseOpts(argc,argv))
       throw std::invalid_argument("Please fix the command line arguments");
       
     ReadSet refReads, reads;
@@ -110,6 +121,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.28  2010-01-16 01:07:40  regan
+// refactored
+//
 // Revision 1.27  2010-01-13 23:49:11  regan
 // refactored
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.4 2010-01-14 01:17:48 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.5 2010-01-16 01:06:28 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -12,18 +12,21 @@
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
+// put common, universal options in this class
+// extend the class for specific options for each application
 class Options
 {
 public:
   typedef std::vector<std::string> FileListType;
   
-private:
+protected:
   static inline Options &getOptions() { static Options singleton; return singleton; }
-  
+
+private: 
   po::options_description desc;
   po::positional_options_description p;
   po::variables_map vm;
-  
+
   // cache of variables (for inline lookup and defaults)
   FileListType  referenceFiles;
   FileListType  inputFiles;
@@ -36,7 +39,9 @@ private:
   double        secondOrderWeight;
   unsigned int  minQuality;
   unsigned int  minDepth;
-  
+
+  Options() { setOptions(); }
+
 public:
 
   static inline FileListType        &getReferenceFiles()   { return getOptions().referenceFiles; }
@@ -50,31 +55,44 @@ public:
   static inline double              &getSecondOrderWeight(){ return getOptions().secondOrderWeight; }
   static inline unsigned int        &getMinQuality()       { return getOptions().minQuality; }
   static inline unsigned int        &getMinDepth()         { return getOptions().minDepth; }
-    
-  static bool parseOpts(int argc, char *argv[]) {
-    try {
-    	po::options_description &desc = getOptions().desc;
+
+private:  
+  void setOptions() {
     	
         desc.add_options()
             ("help", "produce help message")
             ("verbose", po::value< unsigned int >()->default_value(0), "level of verbosity (0+)")
+            
             ("reference-file", po::value< FileListType >(), "set reference file(s)")
-            ("solid-quantile", po::value< double >()->default_value(0.05), "quantile threshold for solid kmers (0-1)")
             ("kmer-size", po::value< unsigned int >(), "kmer size")
+            
             ("input-file", po::value< FileListType >(), "input file(s)")
             ("output-file", po::value< std::string >(), "output file or dir")
-            ("min-kmer-quality", po::value< double >()->default_value(0.25), "minimum quality-adjusted kmer probability (0-1)")
+            
+            ("min-kmer-quality", po::value< double >()->default_value(0.10), "minimum quality-adjusted kmer probability (0-1)")
             ("min-quality-score", po::value< unsigned int >()->default_value(10), "minimum quality score over entire kmer")
             ("min-depth", po::value< unsigned int >()->default_value(10), "minimum depth for a solid kmer")
+
+            ("solid-quantile", po::value< double >()->default_value(0.05), "quantile threshold for solid kmers (0-1)")
             ("first-order-weight", po::value< double >()->default_value(0.10), "first order permuted bases weight")
             ("second-order-weight", po::value< double >()->default_value(0.00), "second order permuted bases weight")
         ;
+  	
+  }
 
-        po::positional_options_description &p = getOptions().p;
-        p.add("kmer-size", 1);
-        p.add("input-file", -1);
+public:
+
+  static po::options_description &getDesc() { return getOptions().desc; }
+  static po::positional_options_description &getPosDesc() { return getOptions().p; }
+  static po::variables_map &getVarMap() { return getOptions().vm; }
+
+  static bool parseOpts(int argc, char *argv[]) {
+    try {
+
+        po::options_description &desc = getDesc();
+        po::positional_options_description &p = getPosDesc();
         
-        po::variables_map &vm = getOptions().vm;        
+        po::variables_map &vm = getVarMap();        
         po::store(po::command_line_parser(argc, argv).
                  options(desc).positional(p).run(), vm);
         po::notify(vm);    
@@ -117,11 +135,6 @@ public:
         	std::cerr << "Output file (or dir) is: " << getOutputFile() << std::endl;
         }
         
-     
-        // set solid-quantile
-      	getSolidQuantile() = vm["solid-quantile"].as< double >();
-        std::cerr << "solid-quantile is: " << getSolidQuantile() << std::endl;
-        
         // set kmer quality
         getMinKmerQuality() = vm["min-kmer-quality"].as< double >();
         std::cerr << "min-kmer-quality is: " << getMinKmerQuality() << std::endl;
@@ -133,6 +146,12 @@ public:
         // set minimum depth
         getMinDepth() = vm["min-depth"].as< unsigned int >();
         std::cerr << "min-depth is: " << getMinDepth() << std::endl;
+
+     
+        // set solid-quantile
+      	getSolidQuantile() = vm["solid-quantile"].as< double >();
+        std::cerr << "solid-quantile is: " << getSolidQuantile() << std::endl;
+        
         
         // set permuted weights
         getFirstOrderWeight() = vm["first-order-weight"].as< double >();
@@ -156,6 +175,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.5  2010-01-16 01:06:28  regan
+// refactored
+//
 // Revision 1.4  2010-01-14 01:17:48  regan
 // working out options
 //
