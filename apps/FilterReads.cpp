@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.2 2010-01-14 01:17:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.3 2010-01-16 01:07:58 regan Exp $
 //
 
 #include <iostream>
@@ -56,21 +56,25 @@ int main(int argc, char *argv[]) {
     cerr << MemoryUtils::getMemoryUsage() << endl;
 
     cerr << "Picking reads: " << endl;
-    RS selector(reads, spectrum.weak);
-    long picked;
-    if (reads.hasPairs())
-      picked = selector.pickAllPassingPairs(Options::getMinDepth());
-    else
-      picked = selector.pickAllPassingReads(Options::getMinDepth());
-    cerr << "Picked " << picked << " / " << reads.getSize() << " reads" << endl;
+    RS selector(reads, spectrum.weak, Options::getMinDepth());
+    long oldPicked = 0;
+    long picked = 0;
+    for(unsigned int depth = 4096 ; depth >= 2; depth /= 2) {
+      if (reads.hasPairs())
+        picked = selector.pickAllPassingPairs(depth);
+      else
+        picked = selector.pickAllPassingReads(depth);
+      cerr << "At or above coverage: " << depth << " Picked " << picked << " / " << reads.getSize() << " reads" << endl;
     
-    std::string outputFile = Options::getOutputFile();
-    if (!outputFile.empty()) {
+      std::string outputFile = Options::getOutputFile();
+      if (picked > 0 && !outputFile.empty()) {
+        outputFile += "-" + boost::lexical_cast<std::string>( depth );
     	cerr << "Writing reads to output file: " << outputFile << endl;
     	ofstream out;
     	out.open(outputFile.c_str());
-    	selector.writePicks(out);
+    	selector.writePicks(out, oldPicked);
     	out.close();
+      }
+      oldPicked += picked;
     }
-    
 }
