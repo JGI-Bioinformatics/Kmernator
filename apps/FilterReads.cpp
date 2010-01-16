@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.3 2010-01-16 01:07:58 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.4 2010-01-16 01:12:45 regan Exp $
 //
 
 #include <iostream>
@@ -18,8 +18,19 @@ typedef TrackingDataMinimal8 DataType;
 typedef KmerSpectrum<DataType,DataType> KS;
 typedef ReadSelector<DataType> RS;
 
+class FilterReadsOptions : Options
+{
+public:
+	static bool parseOpts(int argc, char *argv[])
+	{
+		getPosDesc().add("kmer-size", 1);
+        getPosDesc().add("input-file", -1);
+		return Options::parseOpts(argc, argv);
+	}
+};
+
 int main(int argc, char *argv[]) {
-   if (!Options::parseOpts(argc,argv))
+   if (!FilterReadsOptions::parseOpts(argc,argv))
       throw std::invalid_argument("Please fix the command line arguments");
 
     cerr << MemoryUtils::getMemoryUsage() << endl;
