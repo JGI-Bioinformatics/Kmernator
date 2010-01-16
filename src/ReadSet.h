@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.15 2010-01-14 00:50:07 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.16 2010-01-16 01:07:29 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -50,6 +50,7 @@ public:
     void appendFastaFile(std::string &is);
     
     void append(ReadSet &reads);
+    void append(Read &read) { _reads.push_back( read); }
 
     inline ReadSetSizeType getSize() const { return _reads.size(); }
     unsigned long getBaseCount() const {return _baseCount;}
@@ -102,6 +103,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.16  2010-01-16 01:07:29  regan
+// added method
+//
 // Revision 1.15  2010-01-14 00:50:07  regan
 // fixes
 //
