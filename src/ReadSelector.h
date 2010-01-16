@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.4 2010-01-14 18:04:14 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.5 2010-01-16 01:07:17 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -48,26 +48,22 @@ private:
   PicksVector _picks;
 
 public:
-  ReadSelector(const ReadSet &reads, const KMType &map): _reads(reads), _map(map), _trims(), _picks() 
+  ReadSelector(const ReadSet &reads, const KMType &map, double minimumKmerScore = 0.0): _reads(reads), _map(map), _trims(), _picks() 
   { 
-  	scoreAndTrimReads();
+  	scoreAndTrimReads(minimumKmerScore);
   }
 
   bool pickIfNew(ReadSetSizeType readIdx) {
   	if ( _reads.isValidRead(readIdx) && _trims[readIdx].isAvailable ) {
   	  _picks.push_back(readIdx);
   	  _trims[readIdx].isAvailable = false;
-  	  // TODO set label
   	  return true;
   	} else
   	  return false;	  
   }
   
   bool isPassingRead(ReadSetSizeType readIdx) {
-  	if (! _reads.isValidRead(readIdx) )
-  	  return false;
-  	else
-  	  return true;
+  	return _reads.isValidRead(readIdx);
   }
   bool isPassingRead(ReadSetSizeType readIdx, float minimumScore, SequenceLengthType minimumLength) {
   	if (! isPassingRead(readIdx) )
@@ -79,25 +75,23 @@ public:
   int pickAllPassingReads(float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
   	int picked = 0;
   	for(long i = 0; i < (long) _reads.getSize(); i++) {
-  	  	if (isPassingRead(i,minimumScore,minimumLength) && pickIfNew(i))
-  		  picked++;
-  	  }
+  	  	isPassingRead(i, minimumScore, minimumLength) && pickIfNew(i) && picked++;
+  	}
   	return picked;
   }
   int pickAllPassingPairs(float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
   	  int picked = 0;
   	  for(long i = 0; i < (long) _reads.getPairSize(); i++) {
   		const ReadSet::Pair &pair = _reads.getPair(i);
-  		if ( isPassingRead(pair.read1,minimumScore,minimumLength) && isPassingRead(pair.read2, minimumScore, minimumLength) )
-  		  if (pickIfNew(pair.read1))
-  		    picked++;
-  		  if (pickIfNew(pair.read2))
-  		    picked++;		
+  		if ( isPassingRead(pair.read1, minimumScore, minimumLength) || isPassingRead(pair.read2, minimumScore, minimumLength) ) {
+  		  pickIfNew(pair.read1) && picked++;
+  		  pickIfNew(pair.read2) && picked++;		
+  		}
   	  }
   	  return picked;  	  
   }
     
-  void scoreAndTrimReads() {
+  void scoreAndTrimReads(double minimumKmerScore) {
   	_trims.resize(_reads.getSize());
   	#ifdef _USE_OPENMP
     #pragma omp parallel for schedule(dynamic)
@@ -110,14 +104,22 @@ public:
   		for(unsigned long j = 0; j < kmers.size(); j++) {
   			const ElementType elem = _map.getElementIfExists(kmers[j]);
   			if (elem.isValid()) {
-  				trim.trimLength++;
-  				trim.score += elem.value().getWeightedCount();
+  				double score = elem.value().getCount();
+  				if (score >= minimumKmerScore) {
+  				  trim.trimLength++;
+  				  trim.score += score;
+  				} else
+  				  break;
   			} else
   			    break;
   		}
   		if (trim.trimLength > 0) {
+  		  // calculate average score (before adding kmer length)
+  		  double numKmers = trim.trimLength;
+  		  trim.score /= numKmers;
+  		  
   		  trim.trimLength += KmerSizer::getSequenceLength() - 1;
-  		  trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength );
+  		  trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( trim.score );
   		} else {
   		  trim.isAvailable = false;
   		}
@@ -154,8 +156,9 @@ public:
   	return _picks;
   }
   
-  std::ostream &writePicks(std::ostream &os) const {
-  	foreach( ReadSetSizeType readIdx, _picks) {
+  std::ostream &writePicks(std::ostream &os, ReadSetSizeType offset = 0) const {
+  	for(ReadSetSizeType i = offset; i < _picks.size(); i++) {
+  	  ReadSetSizeType readIdx = _picks[i];
   	  const ReadTrimType &trim = _trims[readIdx];
   	  os << _reads.getRead( readIdx ).toFastq( trim.trimLength, trim.label );  	  	  
   	}
