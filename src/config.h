@@ -7,6 +7,7 @@
 #include <omp.h>
 const int OMP_NESTED_DEFAULT = omp_get_nested();
 const int OMP_DYNAMIC_DEFAULT = omp_get_dynamic();
+const int MAX_FILE_PARALLELISM = 4;
 #endif
 
 #endif
