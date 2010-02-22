@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.15 2010-01-14 18:04:14 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.16 2010-02-22 14:41:03 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -62,6 +62,7 @@ class Read : public Sequence
 public:
   static const char REF_QUAL = 0xff;
   static const char FASTQ_START_CHAR = 64;
+  static const char PRINT_REF_QUAL = 128;
 
 private:
   inline const Read &constThis() const { return *this; }
@@ -94,7 +95,7 @@ public:
   void  setRead(std::string name, std::string fasta, std::string qualBytes);
 
   std::string getName() const;
-  std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
+  std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, bool forPrinting = false) const;
   void zeroQuals(SequenceLengthType offset, SequenceLengthType length);
 
   std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "") const;
@@ -109,6 +110,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.16  2010-02-22 14:41:03  regan
+// bugfix in printing
+//
 // Revision 1.15  2010-01-14 18:04:14  regan
 // bugfixes
 //

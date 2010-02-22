@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.21 2010-01-14 18:04:14 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.22 2010-02-22 14:41:03 regan Exp $
 //
 
 #include <cstring>
@@ -226,14 +226,18 @@ string Read::getName() const
     return string(_getName());    
 }
 
-string Read::getQuals(SequenceLengthType trimOffset) const
+string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting) const
 {
   const char * qualPtr = _getQual();
   SequenceLengthType len = ( trimOffset <= _length ? trimOffset : _length);
-  if ( len > 0 && *qualPtr == REF_QUAL )
-    return string( len, REF_QUAL );
-  else
+  if ( len > 0 && *qualPtr == REF_QUAL ) {
+    if (forPrinting)
+      return string( len, PRINT_REF_QUAL);
+    else
+      return string( len, REF_QUAL);
+  } else {
     return string( qualPtr, len );
+  }
 }
 
 SequenceLengthType Read::_qualLength() const
@@ -248,7 +252,7 @@ SequenceLengthType Read::_qualLength() const
 
 string Read::toFastq(SequenceLengthType trimOffset, std::string label) const
 {
-  return  string ('@' + getName() + (label.length() > 0 ? " " + label : "") + "\n" + getFasta(trimOffset) + "\n+\n" + getQuals(trimOffset) + "\n" )  ;
+  return  string ('@' + getName() + (label.length() > 0 ? " " + label : "") + "\n" + getFasta(trimOffset) + "\n+\n" + getQuals(trimOffset, true) + "\n" )  ;
 }
 string Read::getFormattedQuals(SequenceLengthType trimOffset) const
 {
@@ -265,6 +269,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.22  2010-02-22 14:41:03  regan
+// bugfix in printing
+//
 // Revision 1.21  2010-01-14 18:04:14  regan
 // bugfixes
 //
