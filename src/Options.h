@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.5 2010-01-16 01:06:28 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.6 2010-02-22 14:40:05 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -39,6 +39,7 @@ private:
   double        secondOrderWeight;
   unsigned int  minQuality;
   unsigned int  minDepth;
+  unsigned int  minReadLength;
 
   Options() { setOptions(); }
 
@@ -55,6 +56,8 @@ public:
   static inline double              &getSecondOrderWeight(){ return getOptions().secondOrderWeight; }
   static inline unsigned int        &getMinQuality()       { return getOptions().minQuality; }
   static inline unsigned int        &getMinDepth()         { return getOptions().minDepth; }
+  static inline unsigned int        &getMinReadLength()    { return getOptions().minReadLength; }
+  const static unsigned int MAX_INT = (unsigned int) -1;
 
 private:  
   void setOptions() {
@@ -68,6 +71,8 @@ private:
             
             ("input-file", po::value< FileListType >(), "input file(s)")
             ("output-file", po::value< std::string >(), "output file or dir")
+            
+            ("min-read-length", po::value< unsigned int >()->default_value(0), "minimum (trimmed) read length of selected reads.  0: (default) no minimum, -1: full read length")
             
             ("min-kmer-quality", po::value< double >()->default_value(0.10), "minimum quality-adjusted kmer probability (0-1)")
             ("min-quality-score", po::value< unsigned int >()->default_value(10), "minimum quality score over entire kmer")
@@ -147,6 +152,8 @@ public:
         getMinDepth() = vm["min-depth"].as< unsigned int >();
         std::cerr << "min-depth is: " << getMinDepth() << std::endl;
 
+        getMinReadLength() = vm["min-read-length"].as< unsigned int >();
+        std::cerr << "min-read-length is: " << getMinReadLength() << std::endl;
      
         // set solid-quantile
       	getSolidQuantile() = vm["solid-quantile"].as< double >();
@@ -175,6 +182,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.6  2010-02-22 14:40:05  regan
+// added optoin
+//
 // Revision 1.5  2010-01-16 01:06:28  regan
 // refactored
 //
