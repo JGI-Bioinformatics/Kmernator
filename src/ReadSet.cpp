@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.22 2010-02-22 14:39:30 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.23 2010-02-22 15:18:37 regan Exp $
 //
 
 #include <exception>
@@ -650,6 +650,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs()
     readIdx = 0;
     while (readIdx<size) {
     	_pairs[ readIdx ] = Pair(readIdx);
+    	readIdx++;
     }
   }
   
@@ -658,6 +659,9 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs()
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.23  2010-02-22 15:18:37  regan
+// bugfix
+//
 // Revision 1.22  2010-02-22 14:39:30  regan
 // optimized to not open too many filesystem threads
 // fixed pairing to abort identification when there are duplicate names
