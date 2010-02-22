@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.16 2010-01-16 01:07:29 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.17 2010-02-22 14:40:45 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -36,15 +36,25 @@ public:
 private:
     std::vector<Read> _reads;
     unsigned long _baseCount;
+    SequenceLengthType _maxSequenceLength;
     PairedIndexType _pairs;
     
 private:
     void addRead(Read &read);
+    inline bool setMaxSequenceLength( SequenceLengthType len) {
+    	if (len > _maxSequenceLength) {
+    	  _maxSequenceLength = len;
+    	  return true;
+    	}
+    	return false;
+    }
     
 public:
     ReadSet():_baseCount(0) {}
     ~ReadSet() {}
 
+    inline SequenceLengthType getMaxSequenceLength() const { return _maxSequenceLength; }
+    
     void appendAnyFile(std::string filePath, std::string filePath2 = "");
     void appendAllFiles(Options::FileListType &files);
     void appendFastaFile(std::string &is);
@@ -103,6 +113,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.17  2010-02-22 14:40:45  regan
+// major milestone
+//
 // Revision 1.16  2010-01-16 01:07:29  regan
 // added method
 //

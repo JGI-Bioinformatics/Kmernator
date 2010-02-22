@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.5 2010-01-16 01:07:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.6 2010-02-22 14:40:35 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -9,7 +9,9 @@
 #include <cstring>
 
 #include <vector>
+#include <algorithm>
 
+#include <boost/unordered_set.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/foreach.hpp>
 #define foreach BOOST_FOREACH
@@ -32,34 +34,126 @@ public:
     bool isAvailable;
     ReadTrimType() : trimLength(0), score(0.0), label(), isAvailable(true){}
   };
+  class PairScore {
+  public:
+  	ReadSet::Pair pair;
+  	float score;
+  	PairScore() : pair(), score(0.0) {}
+  	PairScore(const ReadSet::Pair &_pair, float _score) : pair(_pair),score(_score) {}
+  	PairScore(const PairScore &copy) : pair(copy.pair), score(copy.score) {}
+  };
   typedef M DataType;
   typedef typename DataType::ReadPositionWeightVector ReadPositionWeightVector;
   typedef KmerMap<DataType> KMType;
+  typedef KmerMap<unsigned char> KmerCountMap;
   typedef typename KMType::ConstIterator KMIterator;
   typedef typename KMType::ElementType ElementType;
   typedef KmerMap<unsigned short> KMCacheType;
   typedef std::vector< ReadTrimType > ReadTrimVector;
   typedef std::vector< ReadSetSizeType > PicksVector;
+  typedef std::vector< PairScore > PairScoreVector;
+  typedef boost::unordered_set< std::string > DuplicateSet;
 
 private:
   const ReadSet &_reads;
   const KMType &_map;
   ReadTrimVector _trims;
   PicksVector _picks;
+  KmerCountMap _counts;
+  bool needCounts;
+  DuplicateSet _duplicateSet;
+  bool needDuplicateCheck;
 
 public:
-  ReadSelector(const ReadSet &reads, const KMType &map, double minimumKmerScore = 0.0): _reads(reads), _map(map), _trims(), _picks() 
+  ReadSelector(const ReadSet &reads, const KMType &map, float minimumKmerScore = 0.0): 
+  _reads(reads), 
+  _map(map), 
+  _trims(), 
+  _picks(), 
+  _counts(), 
+  needCounts(false),
+  _duplicateSet(),
+  needDuplicateCheck(false)
   { 
   	scoreAndTrimReads(minimumKmerScore);
   }
 
-  bool pickIfNew(ReadSetSizeType readIdx) {
+  class ScoreCompare : public std::binary_function<ReadSetSizeType,ReadSetSizeType,bool>
+  {
+  	private:
+  	const ReadSelector &_readSelector;
+  	public:
+  	ScoreCompare(const ReadSelector *readSelector) : _readSelector(*readSelector) {}
+  	inline bool operator()(const ReadSetSizeType &x, const ReadSetSizeType &y) {
+  		return _readSelector._trims[x].score < _readSelector._trims[y].score;
+  	}
+  };
+  class PairScoreCompare : public std::binary_function<ReadSetSizeType,ReadSetSizeType,bool>
+  {
+  	private:
+  	const ReadSelector &_readSelector;
+  	public:
+  	PairScoreCompare(const ReadSelector *readSelector) : _readSelector(*readSelector) {}
+  	inline bool operator()(const PairScore &x, const PairScore &y) {
+  		return x.score < y.score;
+  	}
+  };
+
+  void setNeedCounts() {
+  	if (needCounts)
+  	  return;
+  	_counts = KmerCountMap(_map.getNumBuckets());
+  	// TODO verify counts are initialized to 0
+  	needCounts = true;
+  }
+  void setNeedDuplicateCheck() {
+  	if (needDuplicateCheck)
+  	  return;
+  	needDuplicateCheck = true;
+  }
+  
+  inline KmerArray<char> getKmersForRead(ReadSetSizeType readIdx) {
+  	const Read &read = _reads.getRead(readIdx);
+  	KmerArray<char> kmers(read.getTwoBitSequence(), read.getLength(), true);
+  	return kmers;
+  }
+  inline KmerArray<char> getKmersForTrimmedRead(ReadSetSizeType readIdx) {
+  	KmerArray<char> kmers(_reads.getRead(readIdx).getTwoBitSequence(), _trims[readIdx].trimLength, true);
+  	return kmers;
+  }
+  
+  bool pickIfNew(const ReadSetSizeType readIdx) {
   	if ( _reads.isValidRead(readIdx) && _trims[readIdx].isAvailable ) {
+  	
+  	  // check for duplicates
+      if (needDuplicateCheck) {
+      	std::string str = _reads.getRead(readIdx).getFasta( _trims[readIdx].trimLength );
+  	  	DuplicateSet::iterator test = _duplicateSet.find(str);
+  	  	if (test == _duplicateSet.end()) {
+  	  		_duplicateSet.insert(str);
+  	  	} else {
+  	  		_trims[readIdx].isAvailable = false;
+  	  		return false;
+  	  	}
+  	  }
+      
+      // pick the read
   	  _picks.push_back(readIdx);
   	  _trims[readIdx].isAvailable = false;
+  	  
+  	  // account for the picked read
+  	  if (needCounts) {
+  		KmerArray<char> kmers = getKmersForTrimmedRead(readIdx);
+  		for(unsigned long j = 0; j < kmers.size(); j++) {
+  	       _counts[ kmers[j] ]++;
+  		}
+  	  }
   	  return true;
   	} else
   	  return false;	  
+  }
+  bool pickIfNew(const ReadSet::Pair &pair) {
+  	return pickIfNew(pair.read1) || pickIfNew(pair.read2);
   }
   
   bool isPassingRead(ReadSetSizeType readIdx) {
@@ -69,7 +163,23 @@ public:
   	if (! isPassingRead(readIdx) )
   	  return false;
   	ReadTrimType &trim = _trims[readIdx];
+  	if (minimumLength > _reads.getMaxSequenceLength()) {
+      // use actual length of this sequence
+      minimumLength = _reads.getRead(readIdx).getLength();
+  	}
   	return trim.isAvailable && trim.score >= minimumScore && trim.trimLength >= minimumLength;
+  }
+  bool isPassingPair(const ReadSet::Pair &pair, float minimumScore, SequenceLengthType minimumLength, bool bothPass) {
+  	if (bothPass)
+  	  return isPassingRead(pair.read1, minimumScore, minimumLength) && isPassingRead(pair.read2, minimumScore, minimumLength);
+  	else
+  	  return isPassingRead(pair.read1, minimumScore, minimumLength) || isPassingRead(pair.read2, minimumScore, minimumLength);
+  }
+  bool isPairAvailable(const ReadSet::Pair &pair, bool bothPass) {
+  	if (bothPass)
+  	  return isPassingRead(pair.read1) && _trims[pair.read1].isAvailable && isPassingRead(pair.read2) && _trims[pair.read2].isAvailable;
+  	else
+  	  return (isPassingRead(pair.read1) && _trims[pair.read1].isAvailable) || (isPassingRead(pair.read2) && _trims[pair.read2].isAvailable);
   }
   
   int pickAllPassingReads(float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
@@ -79,32 +189,156 @@ public:
   	}
   	return picked;
   }
-  int pickAllPassingPairs(float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
+  
+  int pickAllPassingPairs(float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength(), bool bothPass = false) {
   	  int picked = 0;
   	  for(long i = 0; i < (long) _reads.getPairSize(); i++) {
   		const ReadSet::Pair &pair = _reads.getPair(i);
-  		if ( isPassingRead(pair.read1, minimumScore, minimumLength) || isPassingRead(pair.read2, minimumScore, minimumLength) ) {
+  		if (isPassingPair(pair, minimumScore, minimumLength, bothPass)) {
   		  pickIfNew(pair.read1) && picked++;
   		  pickIfNew(pair.read2) && picked++;		
   		}
   	  }
   	  return picked;  	  
   }
+  
+  bool rescoreByBestCoveringSubset(ReadSetSizeType readIdx, unsigned char maxPickedKmerDepth) {
+  	ReadTrimType &trim = _trims[readIdx];
+  	KmerArray<char> kmers = getKmersForTrimmedRead(readIdx);
+  	float score = 0.0;
+  	for(unsigned long j = 0; j < kmers.size(); j++) {
+  	   const ElementType elem = _map.getElementIfExists(kmers[j]);
+  	   if (elem.isValid()) {
+  	   	 float contribution = elem.value().getCount();
+  	   	 int pickedCount = _counts[kmers[j]];
+  	   	 if ( pickedCount >= maxPickedKmerDepth ) {
+  	   	   trim.score = -1.0;
+  	   	   return false;
+  	   	 } else {
+  	   	   score += contribution * (maxPickedKmerDepth - pickedCount);
+  	   	 }
+  	   } else {
+   	     throw "Reads should have already been trimmed to exclude this kmer: " + kmers[j].toFasta();
+  	   }
+  	}
+
+  	bool hasNotChanged = (score >= trim.score);
+  	//std::cerr << readIdx << " " << score << " " << trim.score << " " << hasNotChanged << " " << kmers.size() << " " << trim.trimLength << std::endl;
+  	trim.score = score;
+  	return hasNotChanged;
+  }
+  
+  bool rescoreByBestCoveringSubset(const ReadSet::Pair &pair, unsigned char maxPickedKmerDepth, float &score) {
+  	score = 0.0;
+    bool hasNotChanged = true;
+  	if (_reads.isValidRead(pair.read1)) {
+  	  hasNotChanged &= rescoreByBestCoveringSubset(pair.read1, maxPickedKmerDepth);
+  	  score += _trims[pair.read1].score;
+  	}
+  	if (_reads.isValidRead(pair.read2)) {
+  	  hasNotChanged &= rescoreByBestCoveringSubset(pair.read2, maxPickedKmerDepth);
+  	  score += _trims[pair.read2].score;
+  	}
+  	return hasNotChanged;
+  }
+  
+  void _initPickBestCoveringSubset()
+  {
+  	setNeedCounts();
+  	setNeedDuplicateCheck();  	
+  }
+  
+  int pickBestCoveringSubsetPairs(unsigned char maxPickedKmerDepth, float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength(), bool bothPass = false) {
+    _initPickBestCoveringSubset();
+    int picked = 0;
     
-  void scoreAndTrimReads(double minimumKmerScore) {
+  	PairScoreVector heapedPairs;
+  	for(ReadSetSizeType pairIdx = 0; pairIdx < _reads.getPairSize(); pairIdx++) {
+  		const ReadSet::Pair &pair = _reads.getPair(pairIdx);
+  		float score;
+  		if (isPairAvailable(pair, bothPass)) {
+  		  rescoreByBestCoveringSubset(pair, maxPickedKmerDepth, score);
+  		  if (isPassingPair(pair, minimumScore, minimumLength, bothPass)) {
+  		  	heapedPairs.push_back( PairScore( pair, score ) );
+  		  }
+  		} 
+  	}
+  	
+  	std::cerr << "building heap out of " << heapedPairs.size() << " pairs" << std::endl;
+  	std::make_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
+  	    
+    std::cerr << "picking pairs: ";
+    // pick pairs
+    while (heapedPairs.begin() != heapedPairs.end()) {
+    	PairScore &pairScore = heapedPairs.front();
+    	std::pop_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
+    	heapedPairs.pop_back();
+    	
+    	if ( rescoreByBestCoveringSubset(pairScore.pair, maxPickedKmerDepth, pairScore.score) ) {
+    		pickIfNew(pairScore.pair) && picked++;
+    	} else {
+    		if (pairScore.score > 0.0) {
+    		  heapedPairs.push_back(pairScore);
+    		  std::push_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
+    	    }
+    	}
+    }
+    std::cerr << picked << std::endl;
+    return picked;
+  	
+  }
+  int pickBestCoveringSubsetReads(unsigned char maxPickedKmerDepth, float minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
+    _initPickBestCoveringSubset();
+    int picked = 0;
+    
+    std::cerr << "initializing reads into a heap" << std::endl;
+    // initialize heap of reads
+    PicksVector heapedReads;
+    for(ReadSetSizeType readIdx = 0; readIdx < _reads.getSize(); readIdx++) {
+    	ReadTrimType &trim = _trims[readIdx];
+    	if (trim.isAvailable) {
+    	  rescoreByBestCoveringSubset(readIdx, maxPickedKmerDepth);
+    	  if (isPassingRead(readIdx, minimumScore, minimumLength)) {
+    	    heapedReads.push_back(readIdx);
+    	  }
+    	}
+    }
+    std::cerr << "building heap out of " << heapedReads.size() << " reads" << std::endl;
+    std::make_heap( heapedReads.begin(), heapedReads.end(), ScoreCompare(this));
+    
+    std::cerr << "picking reads: ";
+    // pick reads
+    while (heapedReads.begin() != heapedReads.end()) {
+    	ReadSetSizeType readIdx = heapedReads.front();
+    	std::pop_heap(heapedReads.begin(), heapedReads.end(), ScoreCompare(this));
+    	heapedReads.pop_back();
+    	
+    	if ( rescoreByBestCoveringSubset(readIdx, maxPickedKmerDepth) ) {
+    		pickIfNew(readIdx) && picked++;
+    	} else {
+    		if (_trims[readIdx].score > 0.0) {
+    		  heapedReads.push_back(readIdx);
+    		  std::push_heap(heapedReads.begin(), heapedReads.end(), ScoreCompare(this));
+    	    }
+    	}
+    }
+    std::cerr << picked << std::endl;
+    return picked;
+  }
+  
+  void scoreAndTrimReads(float minimumKmerScore) {
   	_trims.resize(_reads.getSize());
   	#ifdef _USE_OPENMP
     #pragma omp parallel for schedule(dynamic)
 	#endif
   	for(long i = 0; i < (long) _reads.getSize(); i++) {
-  		const Read &read = _reads.getRead(i);
   		ReadTrimType &trim = _trims[i];
   		
-  		KmerArray<char> kmers(read.getTwoBitSequence(), read.getLength(), true);
+  		KmerArray<char> kmers = getKmersForRead(i);
   		for(unsigned long j = 0; j < kmers.size(); j++) {
   			const ElementType elem = _map.getElementIfExists(kmers[j]);
   			if (elem.isValid()) {
-  				double score = elem.value().getCount();
+  				float score = elem.value().getCount();
   				if (score >= minimumKmerScore) {
   				  trim.trimLength++;
   				  trim.score += score;
@@ -115,7 +349,7 @@ public:
   		}
   		if (trim.trimLength > 0) {
   		  // calculate average score (before adding kmer length)
-  		  double numKmers = trim.trimLength;
+  		  float numKmers = trim.trimLength;
   		  trim.score /= numKmers;
   		  
   		  trim.trimLength += KmerSizer::getSequenceLength() - 1;
@@ -124,24 +358,6 @@ public:
   		  trim.isAvailable = false;
   		}
   	}
-  }
-  
-  void pickLeastCoveringSubset() {
-  	std::vector< SequenceLengthType > readHits;
-  	readHits.resize( _reads.getSize() );
-  	KMIterator it( _map.begin() ), end( _map.end() );
-  	for(; it != end; it++) {
-  		const DataType &data = it->value();
-  		ReadPositionWeightVector rpos = data.getEachInstance();
-  		for(unsigned int i=0; i< rpos.size(); i++) {
-  			readHits[ rpos[i].readId ]++;
-  		}
-  	}
-  	#ifdef _USE_OPENMP
-
-    #else
-	
-	#endif  	
   }
   
   void pickAllCovering() {
