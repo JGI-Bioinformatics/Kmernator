@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.6 2010-01-14 19:27:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.7 2010-02-22 14:41:31 regan Exp $
 //
 
 #include <iostream>
@@ -7,6 +7,7 @@
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "KmerSpectrum.h"
+#include "KmerReadUtils.h"
  
 
 //#include "Options.h"
@@ -137,7 +138,7 @@ typedef std::vector< unsigned long > NumbersVector;
 //  2: the cumulative count of the common kmers from map 2
 //  3: the total cumulative count of all kmers from map 1
 //  4: the total cumulative count of all kmers from map 2
-static NumbersVector  countCommonKmers(KmerSolidMap &m1, KmerSolidMap &m2)
+static NumbersVector countCommonKmers(KmerSolidMap &m1, KmerSolidMap &m2)
 {
     NumbersVector ret(5);
     
@@ -179,35 +180,62 @@ int main(int argc, char *argv[])
     readSet2.appendAllFiles(fileList2);
     cerr << " loaded " << readSet2.getSize() << " Reads, " << readSet2.getBaseCount() << " Bases " << endl;
  
-    KS ks1(KS::estimateWeakKmerBucketSize(readSet1)*8);
-    KS ks2(KS::estimateWeakKmerBucketSize(readSet2)*8);
-   
-    KmerSolidMap &m1 = ks1.solid;
-    KmerSolidMap &m2 = ks2.solid;
+    long buckets = std::max(KS::estimateWeakKmerBucketSize(readSet1), KS::estimateWeakKmerBucketSize(readSet2));
 
-    cerr << "Building map 1\n";
-    ks1.buildKmerSpectrum(readSet1, true);
-    
-    TrackingData::resetGlobalCounters();
+    KS ks1(buckets);
+    KS ks2(buckets);
 
     cerr << "Building map 2\n";
     ks2.buildKmerSpectrum(readSet2, true);
 
-    cerr << "Counting common Kmers\n";
-    NumbersVector common = countCommonKmers(m1,m2);
+    cout << endl;
+    cout << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
+ 
+    if (CS_Options::getPerRead1()) {
+      #pragma omp parallel for schedule(dynamic)
+	  for(long i = 0; i < readSet1.getSize(); i++) {
+	  	ReadSet tmpSet;
+	  	Read &read = readSet1.getRead(i);
+	  	tmpSet.append( read );
+	  	KS tmpKs1(buckets);
+	  	tmpKs1.buildKmerSpectrum(tmpSet, true);
+	  	KmerSolidMap &m1 = tmpKs1.solid;
+        KmerSolidMap &m2 = ks2.solid;
+        NumbersVector common = countCommonKmers(m1,m2);
+        if (common[0] > 0) {
+        	#pragma omp critical
+		    {
+		    	cout << m1.size() << '\t' << m2.size()<< '\t'<< common[0] << '\t'  
+                  << setprecision(4) 
+                  << (common[0]*100.0)/m1.size() << '\t' 
+                  << (common[1]*100.0/common[3]) << "\t" 
+                  << (common[0]*100.0)/m2.size() << "\t"
+                  << (common[2]*100.0/common[4]) << "\t"
+                  << read.getName() << endl;
+		    }
+        }
+	  }
+    } else {
+      cerr << "Building map 1\n";
+      ks1.buildKmerSpectrum(readSet1, true);
+      TrackingData::resetGlobalCounters();
+    
+      KmerSolidMap &m1 = ks1.solid;
+      KmerSolidMap &m2 = ks2.solid;
+
+      cerr << "Counting common Kmers\n";
+      NumbersVector common = countCommonKmers(m1,m2);
     
     // TODO fix check common to iterater through same-bucketed KmerMaps in sorted order (fast)
     // TODO if perRead1, iterate through common matches and output non-zero % matches
 
-    cout << endl;
-    cout << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
-    cout << m1.size() << '\t' << m2.size()<< '\t'<< common[0] << '\t'  
-      << setprecision(4) 
-      << (common[0]*100.0)/m1.size() << '\t' 
-      << (common[1]*100.0/common[3]) << "\t" 
-      << (common[0]*100.0)/m2.size() << "\t"
-      << (common[2]*100.0/common[4]) << endl;
-   
+     cout << m1.size() << '\t' << m2.size()<< '\t'<< common[0] << '\t'  
+        << setprecision(4) 
+        << (common[0]*100.0)/m1.size() << '\t' 
+        << (common[1]*100.0/common[3]) << "\t" 
+        << (common[0]*100.0)/m2.size() << "\t"
+        << (common[2]*100.0/common[4]) << endl;
+    }
 }
 
 
@@ -218,6 +246,9 @@ int main(int argc, char *argv[])
 
 //
 // $Log: CompareSpectrums.cpp,v $
+// Revision 1.7  2010-02-22 14:41:31  regan
+// checkpoint
+//
 // Revision 1.6  2010-01-14 19:27:43  regan
 // bugfixes
 //
