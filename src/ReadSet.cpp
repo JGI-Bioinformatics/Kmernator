@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.21 2010-01-14 00:50:07 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.22 2010-02-22 14:39:30 regan Exp $
 //
 
 #include <exception>
@@ -339,7 +339,9 @@ std::ifstream::pos_type _fileSize(ifstream &f)
 
 void ReadSet::addRead(Read &read) {
 	_reads.push_back( read );
-	_baseCount += read.getLength();
+	SequenceLengthType len = read.getLength();
+	_baseCount += len;
+	setMaxSequenceLength(len);
 }
 
 void ReadSet::appendAnyFile(string filePath, string filePath2)
@@ -356,8 +358,15 @@ void ReadSet::appendAllFiles(Options::FileListType &files)
 	
     #ifdef _USE_OPENMP
 	ReadSet myReads[ files.size() ];
-	omp_set_nested(1);
-	#pragma omp parallel for schedule(dynamic)
+	int numThreads = omp_get_max_threads() / MAX_FILE_PARALLELISM;
+	if ( numThreads > 1 ) {
+		omp_set_nested(1);
+	} else {
+		numThreads = omp_get_max_threads();
+		omp_set_nested(0);
+	}
+
+	#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 	#endif
 	for(long i = 0; i < (long) files.size(); i++) {
 		#ifdef _USE_OPENMP
@@ -408,6 +417,7 @@ void ReadSet::append(ReadSet &reads)
 	  _pairs[ oldPairSize + i ] = Pair( (tmp.read1 == MAX_READ_IDX ? MAX_READ_IDX : tmp.read1+oldSize), (tmp.read2 == MAX_READ_IDX ? MAX_READ_IDX : tmp.read2+oldSize) );
 	}
 	_baseCount += reads._baseCount;
+	setMaxSequenceLength(reads.getMaxSequenceLength());
 		  
 }
 
@@ -440,19 +450,18 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
   
   unsigned long startIdx = _reads.size();
   unsigned long blockSize = 0;
-  unsigned long tmpBaseCount = 0;
   
   // set OMP variables
   omp_set_nested(1);
   int numThreads = omp_get_max_threads();
-  if (numThreads > 8)
-    numThreads = 8;
+  if (numThreads > MAX_FILE_PARALLELISM)
+    numThreads = MAX_FILE_PARALLELISM;
   unsigned long numReads[ numThreads ];
   unsigned long seekPos[ numThreads ];
   for(int i = 0; i < numThreads ; i++)
     numReads[i] = 0;
   
-  #pragma omp parallel reduction(+:tmpBaseCount) num_threads(numThreads)
+  #pragma omp parallel num_threads(numThreads)
   {
   	
   	if (omp_get_num_threads() != numThreads)
@@ -489,8 +498,7 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
     while (hasNext && reader.nextRead(name,bases,quals))
     {
        Read read(name, bases, quals);
-       myReads.addRead( read );
-       tmpBaseCount += read.getLength();
+       myReads.addRead( read );       
        // todo look into getPos() to optimize
        hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
     }
@@ -499,6 +507,13 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
 	//#pragma omp critical
 	//{ std::cerr << omp_get_thread_num() << " " << blockSize << " finished at " << reader.getPos() << " with " << myReads.getSize() << " " << numReads[ omp_get_thread_num() ]<< std::endl; }
     
+    #pragma omp critical
+	{
+		// set global counters
+		_baseCount += myReads._baseCount;
+	    setMaxSequenceLength(myReads.getMaxSequenceLength());
+	}
+	
     #pragma omp barrier
 	
 	#pragma omp single
@@ -516,50 +531,10 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
   	for(unsigned long j = 0; j <  myReads.getSize(); j++)
   	  _reads[startIdx + numReads[ omp_get_thread_num() ] + j] = myReads.getRead(j);
   }
-  _baseCount += tmpBaseCount;
   
   // reset omp variables
   omp_set_nested(OMP_NESTED_DEFAULT);
   
-}
-
-// not used as it speeds up only marginally
-void ReadSet::appendFastqBatchedOMP(string fastaFilePath,string qualFilePath)
-{
-    ReadFileReader reader(fastaFilePath,qualFilePath);
-    
-    long batchSize = 100000;
-    long batchIdx = 0;
-    std::string names[batchSize];
-    std::string bases[batchSize];
-    std::string quals[batchSize];
-    unsigned long tmpBaseCount = 0;
-    bool hasNext = true;
-    while (hasNext)
-    {
-    	// single threaded reading...
-        for(long idx = 0 ; idx < batchSize; idx++)
-          if( ! reader.nextRead(names[idx],bases[idx],quals[idx]) ) {
-          	hasNext = false;
-          	batchSize = idx;
-          	break;
-          }
-        
-        // allocate space
-        _reads.resize( batchIdx + batchSize );
-        
-        
-        #pragma omp parallel for reduction(+:tmpBaseCount)
-		for(long idx = 0; idx < batchSize ; idx++) {
-	      Read read(names[idx], bases[idx], quals[idx]);
-		  _reads[batchIdx+idx] = read;
-		  tmpBaseCount += read.getLength();
-		}
-		  
-		batchIdx += batchSize;
-    }
-    _baseCount += tmpBaseCount;
-    
 }
 
 void ReadSet::appendFastq(string fastaFilePath)
@@ -616,6 +591,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs()
   boost::unordered_map< std::string, ReadSetSizeType > unmatchedNames;
   boost::unordered_map< std::string, ReadSetSizeType >::iterator unmatchedIt;
   
+  // build the unmatchedNames map for existing identified pairs
   for(ReadSetSizeType i = 0 ; i < _pairs.size() ; i++) {
   	Pair &pair = _pairs[i];
   	if ( (pair.read1 == MAX_READ_IDX || pair.read2 == MAX_READ_IDX) && pair.read1 != pair.read2) {
@@ -626,6 +602,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs()
   
   std::string lastName, common;
   int readNum = 0;
+  bool isPairable = true;
   
   while (readIdx < size) {
   
@@ -637,12 +614,18 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs()
     if (unmatchedIt != unmatchedNames.end()) {
       Pair &test = _pairs[ unmatchedIt->second ];
       if (readNum == 2) {
-      	if (test.read2 != MAX_READ_IDX)
-      	  throw;
+      	if (test.read2 != MAX_READ_IDX) {
+      	  isPairable = false;
+      	  std::cerr << "Detected a conflicting read2. Aborting pair identification: " << name << std::endl;
+      	  break;
+      	}
       	_pairs[ unmatchedIt->second ].read2 = readIdx;
       } else {
-      	if (test.read1 != MAX_READ_IDX)
-      	  throw;
+      	if (test.read1 != MAX_READ_IDX) {
+      	  isPairable = false;
+      	  std::cerr << "Detected a conflicting read1. Aborting pair identification: " << name << std::endl;
+      	  break;
+      	}
         _pairs[ unmatchedIt->second ].read1 = readIdx;
       }
       unmatchedNames.erase(unmatchedIt);
@@ -660,11 +643,25 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs()
     readIdx++;
   }
   
+  if (! isPairable ) {
+  	// Pair identification was aborted, re-assigning all 'pairs' to be single reads
+  	_pairs.clear();
+  	_pairs.resize(size);
+    readIdx = 0;
+    while (readIdx<size) {
+    	_pairs[ readIdx ] = Pair(readIdx);
+    }
+  }
+  
   return _pairs.size();
 }
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.22  2010-02-22 14:39:30  regan
+// optimized to not open too many filesystem threads
+// fixed pairing to abort identification when there are duplicate names
+//
 // Revision 1.21  2010-01-14 00:50:07  regan
 // fixes
 //
