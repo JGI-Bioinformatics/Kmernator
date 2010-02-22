@@ -1,7 +1,7 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.8 2010-01-13 07:20:10 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.9 2010-02-22 14:41:18 regan Exp $
 //
  
-
+#include "Sequence.h"
 #include "ReadSet.h"
 #define BOOST_TEST_MODULE ReadSetTest
 #include <boost/test/unit_test.hpp>
@@ -106,6 +106,9 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.9  2010-02-22 14:41:18  regan
+// minor bug fixes
+//
 // Revision 1.8  2010-01-13 07:20:10  regan
 // refactored filter
 // checkpoint on read picker
