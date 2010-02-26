@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.16 2010-02-22 14:41:03 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.17 2010-02-26 11:09:43 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -62,7 +62,7 @@ class Read : public Sequence
 public:
   static const char REF_QUAL = 0xff;
   static const char FASTQ_START_CHAR = 64;
-  static const char PRINT_REF_QUAL = 128;
+  static const char PRINT_REF_QUAL = 114;
 
 private:
   inline const Read &constThis() const { return *this; }
@@ -110,6 +110,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.17  2010-02-26 11:09:43  regan
+// bugfix
+//
 // Revision 1.16  2010-02-22 14:41:03  regan
 // bugfix in printing
 //
