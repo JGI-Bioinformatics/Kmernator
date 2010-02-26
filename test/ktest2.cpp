@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.28 2010-01-16 01:07:40 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.29 2010-02-26 13:01:21 regan Exp $
 //
 
 #include <iostream>
@@ -20,107 +20,116 @@
 
 using namespace std;
 
-typedef KmerSpectrum<TrackingData,TrackingDataWithAllReads> KS;
+typedef KmerSpectrum<TrackingData, TrackingDataWithAllReads> KS;
 
-class Ktest2Options : Options
-{
+class Ktest2Options: Options {
 public:
-	static bool parseOpts(int argc, char *argv[])
-	{
+	static bool parseOpts(int argc, char *argv[]) {
 		getPosDesc().add("kmer-size", 1);
-        getPosDesc().add("input-file", -1);
+		getPosDesc().add("input-file", -1);
 		return Options::parseOpts(argc, argv);
 	}
 };
 
 int main(int argc, char *argv[]) {
-    
-    if (!Ktest2Options::parseOpts(argc,argv))
-      throw std::invalid_argument("Please fix the command line arguments");
-      
-    ReadSet refReads, reads;
 
-    cerr << MemoryUtils::getMemoryUsage() << endl;
-    
-    FilterKnownOddities filter;
-    
-    KmerSizer::set(Options::getKmerSize());
-    Options::FileListType references = Options::getReferenceFiles();
-    Options::FileListType inputs     = Options::getInputFiles();
- 
-    TrackingDataWithAllReads test;
-    test.track(0.99, true, 1, 2);
-    KmerArray<TrackingDataWithAllReads> test2;
-    TEMP_KMER( blah );
-    test2.insertAt(0, blah);
-    test2.valueAt(0).track(0.98,true,2,3);
-        
-    
-    cerr << "Reading Reference Files" << endl;
-    refReads.appendAllFiles( references );
-    cerr << "loaded " << refReads.getSize() << " Reads, " << refReads.getBaseCount() << " Bases " << endl;
-    cerr << MemoryUtils::getMemoryUsage() << endl; 
-    
-    unsigned long numBuckets = KS::estimateWeakKmerBucketSize( refReads, 256 );
-    cerr << "targetting " << numBuckets << " buckets for reference " << endl;
-    KS refSpectrum( numBuckets );
-    refSpectrum.weak.clear();
-    refSpectrum.buildKmerSpectrum( refReads, true );
-    TrackingData::resetGlobalCounters();
-    cerr << MemoryUtils::getMemoryUsage() << endl;
-    
-    cerr << "Reading Input Files" << endl;
-    reads.appendAllFiles(inputs);
-    cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases " << endl;
-    cerr << MemoryUtils::getMemoryUsage() << endl;
-    
-    cerr << "Applying filter to Input Files" << endl;
-    unsigned long filtered = filter.applyFilter(reads);
-    cerr << "filter affected " << filtered << " Reads " << endl;
-    cerr << MemoryUtils::getMemoryUsage() << endl;
-    
-    numBuckets = KS::estimateWeakKmerBucketSize( reads, 64 );
-    cerr << "targetting " << numBuckets << " buckets for reads " << endl;
-    
-    KS spectrum(numBuckets);
-    cerr << MemoryUtils::getMemoryUsage() << endl;
+	if (!Ktest2Options::parseOpts(argc, argv))
+		throw std::invalid_argument("Please fix the command line arguments");
 
-    TrackingData::minimumDepth = 10;
-    TrackingData::minimumWeight = 0.25;
-        
-    spectrum.buildKmerSpectrum( reads );
-    cerr << MemoryUtils::getMemoryUsage() << endl;
-    
-    if (refReads.getSize() > 0) {
-    	cerr << "Getting real error rate" << endl;
-    	spectrum.getErrorRates(refSpectrum.solid);
-    }
-    
-    unsigned long promoted = spectrum.autoPromote();//spectrum.promote( Options::getSolidQuantile() );
-    
-    cerr << "Promoted " << promoted << " kmers" << endl;
-    
-    if (refReads.getSize() > 0) {
-    	cerr << "Contrasted to reference kmer-spectrum:" << endl;
-        cerr << spectrum.contrastSpectrums( refSpectrum ) << endl;
-    } else if (Options::getVerbosity() > 0){
-    	cerr << "Dumping kmer spectrum" << endl;
-    	cerr << "Solid:" << endl;
-    	for( KS::SolidMapType::Iterator it = spectrum.solid.begin(); it != spectrum.solid.end(); it++) {
-    	  if (it->value().getCount() > 15 && (it->value().getNormalizedDirectionBias() > 0.9 || it->value().getNormalizedDirectionBias() < 0.1) )
-    		cerr << "\t" << spectrum.pretty( it->key(), it->value().toString() );
-    	}
-    	cerr << "Weak:" << endl;
-    	for( KS::WeakMapType::Iterator it = spectrum.weak.begin(); it != spectrum.weak.end(); it++) {
-    	  if (it->value().getCount() > 15 && (it->value().getNormalizedDirectionBias() > 0.9 || it->value().getNormalizedDirectionBias() < 0.1) )
-    		cerr << "\t" << spectrum.pretty( it->key(), it->value().toString() );
-    	}
-    }
+	ReadSet refReads, reads;
+
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	FilterKnownOddities filter;
+
+	KmerSizer::set(Options::getKmerSize());
+	Options::FileListType references = Options::getReferenceFiles();
+	Options::FileListType inputs = Options::getInputFiles();
+
+	TrackingDataWithAllReads test;
+	test.track(0.99, true, 1, 2);
+	KmerArray<TrackingDataWithAllReads> test2;
+	TEMP_KMER(blah);
+	test2.insertAt(0, blah);
+	test2.valueAt(0).track(0.98, true, 2, 3);
+
+	cerr << "Reading Reference Files" << endl;
+	refReads.appendAllFiles(references);
+	cerr << "loaded " << refReads.getSize() << " Reads, "
+			<< refReads.getBaseCount() << " Bases " << endl;
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	unsigned long numBuckets = KS::estimateWeakKmerBucketSize(refReads, 256);
+	cerr << "targetting " << numBuckets << " buckets for reference " << endl;
+	KS refSpectrum(numBuckets);
+	refSpectrum.weak.clear();
+	refSpectrum.buildKmerSpectrum(refReads, true);
+	TrackingData::resetGlobalCounters();
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	cerr << "Reading Input Files" << endl;
+	reads.appendAllFiles(inputs);
+	cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
+			<< " Bases " << endl;
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	cerr << "Applying filter to Input Files" << endl;
+	unsigned long filtered = filter.applyFilter(reads);
+	cerr << "filter affected " << filtered << " Reads " << endl;
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
+	cerr << "targetting " << numBuckets << " buckets for reads " << endl;
+
+	KS spectrum(numBuckets);
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	TrackingData::minimumDepth = 10;
+	TrackingData::minimumWeight = 0.25;
+
+	spectrum.buildKmerSpectrum(reads);
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	if (refReads.getSize() > 0) {
+		cerr << "Getting real error rate" << endl;
+		spectrum.getErrorRates(refSpectrum.solid);
+	}
+
+	unsigned long promoted = spectrum.autoPromote();//spectrum.promote( Options::getSolidQuantile() );
+
+	cerr << "Promoted " << promoted << " kmers" << endl;
+
+	if (refReads.getSize() > 0) {
+		cerr << "Contrasted to reference kmer-spectrum:" << endl;
+		cerr << spectrum.contrastSpectrums(refSpectrum) << endl;
+	} else if (Options::getVerbosity() > 0) {
+		cerr << "Dumping kmer spectrum" << endl;
+		cerr << "Solid:" << endl;
+		for (KS::SolidMapType::Iterator it = spectrum.solid.begin(); it
+				!= spectrum.solid.end(); it++) {
+			if (it->value().getCount() > 15
+					&& (it->value().getNormalizedDirectionBias() > 0.9
+							|| it->value().getNormalizedDirectionBias() < 0.1))
+				cerr << "\t" << spectrum.pretty(it->key(),
+						it->value().toString());
+		}
+		cerr << "Weak:" << endl;
+		for (KS::WeakMapType::Iterator it = spectrum.weak.begin(); it
+				!= spectrum.weak.end(); it++) {
+			if (it->value().getCount() > 15
+					&& (it->value().getNormalizedDirectionBias() > 0.9
+							|| it->value().getNormalizedDirectionBias() < 0.1))
+				cerr << "\t" << spectrum.pretty(it->key(),
+						it->value().toString());
+		}
+	}
 }
-
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.29  2010-02-26 13:01:21  regan
+// reformatted
+//
 // Revision 1.28  2010-01-16 01:07:40  regan
 // refactored
 //

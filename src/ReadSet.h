@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.17 2010-02-22 14:40:45 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.18 2010-02-26 13:01:16 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -10,109 +10,145 @@
 #include "Options.h"
 #include "Sequence.h"
 
-
 class ReadFileReader;
 
 class ReadSet {
 public:
-    typedef unsigned int ReadSetSizeType;
-    static const ReadSetSizeType MAX_READ_IDX = (unsigned int) -1;
-    class Pair {
-    public:
-    	ReadSetSizeType read1;
-    	ReadSetSizeType read2;
-    	
-    	Pair() : read1(MAX_READ_IDX), read2(MAX_READ_IDX) {}
-    	Pair(ReadSetSizeType _read1) : read1(_read1), read2(MAX_READ_IDX) {}
-    	Pair(ReadSetSizeType _read1, ReadSetSizeType _read2) : read1(_read1), read2(_read2) {}
-    	Pair(const Pair &copy) : read1(copy.read1), read2(copy.read2) {} 
-    	bool operator==(const Pair &other) const { return (read1 == other.read1) && (read2 == other.read2); }
-    	bool operator<(const Pair &other) const { return lesser() < other.lesser(); }
-    	inline ReadSetSizeType lesser() const { return (read1 < read2 ? read1 : read2); }
-    };
-    
-    typedef std::vector< Pair > PairedIndexType;
-    
+	typedef unsigned int ReadSetSizeType;
+	static const ReadSetSizeType MAX_READ_IDX = (unsigned int) -1;
+	class Pair {
+	public:
+		ReadSetSizeType read1;
+		ReadSetSizeType read2;
+
+		Pair() :
+			read1(MAX_READ_IDX), read2(MAX_READ_IDX) {
+		}
+		Pair(ReadSetSizeType _read1) :
+			read1(_read1), read2(MAX_READ_IDX) {
+		}
+		Pair(ReadSetSizeType _read1, ReadSetSizeType _read2) :
+			read1(_read1), read2(_read2) {
+		}
+		Pair(const Pair &copy) :
+			read1(copy.read1), read2(copy.read2) {
+		}
+		bool operator==(const Pair &other) const {
+			return (read1 == other.read1) && (read2 == other.read2);
+		}
+		bool operator<(const Pair &other) const {
+			return lesser() < other.lesser();
+		}
+		inline ReadSetSizeType lesser() const {
+			return (read1 < read2 ? read1 : read2);
+		}
+	};
+
+	typedef std::vector<Pair> PairedIndexType;
+
 private:
-    std::vector<Read> _reads;
-    unsigned long _baseCount;
-    SequenceLengthType _maxSequenceLength;
-    PairedIndexType _pairs;
-    
+	std::vector<Read> _reads;
+	unsigned long _baseCount;
+	SequenceLengthType _maxSequenceLength;
+	PairedIndexType _pairs;
+
 private:
-    void addRead(Read &read);
-    inline bool setMaxSequenceLength( SequenceLengthType len) {
-    	if (len > _maxSequenceLength) {
-    	  _maxSequenceLength = len;
-    	  return true;
-    	}
-    	return false;
-    }
-    
+	void addRead(Read &read);
+	inline bool setMaxSequenceLength(SequenceLengthType len) {
+		if (len > _maxSequenceLength) {
+			_maxSequenceLength = len;
+			return true;
+		}
+		return false;
+	}
+
 public:
-    ReadSet():_baseCount(0) {}
-    ~ReadSet() {}
+	ReadSet() :
+		_baseCount(0) {
+	}
+	~ReadSet() {
+	}
 
-    inline SequenceLengthType getMaxSequenceLength() const { return _maxSequenceLength; }
-    
-    void appendAnyFile(std::string filePath, std::string filePath2 = "");
-    void appendAllFiles(Options::FileListType &files);
-    void appendFastaFile(std::string &is);
-    
-    void append(ReadSet &reads);
-    void append(Read &read) { _reads.push_back( read); }
+	inline SequenceLengthType getMaxSequenceLength() const {
+		return _maxSequenceLength;
+	}
 
-    inline ReadSetSizeType getSize() const { return _reads.size(); }
-    unsigned long getBaseCount() const {return _baseCount;}
+	void appendAnyFile(std::string filePath, std::string filePath2 = "");
+	void appendAllFiles(Options::FileListType &files);
+	void appendFastaFile(std::string &is);
 
-    inline ReadSetSizeType getPairSize() const { return _pairs.size(); }
-    
-    inline bool isValidRead(ReadSetSizeType index) const { return index < getSize(); }
-    
-    inline Read &getRead(ReadSetSizeType index) { return _reads[index]; }
-    inline const Read &getRead(ReadSetSizeType index) const { return _reads[index]; }
-    
+	void append(ReadSet &reads);
+	void append(Read &read) {
+		_reads.push_back(read);
+	}
 
-    // by default no pairs are identified
-    ReadSetSizeType identifyPairs();
-    bool hasPairs() { return getPairSize() != 0 && getPairSize() < getSize(); }
-    
-    // may return either as MAX_READ_IDX
-    inline Pair &getPair(ReadSetSizeType pairIndex) { return _pairs[pairIndex]; }
-    inline const Pair &getPair(ReadSetSizeType pairIndex) const { return _pairs[pairIndex]; }
+	inline ReadSetSizeType getSize() const {
+		return _reads.size();
+	}
+	unsigned long getBaseCount() const {
+		return _baseCount;
+	}
+
+	inline ReadSetSizeType getPairSize() const {
+		return _pairs.size();
+	}
+
+	inline bool isValidRead(ReadSetSizeType index) const {
+		return index < getSize();
+	}
+
+	inline Read &getRead(ReadSetSizeType index) {
+		return _reads[index];
+	}
+	inline const Read &getRead(ReadSetSizeType index) const {
+		return _reads[index];
+	}
+
+	// by default no pairs are identified
+	ReadSetSizeType identifyPairs();
+	bool hasPairs() {
+		return getPairSize() != 0 && getPairSize() < getSize();
+	}
+
+	// may return either as MAX_READ_IDX
+	inline Pair &getPair(ReadSetSizeType pairIndex) {
+		return _pairs[pairIndex];
+	}
+	inline const Pair &getPair(ReadSetSizeType pairIndex) const {
+		return _pairs[pairIndex];
+	}
 
 protected:
-    void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
-    void appendFasta(ReadFileReader &reader);
-    
-    void appendFastq(std::string fastqFilePath);
-    void appendFastqBlockedOMP(std::string fastaFilePath, std::string qualFilePath = "");
-    void appendFastqBatchedOMP(std::string fastaFilePath, std::string qualFilePath = "");
-    
+	void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
+	void appendFasta(ReadFileReader &reader);
+
+	void appendFastq(std::string fastqFilePath);
+	void appendFastqBlockedOMP(std::string fastaFilePath,
+			std::string qualFilePath = "");
+	void appendFastqBatchedOMP(std::string fastaFilePath,
+			std::string qualFilePath = "");
 
 };
 
-
-class ReadIndexScore
-{
+class ReadIndexScore {
 public:
-   ReadSet::ReadSetSizeType readIndex;
-   float score; 
+	ReadSet::ReadSetSizeType readIndex;
+	float score;
 };
 
-
-class KmerReadSetStats
-{
+class KmerReadSetStats {
 public:
-   float  kmerScore;
-   std::vector<ReadIndexScore> linkedReads;
+	float kmerScore;
+	std::vector<ReadIndexScore> linkedReads;
 };
-
 
 #endif
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.18  2010-02-26 13:01:16  regan
+// reformatted
+//
 // Revision 1.17  2010-02-22 14:40:45  regan
 // major milestone
 //

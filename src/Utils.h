@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.28 2010-01-13 23:48:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.29 2010-02-26 13:01:17 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -23,58 +23,56 @@
 #include "Options.h"
 
 template<typename Raw, typename Store>
-class BucketedData
-{
+class BucketedData {
 public:
-  typedef Store StoreType;
-  typedef Raw   RawType;
-  
+	typedef Store StoreType;
+	typedef Raw RawType;
+
 private:
-  RawType _minValue, _maxValue;
-  StoreType steps;
-  
+	RawType _minValue, _maxValue;
+	StoreType steps;
+
 public:
-  // TODO inclusive permutations: (), [), (], []
-  //      presently it truncates fraction, so [)
-  // TODO implement log scale
-  BucketedData(RawType minValue, RawType maxValue): 
-    _minValue(minValue), 
-    _maxValue(maxValue)
-  {
-  	// assumes unsigned Store...
-  	steps = ((StoreType) -1);
-  }
-  ~BucketedData() {}
-  
-  StoreType getStore(RawType value) {
-  	if (value < _minValue || value > _maxValue)
-  	  throw std::invalid_argument("getStore() out of range");
-    return ((RawType) steps) * (value - _minValue) / (_maxValue - _minValue);
-  }
-  
-  RawType getValue(StoreType store) {
-  	return (_maxValue - _minValue) * ((RawType) store) / ((RawType) steps);
-  }
+	// TODO inclusive permutations: (), [), (], []
+	//      presently it truncates fraction, so [)
+	// TODO implement log scale
+	BucketedData(RawType minValue, RawType maxValue) :
+		_minValue(minValue), _maxValue(maxValue) {
+		// assumes unsigned Store...
+		steps = ((StoreType) -1);
+	}
+	~BucketedData() {
+	}
+
+	StoreType getStore(RawType value) {
+		if (value < _minValue || value > _maxValue)
+			throw std::invalid_argument("getStore() out of range");
+		return ((RawType) steps) * (value - _minValue)
+				/ (_maxValue - _minValue);
+	}
+
+	RawType getValue(StoreType store) {
+		return (_maxValue - _minValue) * ((RawType) store) / ((RawType) steps);
+	}
 };
 
-typedef unsigned char   OneByte;
-typedef unsigned short  TwoByte;
-typedef unsigned int    FourByte;
-typedef unsigned long   EightByte;
+typedef unsigned char OneByte;
+typedef unsigned short TwoByte;
+typedef unsigned int FourByte;
+typedef unsigned long EightByte;
 
-
-typedef BucketedData< double, OneByte   > DoubleToOneByte;
-typedef BucketedData< double, TwoByte   > DoubleToTwoByte;
-typedef BucketedData< double, FourByte  > DoubleToFourByte;
-typedef BucketedData< double, EightByte > DoubleToEightByte;
-
-
-
+typedef BucketedData<double, OneByte> DoubleToOneByte;
+typedef BucketedData<double, TwoByte> DoubleToTwoByte;
+typedef BucketedData<double, FourByte> DoubleToFourByte;
+typedef BucketedData<double, EightByte> DoubleToEightByte;
 
 #endif
 
 //
 // $Log: Utils.h,v $
+// Revision 1.29  2010-02-26 13:01:17  regan
+// reformatted
+//
 // Revision 1.28  2010-01-13 23:48:51  regan
 // refactored
 //

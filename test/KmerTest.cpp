@@ -1,6 +1,6 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.34 2009-12-14 05:32:15 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.35 2010-02-26 13:01:22 regan Exp $
 //
- 
+
 
 #include "TwoBitSequence.h"
 #include "Kmer.h"
@@ -15,20 +15,19 @@
 
 using namespace std;
 
-TwoBitEncoding twoBit1[1024],twoBit2[1024],twoBit3[1024];
+TwoBitEncoding twoBit1[1024], twoBit2[1024], twoBit3[1024];
 // do not want to support these....
 /* Kmer    *kmer1     = (Kmer*)&twoBit1;
-Kmer    *kmer2     = (Kmer*)&twoBit2;
-Kmer    *kmer3     = (Kmer*)&twoBit3;
-Kmer    &kmer1ref  = *kmer1;
-Kmer    &kmer2ref  = *kmer2;
-Kmer    &kmer3ref  = *kmer3;
+ Kmer    *kmer2     = (Kmer*)&twoBit2;
+ Kmer    *kmer3     = (Kmer*)&twoBit3;
+ Kmer    &kmer1ref  = *kmer1;
+ Kmer    &kmer2ref  = *kmer2;
+ Kmer    &kmer3ref  = *kmer3;
  */
- 
-Kmer &kmer1 = *((Kmer *)(twoBit1));
-Kmer &kmer2 = *((Kmer *)(twoBit2));
-Kmer &kmer3 = *((Kmer *)(twoBit3));
 
+Kmer &kmer1 = *((Kmer *) (twoBit1));
+Kmer &kmer2 = *((Kmer *) (twoBit2));
+Kmer &kmer3 = *((Kmer *) (twoBit3));
 
 #define SET_KMERS(fasta1, fasta2, fasta3) \
     TwoBitSequence::compressSequence(fasta1,   twoBit1);\
@@ -38,54 +37,52 @@ Kmer &kmer3 = *((Kmer *)(twoBit3));
     BOOST_CHECK_EQUAL( fasta1, kmer1.toFasta());\
     BOOST_CHECK_EQUAL( fasta2, kmer2.toFasta());
 
-void testKmerCompare()
-{
+void testKmerCompare() {
 
+	SET_KMERS("AAAA", "AAAA", "");
+	BOOST_CHECK(kmer1 == (kmer2));
 
-  SET_KMERS("AAAA", "AAAA", "");
-  BOOST_CHECK( kmer1==(kmer2) );
-  
-  SET_KMERS("AAAAA", "AAAAA", "");
-  BOOST_CHECK( kmer1==(kmer2) );
-  
-  SET_KMERS("AAAAAA", "AAAAAA", "");
-  BOOST_CHECK( kmer1==(kmer2) );
-  
-  SET_KMERS("AAAAAAA", "AAAAAAA", "");
-  BOOST_CHECK( kmer1==(kmer2) );
+	SET_KMERS("AAAAA", "AAAAA", "");
+	BOOST_CHECK(kmer1 == (kmer2));
 
-  SET_KMERS("AAAAAAAA", "AAAAAAAA", "");
-  BOOST_CHECK( kmer1==(kmer2) );
+	SET_KMERS("AAAAAA", "AAAAAA", "");
+	BOOST_CHECK(kmer1 == (kmer2));
 
-  SET_KMERS("ACGT", "ACGT", "");
-  BOOST_CHECK( kmer1==(kmer2) );
-  
-  SET_KMERS("ACGTC", "ACGTC", "");
-  BOOST_CHECK( kmer1==(kmer2) );
-  
-  SET_KMERS("ACGTCG", "ACGTCG", "");
-  BOOST_CHECK( kmer1==(kmer2) );
-  
-  SET_KMERS("ACGTCGT", "ACGTCGT", "");
-  BOOST_CHECK( kmer1==(kmer2) );
+	SET_KMERS("AAAAAAA", "AAAAAAA", "");
+	BOOST_CHECK(kmer1 == (kmer2));
 
-  SET_KMERS("ACGTCGTC", "ACGTCGTC", "");
-  BOOST_CHECK( kmer1==(kmer2) );
+	SET_KMERS("AAAAAAAA", "AAAAAAAA", "");
+	BOOST_CHECK(kmer1 == (kmer2));
 
-  SET_KMERS("ACGT", "CGTA", "");
-  BOOST_CHECK( kmer1!=(kmer2) );
-  
-  SET_KMERS("ACGTC", "CGTCA", "");
-  BOOST_CHECK(  kmer1!=(kmer2) );
-  
-  SET_KMERS("ACGTCG", "CGTCGA", "");
-  BOOST_CHECK(  kmer1!=(kmer2) );
-  
-  SET_KMERS("ACGTCGT", "CGTCGTA", "");
-  BOOST_CHECK(  kmer1!=(kmer2) );
+	SET_KMERS("ACGT", "ACGT", "");
+	BOOST_CHECK(kmer1 == (kmer2));
 
-  SET_KMERS("ACGTCGTC", "CGTCGTCA", "");
-  BOOST_CHECK(  kmer1 !=(kmer2) );
+	SET_KMERS("ACGTC", "ACGTC", "");
+	BOOST_CHECK(kmer1 == (kmer2));
+
+	SET_KMERS("ACGTCG", "ACGTCG", "");
+	BOOST_CHECK(kmer1 == (kmer2));
+
+	SET_KMERS("ACGTCGT", "ACGTCGT", "");
+	BOOST_CHECK(kmer1 == (kmer2));
+
+	SET_KMERS("ACGTCGTC", "ACGTCGTC", "");
+	BOOST_CHECK(kmer1 == (kmer2));
+
+	SET_KMERS("ACGT", "CGTA", "");
+	BOOST_CHECK(kmer1 != (kmer2));
+
+	SET_KMERS("ACGTC", "CGTCA", "");
+	BOOST_CHECK(kmer1 != (kmer2));
+
+	SET_KMERS("ACGTCG", "CGTCGA", "");
+	BOOST_CHECK(kmer1 != (kmer2));
+
+	SET_KMERS("ACGTCGT", "CGTCGTA", "");
+	BOOST_CHECK(kmer1 != (kmer2));
+
+	SET_KMERS("ACGTCGTC", "CGTCGTCA", "");
+	BOOST_CHECK(kmer1 != (kmer2));
 
 }
 #if 0
@@ -97,514 +94,513 @@ SequenceLengthType kmerBytesJump = 0;
 
 void testKmerPtr(SequenceLengthType size)
 {
-  unsigned char bitshift = size % 4;
-  kmerBytesJump = (size+3) /4;
-  //verify initial conditions
-  BOOST_CHECK( kptr1.get() == kmer1);
-  BOOST_CHECK( kptr2.get() == kmer2);
-  BOOST_CHECK( kptr3.get() == kmer3);
- 
-  BOOST_CHECK( kptr1 == *&kptr1);
-  BOOST_CHECK( kptr2 == *&kptr2);
-  BOOST_CHECK( kptr3 == *&kptr3); 
-  
-  // do not want to support these...
-  //BOOST_CHECK( *kptr1 == kmer1ref);
-  //BOOST_CHECK( *kptr2 == kmer2ref);
-  //BOOST_CHECK( *kptr3 == kmer3ref); 
+	unsigned char bitshift = size % 4;
+	kmerBytesJump = (size+3) /4;
+	//verify initial conditions
+	BOOST_CHECK( kptr1.get() == kmer1);
+	BOOST_CHECK( kptr2.get() == kmer2);
+	BOOST_CHECK( kptr3.get() == kmer3);
 
-  KmerPtr a = kptr1;
-  KmerPtr b = kptr2;
-  KmerPtr c = kptr3;  
+	BOOST_CHECK( kptr1 == *&kptr1);
+	BOOST_CHECK( kptr2 == *&kptr2);
+	BOOST_CHECK( kptr3 == *&kptr3);
 
-  BOOST_CHECK( kptr1 == a);
-  BOOST_CHECK( kptr2 == b);
-  BOOST_CHECK( kptr3 == c);
-  BOOST_CHECK( a != c);
+	// do not want to support these...
+	//BOOST_CHECK( *kptr1 == kmer1ref);
+	//BOOST_CHECK( *kptr2 == kmer2ref);
+	//BOOST_CHECK( *kptr3 == kmer3ref);
 
-   // Do not want to support theses...
-   /*
-  Kmer *a_ptr = kmer1;
-  Kmer *b_ptr = (Kmer *)b.get();
-  Kmer *c_ptr = (Kmer *)c.get();//(Kmer *)((void *)&(*c));
-  BOOST_CHECK( a_ptr == kmer1 );
-  BOOST_CHECK( b_ptr == kmer2 );
-  BOOST_CHECK( c_ptr == kmer3 );
-  */
-  // Do not want to support theses...
-  /*
-  Kmer &a_ref = (Kmer &)*kmer1;
-  Kmer &b_ref = *b_ptr;
-  Kmer &c_ref = *c_ptr; // *c;  
-  // test Kmer == Kmer
-  BOOST_CHECK( a_ref == *a_ptr );
-  BOOST_CHECK( b_ref == *b_ptr );
-  BOOST_CHECK( c_ref == *c_ptr );
-  // test KmerPtr == KmerPtr
-  BOOST_CHECK( &a_ref == a_ptr );
-  BOOST_CHECK( &b_ref == b_ptr );
-  BOOST_CHECK( &c_ref == c_ptr );
- */
-  std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
-  SET_KMERS(A.c_str(), B.c_str(), C.c_str());
-  KmerSizer::set(size);
-  
-  
-  // check KmerPtr
+	KmerPtr a = kptr1;
+	KmerPtr b = kptr2;
+	KmerPtr c = kptr3;
 
-  BOOST_CHECK( *a     == a[0] );
-  BOOST_CHECK( *(a+0) == a[0] ); 
-  BOOST_CHECK( *(a+1) == a[1] ); 
-  
-  BOOST_CHECK( *b     == b[0] );
-  BOOST_CHECK( *(b+0) == b[0] ); 
-  BOOST_CHECK( *(b+1) == b[1] ); 
-  
-  BOOST_CHECK( *c     == c[0] );
-  BOOST_CHECK( *(c+0) == c[0] ); 
-  BOOST_CHECK( *(c+1) == c[1] ); 
-    
-  KmerPtr copy = a;
-  BOOST_CHECK( a == copy );
-  BOOST_CHECK( copy == a );
+	BOOST_CHECK( kptr1 == a);
+	BOOST_CHECK( kptr2 == b);
+	BOOST_CHECK( kptr3 == c);
+	BOOST_CHECK( a != c);
 
+	// Do not want to support theses...
+	/*
+	 Kmer *a_ptr = kmer1;
+	 Kmer *b_ptr = (Kmer *)b.get();
+	 Kmer *c_ptr = (Kmer *)c.get();//(Kmer *)((void *)&(*c));
+	 BOOST_CHECK( a_ptr == kmer1 );
+	 BOOST_CHECK( b_ptr == kmer2 );
+	 BOOST_CHECK( c_ptr == kmer3 );
+	 */
+	// Do not want to support theses...
+	/*
+	 Kmer &a_ref = (Kmer &)*kmer1;
+	 Kmer &b_ref = *b_ptr;
+	 Kmer &c_ref = *c_ptr; // *c;
+	 // test Kmer == Kmer
+	 BOOST_CHECK( a_ref == *a_ptr );
+	 BOOST_CHECK( b_ref == *b_ptr );
+	 BOOST_CHECK( c_ref == *c_ptr );
+	 // test KmerPtr == KmerPtr
+	 BOOST_CHECK( &a_ref == a_ptr );
+	 BOOST_CHECK( &b_ref == b_ptr );
+	 BOOST_CHECK( &c_ref == c_ptr );
+	 */
+	std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+	SET_KMERS(A.c_str(), B.c_str(), C.c_str());
+	KmerSizer::set(size);
 
-  BOOST_CHECK_EQUAL( SS(A,0,size), a++->toFasta());
-  BOOST_CHECK_EQUAL( SS(A,0,size), (--a)->toFasta());
-  
-  BOOST_CHECK_EQUAL( SS(B,0,size), b++->toFasta());
-  BOOST_CHECK_EQUAL( SS(B,0,size), (--b)->toFasta());
-  
-  BOOST_CHECK_EQUAL( SS(C,0,size), c++->toFasta());
-  BOOST_CHECK_EQUAL( SS(C,1,size), c++->toFasta());
-  BOOST_CHECK_EQUAL( SS(C,2,size), c++->toFasta());
-  BOOST_CHECK_EQUAL( SS(C,3,size), c++->toFasta());
+	// check KmerPtr
 
-  BOOST_CHECK_EQUAL( SS(C,3,size), (--c)->toFasta());
-  BOOST_CHECK_EQUAL( SS(C,2,size), (--c)->toFasta());
-  BOOST_CHECK_EQUAL( SS(C,1,size), (--c)->toFasta());
-  BOOST_CHECK_EQUAL( SS(C,0,size), (--c)->toFasta());
+	BOOST_CHECK( *a == a[0] );
+	BOOST_CHECK( *(a+0) == a[0] );
+	BOOST_CHECK( *(a+1) == a[1] );
 
-  BOOST_CHECK( kptr3 == c);
-  
-  BOOST_CHECK_EQUAL( SS(C,0,size), c[0].toFasta());
-  BOOST_CHECK_EQUAL( SS(C,1,size), c[1].toFasta());
-  BOOST_CHECK_EQUAL( SS(C,2,size), c[2].toFasta());
-  BOOST_CHECK_EQUAL( SS(C,3,size), c[3].toFasta());
+	BOOST_CHECK( *b == b[0] );
+	BOOST_CHECK( *(b+0) == b[0] );
+	BOOST_CHECK( *(b+1) == b[1] );
 
-  BOOST_CHECK( kptr3 == c);
-  
-  
+	BOOST_CHECK( *c == c[0] );
+	BOOST_CHECK( *(c+0) == c[0] );
+	BOOST_CHECK( *(c+1) == c[1] );
 
-/*   // Do not want o support these
-  if(0)  
-  {  
-  	// check Kmer * (I do not know if this will ever work...)
-    BOOST_CHECK_EQUAL( SS(A,0,size), a_ptr++->toFasta());
-    BOOST_CHECK_EQUAL( SS(A,0,size), (--a_ptr)->toFasta());
-  
-    BOOST_CHECK_EQUAL( SS(B,0,size), b_ptr++->toFasta());
-    BOOST_CHECK_EQUAL( SS(B,0,size), (--b_ptr)->toFasta());
+	KmerPtr copy = a;
+	BOOST_CHECK( a == copy );
+	BOOST_CHECK( copy == a );
 
-    BOOST_CHECK_EQUAL( SS(C,0,size), c_ptr++->toFasta());
-    BOOST_CHECK_EQUAL( SS(C,1,size), c_ptr++->toFasta());
-    BOOST_CHECK_EQUAL( SS(C,2,size), c_ptr++->toFasta());
-    BOOST_CHECK_EQUAL( SS(C,3,size), c_ptr++->toFasta());
+	BOOST_CHECK_EQUAL( SS(A,0,size), a++->toFasta());
+	BOOST_CHECK_EQUAL( SS(A,0,size), (--a)->toFasta());
 
-    BOOST_CHECK_EQUAL( SS(C,3,size), (--c_ptr)->toFasta());
-    BOOST_CHECK_EQUAL( SS(C,2,size), (--c_ptr)->toFasta());
-    BOOST_CHECK_EQUAL( SS(C,1,size), (--c_ptr)->toFasta());
-    BOOST_CHECK_EQUAL( SS(C,0,size), (--c_ptr)->toFasta());
+	BOOST_CHECK_EQUAL( SS(B,0,size), b++->toFasta());
+	BOOST_CHECK_EQUAL( SS(B,0,size), (--b)->toFasta());
 
-    BOOST_CHECK( kptr3 == c_ptr);  
-  }
- */  
-  // and original have not changed...
-  a++; b++; c++;
-  BOOST_CHECK( kptr1.get() == kmer1);
-  BOOST_CHECK( kptr2.get() == kmer2);
-  BOOST_CHECK( kptr3.get() == kmer3);  
+	BOOST_CHECK_EQUAL( SS(C,0,size), c++->toFasta());
+	BOOST_CHECK_EQUAL( SS(C,1,size), c++->toFasta());
+	BOOST_CHECK_EQUAL( SS(C,2,size), c++->toFasta());
+	BOOST_CHECK_EQUAL( SS(C,3,size), c++->toFasta());
+
+	BOOST_CHECK_EQUAL( SS(C,3,size), (--c)->toFasta());
+	BOOST_CHECK_EQUAL( SS(C,2,size), (--c)->toFasta());
+	BOOST_CHECK_EQUAL( SS(C,1,size), (--c)->toFasta());
+	BOOST_CHECK_EQUAL( SS(C,0,size), (--c)->toFasta());
+
+	BOOST_CHECK( kptr3 == c);
+
+	BOOST_CHECK_EQUAL( SS(C,0,size), c[0].toFasta());
+	BOOST_CHECK_EQUAL( SS(C,1,size), c[1].toFasta());
+	BOOST_CHECK_EQUAL( SS(C,2,size), c[2].toFasta());
+	BOOST_CHECK_EQUAL( SS(C,3,size), c[3].toFasta());
+
+	BOOST_CHECK( kptr3 == c);
+
+	/*   // Do not want o support these
+	 if(0)
+	 {
+	 // check Kmer * (I do not know if this will ever work...)
+	 BOOST_CHECK_EQUAL( SS(A,0,size), a_ptr++->toFasta());
+	 BOOST_CHECK_EQUAL( SS(A,0,size), (--a_ptr)->toFasta());
+
+	 BOOST_CHECK_EQUAL( SS(B,0,size), b_ptr++->toFasta());
+	 BOOST_CHECK_EQUAL( SS(B,0,size), (--b_ptr)->toFasta());
+
+	 BOOST_CHECK_EQUAL( SS(C,0,size), c_ptr++->toFasta());
+	 BOOST_CHECK_EQUAL( SS(C,1,size), c_ptr++->toFasta());
+	 BOOST_CHECK_EQUAL( SS(C,2,size), c_ptr++->toFasta());
+	 BOOST_CHECK_EQUAL( SS(C,3,size), c_ptr++->toFasta());
+
+	 BOOST_CHECK_EQUAL( SS(C,3,size), (--c_ptr)->toFasta());
+	 BOOST_CHECK_EQUAL( SS(C,2,size), (--c_ptr)->toFasta());
+	 BOOST_CHECK_EQUAL( SS(C,1,size), (--c_ptr)->toFasta());
+	 BOOST_CHECK_EQUAL( SS(C,0,size), (--c_ptr)->toFasta());
+
+	 BOOST_CHECK( kptr3 == c_ptr);
+	 }
+	 */
+	// and original have not changed...
+	a++; b++; c++;
+	BOOST_CHECK( kptr1.get() == kmer1);
+	BOOST_CHECK( kptr2.get() == kmer2);
+	BOOST_CHECK( kptr3.get() == kmer3);
 }
 #endif
 
 #define SS2(str, offset, len) str.substr(offset, len)
 
-void testKmerArray(SequenceLengthType size)
-{
-//   kmerBytesJump = (size+3) /4;
-// 	
-  //BOOST_MESSAGE( size );
-  std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
- 
-  SET_KMERS(A.c_str(), B.c_str(), C.c_str());
-  KmerSizer::set(size);
-  
-  struct myTag {};
-  KmerArray<char> kmersA(twoBit1, A.length());
-  KmerArray<char> kmersB(twoBit2, B.length());
-  KmerArray<char> kmersC(twoBit3, C.length());
-  
-  if (size == 1) {
-  	for (unsigned int i=0; i<kmersC.size(); i++) {
-  	  char *ch = (char*)kmersC[i].get();
-  	  BOOST_CHECK_EQUAL( *ch & 0x3f, 0x00 ); 
-  	}
-  }
-  if (size == 2) {
-  	for (unsigned int i=0; i<kmersC.size(); i++) {
-  	  char *ch = (char*)kmersC[i].get();
-  	  BOOST_CHECK_EQUAL( *ch & 0x0f, 0x00 ); 
-  	}
-  }
-  if (size == 3) {
-  	for (unsigned int i=0; i<kmersC.size(); i++) {
-  	  char *ch = (char*)kmersC[i].get();
-  	  BOOST_CHECK_EQUAL( *ch & 0x03, 0x00 ); 
-  	}
-  }
-  KmerArray<char> *kmersD = new KmerArray<char>(twoBit3, C.length());
+void testKmerArray(SequenceLengthType size) {
+	//   kmerBytesJump = (size+3) /4;
+	//
+	//BOOST_MESSAGE( size );
+	std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C(
+			"AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
 
-  for (unsigned int i=0; i< A.length() - size +1; i++) {
-    BOOST_CHECK_EQUAL( kmersA[i].toFasta(), SS2(A,i,size));
-  }
-  for (unsigned int i=0; i< B.length() - size +1; i++) {
-    BOOST_CHECK_EQUAL( kmersB[i].toFasta(), SS2(B,i,size));
-  }
-  for (unsigned int i=0; i< C.length() - size +1; i++) {
-    BOOST_CHECK_EQUAL( kmersC[i].toFasta(), SS2(C,i,size));
-  }
-  for (unsigned int i=0; i< C.length() - size +1; i++) {
-    BOOST_CHECK_EQUAL( (*kmersD)[i].toFasta(), SS2(C,i,size));
-  }
-  delete kmersD;
+	SET_KMERS(A.c_str(), B.c_str(), C.c_str());
+	KmerSizer::set(size);
 
-  KmerArray<float> kmersFloat(twoBit3, C.length());
-  for (unsigned int i=0; i<kmersFloat.size() ; i++) {
-  	 float &valRef = kmersFloat.valueAt(i);
-  	 valRef = i*2.0;
-  }
-  for (unsigned int i=0; i<kmersFloat.size() ; i++) {
-  	 float &valRef = kmersFloat.valueAt(i);
-  	 float val = i*2.0;
-  	 BOOST_CHECK_EQUAL( val, valRef );
-  	 BOOST_CHECK_EQUAL( kmersC[i].toFasta(), kmersFloat[i].toFasta() );
-  }
+	struct myTag {
+	};
+	KmerArray<char> kmersA(twoBit1, A.length());
+	KmerArray<char> kmersB(twoBit2, B.length());
+	KmerArray<char> kmersC(twoBit3, C.length());
 
-  // test KmerArray assignment
-   
-  void *mem1, *mem2;
-  mem1 = kmersFloat[0].get(); 
-  KmerArray<float> copy = kmersFloat;
-  BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size() );
-  BOOST_CHECK_EQUAL( mem1, (void*)kmersFloat[0].get() );
-  mem2 = copy[0].get();
-  BOOST_CHECK( mem1 != mem2 );
-   
+	if (size == 1) {
+		for (unsigned int i = 0; i < kmersC.size(); i++) {
+			char *ch = (char*) kmersC[i].get();
+			BOOST_CHECK_EQUAL(*ch & 0x3f, 0x00);
+		}
+	}
+	if (size == 2) {
+		for (unsigned int i = 0; i < kmersC.size(); i++) {
+			char *ch = (char*) kmersC[i].get();
+			BOOST_CHECK_EQUAL(*ch & 0x0f, 0x00);
+		}
+	}
+	if (size == 3) {
+		for (unsigned int i = 0; i < kmersC.size(); i++) {
+			char *ch = (char*) kmersC[i].get();
+			BOOST_CHECK_EQUAL(*ch & 0x03, 0x00);
+		}
+	}
+	KmerArray<char> *kmersD = new KmerArray<char> (twoBit3, C.length());
 
-  for (unsigned int i=0; i<kmersFloat.size() ; i++) {
-  	 float &valRef = copy.valueAt(i);
-     float &valRef2 = kmersFloat.valueAt(i);
-  	 BOOST_CHECK_EQUAL( valRef2, valRef );
-  	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
-  }
-  
-  // test resize and []
-  unsigned long oldSize = copy.size();
-  copy.resize( oldSize+1 );
-  mem1 = copy[0].get();
-  BOOST_CHECK( mem1 != mem2 );
-  
-  BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size()+1 );
-  for (unsigned int i=0; i<kmersFloat.size() ; i++) {
-  	 float &valRef = copy.valueAt(i);
-     float &valRef2 = kmersFloat.valueAt(i);
-  	 BOOST_CHECK_EQUAL( valRef2, valRef );
-  	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
-  }
-  
-  copy[oldSize] = kmersFloat[0];
-  BOOST_CHECK_EQUAL( kmersFloat[0].toFasta(), copy[oldSize].toFasta() );
-  copy.valueAt(oldSize) = oldSize * 2.0;
-  BOOST_CHECK_EQUAL( oldSize*2.0, copy.valueAt(oldSize) );
-  BOOST_CHECK( copy[oldSize].get() != kmersFloat[0].get() );
+	for (unsigned int i = 0; i < A.length() - size + 1; i++) {
+		BOOST_CHECK_EQUAL(kmersA[i].toFasta(), SS2(A,i,size));
+	}
+	for (unsigned int i = 0; i < B.length() - size + 1; i++) {
+		BOOST_CHECK_EQUAL(kmersB[i].toFasta(), SS2(B,i,size));
+	}
+	for (unsigned int i = 0; i < C.length() - size + 1; i++) {
+		BOOST_CHECK_EQUAL(kmersC[i].toFasta(), SS2(C,i,size));
+	}
+	for (unsigned int i = 0; i < C.length() - size + 1; i++) {
+		BOOST_CHECK_EQUAL((*kmersD)[i].toFasta(), SS2(C,i,size));
+	}
+	delete kmersD;
 
-  for (unsigned int i=0; i<kmersFloat.size() ; i++) {
-  	 float &valRef = copy.valueAt(i);
-     float &valRef2 = kmersFloat.valueAt(i);
-  	 BOOST_CHECK_EQUAL( valRef2, valRef );
-  	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
-  }
-  BOOST_CHECK_EQUAL( kmersFloat[0].toFasta(), copy[oldSize].toFasta() );
-  BOOST_CHECK_EQUAL( oldSize*2.0, copy.valueAt(oldSize) );
-  
-  // now reduce
-  copy.resize(oldSize);
-  mem2 = copy[0].get();
-  
-  BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size() );
-  for (unsigned int i=0; i<kmersFloat.size() ; i++) {
-  	 float &valRef = copy.valueAt(i);
-     float &valRef2 = kmersFloat.valueAt(i);
-  	 BOOST_CHECK_EQUAL( valRef2, valRef );
-  	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
-  }
-    
-  // test find
-  for (unsigned int i=0; i<kmersFloat.size() ; i++) {
-    unsigned long idx = copy.find(kmersFloat[i]);
-    BOOST_REQUIRE( idx != KmerArray<float>::MAX_INDEX );
-    BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[idx].toFasta() );
-    // duplicates could be present and first one will be found
-    BOOST_CHECK( idx <= i );
-    BOOST_CHECK( copy.valueAt(idx) <= kmersFloat.valueAt(i) ); 
-  }
-  
-  // test insert
-  BOOST_CHECK_EQUAL( kmersFloat.size(), copy.size() );
-  for(unsigned int i=0; i<kmersFloat.size() ; i++) {
-    //BOOST_MESSAGE( i );
-    
-  	BOOST_CHECK_EQUAL( kmersFloat.size()+i, copy.size() );
-    copy.insertAt(i*2, kmersFloat[i]);
-    copy.valueAt(i*2) = kmersFloat.valueAt(i) - 1.0;
-    BOOST_CHECK_EQUAL( kmersFloat.size()+i+1, copy.size() );
-    
-    BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i*2].toFasta() );
-    BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i*2+1].toFasta() );
-    BOOST_CHECK_EQUAL( kmersFloat.valueAt(i),   copy.valueAt(i*2+1) );
-    BOOST_CHECK_EQUAL( kmersFloat.valueAt(i)-1.0,   copy.valueAt(i*2) );
-  }
-  BOOST_CHECK_EQUAL( kmersFloat.size()*2, copy.size() );
-  
-  for (unsigned int i=0; i<kmersFloat.size() ; i++) {
-  	 float &valRef = copy.valueAt(i*2+1);
-     float &valRef2 = kmersFloat.valueAt(i);
-  	 BOOST_CHECK_EQUAL( valRef2, valRef );
-  	 BOOST_CHECK_EQUAL( valRef2 - 1.0, copy.valueAt(i*2) );
-  	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i*2].toFasta() );
-  	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i*2+1].toFasta() );
-  }
-  
-  // test remove
-  BOOST_CHECK_EQUAL( kmersFloat.size()*2, copy.size() );
-  for(unsigned int i=0; i< kmersFloat.size(); i++) {
-  	BOOST_CHECK_EQUAL( kmersFloat.size()*2-i, copy.size() );
-  	copy.remove(i);
-  	BOOST_CHECK_EQUAL( kmersFloat.size()*2-i-1, copy.size() );
-  	
-  	for (unsigned int k=0; k<i+1 ; k++) {
-  	  BOOST_CHECK_EQUAL( kmersFloat[k].toFasta(), copy[k].toFasta() );
-      BOOST_CHECK_EQUAL( kmersFloat.valueAt(k),   copy.valueAt(k));
-  	}
-  }
-  
-  BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size() );
-  for (unsigned int i=0; i<kmersFloat.size() ; i++) {
- 	 float &valRef = copy.valueAt(i);
-     float &valRef2 = kmersFloat.valueAt(i);
-  	 BOOST_CHECK_EQUAL( valRef2, valRef);
-  	 BOOST_CHECK_EQUAL( kmersFloat[i].toFasta(), copy[i].toFasta() );
-  }
+	KmerArray<float> kmersFloat(twoBit3, C.length());
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		float &valRef = kmersFloat.valueAt(i);
+		valRef = i * 2.0;
+	}
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		float &valRef = kmersFloat.valueAt(i);
+		float val = i * 2.0;
+		BOOST_CHECK_EQUAL(val, valRef);
+		BOOST_CHECK_EQUAL(kmersC[i].toFasta(), kmersFloat[i].toFasta());
+	}
 
-  BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size() );
-  unsigned int count = 0;
-  for(KmerArray<float>::Iterator it = kmersFloat.begin() ; it != kmersFloat.end() ; it++) {
-    BOOST_CHECK_EQUAL( kmersFloat.valueAt(count), it->value() );
-    BOOST_CHECK_EQUAL( kmersFloat[count].toFasta(), it->key().toFasta() );
-    count++;
-  }
-  BOOST_CHECK_EQUAL( copy.size(), kmersFloat.size() );
-  BOOST_CHECK_EQUAL( copy.size(), count );
+	// test KmerArray assignment
 
-/* print out the permutations table
-  if (size == 4)  {
-  for(int i=0; i<=255; i++) {
-  	TwoBitEncoding tb = i;
-  	KmerPtr k2( &tb );
-  	std::stringstream ss;
-  	ss << k2->toFasta() << ": ";
-  	for (int j=0; j<12; j++) {
-  	  KmerPtr k( &(TwoBitSequence::permutations[i*12+j]) );
-  	  ss << k->toFasta() << ", ";
-  	}
-  	BOOST_MESSAGE( ss.str() );
-  }
-  }  else
-    return; 
-*/
+	void *mem1, *mem2;
+	mem1 = kmersFloat[0].get();
+	KmerArray<float> copy = kmersFloat;
+	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
+	BOOST_CHECK_EQUAL(mem1, (void*) kmersFloat[0].get());
+	mem2 = copy[0].get();
+	BOOST_CHECK(mem1 != mem2);
 
-  for(unsigned int i=0; i<kmersFloat.size(); i++) {
-    KmerArray<float> permutations = KmerArray<float>::permuteBases( kmersFloat[i] );
-    BOOST_CHECK_EQUAL( KmerSizer::getSequenceLength() * 3, permutations.size() );
-    //BOOST_MESSAGE( "start" );
-    //BOOST_MESSAGE( kmersFloat[i].toFasta() );
-    for(unsigned int j=0; j<permutations.size(); j++) {
-      BOOST_CHECK_NE( kmersFloat[i].toFasta(), permutations[j].toFasta() );
-      //BOOST_MESSAGE( permutations[j].toFasta() );
-      for(unsigned int k=0; k<j; k++) {
-      	BOOST_CHECK_NE( permutations[j].toFasta(), permutations[k].toFasta() );
-      }
-    } 
-  }
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		float &valRef = copy.valueAt(i);
+		float &valRef2 = kmersFloat.valueAt(i);
+		BOOST_CHECK_EQUAL(valRef2, valRef);
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[i].toFasta());
+	}
+
+	// test resize and []
+	unsigned long oldSize = copy.size();
+	copy.resize(oldSize + 1);
+	mem1 = copy[0].get();
+	BOOST_CHECK(mem1 != mem2);
+
+	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size() + 1);
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		float &valRef = copy.valueAt(i);
+		float &valRef2 = kmersFloat.valueAt(i);
+		BOOST_CHECK_EQUAL(valRef2, valRef);
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[i].toFasta());
+	}
+
+	copy[oldSize] = kmersFloat[0];
+	BOOST_CHECK_EQUAL(kmersFloat[0].toFasta(), copy[oldSize].toFasta());
+	copy.valueAt(oldSize) = oldSize * 2.0;
+	BOOST_CHECK_EQUAL(oldSize * 2.0, copy.valueAt(oldSize));
+	BOOST_CHECK(copy[oldSize].get() != kmersFloat[0].get());
+
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		float &valRef = copy.valueAt(i);
+		float &valRef2 = kmersFloat.valueAt(i);
+		BOOST_CHECK_EQUAL(valRef2, valRef);
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[i].toFasta());
+	}
+	BOOST_CHECK_EQUAL(kmersFloat[0].toFasta(), copy[oldSize].toFasta());
+	BOOST_CHECK_EQUAL(oldSize * 2.0, copy.valueAt(oldSize));
+
+	// now reduce
+	copy.resize(oldSize);
+	mem2 = copy[0].get();
+
+	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		float &valRef = copy.valueAt(i);
+		float &valRef2 = kmersFloat.valueAt(i);
+		BOOST_CHECK_EQUAL(valRef2, valRef);
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[i].toFasta());
+	}
+
+	// test find
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		unsigned long idx = copy.find(kmersFloat[i]);
+		BOOST_REQUIRE(idx != KmerArray<float>::MAX_INDEX);
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[idx].toFasta());
+		// duplicates could be present and first one will be found
+		BOOST_CHECK(idx <= i);
+		BOOST_CHECK(copy.valueAt(idx) <= kmersFloat.valueAt(i));
+	}
+
+	// test insert
+	BOOST_CHECK_EQUAL(kmersFloat.size(), copy.size());
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		//BOOST_MESSAGE( i );
+
+		BOOST_CHECK_EQUAL(kmersFloat.size() + i, copy.size());
+		copy.insertAt(i * 2, kmersFloat[i]);
+		copy.valueAt(i * 2) = kmersFloat.valueAt(i) - 1.0;
+		BOOST_CHECK_EQUAL(kmersFloat.size() + i + 1, copy.size());
+
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[i * 2].toFasta());
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[i * 2 + 1].toFasta());
+		BOOST_CHECK_EQUAL(kmersFloat.valueAt(i), copy.valueAt(i * 2 + 1));
+		BOOST_CHECK_EQUAL(kmersFloat.valueAt(i) - 1.0, copy.valueAt(i * 2));
+	}
+	BOOST_CHECK_EQUAL(kmersFloat.size() * 2, copy.size());
+
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		float &valRef = copy.valueAt(i * 2 + 1);
+		float &valRef2 = kmersFloat.valueAt(i);
+		BOOST_CHECK_EQUAL(valRef2, valRef);
+		BOOST_CHECK_EQUAL(valRef2 - 1.0, copy.valueAt(i * 2));
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[i * 2].toFasta());
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[i * 2 + 1].toFasta());
+	}
+
+	// test remove
+	BOOST_CHECK_EQUAL(kmersFloat.size() * 2, copy.size());
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		BOOST_CHECK_EQUAL(kmersFloat.size() * 2 - i, copy.size());
+		copy.remove(i);
+		BOOST_CHECK_EQUAL(kmersFloat.size() * 2 - i - 1, copy.size());
+
+		for (unsigned int k = 0; k < i + 1; k++) {
+			BOOST_CHECK_EQUAL(kmersFloat[k].toFasta(), copy[k].toFasta());
+			BOOST_CHECK_EQUAL(kmersFloat.valueAt(k), copy.valueAt(k));
+		}
+	}
+
+	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		float &valRef = copy.valueAt(i);
+		float &valRef2 = kmersFloat.valueAt(i);
+		BOOST_CHECK_EQUAL(valRef2, valRef);
+		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[i].toFasta());
+	}
+
+	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
+	unsigned int count = 0;
+	for (KmerArray<float>::Iterator it = kmersFloat.begin(); it
+			!= kmersFloat.end(); it++) {
+		BOOST_CHECK_EQUAL(kmersFloat.valueAt(count), it->value());
+		BOOST_CHECK_EQUAL(kmersFloat[count].toFasta(), it->key().toFasta());
+		count++;
+	}
+	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
+	BOOST_CHECK_EQUAL(copy.size(), count);
+
+	/* print out the permutations table
+	 if (size == 4)  {
+	 for(int i=0; i<=255; i++) {
+	 TwoBitEncoding tb = i;
+	 KmerPtr k2( &tb );
+	 std::stringstream ss;
+	 ss << k2->toFasta() << ": ";
+	 for (int j=0; j<12; j++) {
+	 KmerPtr k( &(TwoBitSequence::permutations[i*12+j]) );
+	 ss << k->toFasta() << ", ";
+	 }
+	 BOOST_MESSAGE( ss.str() );
+	 }
+	 }  else
+	 return;
+	 */
+
+	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+		KmerArray<float> permutations = KmerArray<float>::permuteBases(
+				kmersFloat[i]);
+		BOOST_CHECK_EQUAL(KmerSizer::getSequenceLength() * 3,
+				permutations.size());
+		//BOOST_MESSAGE( "start" );
+		//BOOST_MESSAGE( kmersFloat[i].toFasta() );
+		for (unsigned int j = 0; j < permutations.size(); j++) {
+			BOOST_CHECK_NE(kmersFloat[i].toFasta(), permutations[j].toFasta());
+			//BOOST_MESSAGE( permutations[j].toFasta() );
+			for (unsigned int k = 0; k < j; k++) {
+				BOOST_CHECK_NE(permutations[j].toFasta(),
+						permutations[k].toFasta());
+			}
+		}
+	}
 }
 
-  class Tester
-  {
-  public:
-    KmerMap<float> &kmerF;
-    Tester (KmerMap<float>  map):
-    kmerF(map)
-    {
-      
-    }
+class Tester {
+public:
+	KmerMap<float> &kmerF;
+	Tester(KmerMap<float> map) :
+		kmerF(map) {
 
-    void operator() (KmerArray<float>::ElementType  &e)
-    {
-        BOOST_CHECK( kmerF.exists( e.key() ) );
-        BOOST_CHECK_EQUAL( kmerF[ e.key() ], e.value() );
-    }
-  };
+	}
 
-void testKmerMap(SequenceLengthType size)
-{
-  std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
-  SET_KMERS(A.c_str(), B.c_str(), C.c_str());
-  KmerSizer::set(size);
+	void operator()(KmerArray<float>::ElementType &e) {
+		BOOST_CHECK(kmerF.exists(e.key()));
+		BOOST_CHECK_EQUAL(kmerF[e.key()], e.value());
+	}
+};
 
-  // test KmerMap construction, destruction
-  // test insert, find, delete
+void testKmerMap(SequenceLengthType size) {
+	std::string
+			A("ACGTCGTAACGTCGTA"),
+			B("TACGACGTTACGACGT"),
+			C(
+					"AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+	SET_KMERS(A.c_str(), B.c_str(), C.c_str());
+	KmerSizer::set(size);
 
-  KmerArray<char> kmersC(twoBit3, C.length());
-  
-  KmerMap<float> kmerF(4);
-  typedef std::pair<unsigned short, float> Pair;
-  KmerMap< Pair > kmerP(8);
-  
-  for(unsigned int i=0; i< kmersC.size(); i++) {
-  	kmerF[ kmersC[i] ] = i*2.0;
-  	kmerP[ kmersC[i] ] = Pair(i, i*3.0);
-  	//BOOST_MESSAGE(kmersC[i].toFasta());
-  	BOOST_CHECK_EQUAL( i*2.0, kmerF[ kmersC[i] ] );
-  	BOOST_CHECK_EQUAL( i,     kmerP[ kmersC[i] ].first );
-  	BOOST_CHECK_EQUAL( i*3.0, kmerP[ kmersC[i] ].second );
-  	
-    //BOOST_MESSAGE ( kmerF.toString() );
- 
- 
-  }
-  
-  kmerF.clear();
-  kmerP.clear();
-  //BOOST_MESSAGE ("Testing exists()");
-  for(unsigned int i=0; i< kmersC.size(); i++) {
-  	BOOST_CHECK( ! kmerF.exists( kmersC[i] ) );
-  	BOOST_CHECK( ! kmerF.exists( kmersC[i] ) );
-  	BOOST_CHECK( ! kmerP.exists( kmersC[i] ) );
-  	BOOST_CHECK( ! kmerP.exists( kmersC[i] ) );
-  }
-  
-  for(unsigned int i=0; i< kmersC.size(); i++) {
-  	if ( ! kmerF.exists( kmersC[i] ) ) 
-  	  kmerF[ kmersC[i] ] = i*2.0;
-  	if ( ! kmerP.exists( kmersC[i] ) )
-  	  kmerP[ kmersC[i] ] = Pair(i, i*3.0);
-  	
-  	BOOST_CHECK( i*2.0 >= kmerF[ kmersC[i] ] );
-  	BOOST_CHECK( i     >= kmerP[ kmersC[i] ].first );
-  	BOOST_CHECK( i*3.0 >= kmerP[ kmersC[i] ].second );
-  }
+	// test KmerMap construction, destruction
+	// test insert, find, delete
 
-  
-  std::for_each(kmerF.begin() , kmerF.end(), Tester(kmerF)) ;
+	KmerArray<char> kmersC(twoBit3, C.length());
+
+	KmerMap<float> kmerF(4);
+	typedef std::pair<unsigned short, float> Pair;
+	KmerMap<Pair> kmerP(8);
+
+	for (unsigned int i = 0; i < kmersC.size(); i++) {
+		kmerF[kmersC[i]] = i * 2.0;
+		kmerP[kmersC[i]] = Pair(i, i * 3.0);
+		//BOOST_MESSAGE(kmersC[i].toFasta());
+		BOOST_CHECK_EQUAL(i * 2.0, kmerF[kmersC[i]]);
+		BOOST_CHECK_EQUAL(i, kmerP[kmersC[i]].first);
+		BOOST_CHECK_EQUAL(i * 3.0, kmerP[kmersC[i]].second);
+
+		//BOOST_MESSAGE ( kmerF.toString() );
 
 
-  unsigned int count = 0;
-  for(KmerMap<float>::Iterator it = kmerF.begin() ; it != kmerF.end(); it++) {
-    BOOST_CHECK( kmerF.exists( it->key() ) );
-    BOOST_CHECK_EQUAL( kmerF[ it->key() ], it->value() );
-    count++;
-  }
-  BOOST_CHECK_EQUAL( kmerF.size(), count );
+	}
+
+	kmerF.clear();
+	kmerP.clear();
+	//BOOST_MESSAGE ("Testing exists()");
+	for (unsigned int i = 0; i < kmersC.size(); i++) {
+		BOOST_CHECK(!kmerF.exists(kmersC[i]));
+		BOOST_CHECK(!kmerF.exists(kmersC[i]));
+		BOOST_CHECK(!kmerP.exists(kmersC[i]));
+		BOOST_CHECK(!kmerP.exists(kmersC[i]));
+	}
+
+	for (unsigned int i = 0; i < kmersC.size(); i++) {
+		if (!kmerF.exists(kmersC[i]))
+			kmerF[kmersC[i]] = i * 2.0;
+		if (!kmerP.exists(kmersC[i]))
+			kmerP[kmersC[i]] = Pair(i, i * 3.0);
+
+		BOOST_CHECK(i * 2.0 >= kmerF[kmersC[i]]);
+		BOOST_CHECK(i >= kmerP[kmersC[i]].first);
+		BOOST_CHECK(i * 3.0 >= kmerP[kmersC[i]].second);
+	}
+
+	std::for_each(kmerF.begin(), kmerF.end(), Tester(kmerF));
+
+	unsigned int count = 0;
+	for (KmerMap<float>::Iterator it = kmerF.begin(); it != kmerF.end(); it++) {
+		BOOST_CHECK(kmerF.exists(it->key()));
+		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
+		count++;
+	}
+	BOOST_CHECK_EQUAL(kmerF.size(), count);
 }
 
-
-void testKmerNewDelete()
-{
+void testKmerNewDelete() {
 #if 0
-  // This should never compile!
-  Kmer *one = new Kmer;
-  delete one;
-  
-  Kmer *many = new Kmer[100];
-  delete [] many;
-  
-  Kmer bad;
+	// This should never compile!
+	Kmer *one = new Kmer;
+	delete one;
+
+	Kmer *many = new Kmer[100];
+	delete [] many;
+
+	Kmer bad;
 #endif
 }
-/* 
-void testKmerInstance()
-{
-  KmerInstance one;
-  KmerInstance many[100];
-  KmerSizer::set(8);
-  
-  std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
-  SET_KMERS(A.c_str(), B.c_str(), C.c_str()); 
-  KmerSizer::set(8);
-  
-  one = *kmer1;
-  many[0] = *kptr1;//kmer1ref;
-  many[1] = *kptr2;
-  many[2] = *kmer3;
+/*
+ void testKmerInstance()
+ {
+ KmerInstance one;
+ KmerInstance many[100];
+ KmerSizer::set(8);
 
-  BOOST_CHECK_EQUAL( "ACGTCGTA", one.toFasta() );
-  BOOST_CHECK_EQUAL( "ACGTCGTA", many[0].toFasta() );
-  BOOST_CHECK_EQUAL( "TACGACGT", many[1].toFasta() );
-  BOOST_CHECK_EQUAL( "AAAACCCC", many[2].toFasta() );
-}
+ std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+ SET_KMERS(A.c_str(), B.c_str(), C.c_str());
+ KmerSizer::set(8);
+
+ one = *kmer1;
+ many[0] = *kptr1;//kmer1ref;
+ many[1] = *kptr2;
+ many[2] = *kmer3;
+
+ BOOST_CHECK_EQUAL( "ACGTCGTA", one.toFasta() );
+ BOOST_CHECK_EQUAL( "ACGTCGTA", many[0].toFasta() );
+ BOOST_CHECK_EQUAL( "TACGACGT", many[1].toFasta() );
+ BOOST_CHECK_EQUAL( "AAAACCCC", many[2].toFasta() );
+ }
  */
 
 BOOST_AUTO_TEST_CASE( KmerSetTest )
 {
-  testKmerCompare();
-  /*
-  testKmerPtr(1);
-  testKmerPtr(2);
-  testKmerPtr(3);
-  testKmerPtr(4);
-  testKmerPtr(5);
-  testKmerPtr(6);
-  testKmerPtr(7);
-  testKmerPtr(8);
-  testKmerPtr(9);
-*/
-  testKmerArray(1);
-  testKmerArray(2);
-  testKmerArray(3);
-  testKmerArray(4);
-  testKmerArray(5);
-  testKmerArray(6);
-  testKmerArray(7);
-  testKmerArray(8);
-  testKmerArray(9);
-  
-  testKmerNewDelete();
-  
-  testKmerMap(1);
-  testKmerMap(2);
-  testKmerMap(3);
-  testKmerMap(4);
-  testKmerMap(5);
-  testKmerMap(6);
-  testKmerMap(7);
-  testKmerMap(8);
-  testKmerMap(9);
-  
-  //testKmerInstance();
+	testKmerCompare();
+	/*
+	 testKmerPtr(1);
+	 testKmerPtr(2);
+	 testKmerPtr(3);
+	 testKmerPtr(4);
+	 testKmerPtr(5);
+	 testKmerPtr(6);
+	 testKmerPtr(7);
+	 testKmerPtr(8);
+	 testKmerPtr(9);
+	 */
+	testKmerArray(1);
+	testKmerArray(2);
+	testKmerArray(3);
+	testKmerArray(4);
+	testKmerArray(5);
+	testKmerArray(6);
+	testKmerArray(7);
+	testKmerArray(8);
+	testKmerArray(9);
+
+	testKmerNewDelete();
+
+	testKmerMap(1);
+	testKmerMap(2);
+	testKmerMap(3);
+	testKmerMap(4);
+	testKmerMap(5);
+	testKmerMap(6);
+	testKmerMap(7);
+	testKmerMap(8);
+	testKmerMap(9);
+
+	//testKmerInstance();
 }
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.35  2010-02-26 13:01:22  regan
+// reformatted
+//
 // Revision 1.34  2009-12-14 05:32:15  regan
 // optimized array resizing to malloc at logarithmic stepping
 //

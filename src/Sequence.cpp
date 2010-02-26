@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.22 2010-02-22 14:41:03 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.23 2010-02-26 13:01:16 regan Exp $
 //
 
 #include <cstring>
@@ -12,263 +12,236 @@
 
 using namespace std;
 
-
-
-
-
 /*----------------------------- SEQUENCE -------------------------------------------*/
-static const std::tr1::shared_ptr<TwoBitEncoding> nullSequence(new TwoBitEncoding [0]);
+static const std::tr1::shared_ptr<TwoBitEncoding> nullSequence(
+		new TwoBitEncoding[0]);
 
+Sequence::Sequence() {
+	reset();
+}
+;
 
-
-
-Sequence::Sequence()
-{
-  reset();
-};
-
-Sequence::Sequence(std::string name):
- _length(0)
-{
-  setSequence(name);
+Sequence::Sequence(std::string name) :
+	_length(0) {
+	setSequence(name);
 }
 
-Sequence::~Sequence()
-{
-  reset();
+Sequence::~Sequence() {
+	reset();
 }
 
-void Sequence::setSequence(std::string fasta)
-{
-   setSequence(fasta,0);
+void Sequence::setSequence(std::string fasta) {
+	setSequence(fasta, 0);
 }
 
-void Sequence::setSequence(std::string fasta, unsigned int extraBytes)
-{
-   reset();
-   _length = fasta.length();
+void Sequence::setSequence(std::string fasta, unsigned int extraBytes) {
+	reset();
+	_length = fasta.length();
 
-   unsigned long buffSize = getTwoBitEncodingSequenceLength();
-   TwoBitEncoding *buffer = (TwoBitEncoding*) malloc(buffSize);
-   if ( buffer == NULL )
-     throw std::runtime_error("Could not allocate buffer memory in Sequence::setSequence");
-     
-   const char *f_str = fasta.c_str();
-   BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(f_str,buffer);
-   SequenceLengthType markupBasesSize = markupBases.size();
-   try {
-     unsigned int size =  getTwoBitEncodingSequenceLength() + sizeof(SequenceLengthType)+
-                          markupBasesSize*sizeof(BaseLocationVectorType) + extraBytes;
-     _data = std::tr1::shared_ptr<unsigned char>(new unsigned char[size]);
-   } catch (...) {
-     throw new std::runtime_error("Cannot allocate memory in Sequence::setSequence()");
-   }
+	unsigned long buffSize = getTwoBitEncodingSequenceLength();
+	TwoBitEncoding *buffer = (TwoBitEncoding*) malloc(buffSize);
+	if (buffer == NULL)
+		throw std::runtime_error(
+				"Could not allocate buffer memory in Sequence::setSequence");
 
-   memcpy(getTwoBitSequence(), buffer, getTwoBitEncodingSequenceLength());
-   free(buffer);
-   
-   memcpy(_getMarkupBasesCount(),&markupBasesSize,sizeof(markupBasesSize));
-   BaseLocationType *ptr = _getMarkupBases();
-   for (SequenceLengthType i = 0 ; i < markupBasesSize;i++) {
-     memcpy(ptr++,&markupBases[i],sizeof(BaseLocationType));
-   }
+	const char *f_str = fasta.c_str();
+	BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(
+			f_str, buffer);
+	SequenceLengthType markupBasesSize = markupBases.size();
+	try {
+		unsigned int size = getTwoBitEncodingSequenceLength()
+				+ sizeof(SequenceLengthType) + markupBasesSize
+				* sizeof(BaseLocationVectorType) + extraBytes;
+		_data = std::tr1::shared_ptr<unsigned char>(new unsigned char[size]);
+	} catch (...) {
+		throw new std::runtime_error(
+				"Cannot allocate memory in Sequence::setSequence()");
+	}
+
+	memcpy(getTwoBitSequence(), buffer, getTwoBitEncodingSequenceLength());
+	free(buffer);
+
+	memcpy(_getMarkupBasesCount(), &markupBasesSize, sizeof(markupBasesSize));
+	BaseLocationType *ptr = _getMarkupBases();
+	for (SequenceLengthType i = 0; i < markupBasesSize; i++) {
+		memcpy(ptr++, &markupBases[i], sizeof(BaseLocationType));
+	}
 
 }
 
-
-void Sequence::reset()
-{
-  _length = 0;
-  _data = nullSequence;
+void Sequence::reset() {
+	_length = 0;
+	_data = nullSequence;
 }
 
-string Sequence::getFasta(SequenceLengthType trimOffset) const
-{
-  if(_data == nullSequence)
-    return string("");
-  SequenceLengthType len = getLength();
-  if ( trimOffset < len )
-    len = trimOffset;
-  string fasta = TwoBitSequence::getFasta(getTwoBitSequence(), len);
-  TwoBitSequence::applyMarkup(fasta, *_getMarkupBasesCount(), _getMarkupBases());
+string Sequence::getFasta(SequenceLengthType trimOffset) const {
+	if (_data == nullSequence)
+		return string("");
+	SequenceLengthType len = getLength();
+	if (trimOffset < len)
+		len = trimOffset;
+	string fasta = TwoBitSequence::getFasta(getTwoBitSequence(), len);
+	TwoBitSequence::applyMarkup(fasta, *_getMarkupBasesCount(),
+			_getMarkupBases());
 
-  return fasta;
+	return fasta;
 }
 
-const TwoBitEncoding *Sequence::getTwoBitSequence() const
-{
-   return _data.get();
+const TwoBitEncoding *Sequence::getTwoBitSequence() const {
+	return _data.get();
 }
-TwoBitEncoding *Sequence::getTwoBitSequence()
-{
-   return const_cast<TwoBitEncoding*>( constThis().getTwoBitSequence() );
+TwoBitEncoding *Sequence::getTwoBitSequence() {
+	return const_cast<TwoBitEncoding*> (constThis().getTwoBitSequence());
 }
 
-const SequenceLengthType *Sequence::_getMarkupBasesCount() const
-{
-  return  (SequenceLengthType *)(getTwoBitSequence() + getTwoBitEncodingSequenceLength());
+const SequenceLengthType *Sequence::_getMarkupBasesCount() const {
+	return (SequenceLengthType *) (getTwoBitSequence()
+			+ getTwoBitEncodingSequenceLength());
 }
 SequenceLengthType *Sequence::_getMarkupBasesCount() {
-  return const_cast<SequenceLengthType*>( constThis()._getMarkupBasesCount() );
+	return const_cast<SequenceLengthType*> (constThis()._getMarkupBasesCount());
 }
 
-const BaseLocationType *Sequence::_getMarkupBases() const
-{
-   return (BaseLocationType *)(_getMarkupBasesCount()+1);
+const BaseLocationType *Sequence::_getMarkupBases() const {
+	return (BaseLocationType *) (_getMarkupBasesCount() + 1);
 }
-BaseLocationType *Sequence::_getMarkupBases()
-{
-   return const_cast<BaseLocationType *>( constThis()._getMarkupBases() );
+BaseLocationType *Sequence::_getMarkupBases() {
+	return const_cast<BaseLocationType *> (constThis()._getMarkupBases());
 }
 
-SequenceLengthType Sequence::getLength() const
-{
-  return _length;
+SequenceLengthType Sequence::getLength() const {
+	return _length;
 }
 
-SequenceLengthType Sequence::getTwoBitEncodingSequenceLength() const
-{
-  return TwoBitSequence::fastaLengthToTwoBitLength(getLength());;
+SequenceLengthType Sequence::getTwoBitEncodingSequenceLength() const {
+	return TwoBitSequence::fastaLengthToTwoBitLength(getLength());;
 }
 
-BaseLocationVectorType Sequence::getMarkups() const
-{
-  SequenceLengthType size =  *_getMarkupBasesCount();
-  BaseLocationVectorType markups( size );
-  if (size > 0) {
-  	const BaseLocationType *ptr = _getMarkupBases();
-  	for(unsigned int i=0; i<size; i++)
-  	  markups.push_back( *(ptr++) );
-  }
-  return markups;
+BaseLocationVectorType Sequence::getMarkups() const {
+	SequenceLengthType size = *_getMarkupBasesCount();
+	BaseLocationVectorType markups(size);
+	if (size > 0) {
+		const BaseLocationType *ptr = _getMarkupBases();
+		for (unsigned int i = 0; i < size; i++)
+			markups.push_back(*(ptr++));
+	}
+	return markups;
 }
 
 /*------------------------------------ READ ----------------------------------------*/
 
 double Read::qualityToProbability[256];
-int Read::initializeQualityToProbability(unsigned char minQualityScore)
-{
-  for (int i=0; i<256; i++) {
-  	qualityToProbability[i] = 0;
-  }
-  int start = FASTQ_START_CHAR;
-  for (int i = start + minQualityScore; i < FASTQ_START_CHAR + 100 ; i++ )
-    qualityToProbability[i] = 1.0 - pow(10.0,( ( start - i ) / 10.0 ));
+int Read::initializeQualityToProbability(unsigned char minQualityScore) {
+	for (int i = 0; i < 256; i++) {
+		qualityToProbability[i] = 0;
+	}
+	int start = FASTQ_START_CHAR;
+	for (int i = start + minQualityScore; i < FASTQ_START_CHAR + 100; i++)
+		qualityToProbability[i] = 1.0 - pow(10.0, ((start - i) / 10.0));
 
-  qualityToProbability[255] = 1.0; // for reads with no quality data
-  return 1;
+	qualityToProbability[255] = 1.0; // for reads with no quality data
+	return 1;
 }
-int Read::qualityToProbabilityInitialized = Read::initializeQualityToProbability(0);
+int Read::qualityToProbabilityInitialized =
+		Read::initializeQualityToProbability(0);
 
-void Read::setMinQualityScore( unsigned char minQualityScore)
-{
-  Read::initializeQualityToProbability(minQualityScore); 
-}
-
-
-Read::Read(std::string name, std::string fasta, std::string qualBytes)
-{
-  setRead(name,fasta,qualBytes);
+void Read::setMinQualityScore(unsigned char minQualityScore) {
+	Read::initializeQualityToProbability(minQualityScore);
 }
 
-
-
-const char * Read::_getQual() const
-{
-  return (char *)(_getMarkupBases() + *_getMarkupBasesCount());
-}
-char * Read::_getQual()
-{
-  return const_cast<char*>( constThis()._getQual() );
+Read::Read(std::string name, std::string fasta, std::string qualBytes) {
+	setRead(name, fasta, qualBytes);
 }
 
-const char * Read::_getName() const
-{
-  return (char *)(_getQual() + _qualLength());
+const char * Read::_getQual() const {
+	return (char *) (_getMarkupBases() + *_getMarkupBasesCount());
 }
-char * Read::_getName()
-{
-  return const_cast<char*>( constThis()._getName() );
+char * Read::_getQual() {
+	return const_cast<char*> (constThis()._getQual());
 }
 
-
-void Read::setRead(std::string name, std::string fasta, std::string qualBytes )
-{
-   if ( fasta.length() != qualBytes.length())
-      throw new std::invalid_argument("fasta length != qual length for name = " + name);
-
-   // set quality to one byte if this is a reference (or fasta without quality scores)
-   if (qualBytes.length() > 1 && qualBytes[0] == REF_QUAL)
-     qualBytes = string(1, REF_QUAL);
-     
-   Sequence::setSequence(fasta, qualBytes.length() + (name.length() + 1) );
-
-   memcpy(_getQual(), qualBytes.c_str(), qualBytes.length());
-   strcpy(_getName(), name.c_str());
+const char * Read::_getName() const {
+	return (char *) (_getQual() + _qualLength());
+}
+char * Read::_getName() {
+	return const_cast<char*> (constThis()._getName());
 }
 
-void Read::zeroQuals(SequenceLengthType offset, SequenceLengthType length)
-{
+void Read::setRead(std::string name, std::string fasta, std::string qualBytes) {
+	if (fasta.length() != qualBytes.length())
+		throw new std::invalid_argument(
+				"fasta length != qual length for name = " + name);
+
+	// set quality to one byte if this is a reference (or fasta without quality scores)
+	if (qualBytes.length() > 1 && qualBytes[0] == REF_QUAL)
+		qualBytes = string(1, REF_QUAL);
+
+	Sequence::setSequence(fasta, qualBytes.length() + (name.length() + 1));
+
+	memcpy(_getQual(), qualBytes.c_str(), qualBytes.length());
+	strcpy(_getName(), name.c_str());
+}
+
+void Read::zeroQuals(SequenceLengthType offset, SequenceLengthType length) {
 	char *qualPtr = _getQual();
-	if ( *qualPtr == REF_QUAL )
-	  return;
-	for(unsigned int i=0;i<offset;i++)
-	  qualPtr++;
-	for(unsigned int i=0;i<length;i++)
-	  *(qualPtr++) = FASTQ_START_CHAR;	
+	if (*qualPtr == REF_QUAL)
+		return;
+	for (unsigned int i = 0; i < offset; i++)
+		qualPtr++;
+	for (unsigned int i = 0; i < length; i++)
+		*(qualPtr++) = FASTQ_START_CHAR;
 }
 
-string Read::getName() const
-{
-  if(_data == nullSequence)
-    return string("");
-  else
-    return string(_getName());    
+string Read::getName() const {
+	if (_data == nullSequence)
+		return string("");
+	else
+		return string(_getName());
 }
 
-string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting) const
-{
-  const char * qualPtr = _getQual();
-  SequenceLengthType len = ( trimOffset <= _length ? trimOffset : _length);
-  if ( len > 0 && *qualPtr == REF_QUAL ) {
-    if (forPrinting)
-      return string( len, PRINT_REF_QUAL);
-    else
-      return string( len, REF_QUAL);
-  } else {
-    return string( qualPtr, len );
-  }
+string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting) const {
+	const char * qualPtr = _getQual();
+	SequenceLengthType len = (trimOffset <= _length ? trimOffset : _length);
+	if (len > 0 && *qualPtr == REF_QUAL) {
+		if (forPrinting)
+			return string(len, PRINT_REF_QUAL);
+		else
+			return string(len, REF_QUAL);
+	} else {
+		return string(qualPtr, len);
+	}
 }
 
-SequenceLengthType Read::_qualLength() const
-{
-    if (_length == 0)
-      return 0;
-    else if ( *(_getQual()) == REF_QUAL )
-      return 1;
-    else
-      return _length;
+SequenceLengthType Read::_qualLength() const {
+	if (_length == 0)
+		return 0;
+	else if (*(_getQual()) == REF_QUAL)
+		return 1;
+	else
+		return _length;
 }
 
-string Read::toFastq(SequenceLengthType trimOffset, std::string label) const
-{
-  return  string ('@' + getName() + (label.length() > 0 ? " " + label : "") + "\n" + getFasta(trimOffset) + "\n+\n" + getQuals(trimOffset, true) + "\n" )  ;
+string Read::toFastq(SequenceLengthType trimOffset, std::string label) const {
+	return string('@' + getName() + (label.length() > 0 ? " " + label : "")
+			+ "\n" + getFasta(trimOffset) + "\n+\n"
+			+ getQuals(trimOffset, true) + "\n");
 }
-string Read::getFormattedQuals(SequenceLengthType trimOffset) const
-{
-  string quals = getQuals();
-  stringstream ss;
-  SequenceLengthType len = quals.length();
-  if (trimOffset < len)
-    len = trimOffset;
-  for(unsigned int i =0; i < len; i++)
-  {
-     ss << (int)quals[i]-64 << ' ';  
-  }
-  return ss.str();
+string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
+	string quals = getQuals();
+	stringstream ss;
+	SequenceLengthType len = quals.length();
+	if (trimOffset < len)
+		len = trimOffset;
+	for (unsigned int i = 0; i < len; i++) {
+		ss << (int) quals[i] - 64 << ' ';
+	}
+	return ss.str();
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.23  2010-02-26 13:01:16  regan
+// reformatted
+//
 // Revision 1.22  2010-02-22 14:41:03  regan
 // bugfix in printing
 //

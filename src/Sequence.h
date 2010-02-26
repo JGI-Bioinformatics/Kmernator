@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.17 2010-02-26 11:09:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.18 2010-02-26 13:01:16 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -10,106 +10,117 @@
 
 #include "TwoBitSequence.h"
 
-class Sequence
-{
+class Sequence {
 public:
-  typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
-  const static SequenceLengthType MAX_SEQUENCE_LENGTH = (SequenceLengthType) -1;
+	typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
+	const static SequenceLengthType MAX_SEQUENCE_LENGTH =
+			(SequenceLengthType) -1;
 
 private:
-  inline const Sequence &constThis() const { return *this; }
-  
+	inline const Sequence &constThis() const {
+		return *this;
+	}
+
 protected:
-  SequenceLengthType _length;
+	SequenceLengthType _length;
 
-/*
-   _data contains a composite of 1 fields:
-      +0                 : the sequence as NCBI 2NA (2 bits per base ACGT)
-      += (length +3)/4   : non-ACGT bases: count followed by array of markups
-*/
-  std::tr1::shared_ptr<unsigned char> _data;
+	/*
+	 _data contains a composite of 1 fields:
+	 +0                 : the sequence as NCBI 2NA (2 bits per base ACGT)
+	 += (length +3)/4   : non-ACGT bases: count followed by array of markups
+	 */
+	std::tr1::shared_ptr<unsigned char> _data;
 
-  SequenceLengthType *_getMarkupBasesCount();
-  const SequenceLengthType *_getMarkupBasesCount() const;
-  BaseLocationType   *_getMarkupBases();
-  const BaseLocationType   *_getMarkupBases() const;
+	SequenceLengthType *_getMarkupBasesCount();
+	const SequenceLengthType *_getMarkupBasesCount() const;
+	BaseLocationType *_getMarkupBases();
+	const BaseLocationType *_getMarkupBases() const;
 
-  void reset();
+	void reset();
 
-  void setSequence( std::string fasta,unsigned int extraBytes);
+	void setSequence(std::string fasta, unsigned int extraBytes);
 public:
 
-  Sequence();
-  Sequence(std::string fasta);
+	Sequence();
+	Sequence(std::string fasta);
 
-  ~Sequence();
+	~Sequence();
 
-  void  setSequence(std::string fasta);
+	void setSequence(std::string fasta);
 
-  SequenceLengthType getLength() const;
-  std::string getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
-  BaseLocationVectorType getMarkups() const;
+	SequenceLengthType getLength() const;
+	std::string
+			getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
+	BaseLocationVectorType getMarkups() const;
 
-  SequenceLengthType getTwoBitEncodingSequenceLength() const;
-  TwoBitEncoding *getTwoBitSequence();
-  const TwoBitEncoding *getTwoBitSequence() const;
+	SequenceLengthType getTwoBitEncodingSequenceLength() const;
+	TwoBitEncoding *getTwoBitSequence();
+	const TwoBitEncoding *getTwoBitSequence() const;
 
 };
 
-
-class Read : public Sequence
-{
+class Read: public Sequence {
 public:
-  static const char REF_QUAL = 0xff;
-  static const char FASTQ_START_CHAR = 64;
-  static const char PRINT_REF_QUAL = 114;
+	static const char REF_QUAL = 0xff;
+	static const char FASTQ_START_CHAR = 64;
+	static const char PRINT_REF_QUAL = 114;
 
 private:
-  inline const Read &constThis() const { return *this; }
-  
+	inline const Read &constThis() const {
+		return *this;
+	}
+
 private:
 
 	/*
-   _data is inherited and now contains a composite of 4 fields:
-      +0                    : the sequence as NCBI 2NA (2 bits per base ACGT)
-      += (length +3)/4      :  non-ACGT bases: count followed by array of markups
-      += getMarkupLength()  : qualities as 1 byte per base, 0 = N 1..255 Phred Quality Score.
-      += length             : null terminated name.
- */
+	 _data is inherited and now contains a composite of 4 fields:
+	 +0                    : the sequence as NCBI 2NA (2 bits per base ACGT)
+	 += (length +3)/4      :  non-ACGT bases: count followed by array of markups
+	 += getMarkupLength()  : qualities as 1 byte per base, 0 = N 1..255 Phred Quality Score.
+	 += length             : null terminated name.
+	 */
 
+	char * _getQual();
+	const char * _getQual() const;
+	char * _getName();
+	const char * _getName() const;
+	SequenceLengthType _qualLength() const;
 
-  char * _getQual();
-  const char * _getQual() const;
-  char * _getName();
-  const char * _getName() const;
-  SequenceLengthType _qualLength() const;
+	static int qualityToProbabilityInitialized;
+	static int
+			initializeQualityToProbability(unsigned char minQualityScore = 0);
 
-  static int qualityToProbabilityInitialized;
-  static int initializeQualityToProbability( unsigned char minQualityScore=0);
-  
 public:
 
-  Read():Sequence(){ };
-  Read(std::string name, std::string fasta, std::string qualBytes);
+	Read() :
+		Sequence() {
+	}
+	;
+	Read(std::string name, std::string fasta, std::string qualBytes);
 
-  void  setRead(std::string name, std::string fasta, std::string qualBytes);
+	void setRead(std::string name, std::string fasta, std::string qualBytes);
 
-  std::string getName() const;
-  std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, bool forPrinting = false) const;
-  void zeroQuals(SequenceLengthType offset, SequenceLengthType length);
+	std::string getName() const;
+	std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
+			bool forPrinting = false) const;
+	void zeroQuals(SequenceLengthType offset, SequenceLengthType length);
 
-  std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "") const;
-  std::string getFormattedQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
+	std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
+			std::string label = "") const;
+	std::string getFormattedQuals(SequenceLengthType trimOffset =
+			MAX_SEQUENCE_LENGTH) const;
 
-  
-  static double qualityToProbability[256];
-  static void setMinQualityScore( unsigned char minQualityScore);
+	static double qualityToProbability[256];
+	static void setMinQualityScore(unsigned char minQualityScore);
 };
 
 #endif
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.18  2010-02-26 13:01:16  regan
+// reformatted
+//
 // Revision 1.17  2010-02-26 11:09:43  regan
 // bugfix
 //
