@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.24 2010-02-26 12:53:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.25 2010-02-26 12:57:26 regan Exp $
 //
 
 #include <exception>
@@ -650,6 +650,9 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 		}
 
 		readIdx++;
+		if (readIdx % 10000000 == 0)
+			std::cerr << "Processed " << readIdx << " reads for pairing"
+					<< std::endl;
 	}
 
 	if (!isPairable) {
@@ -668,6 +671,9 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.25  2010-02-26 12:57:26  regan
+// added progress to pair id routine
+//
 // Revision 1.24  2010-02-26 12:53:05  regan
 // reformatted
 //
