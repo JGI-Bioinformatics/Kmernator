@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.3 2010-02-26 13:01:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.4 2010-03-02 15:02:49 regan Exp $
 //
 
 #ifndef _KMER_READ_UTILS_H
@@ -49,6 +49,11 @@ public:
 
 		}
 		//  std::cerr << std::endl;
+		if (Options::getDebug() > 1) {
+		  for(unsigned int i = 0 ; i < kmers.size(); i++) {
+			std::cerr << i << " " << kmers.valueAt(i) << " " << kmers[i].toFasta() << std::endl;
+		  }
+		}
 		return kmers;
 	}
 };
