@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.71 2010-02-26 13:01:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.72 2010-03-02 15:02:40 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -354,6 +354,15 @@ public:
 		maxCount = 0;
 		maxWeightedCount = 0.0;
 	}
+	static void resetForGlobals(CountType count) {
+		if (count == 1 && singletonCount == 0)
+		    throw std::runtime_error("This should not be happening");
+		if (count==1)
+#ifdef _USE_THREADSAFE_KMER
+#pragma omp atomic
+#endif
+			singletonCount--;
+	}
 	static void setGlobals(CountType count, WeightType weightedCount) {
 		if (count > maxCount) {
 			maxCount = count;
@@ -384,17 +393,16 @@ public:
 
 protected:
 	CountType count;
-	CountType directionBias;
 	WeightType weightedCount;
 
 public:
 	TrackingData() :
-		count(0), directionBias(0), weightedCount(0.0) {
+		count(0),  weightedCount(0.0) {
 	}
 
 	void reset() {
+		resetForGlobals(getCount());
 		count = 0;
-		directionBias = 0;
 		weightedCount = 0.0;
 	}
 	inline bool operator==(const TrackingData &other) const {
@@ -415,8 +423,6 @@ public:
 #endif
 			{
 				count++;
-				if (forward)
-					directionBias++;
 				weightedCount += weight;
 			}
 
@@ -432,7 +438,7 @@ public:
 		return count;
 	}
 	inline unsigned long getDirectionBias() const {
-		return directionBias;
+		return count / 2;
 	}
 	inline double getWeightedCount() const {
 		return weightedCount;
@@ -441,7 +447,7 @@ public:
 		return weightedCount / count;
 	}
 	inline double getNormalizedDirectionBias() const {
-		return (double) directionBias / (double) count;
+		return 0.5;
 	}
 
 	ReadPositionWeightVector getEachInstance() const {
@@ -465,7 +471,38 @@ public:
 	TrackingData &operator=(const TrackingDataWithAllReads &other);
 };
 
-class TrackingDataWithLastRead: public TrackingData {
+class TrackingDataWithDirection: public TrackingData {
+public:
+
+protected:
+	CountType directionBias;
+
+public:
+	TrackingDataWithDirection(): TrackingData(), directionBias(0) {}
+	void reset() {
+		TrackingData::reset();
+		directionBias = 0;
+	}
+
+	bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos) {
+		bool ret = TrackingData::track(weight,forward);
+
+		if (ret) {
+			if (forward)
+				directionBias++;
+		}
+		return ret;
+	}
+	inline unsigned long getDirectionBias() const {
+		return directionBias;
+	}
+	inline double getNormalizedDirectionBias() const {
+		return (double) directionBias / (double) count;
+	}
+
+};
+
+class TrackingDataWithLastRead: public TrackingDataWithDirection {
 public:
 
 protected:
@@ -473,12 +510,16 @@ protected:
 
 public:
 	TrackingDataWithLastRead() :
-		TrackingData(), readPosition() {
+		TrackingDataWithDirection(), readPosition() {
 	}
 
+	void reset() {
+		TrackingDataWithDirection::reset();
+		readPosition = ReadPosition();
+	}
 	bool track(double weight, bool forward, ReadIdType readIdx,
 			PositionType readPos) {
-		bool ret = TrackingData::track(weight, forward);
+		bool ret = TrackingDataWithDirection::track(weight, forward, readIdx, readPos);
 		if (ret)
 			readPosition = ReadPosition(readIdx, readPos);
 		return ret;
@@ -495,6 +536,69 @@ public:
 
 class TrackingDataSingleton {
 public:
+	typedef TrackingData::PositionType PositionType;
+	typedef TrackingData::ReadPositionWeight ReadPositionWeight;
+	typedef TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
+	typedef TrackingData::CountType CountType;
+	typedef TrackingData::WeightType WeightType;
+	typedef TrackingData::ReadIdType ReadIdType;
+
+protected:
+	unsigned char _weight;
+
+public:
+	TrackingDataSingleton() : _weight(0) {}
+	void reset() {
+		TrackingData::resetForGlobals(getCount());
+		_weight = 0;
+	}
+	inline bool operator==(const TrackingDataSingleton &other) const {
+		return getCount() == other.getCount();
+	}
+	inline bool operator<(const TrackingDataSingleton &other) const {
+		return getCount() < other.getCount();
+	}
+	bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
+		if (TrackingData::isDiscard(weight))
+			return false;
+		_weight = (weight * 254.0) + 1;
+		TrackingData::setGlobals(1, weight);
+		return true;
+	}
+
+	inline unsigned long getCount() const {
+		return _weight == 0 ? 0 : 1;
+	}
+	inline unsigned long getDirectionBias() const {
+		return 0;
+	}
+	inline double getWeightedCount() const {
+		return _weight == 0 ? 0.0 : (_weight - 1 ) / 254.0;
+	}
+	inline double getNormalizedDirectionBias() const {
+		return 0.5;
+	}
+
+	ReadPositionWeightVector getEachInstance() const {
+		//returns count entries from read -1, position 0
+		ReadPositionWeight dummy1((ReadIdType) -1, 0, getWeightedCount()
+				/ getCount());
+		ReadPositionWeightVector dummy(getCount(), dummy1);
+		return dummy;
+	}
+
+	std::string toString() const {
+		std::stringstream ss;
+		ss << getCount() << ":" << std::fixed << std::setprecision(2)
+				<< getNormalizedDirectionBias();
+		ss << ':' << std::fixed << std::setprecision(2)
+				<< ((double) getWeightedCount() / (double) getCount());
+		return ss.str();
+	}
+};
+
+class TrackingDataSingletonWithReadPosition {
+public:
 	typedef TrackingData::ReadPositionWeight ReadPositionWeight;
 	typedef TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
 	typedef TrackingData::CountType CountType;
@@ -506,20 +610,19 @@ protected:
 	ReadPositionWeight instance; // save space and store direction within sign of weight.
 
 public:
-	TrackingDataSingleton() :
+	TrackingDataSingletonWithReadPosition() :
 		instance(0, 0, 0.0) {
 	}
 
 	void reset() {
-		// destructor should not call this
-		if (getCount() == 1)
-			TrackingData::singletonCount--;
+		// destructor should *not* call this
+		TrackingData::resetForGlobals(getCount());
 		instance = ReadPositionWeight(0, 0, 0.0);
 	}
-	inline bool operator==(const TrackingDataSingleton &other) const {
+	inline bool operator==(const TrackingDataSingletonWithReadPosition &other) const {
 		return getCount() == other.getCount();// && weightedCount == other.weightedCount;
 	}
-	inline bool operator<(const TrackingDataSingleton &other) const {
+	inline bool operator<(const TrackingDataSingletonWithReadPosition &other) const {
 		return getCount() < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
 	}
 
@@ -533,7 +636,7 @@ public:
 		instance = ReadPositionWeight(readIdx, readPos, forward ? weight : -1.0
 				* weight);
 
-		TrackingData::setGlobals(1, weight);
+		TrackingData::setGlobals(getCount(), getWeightedCount());
 
 		return true;
 	}
@@ -593,6 +696,7 @@ public:
 	}
 
 	void reset() {
+		TrackingData::resetForGlobals(getCount());
 		instances.clear();
 		directionBias = 0;
 		weightedCount = 0.0;
@@ -687,21 +791,32 @@ private:
 
 public:
 	TrackingDataMinimal() : count(0) {}
-	void reset() {count = 0;}
+	void reset() {
+		TrackingData::resetForGlobals(getCount());
+	    count = 0;
+	}
 
 	bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos)
 	{
-		if (TrackingData::isDiscard(weight))
-		return false;
+		if (TrackingData::isDiscard(weight)) {
+			return false;
+		}
 		DataType test = (DataType) weight;
 		// handle both integers and floats "properly"
-		if (test < weight)
-		count += 1;
-		else
-		count += weight;
+		if (test < weight) {
+			count += 1;
+		} else {
+			count += weight;
+		}
+		if (weight > 1.0) {
+			std::stringstream ss;
+			ss << "How can the weight be greater than one? " << weight << "," << forward << "," << readIdx << "," << readPos;
+			throw std::invalid_argument(ss.str());
+		}
+		TrackingData::setGlobals(getCount(), getWeightedCount());
 		return true;
 	}
-	inline unsigned long getCount() const {return count;}
+	inline unsigned long getCount() const { unsigned long tmp = count; return (tmp<count) ? tmp+1 : tmp; }
 	inline unsigned long getDirectionBias() const {return count / 2;}
 	inline double getWeightedCount() const {return count;}
 	inline double getNormalizedDirectionBias() const {return 0.5;}
@@ -731,7 +846,8 @@ public:
 typedef TrackingDataMinimal<unsigned char> TrackingDataMinimal1;
 typedef TrackingDataMinimal<unsigned short> TrackingDataMinimal2;
 typedef TrackingDataMinimal<unsigned int> TrackingDataMinimal4;
-typedef TrackingDataMinimal<float> TrackingDataMinimal8;
+typedef TrackingDataMinimal<float> TrackingDataMinimal4f;
+typedef TrackingDataMinimal<double> TrackingDataMinimal8;
 
 template<typename T>
 std::ostream &operator<<(std::ostream &stream, TrackingDataMinimal<T> &ob) {
@@ -982,7 +1098,6 @@ public:
 	}
 
 #endif //  _USE_THREADSAFE_KMER
-
 private:
 	static inline const void *_add(const void *ptr, IndexType i) {
 		return ((char *) ptr + i * KmerSizer::getByteSize());
@@ -1959,6 +2074,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.72  2010-03-02 15:02:40  regan
+// fixed bugs in tracking data and singleton counting
+//
 // Revision 1.71  2010-02-26 13:01:17  regan
 // reformatted
 //

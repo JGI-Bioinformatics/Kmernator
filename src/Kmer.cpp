@@ -32,13 +32,11 @@ std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob) {
 TrackingData &TrackingData::operator=(const TrackingDataSingleton &copy) {
 	count = copy.getCount();
 	weightedCount = copy.getWeightedCount();
-	directionBias = copy.getDirectionBias();
 	return *this;
 }
 TrackingData &TrackingData::operator=(const TrackingDataWithAllReads &copy) {
 	count = copy.getCount();
 	weightedCount = copy.getWeightedCount();
-	directionBias = copy.getDirectionBias();
 	return *this;
 }
 

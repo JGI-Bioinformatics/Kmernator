@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.22 2010-02-26 13:01:16 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.23 2010-03-02 15:03:10 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -220,11 +220,15 @@ public:
 		inline BucketsType getBuckets() {return buckets;}
 
 		void addRecord(unsigned long count, double weight) {
+			if (count == 0)
+				return;
 			unsigned int idx = getIdx(count);
 			HistogramElement &elem = buckets[ idx ];
 			elem.visits++;
 			elem.visitedCount += count;
 			elem.visitedWeight += weight;
+			if (count < weight)
+				throw std::invalid_argument("count < weight!");
 		}
 		void resetTotals() {
 			count = 0;
@@ -270,15 +274,15 @@ public:
 
 			ss << std::endl;
 
-			ss << "Bucket\tUnique\t%Unique\tCount\t%Count\tWeight\tQual\t%Weight" << std::endl;
-			for (unsigned int i=0; i < lastBucket+1; i++) {
+			ss << "Bucket\tUnique\t%Unique\tCount\t%Count\tWeight\tQualProb\t%Weight" << std::endl;
+			for (unsigned int i=1; i < lastBucket+1; i++) {
 				ss << getBucketValue(i) << "\t";
 				ss << buckets[i].visits << "\t";
 				ss << 100.0 * buckets[i].visits / count << "\t";
 				ss << buckets[i].visitedCount << "\t";
 				ss << 100.0 * buckets[i].visitedCount / totalCount << "\t\t";
 				ss << buckets[i].visitedWeight << "\t";
-				ss << 100.0 * buckets[i].visitedWeight / buckets[i].visitedCount << "\t";
+				ss << buckets[i].visitedWeight / buckets[i].visitedCount << "\t";
 				ss << 100.0 * buckets[i].visitedWeight / totalWeightedCount << "\t";
 				ss << std::endl;
 			}
@@ -314,7 +318,7 @@ public:
 	void setSingletonHistogram(Histogram &histogram) {
 		for(SingletonIterator it(singleton.begin()), itEnd(singleton.end()); it != itEnd; it++) {
 			SingletonDataType &data = it->value();
-			histogram.addRecord( 1, data.getWeightedCount() );
+			histogram.addRecord( data.getCount(), data.getWeightedCount() );
 		}
 	}
 
@@ -651,9 +655,9 @@ public:
 				}
 			} else if ( pointers.singleton.isValid() ) {
 				TrackingDataSingleton &data = pointers.singleton.value();
-				if (weakCounts.size() < data.getPosition()+1ul)
-				weakCounts.resize(data.getPosition()+1);
-				weakCounts[data.getPosition()].push_back( useWeighted ? pointers.singleton.value().getWeightedCount() : pointers.singleton.value().getCount() );
+				//if (weakCounts.size() < data.getPosition()+1ul)
+				//weakCounts.resize(data.getPosition()+1);
+				//weakCounts[data.getPosition()].push_back( useWeighted ? pointers.singleton.value().getWeightedCount() : pointers.singleton.value().getCount() );
 			}
 		}
 		std::vector< double > median, nonZeroCount;
@@ -873,22 +877,22 @@ public:
 
 						// promote singleton to weak & track
 						SingletonDataType singleData = pointers.singleton.value();
-						pointers.singleton.value().reset();
 						pointers.reset();
-						//singleton.remove( least );
 
 						WeakElementType weakElem = getWeak( least );
 						weakElem.value() = singleData;
 						weakElem.value().track( weight, keepDirection, readIdx, j);
 
-					} else {
+						singleton.remove( least );
 
+					} else {
 						// record this singleton
 						SingletonElementType elem = getSingleton(least);
 						elem.value().track( weight, keepDirection, readIdx, j );
-
 					}
 				}
+			} else if (Options::getDebug()){
+				std::cerr << "discarded kmer " << readIdx << "@" << j << " " << weight << " " << least.toFasta() << std::endl;
 			}
 		}
 	}
@@ -897,7 +901,9 @@ public:
 		//stats.printHistograms(solidOnly);
 		std::cerr << pos << " reads" << "\t";
 		if (fullStats) {
-			std::cerr << ", " << solid.size() << " solid / " << weak.size() << " weak / " << TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : " << singleton.size() << " singleton - kmers so far " << std::endl;
+			std::cerr << ", " << solid.size() << " solid / " << weak.size() << " weak / "
+			<< TrackingData::discarded << " discarded / " << TrackingData::singletonCount << " : "
+			<< singleton.size() << " singleton - kmers so far " << std::endl;
 		}
 		std::cerr << MemoryUtils::getMemoryUsage() << std::endl;
 	}
@@ -917,12 +923,12 @@ public:
 
 	inline unsigned int getSMPThread( Kmer &kmer, unsigned int numThreads ) {
 		// return the smallest KmerMap in the spectrum's getLocalThreadId()
-		TEMP_KMER(tmp)
+		TEMP_KMER(tmp);
 		kmer.buildLeastComplement(tmp);
 		return solid.getLocalThreadId(tmp, numThreads);
 	}
 	inline unsigned int getDMPThread( Kmer &kmer, unsigned int numThreads ) {
-		TEMP_KMER(tmp)
+		TEMP_KMER(tmp);
 		kmer.buildLeastComplement(tmp);
 		return solid.getDistributedThreadId(tmp, numThreads);
 	}
