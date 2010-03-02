@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.6 2010-02-26 13:01:15 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.7 2010-03-02 15:01:01 regan Exp $
 //
 
 #include <iostream>
@@ -14,7 +14,7 @@
 
 using namespace std;
 
-typedef TrackingDataMinimal8 DataType;
+typedef TrackingData4f DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 typedef ReadSelector<DataType> RS;
 
@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
 	KS spectrum(numBuckets);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	TrackingData::minimumWeight = 0.25;
+	TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 	spectrum.buildKmerSpectrum(reads);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
