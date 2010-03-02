@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.7 2010-02-26 13:01:16 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.8 2010-03-02 15:03:33 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -37,6 +37,7 @@ private:
 	double solidQuantile;
 	double minKmerQuality;
 	unsigned int verbosity;
+	unsigned int debug;
 	double firstOrderWeight;
 	double secondOrderWeight;
 	unsigned int minQuality;
@@ -70,6 +71,9 @@ public:
 	static inline unsigned int &getVerbosity() {
 		return getOptions().verbosity;
 	}
+	static inline unsigned int &getDebug() {
+		return getOptions().debug;
+	}
 	static inline double &getFirstOrderWeight() {
 		return getOptions().firstOrderWeight;
 	}
@@ -90,33 +94,42 @@ public:
 private:
 	void setOptions() {
 
-		desc.add_options()("help", "produce help message")("verbose",
-				po::value<unsigned int>()->default_value(0),
+		desc.add_options()("help", "produce help message")
+
+		("verbose", po::value<unsigned int>()->default_value(0),
 				"level of verbosity (0+)")
 
-		("reference-file", po::value<FileListType>(), "set reference file(s)")(
-				"kmer-size", po::value<unsigned int>(), "kmer size")
+		("debug", po::value<unsigned int>()->default_value(0),
+				"level of debug verbosity (0+)")
 
-		("input-file", po::value<FileListType>(), "input file(s)")(
-				"output-file", po::value<std::string>(), "output file or dir")
+		("reference-file", po::value<FileListType>(), "set reference file(s)")
 
-		(
-				"min-read-length",
+		("kmer-size", po::value<unsigned int>(), "kmer size")
+
+		("input-file", po::value<FileListType>(), "input file(s)")
+
+		("output-file", po::value<std::string>(), "output file or dir")
+
+		("min-read-length",
 				po::value<unsigned int>()->default_value(0),
 				"minimum (trimmed) read length of selected reads.  0: (default) no minimum, -1: full read length")
 
 		("min-kmer-quality", po::value<double>()->default_value(0.10),
-				"minimum quality-adjusted kmer probability (0-1)")(
-				"min-quality-score", po::value<unsigned int>()->default_value(
-						10), "minimum quality score over entire kmer")(
-				"min-depth", po::value<unsigned int>()->default_value(10),
+				"minimum quality-adjusted kmer probability (0-1)")
+
+		("min-quality-score", po::value<unsigned int>()->default_value(10),
+				"minimum quality score over entire kmer")
+
+		("min-depth", po::value<unsigned int>()->default_value(10),
 				"minimum depth for a solid kmer")
 
 		("solid-quantile", po::value<double>()->default_value(0.05),
-				"quantile threshold for solid kmers (0-1)")(
-				"first-order-weight", po::value<double>()->default_value(0.10),
-				"first order permuted bases weight")("second-order-weight",
-				po::value<double>()->default_value(0.00),
+				"quantile threshold for solid kmers (0-1)")
+
+		("first-order-weight", po::value<double>()->default_value(0.10),
+				"first order permuted bases weight")
+
+		("second-order-weight", po::value<double>()->default_value(0.00),
 				"second order permuted bases weight");
 
 	}
@@ -150,6 +163,7 @@ public:
 				return false;
 			}
 			getVerbosity() = vm["verbose"].as<unsigned int> ();
+			getDebug() = vm["debug"].as<unsigned int> ();
 
 			if (vm.count("reference-file")) {
 				std::cerr << "Reference files are: ";
@@ -192,6 +206,7 @@ public:
 
 			// set kmer quality
 			getMinKmerQuality() = vm["min-kmer-quality"].as<double> ();
+
 			std::cerr << "min-kmer-quality is: " << getMinKmerQuality()
 					<< std::endl;
 
@@ -233,6 +248,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.8  2010-03-02 15:03:33  regan
+// added debug option and reformatted
+//
 // Revision 1.7  2010-02-26 13:01:16  regan
 // reformatted
 //
