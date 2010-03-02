@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.3 2010-02-26 13:01:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.4 2010-03-02 15:01:56 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -10,6 +10,7 @@
 
 #include <boost/unordered_map.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/array.hpp>
 
 #include "config.h"
 #include "Kmer.h"
@@ -18,29 +19,68 @@
 
 class FilterKnownOddities {
 public:
-	typedef boost::unordered_map<Kmer::NumberType, std::string> DescriptionMap;
-	typedef boost::unordered_map<Kmer::NumberType, unsigned long> CountMap;
+	typedef Kmer::NumberType NumberType;
+	typedef boost::unordered_map<NumberType, std::string> DescriptionMap;
+	typedef boost::array< DescriptionMap, 4 > DescriptionMapArray;
+	typedef boost::unordered_map<NumberType, unsigned long> CountMap;
+	typedef boost::array< CountMap, 4 > CountMapArray;
+	typedef boost::array< NumberType, 4 > BitShiftNumberArray;
 	typedef std::vector<unsigned long> PatternVector;
+
 
 private:
 	ReadSet sequences;
-	DescriptionMap descriptions;
-	CountMap counts;
-	Kmer::NumberType mask;
+	BitShiftNumberArray masks;
+	DescriptionMapArray descriptions;
+	CountMapArray counts;
 	unsigned short length;
+	unsigned short twoBitLength;
 	unsigned short maskBytes;
+	std::string maskBases;
+	std::string maskAs;
 
 public:
-	FilterKnownOddities(int _length = 24, int numErrors = 2) :
+	FilterKnownOddities(int _length = 26, int numErrors = 2) :
 		length(_length) {
+		if (length > 28) {
+			throw std::invalid_argument("FilterKnownOddities must use 7 bytes or less");
+		}
+		twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(length);
+		// T is 11, A is 00, so mask is all T's surrounded by A's
+		maskBases = std::string("TTTTTTTTTTTTTTTTTTTTTTTTTTTT").substr(0,length);
+		maskAs = std::string("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
 		std::string fasta = getFasta();
 		sequences.appendFastaFile(fasta);
-		// mask is low bits
+
 		maskBytes = TwoBitSequence::fastaLengthToTwoBitLength(length);
-		mask = 1;
-		mask <<= (length * 2);
-		mask--;
+		NumberType mask;
+		TwoBitSequence::compressSequence(        maskBases + maskAs.substr(0,32-length), (TwoBitEncoding *) &mask);
+		setBitShiftNumbers( masks, mask);
+
+		if (Options::getDebug() >= 3) {
+			std::cerr
+			<< TwoBitSequence::getFasta( (TwoBitEncoding *) &masks[0], 32) << "\t"
+			<< TwoBitSequence::getFasta( (TwoBitEncoding *) &masks[1], 32) << "\t"
+			<< TwoBitSequence::getFasta( (TwoBitEncoding *) &masks[2], 32) << "\t"
+			<< TwoBitSequence::getFasta( (TwoBitEncoding *) &masks[3], 32) << "\t" << std::endl;
+		}
 		prepareMaps(numErrors);
+	}
+
+	void setBitShiftNumbers(BitShiftNumberArray &nums, std::string fasta, int len) {
+		TwoBitSequence::compressSequence(        fasta.substr(0,len) + maskAs.substr(0,32-len), (TwoBitEncoding *) &nums[0]);
+		TwoBitSequence::compressSequence("A"   + fasta.substr(0,len) + maskAs.substr(0,31-len), (TwoBitEncoding *) &nums[1]);
+		TwoBitSequence::compressSequence("AA"  + fasta.substr(0,len) + maskAs.substr(0,30-len), (TwoBitEncoding *) &nums[2]);
+		TwoBitSequence::compressSequence("AAA" + fasta.substr(0,len) + maskAs.substr(0,29-len), (TwoBitEncoding *) &nums[3]);
+	}
+	void setBitShiftNumbers(BitShiftNumberArray &nums, NumberType num) {
+		NumberType right4 = num << 8;
+		NumberType tmp;
+		nums[0] = num;
+		for(int i = 1; i < 4 ; i++) {
+			TwoBitSequence::shiftLeft(&right4, &tmp, twoBitLength+1, i);
+			nums[4-i] = tmp;
+		}
 	}
 
 	void prepareMaps(int numErrors) {
@@ -49,7 +89,6 @@ public:
 
 		TEMP_KMER(reverse);
 		for (unsigned int i = 0; i < sequences.getSize(); i++) {
-			// TODO refine search around byte-boundary problem
 
 			Read &read = sequences.getRead(i);
 			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read);
@@ -67,9 +106,9 @@ public:
 			// build a vector of all patterns
 
 			PatternVector patterns;
-			patterns.reserve(descriptions.size());
-			for (DescriptionMap::iterator it = descriptions.begin(); it
-					!= descriptions.end(); it++)
+			patterns.reserve(descriptions[0].size());
+			for (DescriptionMap::iterator it = descriptions[0].begin(); it
+					!= descriptions[0].end(); it++)
 				patterns.push_back(it->first);
 
 			for (PatternVector::iterator it = patterns.begin(); it
@@ -79,11 +118,11 @@ public:
 				for (unsigned int j = 0; j < kmers.size(); j++) {
 					kmers[j].buildReverseComplement(reverse);
 
-					_setMaps(kmers[j].toNumber(), descriptions[*it] + "-error"
+					_setMaps(kmers[j].toNumber(), descriptions[0][*it] + "-error"
 							+ boost::lexical_cast<std::string>(error) + "/"
 							+ boost::lexical_cast<std::string>(j));
 
-					_setMaps(reverse.toNumber(), descriptions[*it]
+					_setMaps(reverse.toNumber(), descriptions[0][*it]
 							+ "-reverror" + boost::lexical_cast<std::string>(
 							error) + "/" + boost::lexical_cast<std::string>(j));
 
@@ -96,8 +135,8 @@ public:
 		Kmer::NumberType tmp[10];
 		for (int i = 0; i < 10; i++)
 			tmp[i] = 0;
-		std::cerr << "Filter size " << descriptions.size() << " "
-				<< std::setbase(16) << mask << std::setbase(10) << std::endl;
+		std::cerr << "Filter size " << descriptions[0].size()+descriptions[1].size()+descriptions[2].size()+descriptions[3].size() << " "
+				<< std::setbase(16) << masks[0] << std::setbase(10) << std::endl;
 		//foreach( DescriptionMap::value_type _desc, descriptions) {
 		//  tmp[0] = _desc.first;
 		//  std::cerr << "Filter "  << ((Kmer *)&tmp[0])->toFasta() << " " << _desc.first << " " << _desc.second << std::endl;
@@ -106,25 +145,31 @@ public:
 		KmerSizer::set(oldKmerLength);
 	}
 
+	// NOT USED!
 	void _setMapsBitShifted(Kmer::NumberType chunk, std::string description) {
 		for (int shift = 0; shift < 4; shift++) {
-			Kmer::NumberType key = (chunk << shift) & mask;
+			Kmer::NumberType key = (chunk << shift) & masks[0];
 			_setMaps(key, description);
 		}
 	}
 	void _setMaps(Kmer::NumberType key, std::string description) {
-		if (descriptions.find(key) == descriptions.end()) {
-			descriptions[key] = description;
-			counts[key] = 0;
+		BitShiftNumberArray numbers;
+		setBitShiftNumbers(numbers, key);
+		for(int i = 0; i < 4 ; i++) {
+		  if (descriptions[i].find(numbers[i]) == descriptions[i].end()) {
+			descriptions[i][numbers[i]] = description;
+			counts[i][numbers[i]] = 0;
+		  }
 		}
 	}
+
 	unsigned long applyFilter(ReadSet &reads) {
 		unsigned long affectedCount = 0;
 #ifdef _USE_OPENMP
 #pragma omp parallel for schedule(dynamic) reduction(+:affectedCount)
 #endif
-		for (long i = 0; i < (long) reads.getSize(); i++) {
-			Read &read = reads.getRead(i);
+		for (long readIdx = 0; readIdx < (long) reads.getSize(); readIdx++) {
+			Read &read = reads.getRead(readIdx);
 			bool wasAffected = false;
 
 			//std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
@@ -142,34 +187,40 @@ public:
 				chunk <<= 8;
 				chunk |= *(ptr--);
 				unsigned long bytes = loop - maskBytes;
-				//{
-				//	unsigned long maskedChunk = chunk & mask;
-				//    std::cerr << read.getName() << " " << bytes << " "
-				//        <<  TwoBitSequence::getFasta( (TwoBitEncoding *) &chunk, 32) << "\t"
-				//        << TwoBitSequence::getFasta( (TwoBitEncoding *) &maskedChunk, 32)<< std::endl;
-				//}
+				if (Options::getDebug() >= 2){
+					unsigned long maskedChunk = chunk & masks[0];
+			        std::cerr << read.getName() << " " << bytes << " "
+				        <<  TwoBitSequence::getFasta( (TwoBitEncoding *) &chunk, 32) << "\t"
+				        << TwoBitSequence::getFasta( (TwoBitEncoding *) &maskedChunk, 32)<< std::endl;
+				}
 				if (loop <= lastByte + 1) {
 					Kmer::NumberType key;
 					for (int baseShift = 0; baseShift < 4; baseShift++) {
 						if (loop > lastByte && baseShift != 0)
 							break;
-						key = (chunk >> (baseShift * 2)) & mask;
+						key = chunk & masks[baseShift];
 
-						//std::cerr << bytes << "\t" << std::setbase(16) << key << "\t" << chunk << std::setbase(10) << std::endl;
+						if (Options::getDebug() >= 2){
+					      std::cerr << bytes << "\t" << baseShift << "\t" << TwoBitSequence::getFasta( (TwoBitEncoding *) &key, 32)
+					      << "\t" << TwoBitSequence::getFasta( (TwoBitEncoding *) &chunk, 32)
+					      << "\t" << std::setbase(16) << key << "\t" << chunk << std::setbase(10) << std::endl;
+						}
 
-						it = counts.find(key);
-						if (it != counts.end()) {
-							counts[key]++;
+						it = counts[baseShift].find(key);
+						if (it != counts[baseShift].end()) {
+							counts[baseShift][key]++;
 							unsigned long offset = bytes * 4 + baseShift;
 							read.zeroQuals(offset, length);
-							if (!wasAffected) {
+							if (true) { //!wasAffected) {
 								wasAffected = true;
 								affectedCount++;
-								if (0)
+								if (Options::getDebug())
 									std::cerr << "FilterMatch to "
+									        << readIdx << " "
 											<< read.getName() << " against "
-											<< descriptions[key] << " at "
-											<< offset << "\t"
+											<< TwoBitSequence::getFasta( (TwoBitEncoding *) &key, 32) << ":"
+											<< offset << " (" << bytes*4 << "+" << baseShift << ")\t"
+											<< descriptions[baseShift][key] << " at "
 											<< read.getFasta() << "\t"
 											<< std::setbase(16) << key << "\t"
 											<< chunk << std::setbase(10)
