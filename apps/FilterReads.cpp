@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.7 2010-03-02 15:01:01 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.8 2010-03-02 15:04:48 regan Exp $
 //
 
 #include <iostream>
@@ -14,7 +14,7 @@
 
 using namespace std;
 
-typedef TrackingData4f DataType;
+typedef TrackingDataMinimal4f DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 typedef ReadSelector<DataType> RS;
 
