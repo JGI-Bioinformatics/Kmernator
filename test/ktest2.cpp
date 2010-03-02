@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.29 2010-02-26 13:01:21 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.30 2010-03-02 15:04:03 regan Exp $
 //
 
 #include <iostream>
@@ -84,8 +84,8 @@ int main(int argc, char *argv[]) {
 	KS spectrum(numBuckets);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	TrackingData::minimumDepth = 10;
-	TrackingData::minimumWeight = 0.25;
+	TrackingData::minimumDepth = Options::getMinDepth();
+	TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 	spectrum.buildKmerSpectrum(reads);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
@@ -127,6 +127,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.30  2010-03-02 15:04:03  regan
+// modified to use options
+//
 // Revision 1.29  2010-02-26 13:01:21  regan
 // reformatted
 //
