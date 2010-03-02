@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.17 2010-02-26 13:01:16 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.18 2010-03-02 13:51:38 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -33,25 +33,28 @@ public:
 
 public:
 	static BaseLocationVectorType compressSequence(const char *bases,TwoBitEncoding *out);
-   static void uncompressSequence(const TwoBitEncoding *in , int num_bases, char *bases);
-   static void applyMarkup(char *bases, BaseLocationVectorType markupBases);
-   static void applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, const BaseLocationType *markupBases);
+    static void uncompressSequence(const TwoBitEncoding *in , int num_bases, char *bases);
+    static void applyMarkup(char *bases, BaseLocationVectorType markupBases);
+    static void applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, const BaseLocationType *markupBases);
 
-   static std::string getFasta(const TwoBitEncoding *in, SequenceLengthType length);
-   static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
-   static void shiftLeft(const void *in, void *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases, bool hasExtraByte = false);
+    static std::string getFasta(const TwoBitEncoding *in, SequenceLengthType length);
+    static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
+    static void shiftLeft(const void *in, void *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases, bool hasExtraByte = false);
 
 
-   static SequenceLengthType fastaLengthToTwoBitLength(SequenceLengthType fastaLength)
-   {
+    static SequenceLengthType fastaLengthToTwoBitLength(SequenceLengthType fastaLength)
+    {
        return (fastaLength + 3)/4;
-   }
+    }
 };
 
 #endif
 
 			//
 			// $Log: TwoBitSequence.h,v $
+			// Revision 1.18  2010-03-02 13:51:38  regan
+			// reformatted
+			//
 			// Revision 1.17  2010-02-26 13:01:16  regan
 			// reformatted
 			//
