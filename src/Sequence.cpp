@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.24 2010-03-03 17:10:49 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.25 2010-03-03 17:38:48 regan Exp $
 //
 
 #include <cstring>
@@ -140,7 +140,7 @@ int Read::initializeQualityToProbability(unsigned char minQualityScore) {
 		qualityToProbability[i] = 0;
 	}
 	int start = FASTQ_START_CHAR;
-	for (int i = start + minQualityScore; i < FASTQ_START_CHAR + 100; i++)
+	for (int i = start + minQualityScore; i <= PRINT_REF_QUAL; i++)
 		qualityToProbability[i] = 1.0 - pow(10.0, ((start - i) / 10.0));
 
 	qualityToProbability[255] = 1.0; // for reads with no quality data
@@ -213,7 +213,9 @@ string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting) const {
 			return string(len, REF_QUAL);
 	} else if (len > 0) {
 		return string(qualPtr, len);
-	} else {
+	} else if (_data == nullSequence) {
+	    return string("");
+    } else {
 		// to support printing paired reads where 1 read is trimmed to 0
 		return string(1, FASTQ_START_CHAR);
 	}
@@ -246,6 +248,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.25  2010-03-03 17:38:48  regan
+// fixed quality scores
+//
 // Revision 1.24  2010-03-03 17:10:49  regan
 // let zero trimmed reads print out with a single N to support pairs staying together
 //
