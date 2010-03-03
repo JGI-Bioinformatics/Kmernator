@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.8 2010-03-02 15:03:33 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.9 2010-03-03 17:08:52 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -111,7 +111,7 @@ private:
 		("output-file", po::value<std::string>(), "output file or dir")
 
 		("min-read-length",
-				po::value<unsigned int>()->default_value(0),
+				po::value<int>()->default_value(0),
 				"minimum (trimmed) read length of selected reads.  0: (default) no minimum, -1: full read length")
 
 		("min-kmer-quality", po::value<double>()->default_value(0.10),
@@ -219,7 +219,7 @@ public:
 			getMinDepth() = vm["min-depth"].as<unsigned int> ();
 			std::cerr << "min-depth is: " << getMinDepth() << std::endl;
 
-			getMinReadLength() = vm["min-read-length"].as<unsigned int> ();
+			getMinReadLength() = vm["min-read-length"].as<int> ();
 			std::cerr << "min-read-length is: " << getMinReadLength()
 					<< std::endl;
 
@@ -248,6 +248,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.9  2010-03-03 17:08:52  regan
+// fixed options to support -1 in min read length
+//
 // Revision 1.8  2010-03-02 15:03:33  regan
 // added debug option and reformatted
 //
