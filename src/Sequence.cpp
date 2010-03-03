@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.23 2010-02-26 13:01:16 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.24 2010-03-03 17:10:49 regan Exp $
 //
 
 #include <cstring>
@@ -80,6 +80,10 @@ string Sequence::getFasta(SequenceLengthType trimOffset) const {
 	SequenceLengthType len = getLength();
 	if (trimOffset < len)
 		len = trimOffset;
+	if (len == 0) {
+		// to support printing paired reads where 1 read is trimmed to 0
+		return string(1, 'N');
+	}
 	string fasta = TwoBitSequence::getFasta(getTwoBitSequence(), len);
 	TwoBitSequence::applyMarkup(fasta, *_getMarkupBasesCount(),
 			_getMarkupBases());
@@ -207,8 +211,11 @@ string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting) const {
 			return string(len, PRINT_REF_QUAL);
 		else
 			return string(len, REF_QUAL);
-	} else {
+	} else if (len > 0) {
 		return string(qualPtr, len);
+	} else {
+		// to support printing paired reads where 1 read is trimmed to 0
+		return string(1, FASTQ_START_CHAR);
 	}
 }
 
@@ -239,6 +246,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.24  2010-03-03 17:10:49  regan
+// let zero trimmed reads print out with a single N to support pairs staying together
+//
 // Revision 1.23  2010-02-26 13:01:16  regan
 // reformatted
 //
