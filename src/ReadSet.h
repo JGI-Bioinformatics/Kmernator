@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.18 2010-02-26 13:01:16 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.19 2010-03-03 17:10:26 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -9,12 +9,15 @@
 #include "config.h"
 #include "Options.h"
 #include "Sequence.h"
+#include "Utils.h"
 
 class ReadFileReader;
 
 class ReadSet {
 public:
 	typedef unsigned int ReadSetSizeType;
+	typedef std::vector< ReadSetSizeType > ReadIdxVector;
+
 	static const ReadSetSizeType MAX_READ_IDX = (unsigned int) -1;
 	class Pair {
 	public:
@@ -48,6 +51,7 @@ public:
 
 private:
 	std::vector<Read> _reads;
+	PartitioningData<ReadSetSizeType> _filePartitions;
 	unsigned long _baseCount;
 	SequenceLengthType _maxSequenceLength;
 	PairedIndexType _pairs;
@@ -60,6 +64,10 @@ private:
 			return true;
 		}
 		return false;
+	}
+
+	void incrementFile() {
+		_filePartitions.addPartition( _reads.size() );
 	}
 
 public:
@@ -103,6 +111,9 @@ public:
 	inline const Read &getRead(ReadSetSizeType index) const {
 		return _reads[index];
 	}
+	inline int getReadFileNum(ReadSetSizeType index) const {
+		return _filePartitions.getPartitionNum(index);
+	}
 
 	// by default no pairs are identified
 	ReadSetSizeType identifyPairs();
@@ -116,6 +127,15 @@ public:
 	}
 	inline const Pair &getPair(ReadSetSizeType pairIndex) const {
 		return _pairs[pairIndex];
+	}
+
+	const ReadIdxVector getReadIdxVector() const {
+		ReadIdxVector readIdxs;
+		readIdxs.reserve(_reads.size());
+		for(ReadSetSizeType i = 0 ; i < _reads.size(); i++) {
+			readIdxs.push_back(i);
+		}
+		return readIdxs;
 	}
 
 protected:
@@ -146,6 +166,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.19  2010-03-03 17:10:26  regan
+// added ability to recognize which reads came from which files
+//
 // Revision 1.18  2010-02-26 13:01:16  regan
 // reformatted
 //

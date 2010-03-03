@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.25 2010-02-26 12:57:26 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.26 2010-03-03 17:10:26 regan Exp $
 //
 
 #include <exception>
@@ -353,6 +353,7 @@ void ReadSet::appendAnyFile(string filePath, string filePath2) {
 	case 1:
 		appendFasta(reader);
 	}
+	incrementFile();
 }
 
 void ReadSet::appendAllFiles(Options::FileListType &files) {
@@ -393,8 +394,10 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 #ifdef _USE_OPENMP
 	omp_set_nested(OMP_NESTED_DEFAULT);
 	{	std::cerr << "concatenating ReadSet buffers" << std::endl;}
-	for(int i = 0; i< (long) files.size(); i++)
-	append(myReads[i]);
+	for(int i = 0; i< (long) files.size(); i++) {
+	    append(myReads[i]);
+	    incrementFile();
+	}
 #endif
 
 }
@@ -431,6 +434,7 @@ void ReadSet::append(ReadSet &reads) {
 void ReadSet::appendFasta(string fastaFilePath, string qualFilePath) {
 	ReadFileReader reader(fastaFilePath, qualFilePath);
 	appendFasta(reader);
+	incrementFile();
 }
 void ReadSet::appendFasta(ReadFileReader &reader) {
 	string name, bases, quals;
@@ -443,6 +447,7 @@ void ReadSet::appendFasta(ReadFileReader &reader) {
 void ReadSet::appendFastaFile(string &str) {
 	ReadFileReader reader(str);
 	appendFasta(reader);
+	incrementFile();
 }
 
 #ifdef _USE_OPENMP
@@ -534,6 +539,7 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
 		_reads[startIdx + numReads[ omp_get_thread_num() ] + j] = myReads.getRead(j);
 	}
 
+	incrementFile();
 	// reset omp variables
 	omp_set_nested(OMP_NESTED_DEFAULT);
 
@@ -671,6 +677,9 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.26  2010-03-03 17:10:26  regan
+// added ability to recognize which reads came from which files
+//
 // Revision 1.25  2010-02-26 12:57:26  regan
 // added progress to pair id routine
 //
