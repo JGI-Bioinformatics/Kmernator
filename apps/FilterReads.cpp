@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.10 2010-03-03 17:49:42 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.11 2010-03-03 17:51:16 regan Exp $
 //
 
 #include <iostream>
@@ -46,7 +46,7 @@ public:
 		("partition-by-depth", po::value<int>()->default_value(-1),
 				"partition filtered reads by powers-of-two coverage depth (mutually exclusive with max-kmer-depth)")
 
-		("min-reads-in-pair", po::value<int>()->default_value(1),
+		("min-passing-in-pair", po::value<int>()->default_value(1),
 				"1 or 2 reads in a pair must pass filters");
 
 		bool ret = Options::parseOpts(argc, argv);
