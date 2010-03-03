@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.9 2010-03-03 17:11:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.10 2010-03-03 17:49:42 regan Exp $
 //
 
 #include <iostream>
@@ -22,7 +22,7 @@ typedef KmerSpectrum<DataType, DataType> KS;
 typedef ReadSelector<DataType> RS;
 
 // TODO add outputformat of fasta
-class FilterReadsOptions: Options {
+class FilterReadsOptions : Options {
 public:
 	static int getMaxKmerDepth() {
 		return getVarMap()["max-kmer-depth"].as<int> ();
@@ -30,18 +30,24 @@ public:
 	static int getPartitionByDepth() {
 		return getVarMap()["partition-by-depth"].as<int> ();
 	}
+	static bool getBothPairs() {
+		return getVarMap()["min-passing-in-pair"].as<int>() == 2;
+	}
 	static bool parseOpts(int argc, char *argv[]) {
 		// set options specific to this program
 		getPosDesc().add("kmer-size", 1);
 		getPosDesc().add("input-file", -1);
 
-		getDesc().add_options()(
-				"max-kmer-depth",
-				po::value<int>()->default_value(-1),
-				"maximum number of times a kmer will be represented among the selected reads (mutually exclusive with partition-by-depth)")(
-				"partition-by-depth",
-				po::value<int>()->default_value(-1),
-				"partition filtered reads by powers-of-two coverage depth (mutually exclusive with max-kmer-depth)");
+		getDesc().add_options()
+
+		("max-kmer-depth", po::value<int>()->default_value(-1),
+				"maximum number of times a kmer will be represented among the selected reads (mutually exclusive with partition-by-depth)")
+
+		("partition-by-depth", po::value<int>()->default_value(-1),
+				"partition filtered reads by powers-of-two coverage depth (mutually exclusive with max-kmer-depth)")
+
+		("min-reads-in-pair", po::value<int>()->default_value(1),
+				"1 or 2 reads in a pair must pass filters");
 
 		bool ret = Options::parseOpts(argc, argv);
 
@@ -110,7 +116,7 @@ int main(int argc, char *argv[]) {
 			cerr << "Picking depth " << depth << " layer of reads" << endl;
 			if (reads.hasPairs())
 				picked += selector.pickBestCoveringSubsetPairs(depth,
-						Options::getMinDepth(), Options::getMinReadLength());
+						Options::getMinDepth(), Options::getMinReadLength(), FilterReadsOptions::getBothPairs());
 			else
 				picked += selector.pickBestCoveringSubsetReads(depth,
 						Options::getMinDepth(), Options::getMinReadLength());
@@ -135,12 +141,14 @@ int main(int argc, char *argv[]) {
 			float minDepth = std::max(Options::getMinDepth(), depth);
 			cerr << "Selecting reads over depth: " << depth << " (" << minDepth << ") " << endl;
 
-			if (reads.hasPairs())
+			if (reads.hasPairs()) {
 				picked = selector.pickAllPassingPairs(minDepth,
-						Options::getMinReadLength());
-			else
+						Options::getMinReadLength(),
+						FilterReadsOptions::getBothPairs());
+			} else {
 				picked = selector.pickAllPassingReads(minDepth,
 						Options::getMinReadLength());
+			}
 			cerr << "At or above coverage: " << depth << " Picked " << picked
 					<< " / " << reads.getSize() << " reads" << endl;
 
