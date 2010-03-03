@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.29 2010-02-26 13:01:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.30 2010-03-03 17:10:05 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -7,20 +7,91 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 #include <cstdlib>
 #include <vector>
 #include <algorithm>
+#include <tr1/memory>
 
 #include <boost/foreach.hpp>
 #define foreach BOOST_FOREACH
 
 #include "config.h"
-#include "TwoBitSequence.h"
-#include "Kmer.h"
-#include "Sequence.h"
-#include "ReadSet.h"
-#include "MemoryUtils.h"
-#include "Options.h"
+
+class OfstreamMap {
+public:
+	typedef std::tr1::shared_ptr< std::ofstream > OStreamPtr;
+	typedef boost::unordered_map< std::string, OStreamPtr > Map;
+	typedef Map::iterator Iterator;
+private:
+    Map _map;
+    std::string _outputFilePathPrefix;
+    std::string _suffix;
+
+public:
+	OfstreamMap(std::string outputFilePathPrefix, std::string suffix = "")
+	 : _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {}
+	~OfstreamMap() {
+        clear();
+	}
+	void clear() {
+		for(Iterator it = _map.begin() ; it != _map.end(); it++) {
+			if (Options::getDebug()) {
+				std::cerr << "Closing " << it->first << std::endl;
+			}
+			it->second->close();
+		}
+		_map.clear();
+	}
+
+	std::ofstream &getOfstream(std::string key) {
+		std::string filename = _outputFilePathPrefix + key + _suffix;
+		Iterator it = _map.find(filename);
+		if (it == _map.end()) {
+			if (Options::getDebug()) {
+			  std::cerr << "Opening " << filename << std::endl;
+		    }
+
+			OStreamPtr osp(new std::ofstream(filename.c_str()));
+			it = _map.insert( it, Map::value_type(filename, osp) );
+		}
+		return *(it->second);
+	}
+};
+
+template<typename S>
+class PartitioningData {
+public:
+	typedef S DataType;
+	typedef std::vector< DataType > Partitions;
+
+private:
+	Partitions _partitions;
+
+public:
+	PartitioningData() : _partitions() {}
+
+    inline bool hasPartitions() const {
+    	return ! _partitions.empty();
+    }
+    inline int getPartitionNum(DataType score) const {
+		// TODO binary search?
+		for(int i = 0; i < _partitions.size(); i++)
+			if (score < _partitions[i])
+				return i+1;
+		return _partitions.size() + 1;
+	}
+    inline Partitions getPartitions() const {
+    	return _partitions;
+    }
+
+    inline int addPartition(DataType partition) {
+    	_partitions.push_back(partition);
+    	std::sort(_partitions.begin(), _partitions.end());
+    }
+
+
+};
 
 template<typename Raw, typename Store>
 class BucketedData {
@@ -70,6 +141,10 @@ typedef BucketedData<double, EightByte> DoubleToEightByte;
 
 //
 // $Log: Utils.h,v $
+// Revision 1.30  2010-03-03 17:10:05  regan
+// added two helper classes
+// partitioning data and ofstream mapper
+//
 // Revision 1.29  2010-02-26 13:01:17  regan
 // reformatted
 //
