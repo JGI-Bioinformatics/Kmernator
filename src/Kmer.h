@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.72 2010-03-02 15:02:40 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.73 2010-03-04 06:38:15 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -561,7 +561,7 @@ public:
 	bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
 		if (TrackingData::isDiscard(weight))
 			return false;
-		_weight = (weight * 254.0) + 1;
+		_weight = (unsigned char) ((weight * 254.0)) + 1;
 		TrackingData::setGlobals(1, weight);
 		return true;
 	}
@@ -806,7 +806,7 @@ public:
 		if (test < weight) {
 			count += 1;
 		} else {
-			count += weight;
+			count += (DataType) weight;
 		}
 		if (weight > 1.0) {
 			std::stringstream ss;
@@ -2074,6 +2074,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.73  2010-03-04 06:38:15  regan
+// fixed compiler warnings
+//
 // Revision 1.72  2010-03-02 15:02:40  regan
 // fixed bugs in tracking data and singleton counting
 //

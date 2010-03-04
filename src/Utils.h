@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.30 2010-03-03 17:10:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.31 2010-03-04 06:37:42 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -76,7 +76,7 @@ public:
     }
     inline int getPartitionNum(DataType score) const {
 		// TODO binary search?
-		for(int i = 0; i < _partitions.size(); i++)
+		for(unsigned int i = 0; i < _partitions.size(); i++)
 			if (score < _partitions[i])
 				return i+1;
 		return _partitions.size() + 1;
@@ -88,6 +88,7 @@ public:
     inline int addPartition(DataType partition) {
     	_partitions.push_back(partition);
     	std::sort(_partitions.begin(), _partitions.end());
+    	return _partitions.size();
     }
 
 
@@ -141,6 +142,9 @@ typedef BucketedData<double, EightByte> DoubleToEightByte;
 
 //
 // $Log: Utils.h,v $
+// Revision 1.31  2010-03-04 06:37:42  regan
+// fixed compiler warnings
+//
 // Revision 1.30  2010-03-03 17:10:05  regan
 // added two helper classes
 // partitioning data and ofstream mapper

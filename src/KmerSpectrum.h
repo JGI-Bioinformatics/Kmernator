@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.23 2010-03-02 15:03:10 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.24 2010-03-04 06:38:07 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -104,7 +104,7 @@ public:
 
 		unsigned long rawKmers = kmersPerRead * store.getSize();
 		// assume 1% error rate
-		unsigned long estimatedUniqueKmers = rawKmers * ( std::max(pow(1.01, KmerSizer::getSequenceLength()),2.0) - 1.0 );
+		unsigned long estimatedUniqueKmers = rawKmers * (unsigned long) ( std::max(pow(1.01, KmerSizer::getSequenceLength()),2.0) - 1.0 );
 		unsigned long targetBuckets = estimatedUniqueKmers / targetKmersPerBucket;
 		unsigned long maxBuckets = 128*1024*1024;
 		unsigned long minBuckets = 128;
@@ -209,7 +209,7 @@ public:
 		logBase(_logBase), logFactor(log(logBase)),
 		zoomMax(_zoomMax), zoomLogSkip(0), maxIdx(0), lastBucket(0), buckets(),
 		count(0), totalCount(0.0), totalWeightedCount(0.0) {
-			zoomLogSkip = log(zoomMax+1)/logFactor - 1;
+			zoomLogSkip = (unsigned int) ( log((double) zoomMax+1.0)/logFactor - 1.0 );
 			int maxLog2 = 16;
 			maxIdx = (1<<maxLog2) + 1 + zoomMax;
 			buckets.resize(maxIdx+1);
@@ -653,11 +653,11 @@ public:
 						weakCounts[i].push_back( count * positionSums[i] / positions.size() );
 					}
 				}
-			} else if ( pointers.singleton.isValid() ) {
-				TrackingDataSingleton &data = pointers.singleton.value();
-				//if (weakCounts.size() < data.getPosition()+1ul)
-				//weakCounts.resize(data.getPosition()+1);
-				//weakCounts[data.getPosition()].push_back( useWeighted ? pointers.singleton.value().getWeightedCount() : pointers.singleton.value().getCount() );
+			//} else if ( pointers.singleton.isValid() ) {
+			//	TrackingDataSingleton &data = pointers.singleton.value();
+			//	//if (weakCounts.size() < data.getPosition()+1ul)
+			//	//weakCounts.resize(data.getPosition()+1);
+			//	//weakCounts[data.getPosition()].push_back( useWeighted ? pointers.singleton.value().getWeightedCount() : pointers.singleton.value().getCount() );
 			}
 		}
 		std::vector< double > median, nonZeroCount;
