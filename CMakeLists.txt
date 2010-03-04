@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.18 2009-12-24 00:38:45 cfurman Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.19 2010-03-04 06:37:04 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -15,7 +15,9 @@ set(Boost_USE_SINGLETHREADED OFF)
 
 find_package( OpenMP )
 if(OPENMP_FOUND)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_CXX_FLAGS}") 
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_CXX_FLAGS} -DENABLE_OPENMP") 
+else()
+  set(OpenMP_CXX_FLAGS "-DDISABLE_OPENMP")
 endif()
 
 find_package ( Boost 1.41.0 COMPONENTS regex mpi)
@@ -49,6 +51,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 add_subdirectory( apps )
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.19  2010-03-04 06:37:04  regan
+# fixed to support building without openmp
+#
 # Revision 1.18  2009-12-24 00:38:45  cfurman
 # CompareSpectrum application added
 #
