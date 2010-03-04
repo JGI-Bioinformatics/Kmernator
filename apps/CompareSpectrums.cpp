@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.8 2010-02-26 13:01:15 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.9 2010-03-04 06:36:36 regan Exp $
 //
 
 #include <iostream>
@@ -199,7 +199,9 @@ int main(int argc, char *argv[]) {
 	cout << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
 
 	if (CS_Options::getPerRead1()) {
+#ifdef _USE_OPENMP
 #pragma omp parallel for schedule(dynamic)
+#endif
 		for (long i = 0; i < readSet1.getSize(); i++) {
 			ReadSet tmpSet;
 			Read &read = readSet1.getRead(i);
@@ -210,7 +212,9 @@ int main(int argc, char *argv[]) {
 			KmerSolidMap &m2 = ks2.solid;
 			NumbersVector common = countCommonKmers(m1, m2);
 			if (common[0] > 0) {
+#ifdef _USE_OPENMP
 #pragma omp critical
+#endif
 				{
 					cout << m1.size() << '\t' << m2.size() << '\t' << common[0]
 							<< '\t' << setprecision(4) << (common[0] * 100.0)
@@ -245,6 +249,9 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: CompareSpectrums.cpp,v $
+// Revision 1.9  2010-03-04 06:36:36  regan
+// fixed compiler warnings for non-openmp compilers
+//
 // Revision 1.8  2010-02-26 13:01:15  regan
 // reformatted
 //
