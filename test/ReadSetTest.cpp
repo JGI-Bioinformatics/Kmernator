@@ -1,6 +1,7 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.10 2010-02-26 13:01:21 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.11 2010-03-04 06:37:13 regan Exp $
 //
 
+#include "config.h"
 #include "Sequence.h"
 #include "ReadSet.h"
 #define BOOST_TEST_MODULE ReadSetTest
@@ -96,6 +97,9 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.11  2010-03-04 06:37:13  regan
+// bugfix
+//
 // Revision 1.10  2010-02-26 13:01:21  regan
 // reformatted
 //

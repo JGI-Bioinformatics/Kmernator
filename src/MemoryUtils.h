@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.8 2010-02-26 13:01:16 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.9 2010-03-04 06:37:31 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
@@ -81,7 +81,6 @@ public:
 	~BoostPoolManager() {
 		purgePools();
 	}
-	;
 
 	void *malloc(unsigned long size) {
 		mallocs++;
@@ -185,6 +184,9 @@ public:
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.9  2010-03-04 06:37:31  regan
+// bugfix
+//
 // Revision 1.8  2010-02-26 13:01:16  regan
 // reformatted
 //
