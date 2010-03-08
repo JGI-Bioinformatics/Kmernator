@@ -1,2 +1,4 @@
 # Default flags to build optimized version
 /jgi/tools/bin/cmake . -DCMAKE_CXX_FLAGS="-O3 -g -Wall"
+cmake ~/robsandbox/KoMer -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
+
