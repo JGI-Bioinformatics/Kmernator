@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.8 2010-03-03 17:11:19 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.9 2010-03-08 22:14:38 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -343,9 +343,20 @@ public:
 #endif
 		for(long i = 0; i < (long) _reads.getSize(); i++) {
 			ReadTrimType &trim = _trims[i];
-
 			KmerArray<char> kmers = getKmersForRead(i);
-			for(unsigned long j = 0; j < kmers.size(); j++) {
+			SequenceLengthType numKmers = kmers.size();
+			Sequence::BaseLocationVectorType markups = _reads.getRead(i).getMarkups();
+			if ( ! markups.empty() ) {
+			    // find first markup and that is the maximum trim point
+				SequenceLengthType maxTrimPoint = markups[0].second + 1;
+				if (maxTrimPoint > KmerSizer::getSequenceLength()) {
+					numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
+				} else {
+					numKmers = 0;
+				}
+			}
+
+			for(unsigned long j = 0; j < numKmers; j++) {
 				const ElementType elem = _map.getElementIfExists(kmers[j]);
 				if (elem.isValid()) {
 					ScoreType score = elem.value().getCount();
@@ -357,6 +368,7 @@ public:
 				} else
 				break;
 			}
+
 			if (trim.trimLength > 0) {
 				// calculate average score (before adding kmer length)
 				ScoreType numKmers = trim.trimLength;
@@ -369,6 +381,8 @@ public:
 				trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score: 0";
 				// keep available so that pairs will be selected together
 			}
+
+
 		}
 	}
 

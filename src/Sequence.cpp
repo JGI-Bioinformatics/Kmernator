@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.25 2010-03-03 17:38:48 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.26 2010-03-08 22:14:38 regan Exp $
 //
 
 #include <cstring>
@@ -186,14 +186,17 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes) {
 	strcpy(_getName(), name.c_str());
 }
 
-void Read::zeroQuals(SequenceLengthType offset, SequenceLengthType length) {
-	char *qualPtr = _getQual();
-	if (*qualPtr == REF_QUAL)
-		return;
-	for (unsigned int i = 0; i < offset; i++)
-		qualPtr++;
-	for (unsigned int i = 0; i < length; i++)
-		*(qualPtr++) = FASTQ_START_CHAR;
+void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, char mask) {
+	string name  = getName();
+	string fasta = getFasta();
+	string qual  = getQuals();
+	SequenceLengthType len = getLength();
+	if (offset + length > len)
+		length = len - offset;
+	fasta.replace(offset, length, length, mask);
+
+	reset();
+	setRead(name, fasta, qual);
 }
 
 string Read::getName() const {
@@ -248,6 +251,10 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.26  2010-03-08 22:14:38  regan
+// replaced zero bases with markup bases to mask out reads that match the filter pattern
+// bugfix in overrunning the mask
+//
 // Revision 1.25  2010-03-03 17:38:48  regan
 // fixed quality scores
 //

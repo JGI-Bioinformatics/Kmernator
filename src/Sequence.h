@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.19 2010-03-03 17:38:48 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.20 2010-03-08 22:14:38 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -15,6 +15,8 @@ public:
 	typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
 	const static SequenceLengthType MAX_SEQUENCE_LENGTH =
 			(SequenceLengthType) -1;
+	typedef TwoBitSequenceBase::BaseLocationType BaseLocationType;
+	typedef TwoBitSequenceBase::BaseLocationVectorType BaseLocationVectorType;
 
 private:
 	inline const Sequence &constThis() const {
@@ -103,7 +105,7 @@ public:
 	std::string getName() const;
 	std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
 			bool forPrinting = false) const;
-	void zeroQuals(SequenceLengthType offset, SequenceLengthType length);
+	void markupBases(SequenceLengthType offset, SequenceLengthType length, char mask = 'X');
 
 	std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
 			std::string label = "") const;
@@ -118,6 +120,10 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.20  2010-03-08 22:14:38  regan
+// replaced zero bases with markup bases to mask out reads that match the filter pattern
+// bugfix in overrunning the mask
+//
 // Revision 1.19  2010-03-03 17:38:48  regan
 // fixed quality scores
 //

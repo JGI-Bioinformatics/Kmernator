@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.4 2010-03-02 15:01:56 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.5 2010-03-08 22:14:38 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -185,13 +185,17 @@ public:
 			for (unsigned long loop = lastByte + maskBytes; loop >= maskBytes; loop--) {
 				// shift one byte
 				chunk <<= 8;
-				chunk |= *(ptr--);
+				TwoBitEncoding newByte =  *(ptr--);
+				chunk |= newByte;
 				unsigned long bytes = loop - maskBytes;
 				if (Options::getDebug() >= 2){
 					unsigned long maskedChunk = chunk & masks[0];
 			        std::cerr << read.getName() << " " << bytes << " "
-				        <<  TwoBitSequence::getFasta( (TwoBitEncoding *) &chunk, 32) << "\t"
-				        << TwoBitSequence::getFasta( (TwoBitEncoding *) &maskedChunk, 32)<< std::endl;
+				        << TwoBitSequence::getFasta( (TwoBitEncoding *) &chunk, 32) << "\t"
+				        << TwoBitSequence::getFasta( (TwoBitEncoding *) &maskedChunk, 32) << "\t"
+				        << TwoBitSequence::getFasta( (TwoBitEncoding *) &newByte, 4) << "\t"
+				        << (size_t) &(*ptr) << "\t" << (size_t) &( *(read.getTwoBitSequence()) ) << "\t"
+				        << std::endl;
 				}
 				if (loop <= lastByte + 1) {
 					Kmer::NumberType key;
@@ -210,11 +214,10 @@ public:
 						if (it != counts[baseShift].end()) {
 							counts[baseShift][key]++;
 							unsigned long offset = bytes * 4 + baseShift;
-							read.zeroQuals(offset, length);
-							if (true) { //!wasAffected) {
-								wasAffected = true;
-								affectedCount++;
-								if (Options::getDebug())
+							read.markupBases(offset, length, 'X');
+							// read changed... now update ptr
+							ptr = read.getTwoBitSequence() + lastByte - (loop-maskBytes);
+							if (Options::getDebug()>1) {
 									std::cerr << "FilterMatch to "
 									        << readIdx << " "
 											<< read.getName() << " against "
@@ -226,6 +229,10 @@ public:
 											<< chunk << std::setbase(10)
 											<< std::endl;
 							}
+							if (!wasAffected) {
+						        wasAffected = true;
+								affectedCount++;
+						    }
 						}
 					}
 				}
