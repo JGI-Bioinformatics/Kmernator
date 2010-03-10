@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.11 2010-03-03 17:51:16 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.12 2010-03-10 13:17:01 regan Exp $
 //
 
 #include <iostream>
@@ -98,6 +98,10 @@ int main(int argc, char *argv[]) {
 	TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 	spectrum.buildKmerSpectrum(reads);
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+
+    cerr << "Clearing singletons from memory" << endl;
+    spectrum.singleton.clear();
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	cerr << "Picking reads: " << endl;
