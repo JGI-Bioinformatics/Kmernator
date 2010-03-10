@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.73 2010-03-04 06:38:15 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.74 2010-03-10 13:17:27 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -343,25 +343,16 @@ public:
 	static CountType minimumDepth;
 	static const CountType MAX_COUNT = (CountType) -1;
 	static unsigned long discarded;
-	static unsigned long singletonCount;
 
 	static CountType maxCount;
 	static WeightType maxWeightedCount;
 
 	static void resetGlobalCounters() {
 		discarded = 0;
-		singletonCount = 0;
 		maxCount = 0;
 		maxWeightedCount = 0.0;
 	}
 	static void resetForGlobals(CountType count) {
-		if (count == 1 && singletonCount == 0)
-		    throw std::runtime_error("This should not be happening");
-		if (count==1)
-#ifdef _USE_THREADSAFE_KMER
-#pragma omp atomic
-#endif
-			singletonCount--;
 	}
 	static void setGlobals(CountType count, WeightType weightedCount) {
 		if (count > maxCount) {
@@ -370,21 +361,12 @@ public:
 		if (weightedCount > maxWeightedCount) {
 			maxWeightedCount = weightedCount;
 		}
-
-		if (count == 1) {
-#ifdef _USE_THREADSAFE_KMER
-#pragma omp atomic
-#endif
-			singletonCount++;
-		} else if (count == 2) {
-#ifdef _USE_THREADSAFE_KMER
-#pragma omp atomic
-#endif
-			singletonCount--;
-		}
 	}
 	static inline bool isDiscard(WeightType weight) {
 		if (weight < minimumWeight) {
+#ifdef _USE_OPENMP
+#pragma omp atomic
+#endif
 			discarded++;
 			return true;
 		} else
@@ -2074,6 +2056,10 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.74  2010-03-10 13:17:27  regan
+// removed singleton count
+// fixed omp bug in discarded tracking
+//
 // Revision 1.73  2010-03-04 06:38:15  regan
 // fixed compiler warnings
 //
