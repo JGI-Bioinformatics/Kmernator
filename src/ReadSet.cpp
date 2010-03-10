@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.26 2010-03-03 17:10:26 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.27 2010-03-10 13:17:53 regan Exp $
 //
 
 #include <exception>
@@ -33,6 +33,9 @@ public:
 		if (_ifs.fail())
 			throw runtime_error("Could not open : " + fastaFilePath);
 
+		if (Options::getIgnoreQual())
+			qualFilePath.clear();
+
 		if (!qualFilePath.empty()) {
 			_qs.open(qualFilePath.c_str());
 			if (_qs.fail())
@@ -40,14 +43,19 @@ public:
 
 			_parser = new FastaQualStreamParser(_ifs, _qs);
 		} else {
-			// test for an implicit qual file
-			_qs.open((fastaFilePath + ".qual").c_str());
-			if (!_qs.fail()) {
-				_parser = new FastaQualStreamParser(_ifs, _qs);
-			} else if (_ifs.peek() == '@')
-				_parser = new FastqStreamParser(_ifs);
-			else
-				_parser = new FastaStreamParser(_ifs);
+		     if (!Options::getIgnoreQual()) {
+			   // test for an implicit qual file
+			   _qs.open((fastaFilePath + ".qual").c_str());
+			   if (!_qs.fail())
+			     _parser = new FastaQualStreamParser(_ifs, _qs);
+			 }
+			 
+			 if (_parser == NULL) {
+			      if (_ifs.peek() == '@')
+				     _parser = new FastqStreamParser(_ifs);
+			      else
+				     _parser = new FastaStreamParser(_ifs);
+			 }
 		}
 
 	}
@@ -234,7 +242,11 @@ private:
 		}
 
 		string &getQuals() {
-			return nextLine(_qualsBuffer);
+			nextLine(_qualsBuffer);
+			if (Options::getIgnoreQual()) {
+				_qualsBuffer.assign(_qualsBuffer.length(), Read::REF_QUAL);
+			}
+			return _qualsBuffer;
 		}
 		int getType() {
 			return 0;
@@ -677,6 +689,9 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.27  2010-03-10 13:17:53  regan
+// fixed quality ignoring
+//
 // Revision 1.26  2010-03-03 17:10:26  regan
 // added ability to recognize which reads came from which files
 //
