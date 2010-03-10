@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.17 2010-02-22 14:41:18 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.18 2010-03-10 13:18:03 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -25,6 +25,7 @@ add_test( TwoBitSequenceTest TwoBitSequenceTest )
 add_executable( ReadSetTest ReadSetTest )
 target_link_libraries( ReadSetTest Sequence
                                    ReadSet 
+                                   boost_program_options-mt-static 
                                    boost_test_exec_monitor-mt 
                                    boost_unit_test_framework-mt )
 add_test( ReadSetTest ReadSetTest )
@@ -57,6 +58,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.18  2010-03-10 13:18:03  regan
+# fixed linking
+#
 # Revision 1.17  2010-02-22 14:41:18  regan
 # minor bug fixes
 #
