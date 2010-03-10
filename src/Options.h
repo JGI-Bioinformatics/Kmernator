@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.9 2010-03-03 17:08:52 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.10 2010-03-10 13:18:19 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -43,6 +43,8 @@ private:
 	unsigned int minQuality;
 	unsigned int minDepth;
 	unsigned int minReadLength;
+	unsigned int ignoreQual;
+	unsigned int periodicSingletonPurge;
 
 	Options() {
 		setOptions();
@@ -89,6 +91,12 @@ public:
 	static inline unsigned int &getMinReadLength() {
 		return getOptions().minReadLength;
 	}
+	static inline unsigned int &getIgnoreQual() {
+		return getOptions().ignoreQual;
+	}
+	static inline unsigned int &getPeriodicSingletonPurge() {
+		return getOptions().periodicSingletonPurge;
+	}
 	const static unsigned int MAX_INT = (unsigned int) -1;
 
 private:
@@ -130,7 +138,13 @@ private:
 				"first order permuted bases weight")
 
 		("second-order-weight", po::value<double>()->default_value(0.00),
-				"second order permuted bases weight");
+				"second order permuted bases weight")
+
+		("ignore-quality", po::value<unsigned int>()->default_value(0),
+				"ignore the quality score, to save memory or if they are untrusted")
+
+		("periodic-singleton-purge", po::value<unsigned int>()->default_value(0),
+				"Purge singleton memory structure every # of reads");
 
 	}
 
@@ -232,6 +246,12 @@ public:
 			getFirstOrderWeight() = vm["first-order-weight"].as<double> ();
 			getSecondOrderWeight() = vm["second-order-weight"].as<double> ();
 
+			// set the ignore quality value
+			getIgnoreQual() = vm["ignore-quality"].as<unsigned int> ();
+
+			// set periodic singleton purge value
+			getPeriodicSingletonPurge() = vm["periodic-singleton-purge"].as<unsigned int> ();
+
 		} catch (std::exception& e) {
 			std::cerr << "error: " << e.what() << std::endl;
 			return false;
@@ -248,6 +268,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.10  2010-03-10 13:18:19  regan
+// added quality ignore and singleton purge to save memory
+//
 // Revision 1.9  2010-03-03 17:08:52  regan
 // fixed options to support -1 in min read length
 //
