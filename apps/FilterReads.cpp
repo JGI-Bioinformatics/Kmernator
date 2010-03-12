@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.12 2010-03-10 13:17:01 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.13 2010-03-12 19:08:45 regan Exp $
 //
 
 #include <iostream>
@@ -84,9 +84,12 @@ int main(int argc, char *argv[]) {
 	cerr << numPairs << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	cerr << "Applying filter to Input Files" << endl;
+	cerr << "Applying sequence artifact filter to Input Files" << endl;
 	unsigned long filtered = filter.applyFilter(reads);
 	cerr << "filter affected " << filtered << " Reads " << endl;
+	cerr << "Applying IdenticalFragmentPair Filter to Input Files" << endl;
+	unsigned long identicalFragments = filter.filterIdenticalFragmentPairs(reads);
+	cerr << "filter affected " << identicalFragments << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);

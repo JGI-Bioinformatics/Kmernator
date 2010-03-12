@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.25 2010-03-10 13:19:16 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.26 2010-03-12 19:08:42 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -33,7 +33,7 @@ using namespace boost::accumulators;
 #include "KmerReadUtils.h"
 #include "Options.h"
 
-template<typename S, typename W>
+template<typename So, typename We, typename Si = TrackingDataSingleton>
 class KmerSpectrum {
 public:
 
@@ -44,11 +44,11 @@ public:
 	typedef std::vector<DoublePairType> DoublePairVectorType;
 	typedef DoublePairVectorType MeanVectorType;
 
-	typedef S SolidDataType;
-	typedef W WeakDataType;
-	typedef TrackingDataSingleton SingletonDataType;
+	typedef So SolidDataType;
+	typedef We WeakDataType;
+	typedef Si SingletonDataType;
 
-typedef	typename WeakDataType::ReadPositionWeightVector WeakReadPositionWeightVector;
+    typedef	typename WeakDataType::ReadPositionWeightVector WeakReadPositionWeightVector;
 	typedef typename WeakDataType::ReadPositionWeightVector::iterator WeakReadPositionWeightVectorIterator;
 
 	typedef KmerMap<SolidDataType> SolidMapType;

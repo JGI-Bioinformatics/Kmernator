@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.5 2010-03-08 22:14:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.6 2010-03-12 19:08:42 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -16,6 +16,7 @@
 #include "Kmer.h"
 #include "ReadSet.h"
 #include "KmerReadUtils.h"
+#include "KmerSpectrum.h"
 
 class FilterKnownOddities {
 public:
@@ -271,6 +272,60 @@ public:
 		ss << ">Homopolymer-T" << std::endl;
 		ss << "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT" << std::endl;
 		return ss.str();
+	}
+
+	typedef KmerSpectrum<TrackingDataWithAllReads, TrackingDataWithAllReads> KS;
+	typedef TrackingData::ReadPositionWeightVector RPW;
+	typedef RPW::iterator RPWIterator;
+
+	static unsigned long filterIdenticalFragmentPairs(ReadSet &reads, unsigned char sequenceLength = 16, int cutoffThreshold = 2) {
+		unsigned long affectedCount = 0;
+
+		// select the number of bytes from each pair to scan
+		unsigned char bytes = sequenceLength / 4 / 2;
+		if (bytes == 0) {
+			bytes = 1;
+		}
+		SequenceLengthType oldKmerSize = KmerSizer::getSequenceLength();
+		KmerSizer::set(bytes * 4 * 2);
+		KmerWeights tmpKmer(1);
+		tmpKmer.valueAt(0) = 1.0;
+
+		// TODO parallelize - build a temp ReadSet of just the first bases
+
+		// build the kmer spectrum with the concatenated prefixes
+		// from each read in the pair
+		KS ks;
+		for(long pairIdx = 0; pairIdx < reads.getPairSize(); pairIdx++) {
+			Pair &pair = reads.getPair(pairIdx);
+			if (reads.isValidRead(pair.read1) && reads.isValidRead(pair.read2)) {
+			  memcpy(tmpKmer[0].getTwoBitSequence()        , read.getRead(pair.read1).getTwoBitSequence(), bytes);
+			  memcpy(tmpKmer[0].getTwoBitSequence() + bytes, read.getRead(pair.read2).getTwoBitSequence(), bytes);
+			  ks.append(tmpKmer, pairIdx);
+			}
+		}
+
+		// analyze the spectrum
+		ks.printHistogram();
+		for(KS::WeakIterator it = ks.weak.begin(); it != ks.weak.end(); it++) {
+		    if (it->value().getCount() >= cutoffThreshold) {
+		    	RPW rpw = it->value().getEachInstance();
+		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+		    		if (rpwit == rpw.begin()) {
+		    			// keep only one of the identical pairs
+		    			continue;
+		    		}
+		    		ReadSetSizeType pairIdx = rpw.readId;
+		    		Pair &pair = reads.getPair(pairIdx);
+		    		reads.getRead(pair.read1).markupBases(0, -1, 'X');
+		    		reads.getRead(pair.read2).markupBases(0, -1, 'X');
+		    		affectedCount += 2;
+		    	}
+		    }
+		}
+
+		KmerSizer::set(oldKmerSize);
+		return affectedCount;
 	}
 
 };
