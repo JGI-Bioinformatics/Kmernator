@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.7 2010-03-14 16:54:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.8 2010-03-14 17:16:50 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -218,7 +218,7 @@ public:
 							read.markupBases(offset, length, 'X');
 							// read changed... now update ptr
 							ptr = read.getTwoBitSequence() + lastByte - (loop-maskBytes);
-							if (Options::getDebug()>1) {
+							if (Options::getDebug()>2) {
 									std::cerr << "FilterMatch to "
 									        << readIdx << " "
 											<< read.getName() << " against "
@@ -359,9 +359,7 @@ public:
 
 		    	ReadSetSizeType readIdx = tmpReadSet.getCentroidRead();
 		    	ReadSetSizeType count = 0;
-		    	if (Options::getDebug() >= 1) {
-		    		std::cerr << "FilterIdenticalFragmentPairs chose to keep " << readIdx << " out of " << tmpReadSet.getSize() << std::endl;
-		    	}
+
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 		    	    if (count++ == readIdx)
 		    	    	continue;
