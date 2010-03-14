@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.74 2010-03-10 13:17:27 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.75 2010-03-14 16:57:28 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -449,6 +449,15 @@ public:
 		return ss.str();
 	}
 
+
+	TrackingData &operator+(const TrackingData &other) {
+		count += other.count;
+		weightedCount += other.weightedCount;
+		return *this;
+	}
+	TrackingData &add(const TrackingData &other) {
+		return *this + other;
+	}
 	TrackingData &operator=(const TrackingDataSingleton &other);
 	TrackingData &operator=(const TrackingDataWithAllReads &other);
 };
@@ -480,6 +489,14 @@ public:
 	}
 	inline double getNormalizedDirectionBias() const {
 		return (double) directionBias / (double) count;
+	}
+	TrackingDataWithDirection &operator+(const TrackingDataWithDirection &other) {
+		TrackingData::add((TrackingData) other);
+		directionBias += other.directionBias;
+		return *this;
+	}
+	TrackingDataWithDirection &add(const TrackingDataWithDirection &other) {
+		return *this + other;
 	}
 
 };
@@ -513,6 +530,15 @@ public:
 		ReadPositionWeightVector dummy(getCount(), dummy1);
 		return dummy;
 	}
+	TrackingDataWithLastRead &operator+(const TrackingDataWithLastRead &other) {
+		TrackingDataWithDirection::add((TrackingDataWithDirection) other);
+		readPosition = other.readPosition;
+		return *this;
+	}
+	TrackingDataWithLastRead &add(const TrackingDataWithLastRead &other) {
+		return *this + other;
+	}
+
 
 };
 
@@ -752,6 +778,24 @@ public:
 		}
 		return *this;
 	}
+	TrackingDataWithAllReads &operator+(const TrackingDataWithAllReads &other) {
+		instances.insert(instances.end(), other.instances.begin(), other.instances.end());
+		directionBias += other.directionBias;
+		weightedCount += other.weightedCount;
+		return *this;
+	}
+	TrackingDataWithAllReads &add(const TrackingDataWithAllReads &other) {
+		return *this + other;
+	}
+
+	TrackingDataWithAllReads &add(const TrackingDataSingleton &other) {
+		if (other.getCount() > 0) {
+	       instances.push_back(ReadPositionWeight((ReadIdType) -1, 0, other.getWeightedCount()));
+	       weightedCount += other.getWeightedCount();
+		}
+		return *this;
+	}
+
 };
 
 std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
@@ -823,6 +867,14 @@ public:
 		count = (DataType) other.getWeightedCount();
 		return *this;
 	}
+	TrackingDataMinimal &operator+(const TrackingDataMinimal &other) {
+		count += other.count;
+		return *this;
+	}
+	TrackingDataMinimal &add(const TrackingDataMinimal &other) {
+		return *this + other;
+	}
+
 };
 
 typedef TrackingDataMinimal<unsigned char> TrackingDataMinimal1;
@@ -845,6 +897,7 @@ public:
 
 	typedef Value ValueType;
 	static const IndexType MAX_INDEX = (IndexType) -1;
+	typedef std::vector< KmerArray > Vector;
 
 	class ElementType {
 	private:
@@ -1249,9 +1302,12 @@ public:
 		return _size == 0;
 	}
 	void reserve(IndexType size) {
-		resize(size, MAX_INDEX, false);
+		if (size < _capacity) {
+		  IndexType oldSize = _size;
+		  resize(size, MAX_INDEX, false);
+		  _size = oldSize;
+		}
 	}
-	;
 
 	void resize(IndexType size) {
 		resize(size, MAX_INDEX, false);
@@ -1620,6 +1676,11 @@ public:
 				}
 				unsetExclusiveLock();
 			}
+			void swap(KmerArray &other) {
+				std::swap(_begin, other._begin);
+				std::swap(_size, other._size);
+				std::swap(_capacity, other._capacity);
+			}
 
 			std::string toString() {
 				setSharedLock();
@@ -1932,6 +1993,103 @@ public:
 		}
 		return biggest;
 	}
+private:
+	int _compare(const BucketType &a, const BucketType &b, IndexType &idxA, IndexType &idxB) {
+ 	   int cmp;
+ 	   if (idxA < a.size() && idxB < b.size()) {
+ 		   cmp = a[idxA].compare(b[idxB]);
+ 	   } else {
+ 		   if (idxA < a.size()) {
+ 			   cmp = -1;
+ 		   } else {
+ 			   cmp = 1;
+ 		   }
+ 	   }
+	   return cmp;
+	}
+public:
+	void mergeAdd(KmerMap &src) {
+       if (getNumBuckets() != src.getNumBuckets()) {
+    	   throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
+       }
+#ifdef _USE_OPENMP
+#pragma omp parallel for
+#endif
+       for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
+    	   // buckets are sorted so perform a sorted merge by bucket
+    	   BucketType &a = _buckets[idx];
+    	   BucketType &b = src._buckets[idx];
+    	   IndexType capacity = std::max(a.capacity(), b.capacity());
+    	   capacity = std::max(a.size() + b.size(), capacity);
+    	   BucketType merged;
+    	   merged.reserve(capacity);
+           IndexType idxA = 0;
+           IndexType idxB = 0;
+           while (idxA < a.size() || idxB < b.size()) {
+        	   int cmp = _compare(a, b, idxA, idxB);
+        	   if (cmp == 0) {
+        		   merged.append(a[idxA], a.valueAt(idxA) + b.valueAt(idxB));
+        		   idxA++; idxB++;
+        	   } else {
+        		   if (cmp < 0) {
+        			   merged.append(a[idxA], a.valueAt(idxA));
+        			   idxA++;
+        		   } else {
+        			   merged.append(b[idxB], b.valueAt(idxB));
+        			   idxB++;
+        		   }
+        	   }
+           }
+
+           _buckets[idx].swap(merged);
+           merged.reset(true);
+           b.reset(true);
+       }
+	}
+
+	template< typename OtherDataType >
+	void mergePromote(KmerMap &src, KmerMap< OtherDataType > &mergeDest) {
+	       if (getNumBuckets() != src.getNumBuckets()) {
+	    	   throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
+	       }
+#ifdef _USE_OPENMP
+#pragma omp parallel for
+#endif
+	       for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
+	    	   // buckets are sorted so perform a sorted merge by bucket
+	    	   BucketType &a = _buckets[idx];
+	    	   BucketType &b = src._buckets[idx];
+	    	   IndexType capacity = std::max(a.capacity(), b.capacity());
+	    	   capacity = std::max(a.size() + b.size(), capacity);
+	    	   BucketType merged;
+	    	   merged.reserve(capacity);
+	           IndexType idxA = 0;
+	           IndexType idxB = 0;
+	           while (idxA < a.size() || idxB < b.size()) {
+	        	   int cmp = _compare(a, b, idxA, idxB);
+	        	   if (cmp == 0) {
+#pragma omp critical
+	        		   {
+	        		     mergeDest[ a[idxA] ].add( a.valueAt(idxA) ).add( b.valueAt(idxB) );
+	        		   }
+	        		   idxA++; idxB++;
+	        	   } else {
+	        		   if (cmp < 0) {
+	        			   merged.append(a[idxA], a.valueAt(idxA));
+	        			   idxA++;
+	        		   } else {
+	        			   merged.append(b[idxB], b.valueAt(idxB));
+	        			   idxB++;
+	        		   }
+	        	   }
+	           }
+
+	           _buckets[idx].swap(merged);
+	           merged.reset(true);
+	           b.reset(true);
+	       }
+	}
+
 public:
 	class Iterator : public std::iterator<std::forward_iterator_tag, KmerMap>
 	{
@@ -2056,6 +2214,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.75  2010-03-14 16:57:28  regan
+// checkpoint
+//
 // Revision 1.74  2010-03-10 13:17:27  regan
 // removed singleton count
 // fixed omp bug in discarded tracking

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.6 2010-03-12 19:08:42 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.7 2010-03-14 16:54:53 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -58,7 +58,7 @@ public:
 		TwoBitSequence::compressSequence(        maskBases + maskAs.substr(0,32-length), (TwoBitEncoding *) &mask);
 		setBitShiftNumbers( masks, mask);
 
-		if (Options::getDebug() >= 3) {
+		if (Options::getDebug() > 3) {
 			std::cerr
 			<< TwoBitSequence::getFasta( (TwoBitEncoding *) &masks[0], 32) << "\t"
 			<< TwoBitSequence::getFasta( (TwoBitEncoding *) &masks[1], 32) << "\t"
@@ -91,7 +91,7 @@ public:
 		TEMP_KMER(reverse);
 		for (unsigned int i = 0; i < sequences.getSize(); i++) {
 
-			Read &read = sequences.getRead(i);
+			const Read read = sequences.getRead(i);
 			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read);
 			for (unsigned int j = 0; j < kmers.size(); j++) {
 
@@ -189,7 +189,7 @@ public:
 				TwoBitEncoding newByte =  *(ptr--);
 				chunk |= newByte;
 				unsigned long bytes = loop - maskBytes;
-				if (Options::getDebug() >= 2){
+				if (Options::getDebug() >= 3){
 					unsigned long maskedChunk = chunk & masks[0];
 			        std::cerr << read.getName() << " " << bytes << " "
 				        << TwoBitSequence::getFasta( (TwoBitEncoding *) &chunk, 32) << "\t"
@@ -205,7 +205,7 @@ public:
 							break;
 						key = chunk & masks[baseShift];
 
-						if (Options::getDebug() >= 2){
+						if (Options::getDebug() >= 3){
 					      std::cerr << bytes << "\t" << baseShift << "\t" << TwoBitSequence::getFasta( (TwoBitEncoding *) &key, 32)
 					      << "\t" << TwoBitSequence::getFasta( (TwoBitEncoding *) &chunk, 32)
 					      << "\t" << std::setbase(16) << key << "\t" << chunk << std::setbase(10) << std::endl;
@@ -274,58 +274,110 @@ public:
 		return ss.str();
 	}
 
-	typedef KmerSpectrum<TrackingDataWithAllReads, TrackingDataWithAllReads> KS;
+	typedef KmerSpectrum<TrackingDataWithAllReads, TrackingDataWithAllReads, TrackingDataWithAllReads> KS;
 	typedef TrackingData::ReadPositionWeightVector RPW;
 	typedef RPW::iterator RPWIterator;
+	typedef ReadSet::Pair Pair;
+	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 
-	static unsigned long filterIdenticalFragmentPairs(ReadSet &reads, unsigned char sequenceLength = 16, int cutoffThreshold = 2) {
-		unsigned long affectedCount = 0;
+	static unsigned long filterIdenticalFragmentPairs(ReadSet &reads, unsigned char sequenceLength = 16, unsigned int cutoffThreshold = 2) {
+	  unsigned long affectedCount = 0;
 
-		// select the number of bytes from each pair to scan
-		unsigned char bytes = sequenceLength / 4 / 2;
-		if (bytes == 0) {
+	  // select the number of bytes from each pair to scan
+	  unsigned char bytes = sequenceLength / 4 / 2;
+	  if (bytes == 0) {
 			bytes = 1;
-		}
-		SequenceLengthType oldKmerSize = KmerSizer::getSequenceLength();
-		KmerSizer::set(bytes * 4 * 2);
-		KmerWeights tmpKmer(1);
-		tmpKmer.valueAt(0) = 1.0;
+	  }
+	  SequenceLengthType oldKmerSize = KmerSizer::getSequenceLength();
+	  KmerSizer::set(bytes * 4 * 2);
+	  {
 
-		// TODO parallelize - build a temp ReadSet of just the first bases
+		// TODO parallelize - build one KS per thread, then merge, skipping singletons
+        // no need to include quality scores
 
 		// build the kmer spectrum with the concatenated prefixes
 		// from each read in the pair
-		KS ks;
+		int numThreads = 1;
+#ifdef _USE_OPENMP
+		numThreads = omp_get_max_threads();
+#endif
+		KS::Vector ksv(numThreads);
+		KmerWeights::Vector tmpKmerv(numThreads);
+		for(int i = 0; i < numThreads; i++) {
+		  ksv[i] = KS(1024*64);
+		  tmpKmerv[i].resize(1);
+		  tmpKmerv[i].valueAt(0) = 1.0;
+		}
+#pragma omp parallel for
 		for(long pairIdx = 0; pairIdx < reads.getPairSize(); pairIdx++) {
 			Pair &pair = reads.getPair(pairIdx);
+			int threadNum = 0;
+#ifdef _USE_OPENMP
+			threadNum = omp_get_thread_num();
+#endif
 			if (reads.isValidRead(pair.read1) && reads.isValidRead(pair.read2)) {
-			  memcpy(tmpKmer[0].getTwoBitSequence()        , read.getRead(pair.read1).getTwoBitSequence(), bytes);
-			  memcpy(tmpKmer[0].getTwoBitSequence() + bytes, read.getRead(pair.read2).getTwoBitSequence(), bytes);
-			  ks.append(tmpKmer, pairIdx);
+			  const Read read1 = reads.getRead(pair.read1);
+			  const Read read2 = reads.getRead(pair.read2);
+			  if ((read1.getMarkupBasesCount() == 0 || read1.getMarkups()[0].second > sequenceLength)
+			     && (read2.getMarkupBasesCount() == 0 || read2.getMarkups()[0].second > sequenceLength)) {
+			    memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
+			    memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read2.getTwoBitSequence(), bytes);
+			    // store the pairIdx (not readIdx)
+			    ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
+			  }
 			}
 		}
+		if (Options::getDebug() > 1) {
+		  for (int i = 0; i < numThreads; i++) {
+			  std::cerr << "spectrum " << i << std::endl;
+			  ksv[i].printHistograms();
+		  }
+		}
+		KS::mergeVector(ksv, 2);
+		KS &ks = ksv[0];
 
 		// analyze the spectrum
-		ks.printHistogram();
+		ks.printHistograms();
 		for(KS::WeakIterator it = ks.weak.begin(); it != ks.weak.end(); it++) {
 		    if (it->value().getCount() >= cutoffThreshold) {
 		    	RPW rpw = it->value().getEachInstance();
+
+		    	ReadSet tmpReadSet;
+
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
-		    		if (rpwit == rpw.begin()) {
-		    			// keep only one of the identical pairs
-		    			continue;
-		    		}
-		    		ReadSetSizeType pairIdx = rpw.readId;
+
+		    		// iterator readId is actually the pairIdx built above
+		    		ReadSetSizeType pairIdx = rpwit->readId;
+
 		    		Pair &pair = reads.getPair(pairIdx);
-		    		reads.getRead(pair.read1).markupBases(0, -1, 'X');
-		    		reads.getRead(pair.read2).markupBases(0, -1, 'X');
+		    		const Read &read1 = reads.getRead(pair.read1);
+		    		const Read &read2 = reads.getRead(pair.read2);
+
+		    		Read tmpRead("", read1.getFasta() + read2.getFasta(), read1.getQuals() + read2.getQuals());
+		    		tmpReadSet.append( tmpRead );
+		    	}
+
+		    	ReadSetSizeType readIdx = tmpReadSet.getCentroidRead();
+		    	ReadSetSizeType count = 0;
+		    	if (Options::getDebug() >= 1) {
+		    		std::cerr << "FilterIdenticalFragmentPairs chose to keep " << readIdx << " out of " << tmpReadSet.getSize() << std::endl;
+		    	}
+		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+		    	    if (count++ == readIdx)
+		    	    	continue;
+		    	    ReadSetSizeType pairIdx = rpwit->readId;
+		    	    Pair &pair = reads.getPair(pairIdx);
+		    	    Read &read1 = reads.getRead(pair.read1);
+		    	    Read &read2 = reads.getRead(pair.read2);
+		    		read1.markupBases(0, -1, 'X');
+		    		read2.markupBases(0, -1, 'X');
 		    		affectedCount += 2;
 		    	}
 		    }
 		}
-
-		KmerSizer::set(oldKmerSize);
-		return affectedCount;
+	  }
+      KmerSizer::set(oldKmerSize);
+	  return affectedCount;
 	}
 
 };
