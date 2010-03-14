@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.19 2010-03-03 17:10:26 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.20 2010-03-14 16:56:38 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -51,6 +51,7 @@ public:
 
 private:
 	std::vector<Read> _reads;
+protected:
 	PartitioningData<ReadSetSizeType> _filePartitions;
 	unsigned long _baseCount;
 	SequenceLengthType _maxSequenceLength;
@@ -108,7 +109,7 @@ public:
 	inline Read &getRead(ReadSetSizeType index) {
 		return _reads[index];
 	}
-	inline const Read &getRead(ReadSetSizeType index) const {
+	inline const Read getRead(ReadSetSizeType index) const {
 		return _reads[index];
 	}
 	inline int getReadFileNum(ReadSetSizeType index) const {
@@ -138,6 +139,9 @@ public:
 		return readIdxs;
 	}
 
+	ReadSetSizeType getCentroidRead() const;
+	ReadSetSizeType getCentroidRead(const ProbabilityBases &probs) const;
+
 protected:
 	void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
 	void appendFasta(ReadFileReader &reader);
@@ -166,6 +170,10 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.20  2010-03-14 16:56:38  regan
+// added centroid methods
+// minor refactor
+//
 // Revision 1.19  2010-03-03 17:10:26  regan
 // added ability to recognize which reads came from which files
 //
