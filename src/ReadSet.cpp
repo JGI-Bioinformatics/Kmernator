@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.27 2010-03-10 13:17:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.28 2010-03-14 16:55:55 regan Exp $
 //
 
 #include <exception>
@@ -49,7 +49,7 @@ public:
 			   if (!_qs.fail())
 			     _parser = new FastaQualStreamParser(_ifs, _qs);
 			 }
-			 
+
 			 if (_parser == NULL) {
 			      if (_ifs.peek() == '@')
 				     _parser = new FastqStreamParser(_ifs);
@@ -687,8 +687,33 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	return _pairs.size();
 }
 
+ReadSet::ReadSetSizeType ReadSet::getCentroidRead() const {
+	ProbabilityBases probs(0);
+	for(ReadSetSizeType readIdx = 0 ; readIdx < getSize(); readIdx++) {
+		const Read &read = getRead(readIdx);
+		probs += read.getProbabilityBases();
+	}
+	return getCentroidRead(probs);
+}
+
+ReadSet::ReadSetSizeType ReadSet::getCentroidRead(const ProbabilityBases &probs) const {
+	double bestScore = 0.0;
+	ReadSetSizeType bestRead = MAX_READ_IDX;
+	for(ReadSetSizeType readIdx = 0 ; readIdx < getSize(); readIdx++) {
+		double score = getRead(readIdx).scoreProbabilityBases(probs);
+	    if (bestRead == MAX_READ_IDX || bestScore < score ) {
+	    	bestRead = readIdx;
+	    	bestScore = score;
+	    }
+	}
+	return bestRead;
+}
+
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.28  2010-03-14 16:55:55  regan
+// added centroid methods
+//
 // Revision 1.27  2010-03-10 13:17:53  regan
 // fixed quality ignoring
 //
