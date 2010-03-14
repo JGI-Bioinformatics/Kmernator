@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.28 2010-03-14 16:55:55 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.29 2010-03-14 17:16:39 regan Exp $
 //
 
 #include <exception>
@@ -213,8 +213,19 @@ private:
 				_pos = 0;
 				_stream->seekg(0);
 			}
-			while (_stream->peek() != _marker && !endOfStream())
+			while ( (!endOfStream()) && _stream->peek() != _marker) {
 				nextLine();
+				if (_marker == '@' && (!endOfStream()) && _stream->peek() == _marker) {
+					// since '@' is a valid quality character in a FASTQ (sometimes)
+					// verify that the next line is not also starting with '@'
+					unsigned long tmpPos = _stream->tellg();
+					nextLine();
+					if (endOfStream() || _stream->peek() != _marker) {
+						_pos = tmpPos;
+						_stream->seekg(_pos);
+					}
+				}
+			}
 
 		}
 
@@ -711,6 +722,9 @@ ReadSet::ReadSetSizeType ReadSet::getCentroidRead(const ProbabilityBases &probs)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.29  2010-03-14 17:16:39  regan
+// bugfix in reading fastq in parallel
+//
 // Revision 1.28  2010-03-14 16:55:55  regan
 // added centroid methods
 //
