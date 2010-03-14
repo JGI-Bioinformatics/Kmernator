@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.75 2010-03-14 16:57:28 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.76 2010-03-14 17:16:30 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -1195,7 +1195,7 @@ public:
 			return *this;
 		reset();
 		setExclusiveLock();
-		reserve(other.size());
+		resize(other.size());
 		if (size() == 0) {
 			unsetExclusiveLock();
 			return *this;
@@ -2214,6 +2214,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.76  2010-03-14 17:16:30  regan
+// bugfix
+//
 // Revision 1.75  2010-03-14 16:57:28  regan
 // checkpoint
 //
