@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.4 2010-03-02 15:02:49 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.5 2010-03-14 16:55:13 regan Exp $
 //
 
 #ifndef _KMER_READ_UTILS_H
@@ -6,7 +6,7 @@
 
 class KmerReadUtils {
 public:
-	static KmerWeights buildWeightedKmers(Read &read, bool leastComplement =
+	static KmerWeights buildWeightedKmers(const Read &read, bool leastComplement =
 			false) {
 		KmerWeights kmers(read.getTwoBitSequence(), read.getLength(),
 				leastComplement);
@@ -49,7 +49,7 @@ public:
 
 		}
 		//  std::cerr << std::endl;
-		if (Options::getDebug() > 1) {
+		if (Options::getDebug() > 3) {
 		  for(unsigned int i = 0 ; i < kmers.size(); i++) {
 			std::cerr << i << " " << kmers.valueAt(i) << " " << kmers[i].toFasta() << std::endl;
 		  }
