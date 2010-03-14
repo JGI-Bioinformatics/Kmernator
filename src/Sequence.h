@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.20 2010-03-08 22:14:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.21 2010-03-14 16:56:59 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -53,6 +53,7 @@ public:
 	SequenceLengthType getLength() const;
 	std::string
 			getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
+	SequenceLengthType getMarkupBasesCount() const { return *_getMarkupBasesCount(); }
 	BaseLocationVectorType getMarkups() const;
 
 	SequenceLengthType getTwoBitEncodingSequenceLength() const;
@@ -61,11 +62,89 @@ public:
 
 };
 
-class Read: public Sequence {
+class ProbabilityBase {
+public:
+	double a,c,g,t;
+	ProbabilityBase() : a(0.0), c(0.0), g(0.0), t(0.0) {}
+	ProbabilityBase(const ProbabilityBase &copy) : a(copy.a), c(copy.c), g(copy.g), t(copy.t) {}
+	ProbabilityBase &operator=(const ProbabilityBase &copy) {
+		a = copy.a;
+		c = copy.c;
+		g = copy.g;
+		t = copy.t;
+		return *this;
+	}
+	ProbabilityBase operator+(const ProbabilityBase &other) {
+		ProbabilityBase tmp(*this);
+		tmp.a += other.a;
+		tmp.c += other.c;
+		tmp.g += other.g;
+		tmp.t += other.t;
+		return tmp;
+	}
+	ProbabilityBase &operator+=(const ProbabilityBase &other) {
+		*this = *this + other;
+		return *this;
+	}
+	ProbabilityBase operator*(const ProbabilityBase &other) {
+		ProbabilityBase tmp(*this);
+		tmp.a *= other.a;
+		tmp.c *= other.c;
+		tmp.g *= other.g;
+		tmp.t *= other.t;
+		return tmp;
+	}
+	ProbabilityBase &operator*=(const ProbabilityBase &other) {
+		*this = *this * other;
+		return *this;
+	}
+	double sum() const {
+		return a+c+g+t;
+	}
+};
+
+class ProbabilityBases {
+private:
+	std::vector< ProbabilityBase > _bases;
+public:
+	ProbabilityBases(size_t _size) : _bases(_size) {}
+	void resize(size_t _size) { _bases.resize(_size); }
+	double sum() const {
+		double sum = 0.0;
+		for(int i = 0; i < (int) _bases.size(); i++)
+			sum += _bases[i].sum();
+		return sum;
+	}
+	ProbabilityBase &operator[](size_t idx) {
+		return _bases[idx];
+	}
+
+	ProbabilityBases &operator+=(const ProbabilityBases &other) {
+		if (_bases.size() < other._bases.size()) {
+			resize(other._bases.size());
+		}
+		for(Sequence::SequenceLengthType i = 0 ; i < other._bases.size(); i++) {
+			_bases[i] += other._bases[i];
+		}
+		return *this;
+	}
+	ProbabilityBases &operator*=(const ProbabilityBases &other) {
+		if (_bases.size() < other._bases.size() ) {
+			resize(other._bases.size());
+		}
+		for(int i = 0; i < (int) other._bases.size(); i++) {
+			_bases[i] *= other._bases[i];
+		}
+		return *this;
+	}
+};
+
+class Read : public Sequence {
 public:
 	static const char REF_QUAL = 0xff;
 	static const char FASTQ_START_CHAR = 64;
 	static const char PRINT_REF_QUAL = 126;
+
 
 private:
 	inline const Read &constThis() const {
@@ -112,6 +191,27 @@ public:
 	std::string getFormattedQuals(SequenceLengthType trimOffset =
 			MAX_SEQUENCE_LENGTH) const;
 
+	ProbabilityBases getProbabilityBases() const {
+		std::string fasta = getFasta();
+		std::string quals = getQuals();
+		ProbabilityBases probs(fasta.length());
+		for(int i = 0; i < (int) fasta.length(); i++) {
+			double prob = qualityToProbability[ (unsigned char) quals[i] ];
+			switch (fasta[i]) {
+			case 'A': probs[i].a += prob; break;
+			case 'C': probs[i].c += prob; break;
+			case 'G': probs[i].g += prob; break;
+			case 'T': probs[i].t += prob; break;
+			}
+		}
+		return probs;
+	}
+	double scoreProbabilityBases(const ProbabilityBases &probs) const {
+		ProbabilityBases myprobs = getProbabilityBases();
+		myprobs *= probs;
+		return myprobs.sum();
+	}
+
 	static double qualityToProbability[256];
 	static void setMinQualityScore(unsigned char minQualityScore);
 };
@@ -120,6 +220,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.21  2010-03-14 16:56:59  regan
+// added probability base classes
+//
 // Revision 1.20  2010-03-08 22:14:38  regan
 // replaced zero bases with markup bases to mask out reads that match the filter pattern
 // bugfix in overrunning the mask
