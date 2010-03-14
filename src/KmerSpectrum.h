@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.26 2010-03-12 19:08:42 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.27 2010-03-14 16:55:38 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -62,6 +62,8 @@ public:
 	typedef typename SingletonMapType::Iterator SingletonIterator;
 	typedef typename SingletonMapType::ElementType SingletonElementType;
 
+	typedef std::vector< KmerSpectrum > Vector;
+
 	typedef accumulator_set<double,
 	stats< tag::variance(lazy),
 	tag::mean
@@ -76,7 +78,7 @@ public:
 	unsigned long purgedSingletons;
 
 public:
-	KmerSpectrum(unsigned long buckets): solid(buckets/64), weak(buckets/8), singleton(buckets), hasSolids(false), purgedSingletons(0)
+	KmerSpectrum(unsigned long buckets = 0): solid(buckets/64), weak(buckets/8), singleton(buckets), hasSolids(false), purgedSingletons(0)
 	{
 		// set the minimum weight that will be used to track kmers
 		// based on the given options
@@ -95,6 +97,7 @@ public:
 		this->singleton = other.singleton;
 		this->hasSolids = other.hasSolids;
 		this->purgedSingletons = other.purgedSingletons;
+		return *this;
 	}
 
 	static unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKmersPerBucket = 64) {
@@ -896,7 +899,7 @@ public:
 						elem.value().track( weight, keepDirection, readIdx, j );
 					}
 				}
-			} else if (Options::getDebug()){
+			} else if (Options::getDebug() > 2){
 				std::cerr << "discarded kmer " << readIdx << "@" << j << " " << weight << " " << least.toFasta() << std::endl;
 			}
 		}
@@ -1370,6 +1373,26 @@ public:
 		weak.remove( it->key() );
 
 		return promoted;
+	}
+
+	void static mergeVector(Vector &vec, int minimumCount = 2) {
+		// solid
+		if (vec.size() <= 1)
+			return;
+		if (vec[0].hasSolids) {
+		  for (unsigned int i = 1; i < vec.size(); i++) {
+			vec[0].solid.mergeAdd(vec[i].solid);
+		  }
+		}
+		// weak
+		for (unsigned int i = 1; i < vec.size(); i++) {
+			vec[0].weak.mergeAdd(vec[i].weak);
+		}
+		// singleton
+		for (unsigned int i = 1; i < vec.size(); i++) {
+			vec[0].singleton.mergePromote(vec[i].singleton, vec[0].weak);
+		}
+		// purge if min > 2
 	}
 };
 
