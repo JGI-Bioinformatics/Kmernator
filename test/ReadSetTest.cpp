@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.11 2010-03-04 06:37:13 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.12 2010-03-14 16:57:09 regan Exp $
 //
 
 #include "config.h"
@@ -66,7 +66,7 @@ void testFastaWithQualFile(string f, string q) {
 
 	string fasta, qual;
 	for (unsigned int i = 0; i < store.getSize(); i++) {
-		Read &s = store.getRead(i);
+		const Read s = store.getRead(i);
 
 		string nameLine('>' + s.getName() + "\n");
 		fasta += nameLine;
@@ -97,6 +97,9 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.12  2010-03-14 16:57:09  regan
+// minor refactor
+//
 // Revision 1.11  2010-03-04 06:37:13  regan
 // bugfix
 //
