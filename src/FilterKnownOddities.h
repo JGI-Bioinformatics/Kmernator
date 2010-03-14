@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.8 2010-03-14 17:16:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.9 2010-03-14 17:21:19 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -327,7 +327,7 @@ public:
 			  }
 			}
 		}
-		if (Options::getDebug() > 1) {
+		if (Options::getDebug() > 3) {
 		  for (int i = 0; i < numThreads; i++) {
 			  std::cerr << "spectrum " << i << std::endl;
 			  ksv[i].printHistograms();
@@ -338,6 +338,7 @@ public:
 
 		// analyze the spectrum
 		ks.printHistograms();
+		// TODO parallelize (partition by bucket range)
 		for(KS::WeakIterator it = ks.weak.begin(); it != ks.weak.end(); it++) {
 		    if (it->value().getCount() >= cutoffThreshold) {
 		    	RPW rpw = it->value().getEachInstance();
