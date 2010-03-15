@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.11 2010-03-15 15:00:34 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.12 2010-03-15 18:06:32 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -378,7 +378,6 @@ public:
 			  } else {
 				  // trim at first markup
 				  trim.trimLength = markups[0].second;
-				  std::cerr << "Trimming " << read.getName() << " at " << trim.trimLength << " " << read.getFasta() << std::endl;
 			  }
 			  trim.score = trim.trimLength;
 
