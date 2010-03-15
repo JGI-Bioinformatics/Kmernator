@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.14 2010-03-15 07:42:30 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.15 2010-03-15 18:05:04 regan Exp $
 //
 
 #include <iostream>
@@ -87,6 +87,8 @@ int main(int argc, char *argv[]) {
 	cerr << "Applying sequence artifact filter to Input Files" << endl;
 	unsigned long filtered = filter.applyFilter(reads);
 	cerr << "filter affected " << filtered << " Reads " << endl;
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+
 	cerr << "Applying IdenticalFragmentPair Filter to Input Files" << endl;
 	unsigned long identicalFragments = filter.filterIdenticalFragmentPairs(reads);
 	cerr << "filter affected " << identicalFragments << endl;
