@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.10 2010-03-15 07:43:58 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.11 2010-03-15 15:00:34 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -374,10 +374,11 @@ public:
 			  }
 			} else {
 			  if ( markups.empty() ) {
-				  trim.trimLength = read.getLength()+1;
+				  trim.trimLength = read.getLength();
 			  } else {
 				  // trim at first markup
-				  trim.trimLength = markups[0].second+1;
+				  trim.trimLength = markups[0].second;
+				  std::cerr << "Trimming " << read.getName() << " at " << trim.trimLength << " " << read.getFasta() << std::endl;
 			  }
 			  trim.score = trim.trimLength;
 
@@ -385,11 +386,12 @@ public:
 			if (trim.trimLength > 0) {
 				// calculate average score (before adding kmer length)
 				trim.score /= (ScoreType) trim.trimLength;
-
-				trim.trimLength += KmerSizer::getSequenceLength() - 1;
+				if (useKmers) {
+				  trim.trimLength += KmerSizer::getSequenceLength() - 1;
+				}
 				trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( trim.score );
 			} else {
-				trim.score = 0.0;
+				trim.score = -1.0;
 				trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score: 0";
 				// keep available so that pairs will be selected together
 			}
