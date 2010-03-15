@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.10 2010-03-10 13:18:19 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.11 2010-03-15 07:42:39 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -112,7 +112,7 @@ private:
 
 		("reference-file", po::value<FileListType>(), "set reference file(s)")
 
-		("kmer-size", po::value<unsigned int>(), "kmer size")
+		("kmer-size", po::value<unsigned int>(), "kmer size.  A size of 0 will skip k-mer calculations")
 
 		("input-file", po::value<FileListType>(), "input file(s)")
 
@@ -268,6 +268,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.11  2010-03-15 07:42:39  regan
+// added kmer of 0 to skip kmer calculations
+//
 // Revision 1.10  2010-03-10 13:18:19  regan
 // added quality ignore and singleton purge to save memory
 //

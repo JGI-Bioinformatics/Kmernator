@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.9 2010-03-08 22:14:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.10 2010-03-15 07:43:58 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -338,15 +338,19 @@ public:
 
 	void scoreAndTrimReads(ScoreType minimumKmerScore) {
 		_trims.resize(_reads.getSize());
+		bool useKmers = Options::getKmerSize() != 0;
 #ifdef _USE_OPENMP
 #pragma omp parallel for schedule(dynamic)
 #endif
 		for(long i = 0; i < (long) _reads.getSize(); i++) {
 			ReadTrimType &trim = _trims[i];
-			KmerArray<char> kmers = getKmersForRead(i);
-			SequenceLengthType numKmers = kmers.size();
-			Sequence::BaseLocationVectorType markups = _reads.getRead(i).getMarkups();
-			if ( ! markups.empty() ) {
+			const Read read = _reads.getRead(i);
+			Sequence::BaseLocationVectorType markups = read.getMarkups();
+			if (useKmers) {
+			  KmerArray<char> kmers = getKmersForRead(i);
+			  SequenceLengthType numKmers = kmers.size();
+
+			  if ( ! markups.empty() ) {
 			    // find first markup and that is the maximum trim point
 				SequenceLengthType maxTrimPoint = markups[0].second + 1;
 				if (maxTrimPoint > KmerSizer::getSequenceLength()) {
@@ -354,9 +358,9 @@ public:
 				} else {
 					numKmers = 0;
 				}
-			}
+			  }
 
-			for(unsigned long j = 0; j < numKmers; j++) {
+			  for(unsigned long j = 0; j < numKmers; j++) {
 				const ElementType elem = _map.getElementIfExists(kmers[j]);
 				if (elem.isValid()) {
 					ScoreType score = elem.value().getCount();
@@ -367,12 +371,20 @@ public:
 					break;
 				} else
 				break;
-			}
+			  }
+			} else {
+			  if ( markups.empty() ) {
+				  trim.trimLength = read.getLength()+1;
+			  } else {
+				  // trim at first markup
+				  trim.trimLength = markups[0].second+1;
+			  }
+			  trim.score = trim.trimLength;
 
+			}
 			if (trim.trimLength > 0) {
 				// calculate average score (before adding kmer length)
-				ScoreType numKmers = trim.trimLength;
-				trim.score /= numKmers;
+				trim.score /= (ScoreType) trim.trimLength;
 
 				trim.trimLength += KmerSizer::getSequenceLength() - 1;
 				trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( trim.score );

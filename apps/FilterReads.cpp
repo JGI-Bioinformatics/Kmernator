@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.13 2010-03-12 19:08:45 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.14 2010-03-15 07:42:30 regan Exp $
 //
 
 #include <iostream>
@@ -92,20 +92,27 @@ int main(int argc, char *argv[]) {
 	cerr << "filter affected " << identicalFragments << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
-	cerr << "targeting " << numBuckets << " buckets for reads " << endl;
+	KS spectrum(0);
 
-	KS spectrum(numBuckets);
-	cerr << MemoryUtils::getMemoryUsage() << endl;
+	if (Options::getKmerSize() > 0) {
 
-	TrackingData::minimumWeight = Options::getMinKmerQuality();
+	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
+	  cerr << "targeting " << numBuckets << " buckets for reads " << endl;
 
-	spectrum.buildKmerSpectrum(reads);
-	cerr << MemoryUtils::getMemoryUsage() << endl;
+	  spectrum = KS(numBuckets);
+	  cerr << MemoryUtils::getMemoryUsage() << endl;
 
-    cerr << "Clearing singletons from memory" << endl;
-    spectrum.singleton.clear();
-	cerr << MemoryUtils::getMemoryUsage() << endl;
+	  TrackingData::minimumWeight = Options::getMinKmerQuality();
+
+	  spectrum.buildKmerSpectrum(reads);
+	  cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	  if (Options::getMinDepth() > 1) {
+        cerr << "Clearing singletons from memory" << endl;
+        spectrum.singleton.clear();
+	    cerr << MemoryUtils::getMemoryUsage() << endl;
+	  }
+	}
 
 	cerr << "Picking reads: " << endl;
 	RS selector(reads, spectrum.weak, Options::getMinDepth());
@@ -146,6 +153,10 @@ int main(int argc, char *argv[]) {
 			string ofname = outputFilename + "-" + boost::lexical_cast< string >( depth );
 			ofmap = OfstreamMap(ofname, ".fastq");
 			float minDepth = std::max(Options::getMinDepth(), depth);
+			if (Options::getKmerSize() == 0) {
+				minDepth = 0;
+				depth = 0;
+			}
 			cerr << "Selecting reads over depth: " << depth << " (" << minDepth << ") " << endl;
 
 			if (reads.hasPairs()) {
