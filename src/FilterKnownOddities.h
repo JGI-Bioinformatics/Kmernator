@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.9 2010-03-14 17:21:19 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.10 2010-03-15 04:38:31 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -320,10 +320,19 @@ public:
 			  const Read read2 = reads.getRead(pair.read2);
 			  if ((read1.getMarkupBasesCount() == 0 || read1.getMarkups()[0].second > sequenceLength)
 			     && (read2.getMarkupBasesCount() == 0 || read2.getMarkups()[0].second > sequenceLength)) {
-			    memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
-			    memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read2.getTwoBitSequence(), bytes);
-			    // store the pairIdx (not readIdx)
-			    ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
+			    if (memcmp(read1.getTwoBitSequence(), read2.getTwoBitSequence(), bytes) <= 0) {
+				  // read1 + read2
+				  memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
+			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read2.getTwoBitSequence(), bytes);
+			      // store the pairIdx (not readIdx)
+			      ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
+			    } else {
+			      // read2 + read1
+			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read2.getTwoBitSequence(), bytes);
+			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read1.getTwoBitSequence(), bytes);
+			      // store the pairIdx (not readIdx)
+			      ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
+			    }
 			  }
 			}
 		}
