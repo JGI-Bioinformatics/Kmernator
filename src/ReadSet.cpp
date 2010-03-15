@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.29 2010-03-14 17:16:39 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.30 2010-03-15 07:44:30 regan Exp $
 //
 
 #include <exception>
@@ -85,14 +85,16 @@ public:
 
 			if (quals.length() != bases.length())
 				if (!(quals.length() == 1 && quals[0] == Read::REF_QUAL))
-					throw runtime_error("Number of bases and quals not equal");
+					throw runtime_error((string("Number of bases and quals not equal: ") + bases + " " + quals).c_str());
 			return true;
 		}
 
 		catch (runtime_error &e) {
 			stringstream error;
 			error << e.what() << " in file '" << _path << "' at line "
-					<< _parser->lineNumber();
+					<< _parser->lineNumber() << " position:" << _parser->tellg() << " " \
+					<< _parser->getName() << _parser->getBases() << _parser->getQuals() \
+					<< " '" << _parser->getLineBuffer() << _parser->nextLine() << "'";
 			throw runtime_error(error.str());
 		}
 	}
@@ -146,6 +148,9 @@ private:
 			nextLine(_lineBuffer);
 			return _lineBuffer;
 		}
+		string getLineBuffer() const {
+			return _lineBuffer;
+		}
 
 		SequenceStreamParser(istream &stream, char marker) :
 			_stream(&stream), _line(0), _marker(marker), _pos(0) {
@@ -156,6 +161,13 @@ private:
 
 		unsigned long lineNumber() {
 			return _line;
+		}
+		unsigned long tellg() {
+			return _stream->tellg();
+		}
+		void seekg(unsigned long pos) {
+			_pos = pos;
+			_stream->seekg(_pos);
 		}
 		bool endOfStream() {
 			return _stream->eof();
@@ -178,7 +190,7 @@ private:
 
 			if (_nameBuffer[0] != _marker)
 				throw runtime_error(
-						(string("Missing '") + _marker + "'").c_str());
+						(string("Missing name marker '") + _marker + "'").c_str());
 
 			//         char *space = strchr(name,' ');
 			//         if (space != NULL)
@@ -200,29 +212,38 @@ private:
 		virtual void seekToNextRecord(unsigned long minimumPos) {
 			// get to the first line after the pos
 			if (minimumPos > 0) {
-				_pos = minimumPos - 1;
-				_stream->seekg(_pos);
+				seekg(minimumPos - 1);
 				if (endOfStream())
 					return;
 				if (peek() == '\n') {
-					_pos = minimumPos;
-					_stream->seekg(_pos);
+					seekg(minimumPos);
 				} else
 					nextLine();
 			} else {
-				_pos = 0;
-				_stream->seekg(0);
+				seekg(0);
 			}
 			while ( (!endOfStream()) && _stream->peek() != _marker) {
 				nextLine();
-				if (_marker == '@' && (!endOfStream()) && _stream->peek() == _marker) {
-					// since '@' is a valid quality character in a FASTQ (sometimes)
-					// verify that the next line is not also starting with '@'
-					unsigned long tmpPos = _stream->tellg();
-					nextLine();
-					if (endOfStream() || _stream->peek() != _marker) {
-						_pos = tmpPos;
-						_stream->seekg(_pos);
+			}
+			if (_marker == '@' && (!endOfStream())) {
+				// since '@' is a valid quality character in a FASTQ (sometimes)
+				// verify that the next line is not also starting with '@', as that would be the true start of the record
+				unsigned long tmpPos = tellg();
+				string current = _lineBuffer;
+				string tmp = nextLine();
+				if (endOfStream() || _stream->peek() != _marker) {
+					seekg(tmpPos);
+					_lineBuffer = current;
+
+					if (Options::getDebug()) {
+					  std::cerr << "Correctly picked record break point to read fastq in parallel: "
+					  << current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg() << std::endl;
+					}
+
+				} else {
+					if (Options::getDebug()) {
+					  std::cerr << "Needed to skip an extra line to read fastq in parallel: "
+					  << current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg() << std::endl;
 					}
 				}
 			}
@@ -247,7 +268,7 @@ private:
 
 			string &qualName = nextLine();
 			if (qualName.empty() || qualName[0] != '+')
-				throw runtime_error("Missing '+'");
+				throw runtime_error((string("Missing '+' in fastq, got: ") + _basesBuffer + " " + qualName).c_str());
 
 			return _basesBuffer;
 		}
@@ -722,6 +743,9 @@ ReadSet::ReadSetSizeType ReadSet::getCentroidRead(const ProbabilityBases &probs)
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.30  2010-03-15 07:44:30  regan
+// better logging to track down a non-existent bug (file was corrupted)
+//
 // Revision 1.29  2010-03-14 17:16:39  regan
 // bugfix in reading fastq in parallel
 //
