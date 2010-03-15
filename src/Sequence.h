@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.21 2010-03-14 16:56:59 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.22 2010-03-15 18:35:17 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -11,6 +11,11 @@
 #include "TwoBitSequence.h"
 
 class Sequence {
+public:
+	static const char REF_QUAL = 0xff;
+	static const char FASTQ_START_CHAR = 64;
+	static const char PRINT_REF_QUAL = 126;
+
 public:
 	typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
 	const static SequenceLengthType MAX_SEQUENCE_LENGTH =
@@ -62,17 +67,65 @@ public:
 
 };
 
+class BaseQual {
+public:
+	char base;
+	char qual;
+	BaseQual(char _base, char _qual) : base(_base), qual(_qual) {}
+	BaseQual(char _base, double prob) : base(_base), qual() {
+		qual = getQualChar(prob);
+	}
+	char getQualChar(double prob) {
+		if (prob > 0.999) {
+			return Sequence::FASTQ_START_CHAR + 30;
+		} else if (prob > 0.99) {
+			return Sequence::FASTQ_START_CHAR + 20;
+		} else if (prob > 0.9) {
+			return Sequence::FASTQ_START_CHAR + 10;
+		} else {
+			return Sequence::FASTQ_START_CHAR + 1;
+		}
+	}
+};
+
 class ProbabilityBase {
 public:
+
 	double a,c,g,t;
-	ProbabilityBase() : a(0.0), c(0.0), g(0.0), t(0.0) {}
-	ProbabilityBase(const ProbabilityBase &copy) : a(copy.a), c(copy.c), g(copy.g), t(copy.t) {}
+	double top;
+	char best;
+	ProbabilityBase() : a(0.0), c(0.0), g(0.0), t(0.0), top(0.0), best(' ') {}
+	ProbabilityBase(const ProbabilityBase &copy) : a(copy.a), c(copy.c), g(copy.g), t(copy.t), top(copy.top), best(copy.best) {
+		setTop(*this);
+	}
 	ProbabilityBase &operator=(const ProbabilityBase &copy) {
 		a = copy.a;
 		c = copy.c;
 		g = copy.g;
 		t = copy.t;
+		setTop(*this);
 		return *this;
+	}
+	void setTop(const ProbabilityBase &base) {
+		setTop(base.a, base.c, base.g, base.t);
+	}
+	void setTop(double _a, double _c, double _g, double _t) {
+		if (top < _a) {
+			top = _a;
+			best = 'A';
+		}
+		if (top < _c) {
+			top = _c;
+			best = 'C';
+		}
+		if (top < _g) {
+			top = _g;
+			best = 'G';
+		}
+		if (top < _t) {
+			top = _t;
+			best = 'T';
+		}
 	}
 	ProbabilityBase operator+(const ProbabilityBase &other) {
 		ProbabilityBase tmp(*this);
@@ -80,10 +133,12 @@ public:
 		tmp.c += other.c;
 		tmp.g += other.g;
 		tmp.t += other.t;
+		tmp.setTop(other);
 		return tmp;
 	}
 	ProbabilityBase &operator+=(const ProbabilityBase &other) {
 		*this = *this + other;
+		setTop(*this);
 		return *this;
 	}
 	ProbabilityBase operator*(const ProbabilityBase &other) {
@@ -92,14 +147,86 @@ public:
 		tmp.c *= other.c;
 		tmp.g *= other.g;
 		tmp.t *= other.t;
+		tmp.setTop(other);
 		return tmp;
 	}
 	ProbabilityBase &operator*=(const ProbabilityBase &other) {
 		*this = *this * other;
+		setTop(*this);
+		return *this;
+	}
+	ProbabilityBase &operator*=(double factor) {
+		a *= factor;
+		c *= factor;
+		g *= factor;
+		t *= factor;
 		return *this;
 	}
 	double sum() const {
 		return a+c+g+t;
+	}
+	double getA() const {
+		if (best == 'A')
+			return top;
+		else
+			return a;
+	}
+	double getC() const {
+		if (best == 'C')
+			return top;
+		else
+			return c;
+	}
+	double getG() const {
+		if (best == 'G')
+			return top;
+		else
+			return g;
+	}
+	double getT() const {
+		if (best == 'T')
+			return top;
+		else
+			return t;
+	}
+
+	BaseQual getBaseQual() const {
+    	if (a > c) {
+    		// A/G/T
+    		if (a > g) {
+    			// A/T
+    			if (a > t) {
+    				return BaseQual('A', getA());// A
+    			} else {
+    				return BaseQual('T', getT());// T
+    			}
+    		} else {
+    			// G/T
+    			if (g > t) {
+    				return BaseQual('G', getG());// G
+    			} else {
+    				return BaseQual('T', getT());// T
+    			}
+    		}
+    	} else {
+    		// C/G/T
+    		if (c > g) {
+    			// C/T
+    			if (c > t) {
+    				return BaseQual('C', getC());// C
+    			} else {
+    				return BaseQual('T', getT());// T
+    			}
+    		} else {
+    			// G/T
+    			if (g > t) {
+    				return BaseQual('G', getG());// G
+    			} else {
+    				return BaseQual('T', getT());// T
+    			}
+    		}
+    	}
+    	throw;
 	}
 };
 
@@ -109,6 +236,9 @@ private:
 public:
 	ProbabilityBases(size_t _size) : _bases(_size) {}
 	void resize(size_t _size) { _bases.resize(_size); }
+	size_t size() const {
+		return _bases.size();
+	}
 	double sum() const {
 		double sum = 0.0;
 		for(int i = 0; i < (int) _bases.size(); i++)
@@ -116,6 +246,9 @@ public:
 		return sum;
 	}
 	ProbabilityBase &operator[](size_t idx) {
+		return _bases[idx];
+	}
+	const ProbabilityBase &operator[](size_t idx) const {
 		return _bases[idx];
 	}
 
@@ -137,13 +270,15 @@ public:
 		}
 		return *this;
 	}
+	ProbabilityBases &operator*=(double factor) {
+		for(int i = 0; i < (int) _bases.size(); i++) {
+		    _bases[i] *= factor;
+		}
+		return *this;
+	}
 };
 
 class Read : public Sequence {
-public:
-	static const char REF_QUAL = 0xff;
-	static const char FASTQ_START_CHAR = 64;
-	static const char PRINT_REF_QUAL = 126;
 
 
 private:
@@ -197,11 +332,16 @@ public:
 		ProbabilityBases probs(fasta.length());
 		for(int i = 0; i < (int) fasta.length(); i++) {
 			double prob = qualityToProbability[ (unsigned char) quals[i] ];
+			if (prob < 0.2501) {
+				prob = 0.2501; // slightly better than random...
+			}
+			double otherProb = (1.0 - prob) / 3.0;
+			ProbabilityBase &base = probs[i];
 			switch (fasta[i]) {
-			case 'A': probs[i].a += prob; break;
-			case 'C': probs[i].c += prob; break;
-			case 'G': probs[i].g += prob; break;
-			case 'T': probs[i].t += prob; break;
+			case 'A': base.a += prob; base.c += otherProb; base.g += otherProb; base.t += otherProb; break;
+			case 'C': base.c += prob; base.a += otherProb; base.g += otherProb; base.t += otherProb; break;
+			case 'G': base.g += prob; base.a += otherProb; base.c += otherProb; base.t += otherProb; break;
+			case 'T': base.t += prob; base.a += otherProb; base.c += otherProb; base.g += otherProb; break;
 			}
 		}
 		return probs;
@@ -220,6 +360,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.22  2010-03-15 18:35:17  regan
+// minor refactor and added consensus read
+//
 // Revision 1.21  2010-03-14 16:56:59  regan
 // added probability base classes
 //
