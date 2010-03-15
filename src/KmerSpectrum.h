@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.27 2010-03-14 16:55:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.28 2010-03-15 07:43:48 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -942,6 +942,9 @@ public:
 	}
 
 	unsigned long resetSingletons() {
+		if (Options::getMinDepth() <= 1) {
+			return 0;
+		}
 		unsigned long singletonCount = singleton.size();
 		purgedSingletons += singletonCount;
 		std::cerr << "Purging Singletons: " << singletonCount << " (" << purgedSingletons << " total so far)" << std::endl;
