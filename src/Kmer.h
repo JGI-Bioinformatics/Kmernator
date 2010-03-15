@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.76 2010-03-14 17:16:30 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.77 2010-03-15 14:59:50 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -449,14 +449,10 @@ public:
 		return ss.str();
 	}
 
-
-	TrackingData &operator+(const TrackingData &other) {
+	TrackingData &add(const TrackingData &other) {
 		count += other.count;
 		weightedCount += other.weightedCount;
 		return *this;
-	}
-	TrackingData &add(const TrackingData &other) {
-		return *this + other;
 	}
 	TrackingData &operator=(const TrackingDataSingleton &other);
 	TrackingData &operator=(const TrackingDataWithAllReads &other);
@@ -490,13 +486,11 @@ public:
 	inline double getNormalizedDirectionBias() const {
 		return (double) directionBias / (double) count;
 	}
-	TrackingDataWithDirection &operator+(const TrackingDataWithDirection &other) {
+
+	TrackingDataWithDirection &add(const TrackingDataWithDirection &other) {
 		TrackingData::add((TrackingData) other);
 		directionBias += other.directionBias;
 		return *this;
-	}
-	TrackingDataWithDirection &add(const TrackingDataWithDirection &other) {
-		return *this + other;
 	}
 
 };
@@ -530,13 +524,11 @@ public:
 		ReadPositionWeightVector dummy(getCount(), dummy1);
 		return dummy;
 	}
-	TrackingDataWithLastRead &operator+(const TrackingDataWithLastRead &other) {
+
+	TrackingDataWithLastRead &add(const TrackingDataWithLastRead &other) {
 		TrackingDataWithDirection::add((TrackingDataWithDirection) other);
 		readPosition = other.readPosition;
 		return *this;
-	}
-	TrackingDataWithLastRead &add(const TrackingDataWithLastRead &other) {
-		return *this + other;
 	}
 
 
@@ -778,14 +770,11 @@ public:
 		}
 		return *this;
 	}
-	TrackingDataWithAllReads &operator+(const TrackingDataWithAllReads &other) {
+	TrackingDataWithAllReads &add(const TrackingDataWithAllReads &other) {
 		instances.insert(instances.end(), other.instances.begin(), other.instances.end());
 		directionBias += other.directionBias;
 		weightedCount += other.weightedCount;
 		return *this;
-	}
-	TrackingDataWithAllReads &add(const TrackingDataWithAllReads &other) {
-		return *this + other;
 	}
 
 	TrackingDataWithAllReads &add(const TrackingDataSingleton &other) {
@@ -867,12 +856,9 @@ public:
 		count = (DataType) other.getWeightedCount();
 		return *this;
 	}
-	TrackingDataMinimal &operator+(const TrackingDataMinimal &other) {
+	TrackingDataMinimal &add(const TrackingDataMinimal &other) {
 		count += other.count;
 		return *this;
-	}
-	TrackingDataMinimal &add(const TrackingDataMinimal &other) {
-		return *this + other;
 	}
 
 };
@@ -2012,23 +1998,23 @@ public:
        if (getNumBuckets() != src.getNumBuckets()) {
     	   throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
        }
+       BucketType merged;
 #ifdef _USE_OPENMP
-#pragma omp parallel for
+#pragma omp parallel for private(merged)
 #endif
        for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
     	   // buckets are sorted so perform a sorted merge by bucket
     	   BucketType &a = _buckets[idx];
     	   BucketType &b = src._buckets[idx];
-    	   IndexType capacity = std::max(a.capacity(), b.capacity());
-    	   capacity = std::max(a.size() + b.size(), capacity);
-    	   BucketType merged;
+    	   IndexType capacity = std::max(a.size(), b.size());
+
     	   merged.reserve(capacity);
            IndexType idxA = 0;
            IndexType idxB = 0;
            while (idxA < a.size() || idxB < b.size()) {
         	   int cmp = _compare(a, b, idxA, idxB);
         	   if (cmp == 0) {
-        		   merged.append(a[idxA], a.valueAt(idxA) + b.valueAt(idxB));
+        		   merged.append(a[idxA], a.valueAt(idxA).add(b.valueAt(idxB)));
         		   idxA++; idxB++;
         	   } else {
         		   if (cmp < 0) {
@@ -2041,37 +2027,42 @@ public:
         	   }
            }
 
-           _buckets[idx].swap(merged);
-           merged.reset(true);
+           a.swap(merged);
+           if (b.capacity() > merged.capacity()) {
+        	   b.swap(merged);
+           }
+           merged.reset(false);
            b.reset(true);
        }
 	}
 
 	template< typename OtherDataType >
 	void mergePromote(KmerMap &src, KmerMap< OtherDataType > &mergeDest) {
+		// TODO fixme
+		throw std::invalid_argument("This method is broken for threaded execution somehow (even with pragmas disabled)");
 	       if (getNumBuckets() != src.getNumBuckets()) {
 	    	   throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
 	       }
-#ifdef _USE_OPENMP
-#pragma omp parallel for
-#endif
+	       // calculated chunk size to ensure thread safety of merge operation
+	       int chunkSize = mergeDest.getNumBuckets() / src.getNumBuckets();
+	       if (chunkSize <= 1)
+	    	   chunkSize = 2;
+	       BucketType merged;
+//#ifdef _USE_OPENMP
+//#pragma omp parallel for private(merged) schedule(static, chunkSize)
+//#endif
 	       for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
 	    	   // buckets are sorted so perform a sorted merge by bucket
 	    	   BucketType &a = _buckets[idx];
 	    	   BucketType &b = src._buckets[idx];
-	    	   IndexType capacity = std::max(a.capacity(), b.capacity());
-	    	   capacity = std::max(a.size() + b.size(), capacity);
-	    	   BucketType merged;
+	    	   IndexType capacity = std::max(a.size(), b.size());
 	    	   merged.reserve(capacity);
 	           IndexType idxA = 0;
 	           IndexType idxB = 0;
 	           while (idxA < a.size() || idxB < b.size()) {
 	        	   int cmp = _compare(a, b, idxA, idxB);
 	        	   if (cmp == 0) {
-#pragma omp critical
-	        		   {
-	        		     mergeDest[ a[idxA] ].add( a.valueAt(idxA) ).add( b.valueAt(idxB) );
-	        		   }
+	        		   mergeDest[ a[idxA] ].add( a.valueAt(idxA) ).add( b.valueAt(idxB) );
 	        		   idxA++; idxB++;
 	        	   } else {
 	        		   if (cmp < 0) {
@@ -2084,8 +2075,11 @@ public:
 	        	   }
 	           }
 
-	           _buckets[idx].swap(merged);
-	           merged.reset(true);
+	           a.swap(merged);
+	           if (b.capacity() > merged.capacity()) {
+	               b.swap(merged);
+	           }
+	           merged.reset(false);
 	           b.reset(true);
 	       }
 	}
@@ -2214,6 +2208,10 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.77  2010-03-15 14:59:50  regan
+// minor refactor
+// disabled mergePromote as there is some error/race condition
+//
 // Revision 1.76  2010-03-14 17:16:30  regan
 // bugfix
 //
