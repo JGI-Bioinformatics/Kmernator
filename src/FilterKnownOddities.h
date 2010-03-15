@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.11 2010-03-15 15:00:08 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.12 2010-03-15 18:06:17 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -284,7 +284,7 @@ public:
 	  unsigned long affectedCount = 0;
 
 	  // select the number of bytes from each pair to scan
-	  unsigned char bytes = sequenceLength / 4 / 2;
+	  unsigned char bytes = sequenceLength / 4;
 	  if (bytes == 0) {
 			bytes = 1;
 	  }
@@ -308,8 +308,9 @@ public:
 		  tmpKmerv[i].resize(1);
 		  tmpKmerv[i].valueAt(0) = 1.0;
 		}
+		ReadSetSizeType pairSize =  reads.getPairSize();
 #pragma omp parallel for
-		for(long pairIdx = 0; pairIdx < reads.getPairSize(); pairIdx++) {
+		for(long pairIdx = 0; pairIdx < pairSize; pairIdx++) {
 			Pair &pair = reads.getPair(pairIdx);
 			int threadNum = 0;
 #ifdef _USE_OPENMP
@@ -325,15 +326,15 @@ public:
 				  memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
 			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read2.getTwoBitSequence(), bytes);
 			      // store the pairIdx (not readIdx)
-
+			      ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
 			    } else {
 			      // read2 + read1
 			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read2.getTwoBitSequence(), bytes);
 			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read1.getTwoBitSequence(), bytes);
-			      // store the pairIdx (not readIdx)
-
+			      // store the pairIdx (not readIdx) + pairSize
+			      ksv[threadNum].append(tmpKmerv[threadNum], pairIdx + pairSize);
 			    }
-			    ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
+
 			  }
 			}
 		}
@@ -354,32 +355,62 @@ public:
 		// TODO parallelize (partition by bucket range)
 		// TODO create a (new) pair of consensus sequences from the fragments
 
+		ReadSet newReads;
 		for(KS::WeakIterator it = ks.weak.begin(); it != ks.weak.end(); it++) {
 		    if (it->value().getCount() >= cutoffThreshold) {
 		    	RPW rpw = it->value().getEachInstance();
 
-		    	ReadSet tmpReadSet;
+		    	ReadSet tmpReadSet1;
+		    	ReadSet tmpReadSet2;
+
+		    	// std::stringstream out1, out2, out1a, out2a;
 
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
 		    		// iterator readId is actually the pairIdx built above
 		    		ReadSetSizeType pairIdx = rpwit->readId;
 
+		    		bool rev = pairIdx >= pairSize;
+		    		if (rev) {
+		    			pairIdx -= pairSize;
+		    		}
 		    		Pair &pair = reads.getPair(pairIdx);
-		    		const Read &read1 = reads.getRead(pair.read1);
-		    		const Read &read2 = reads.getRead(pair.read2);
+		    		const Read &read1 = reads.getRead(!rev ? pair.read1 : pair.read2);
+		    		const Read &read2 = reads.getRead(!rev ? pair.read2 : pair.read1);
 
-		    		Read tmpRead("", read1.getFasta() + read2.getFasta(), read1.getQuals() + read2.getQuals());
-		    		tmpReadSet.append( tmpRead );
+		    		tmpReadSet1.append( read1 );
+		    		tmpReadSet2.append( read2 );
+		    		//out1 << read1.getFasta() << std::endl;
+		    		//out1a << read1.getQuals() << std::endl;
+		    		//out2 << read2.getFasta() << std::endl;
+		    		//out2a << read2.getQuals() << std::endl;
 		    	}
 
-		    	ReadSetSizeType readIdx = tmpReadSet.getCentroidRead();
-		    	ReadSetSizeType count = 0;
+		    	Read consensus1 = tmpReadSet1.getConsensusRead();
+		    	Read consensus2 = tmpReadSet2.getConsensusRead();
+		    	newReads.append(consensus1);
+		    	newReads.append(consensus2);
+
+		    	
+		    	//	std::cerr << consensus1.getName() << std::endl
+		    	//	<< out1.str() << consensus1.getFasta() << std::endl << out1a.str()
+		    	//	<< consensus1.getQuals() << std::endl;
+		    	//	std::cerr << consensus2.getName() << std::endl
+		    	//	<< out2.str() << consensus2.getFasta() << std::endl << out2a.str()
+		    	//	<< consensus2.getQuals() << std::endl;
+		    	
+
+		    	//ReadSetSizeType readIdx = tmpReadSet.getCentroidRead();
+		    	//ReadSetSizeType count = 0;
 
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
-		    	    if (count++ == readIdx)
-		    	    	continue;
+		    	    //if (count++ == readIdx)
+		    	    //	continue;
 		    	    ReadSetSizeType pairIdx = rpwit->readId;
+		    	    bool rev = pairIdx >= pairSize;
+		    	    if (rev) {
+		    	    	pairIdx -= pairSize;
+		    	    }
 		    	    Pair &pair = reads.getPair(pairIdx);
 		    	    Read &read1 = reads.getRead(pair.read1);
 		    	    Read &read2 = reads.getRead(pair.read2);
@@ -387,8 +418,12 @@ public:
 		    		read2.markupBases(0, -1, 'X');
 		    		affectedCount += 2;
 		    	}
+
 		    }
 		}
+		std::cerr << "Built " << newReads.getSize() << " new consensus reads" << std::endl;
+		newReads.identifyPairs();
+		reads.append(newReads);
 	  }
       KmerSizer::set(oldKmerSize);
 	  return affectedCount;
