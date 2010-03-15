@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.26 2010-03-08 22:14:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.27 2010-03-15 14:58:42 regan Exp $
 //
 
 #include <cstring>
@@ -123,7 +123,8 @@ SequenceLengthType Sequence::getTwoBitEncodingSequenceLength() const {
 
 BaseLocationVectorType Sequence::getMarkups() const {
 	SequenceLengthType size = *_getMarkupBasesCount();
-	BaseLocationVectorType markups(size);
+	BaseLocationVectorType markups;
+	markups.reserve(size);
 	if (size > 0) {
 		const BaseLocationType *ptr = _getMarkupBases();
 		for (unsigned int i = 0; i < size; i++)
@@ -251,6 +252,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.27  2010-03-15 14:58:42  regan
+// fixed major bug in markups
+//
 // Revision 1.26  2010-03-08 22:14:38  regan
 // replaced zero bases with markup bases to mask out reads that match the filter pattern
 // bugfix in overrunning the mask
