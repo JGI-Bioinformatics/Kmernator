@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.20 2010-03-14 16:56:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.21 2010-03-15 18:07:01 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -86,8 +86,8 @@ public:
 	void appendAllFiles(Options::FileListType &files);
 	void appendFastaFile(std::string &is);
 
-	void append(ReadSet &reads);
-	void append(Read &read) {
+	void append(const ReadSet &reads);
+	void append(const Read &read) {
 		_reads.push_back(read);
 	}
 
@@ -139,8 +139,11 @@ public:
 		return readIdxs;
 	}
 
+	ProbabilityBases getProbabilityBases() const;
 	ReadSetSizeType getCentroidRead() const;
 	ReadSetSizeType getCentroidRead(const ProbabilityBases &probs) const;
+	Read getConsensusRead() const;
+	static Read getConsensusRead(const ProbabilityBases &probs, std::string name);
 
 protected:
 	void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
@@ -170,6 +173,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.21  2010-03-15 18:07:01  regan
+// minor refactor and added consensus read
+//
 // Revision 1.20  2010-03-14 16:56:38  regan
 // added centroid methods
 // minor refactor

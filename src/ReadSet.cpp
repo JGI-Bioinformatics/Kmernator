@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.30 2010-03-15 07:44:30 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.31 2010-03-15 18:06:50 regan Exp $
 //
 
 #include <exception>
@@ -446,7 +446,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 
 }
 
-void ReadSet::append(ReadSet &reads) {
+void ReadSet::append(const ReadSet &reads) {
 	unsigned long oldSize = _reads.size();
 	unsigned long newSize = oldSize + reads._reads.size();
 	_reads.resize(newSize);
@@ -464,7 +464,7 @@ void ReadSet::append(ReadSet &reads) {
 #pragma omp parallel for
 #endif
 	for (long i = 0; i < (long) reads._pairs.size(); i++) {
-		Pair &tmp = reads._pairs[i];
+		const Pair &tmp = reads._pairs[i];
 		_pairs[oldPairSize + i]
 				= Pair((tmp.read1 == MAX_READ_IDX ? MAX_READ_IDX : tmp.read1
 						+ oldSize), (tmp.read2 == MAX_READ_IDX ? MAX_READ_IDX
@@ -719,12 +719,17 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	return _pairs.size();
 }
 
-ReadSet::ReadSetSizeType ReadSet::getCentroidRead() const {
+ProbabilityBases ReadSet::getProbabilityBases() const {
 	ProbabilityBases probs(0);
 	for(ReadSetSizeType readIdx = 0 ; readIdx < getSize(); readIdx++) {
-		const Read &read = getRead(readIdx);
+	    const Read &read = getRead(readIdx);
 		probs += read.getProbabilityBases();
-	}
+    }
+	probs *= 1.0 / (double) getSize();
+	return probs;
+}
+ReadSet::ReadSetSizeType ReadSet::getCentroidRead() const {
+	ProbabilityBases probs = getProbabilityBases();
 	return getCentroidRead(probs);
 }
 
@@ -741,8 +746,26 @@ ReadSet::ReadSetSizeType ReadSet::getCentroidRead(const ProbabilityBases &probs)
 	return bestRead;
 }
 
+Read ReadSet::getConsensusRead() const {
+	ProbabilityBases probs = getProbabilityBases();
+    return getConsensusRead(probs, string("C-") + getRead(0).getName());
+}
+Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) {
+    stringstream fasta;
+    stringstream qual;
+    for(size_t i = 0 ; i < probs.size(); i++) {
+    	BaseQual base = probs[i].getBaseQual();
+    	fasta << base.base;
+    	qual << base.qual;
+    }
+    return Read(name, fasta.str(), qual.str());
+}
+
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.31  2010-03-15 18:06:50  regan
+// minor refactor and added consensus read
+//
 // Revision 1.30  2010-03-15 07:44:30  regan
 // better logging to track down a non-existent bug (file was corrupted)
 //
