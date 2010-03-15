@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.12 2010-03-15 18:06:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.13 2010-03-15 18:35:02 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -179,14 +179,15 @@ public:
 			if (lastByte < maskBytes)
 				continue;
 
-			TwoBitEncoding *ptr = read.getTwoBitSequence() + lastByte;
+
 			CountMap::iterator it;
 
 			Kmer::NumberType chunk = 0;
 			for (unsigned long loop = lastByte + maskBytes; loop >= maskBytes; loop--) {
 				// shift one byte
 				chunk <<= 8;
-				TwoBitEncoding newByte =  *(ptr--);
+				TwoBitEncoding *ptr = read.getTwoBitSequence() + loop - maskBytes;
+				TwoBitEncoding newByte = *ptr;
 				chunk |= newByte;
 				unsigned long bytes = loop - maskBytes;
 				if (Options::getDebug() >= 3){
@@ -216,9 +217,7 @@ public:
 							counts[baseShift][key]++;
 							unsigned long offset = bytes * 4 + baseShift;
 							read.markupBases(offset, length, 'X');
-							// read changed... now update ptr
-							ptr = read.getTwoBitSequence() + lastByte - (loop-maskBytes);
-							if (Options::getDebug()>=2 && ! wasAffected) {
+							if (Options::getDebug()>=2) {
 									std::cerr << "FilterMatch to "
 									        << readIdx << " "
 											<< read.getName() << " against "
