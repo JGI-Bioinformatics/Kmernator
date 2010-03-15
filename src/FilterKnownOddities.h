@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.10 2010-03-15 04:38:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.11 2010-03-15 15:00:08 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -218,7 +218,7 @@ public:
 							read.markupBases(offset, length, 'X');
 							// read changed... now update ptr
 							ptr = read.getTwoBitSequence() + lastByte - (loop-maskBytes);
-							if (Options::getDebug()>2) {
+							if (Options::getDebug()>=2 && ! wasAffected) {
 									std::cerr << "FilterMatch to "
 									        << readIdx << " "
 											<< read.getName() << " against "
@@ -304,7 +304,7 @@ public:
 		KS::Vector ksv(numThreads);
 		KmerWeights::Vector tmpKmerv(numThreads);
 		for(int i = 0; i < numThreads; i++) {
-		  ksv[i] = KS(1024*64);
+		  ksv[i] = KS(reads.getPairSize() / 64 / numThreads, false);
 		  tmpKmerv[i].resize(1);
 		  tmpKmerv[i].valueAt(0) = 1.0;
 		}
@@ -325,14 +325,15 @@ public:
 				  memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
 			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read2.getTwoBitSequence(), bytes);
 			      // store the pairIdx (not readIdx)
-			      ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
+
 			    } else {
 			      // read2 + read1
 			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read2.getTwoBitSequence(), bytes);
 			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read1.getTwoBitSequence(), bytes);
 			      // store the pairIdx (not readIdx)
-			      ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
+
 			    }
+			    ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
 			  }
 			}
 		}
@@ -341,13 +342,18 @@ public:
 			  std::cerr << "spectrum " << i << std::endl;
 			  ksv[i].printHistograms();
 		  }
+		} else {
+			std::cerr << "merging duplicate fragment spectrums" << std::endl;
 		}
+
 		KS::mergeVector(ksv, 2);
 		KS &ks = ksv[0];
 
 		// analyze the spectrum
 		ks.printHistograms();
 		// TODO parallelize (partition by bucket range)
+		// TODO create a (new) pair of consensus sequences from the fragments
+
 		for(KS::WeakIterator it = ks.weak.begin(); it != ks.weak.end(); it++) {
 		    if (it->value().getCount() >= cutoffThreshold) {
 		    	RPW rpw = it->value().getEachInstance();
