@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.28 2010-03-15 07:43:48 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.29 2010-03-15 15:00:21 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -75,10 +75,13 @@ public:
 	WeakMapType weak;
 	SingletonMapType singleton;
 	bool hasSolids;
+	bool hasSingletons;
 	unsigned long purgedSingletons;
 
 public:
-	KmerSpectrum(unsigned long buckets = 0): solid(buckets/64), weak(buckets/8), singleton(buckets), hasSolids(false), purgedSingletons(0)
+	KmerSpectrum(unsigned long buckets = 0, bool separateSingletons = true):
+		solid(buckets/64), weak(separateSingletons ? buckets/8 : buckets), singleton(separateSingletons ? buckets : 1),
+		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0)
 	{
 		// set the minimum weight that will be used to track kmers
 		// based on the given options
@@ -96,6 +99,7 @@ public:
 		this->solid = other.solid;
 		this->singleton = other.singleton;
 		this->hasSolids = other.hasSolids;
+		this->hasSingletons = other.hasSingletons;
 		this->purgedSingletons = other.purgedSingletons;
 		return *this;
 	}
@@ -141,10 +145,16 @@ public:
 	}
 
 	bool hasSingleton( const Kmer &kmer ) const {
-		return singleton.exists( kmer );
+		if (hasSingletons)
+		    return singleton.exists( kmer );
+		else
+			return false;
 	}
 	SingletonElementType getIfExistsSingleton( const Kmer &kmer ) {
-		return singleton.getElementIfExists( kmer );
+		if (hasSingletons)
+		    return singleton.getElementIfExists( kmer );
+		else
+			return SingletonElementType();
 	}
 	SingletonElementType getSingleton( const Kmer &kmer ) {
 		return singleton.getElement( kmer );
@@ -173,7 +183,7 @@ public:
 
 			if (!solidElem.isValid()) {
 				weakElem = spectrum->getIfExistsWeak(kmer);
-				if (!weakElem.isValid())
+				if (spectrum->hasSingletons && !weakElem.isValid())
 				singletonElem = spectrum->getIfExistsSingleton(kmer);
 			}
 		}
@@ -894,9 +904,15 @@ public:
 						singleton.remove( least );
 
 					} else {
-						// record this new singleton
-						SingletonElementType elem = getSingleton(least);
-						elem.value().track( weight, keepDirection, readIdx, j );
+						if (hasSingletons) {
+						    // record this new singleton
+						    SingletonElementType elem = getSingleton(least);
+						    elem.value().track( weight, keepDirection, readIdx, j);
+						} else {
+							// record in the weak spectrum
+							WeakElementType weakElem = getWeak( least );
+							weakElem.value().track( weight, keepDirection, readIdx, j);
+						}
 					}
 				}
 			} else if (Options::getDebug() > 2){
@@ -1391,9 +1407,11 @@ public:
 		for (unsigned int i = 1; i < vec.size(); i++) {
 			vec[0].weak.mergeAdd(vec[i].weak);
 		}
-		// singleton
-		for (unsigned int i = 1; i < vec.size(); i++) {
+		if (vec[0].hasSingletons) {
+		  // singleton
+		  for (unsigned int i = 1; i < vec.size(); i++) {
 			vec[0].singleton.mergePromote(vec[i].singleton, vec[0].weak);
+		  }
 		}
 		// purge if min > 2
 	}
