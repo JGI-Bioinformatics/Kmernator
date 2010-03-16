@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.3 2010-01-13 23:32:35 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.4 2010-03-16 18:58:10 regan Exp $
 #
  
 cmake_minimum_required(VERSION 2.6)
@@ -32,10 +32,20 @@ target_link_libraries( FilterReads
                               Kmer
                               ReadSet
                               boost_program_options-mt-static )
+                              
+add_executable( Fastq2Fasta Fastq2Fasta )
+target_link_libraries( Fastq2Fasta
+                              Sequence
+                              ReadSet
+                              boost_program_options-mt-static
+                              )
 
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.4  2010-03-16 18:58:10  regan
+# created a simple fastq2fasta program
+#
 # Revision 1.3  2010-01-13 23:32:35  regan
 # new app
 #
