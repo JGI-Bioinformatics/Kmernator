@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.13 2010-03-15 18:35:02 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.14 2010-03-16 18:57:55 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -320,19 +320,16 @@ public:
 			  const Read read2 = reads.getRead(pair.read2);
 			  if ((read1.getMarkupBasesCount() == 0 || read1.getMarkups()[0].second > sequenceLength)
 			     && (read2.getMarkupBasesCount() == 0 || read2.getMarkups()[0].second > sequenceLength)) {
-			    if (memcmp(read1.getTwoBitSequence(), read2.getTwoBitSequence(), bytes) <= 0) {
-				  // read1 + read2
+
+				  // create read1 + the reverse complement of read2
+				  // when it is represented as a kmer, the leastcomplement will be stored
+				  // and properly account for identical fragment pairs
+
 				  memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
-			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read2.getTwoBitSequence(), bytes);
-			      // store the pairIdx (not readIdx)
+			      TwoBitSequence::reverseComplement( read2.getTwoBitSequence(), tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, bytes*4);
+
+				  // store the pairIdx (not readIdx)
 			      ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
-			    } else {
-			      // read2 + read1
-			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read2.getTwoBitSequence(), bytes);
-			      memcpy(tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, read1.getTwoBitSequence(), bytes);
-			      // store the pairIdx (not readIdx) + pairSize
-			      ksv[threadNum].append(tmpKmerv[threadNum], pairIdx + pairSize);
-			    }
 
 			  }
 			}
@@ -352,7 +349,6 @@ public:
 		// analyze the spectrum
 		ks.printHistograms();
 		// TODO parallelize (partition by bucket range)
-		// TODO create a (new) pair of consensus sequences from the fragments
 
 		ReadSet newReads;
 		for(KS::WeakIterator it = ks.weak.begin(); it != ks.weak.end(); it++) {
@@ -369,13 +365,9 @@ public:
 		    		// iterator readId is actually the pairIdx built above
 		    		ReadSetSizeType pairIdx = rpwit->readId;
 
-		    		bool rev = pairIdx >= pairSize;
-		    		if (rev) {
-		    			pairIdx -= pairSize;
-		    		}
 		    		Pair &pair = reads.getPair(pairIdx);
-		    		const Read &read1 = reads.getRead(!rev ? pair.read1 : pair.read2);
-		    		const Read &read2 = reads.getRead(!rev ? pair.read2 : pair.read1);
+		    		const Read &read1 = reads.getRead(pair.read1);
+		    		const Read &read2 = reads.getRead(pair.read2);
 
 		    		tmpReadSet1.append( read1 );
 		    		tmpReadSet2.append( read2 );
@@ -390,14 +382,14 @@ public:
 		    	newReads.append(consensus1);
 		    	newReads.append(consensus2);
 
-		    	
+
 		    	//	std::cerr << consensus1.getName() << std::endl
 		    	//	<< out1.str() << consensus1.getFasta() << std::endl << out1a.str()
 		    	//	<< consensus1.getQuals() << std::endl;
 		    	//	std::cerr << consensus2.getName() << std::endl
 		    	//	<< out2.str() << consensus2.getFasta() << std::endl << out2a.str()
 		    	//	<< consensus2.getQuals() << std::endl;
-		    	
+
 
 		    	//ReadSetSizeType readIdx = tmpReadSet.getCentroidRead();
 		    	//ReadSetSizeType count = 0;
@@ -406,10 +398,7 @@ public:
 		    	    //if (count++ == readIdx)
 		    	    //	continue;
 		    	    ReadSetSizeType pairIdx = rpwit->readId;
-		    	    bool rev = pairIdx >= pairSize;
-		    	    if (rev) {
-		    	    	pairIdx -= pairSize;
-		    	    }
+
 		    	    Pair &pair = reads.getPair(pairIdx);
 		    	    Read &read1 = reads.getRead(pair.read1);
 		    	    Read &read2 = reads.getRead(pair.read2);
