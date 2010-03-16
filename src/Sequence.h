@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.22 2010-03-15 18:35:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.23 2010-03-16 06:42:50 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -56,8 +56,8 @@ public:
 	void setSequence(std::string fasta);
 
 	SequenceLengthType getLength() const;
-	std::string
-			getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
+	std::string getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
+	std::string getFastaNoMarkup() const;
 	SequenceLengthType getMarkupBasesCount() const { return *_getMarkupBasesCount(); }
 	BaseLocationVectorType getMarkups() const;
 
@@ -360,6 +360,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.23  2010-03-16 06:42:50  regan
+// bugfixes
+//
 // Revision 1.22  2010-03-15 18:35:17  regan
 // minor refactor and added consensus read
 //

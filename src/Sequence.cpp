@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.27 2010-03-15 14:58:42 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.28 2010-03-16 06:42:50 regan Exp $
 //
 
 #include <cstring>
@@ -73,7 +73,11 @@ void Sequence::reset() {
 	_length = 0;
 	_data = nullSequence;
 }
-
+string Sequence::getFastaNoMarkup() const {
+	if (_data == nullSequence)
+	    return string("");
+	return TwoBitSequence::getFasta(getTwoBitSequence(), getLength());
+}
 string Sequence::getFasta(SequenceLengthType trimOffset) const {
 	if (_data == nullSequence)
 		return string("");
@@ -87,6 +91,10 @@ string Sequence::getFasta(SequenceLengthType trimOffset) const {
 	string fasta = TwoBitSequence::getFasta(getTwoBitSequence(), len);
 	TwoBitSequence::applyMarkup(fasta, *_getMarkupBasesCount(),
 			_getMarkupBases());
+	// if the first base is masked, the entire sequence is masked
+	if (fasta[0] == 'X') {
+		fasta = string(fasta.length(), 'X');
+	}
 
 	return fasta;
 }
@@ -127,8 +135,14 @@ BaseLocationVectorType Sequence::getMarkups() const {
 	markups.reserve(size);
 	if (size > 0) {
 		const BaseLocationType *ptr = _getMarkupBases();
-		for (unsigned int i = 0; i < size; i++)
-			markups.push_back(*(ptr++));
+		// if the first base is masked, then the whole sequence is masked
+		if (ptr->first == 'X') {
+			for(unsigned int i = 0 ; i < getLength(); i++)
+				markups.push_back(BaseLocationType('X', i));
+		} else {
+		    for (unsigned int i = 0; i < size; i++)
+			    markups.push_back(*(ptr++));
+		}
 	}
 	return markups;
 }
@@ -194,7 +208,17 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
 	SequenceLengthType len = getLength();
 	if (offset + length > len)
 		length = len - offset;
-	fasta.replace(offset, length, length, mask);
+
+	// save some memory if the first base is being masked, the whole sequence is masked
+	if ((fasta.length()>0 && fasta[0] == 'X')
+		|| (offset == 0 && mask == 'X')) {
+		fasta = getFastaNoMarkup();
+		offset = 0;
+		length = 1;
+		mask = 'X';
+	}
+    fasta.replace(offset, length, length, mask);
+
 
 	reset();
 	setRead(name, fasta, qual);
@@ -221,7 +245,7 @@ string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting) const {
 	    return string("");
     } else {
 		// to support printing paired reads where 1 read is trimmed to 0
-		return string(1, FASTQ_START_CHAR);
+		return string(1, FASTQ_START_CHAR+1);
 	}
 }
 
@@ -252,6 +276,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.28  2010-03-16 06:42:50  regan
+// bugfixes
+//
 // Revision 1.27  2010-03-15 14:58:42  regan
 // fixed major bug in markups
 //
