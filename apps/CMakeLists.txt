@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.4 2010-03-16 18:58:10 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.5 2010-04-14 15:58:34 regan Exp $
 #
  
 cmake_minimum_required(VERSION 2.6)
@@ -39,10 +39,23 @@ target_link_libraries( Fastq2Fasta
                               ReadSet
                               boost_program_options-mt-static
                               )
+set_source_files_properties( Fastq2FastaQual
+                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
+add_executable( Fastq2FastaQual Fastq2FastaQual )
+target_link_libraries( Fastq2FastaQual
+                              Sequence
+                              ReadSet
+                              boost_program_options-mt-static
+                              boost_iostreams-mt-static
+                              )
 
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.5  2010-04-14 15:58:34  regan
+# fixed and added fastq2fastaqual
+#
 # Revision 1.4  2010-03-16 18:58:10  regan
 # created a simple fastq2fasta program
 #
