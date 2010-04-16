@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.9 2010-03-04 06:37:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.10 2010-04-16 22:44:18 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
@@ -23,6 +23,9 @@
 #include <fstream>
 
 #include <execinfo.h>
+
+#include "config.h"
+#include "Sequence.h"
 
 class StackTrace {
 public:
@@ -175,6 +178,7 @@ public:
 			ss << " statm: " << buffer;
 		}
 
+		ss << " Sequences: " << Sequence::constructCount << " " << Sequence::destructCount;
 		return ss.str();
 	}
 
@@ -184,6 +188,15 @@ public:
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.10  2010-04-16 22:44:18  regan
+// merged HEAD with changes for mmap and intrusive pointer
+//
+// Revision 1.9.2.2  2010-04-15 17:29:02  regan
+// checkpoint, working with some optimizations
+//
+// Revision 1.9.2.1  2010-04-04 15:58:02  regan
+// fixed assertion code to obey debug rules
+//
 // Revision 1.9  2010-03-04 06:37:31  regan
 // bugfix
 //

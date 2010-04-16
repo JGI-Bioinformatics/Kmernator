@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.14 2010-03-16 18:57:55 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.15 2010-04-16 22:44:18 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -173,7 +173,12 @@ public:
 			Read &read = reads.getRead(readIdx);
 			bool wasAffected = false;
 
-			//std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
+			if (Options::getDebug() > 2) {
+#ifdef _USE_OPENMP
+#pragma omp critical
+#endif
+			  std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
+			}
 
 			unsigned long lastByte = read.getTwoBitEncodingSequenceLength() - 1;
 			if (lastByte < maskBytes)
@@ -249,9 +254,8 @@ public:
 		// TODO logic to check Options
 		std::stringstream ss;
 		ss << ">PrimerDimer" << std::endl;
-		ss
-				<< "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGAGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTTG"
-				<< std::endl;
+		ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGAGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTTG"
+		   << std::endl;
 		//ss << ">PE-Adaptor-P" << std::endl;
 		//ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG" << std::endl;
 		//ss << ">PE-PCR-PRIMER1" << std::endl;
@@ -279,7 +283,7 @@ public:
 	typedef ReadSet::Pair Pair;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 
-	static unsigned long filterIdenticalFragmentPairs(ReadSet &reads, unsigned char sequenceLength = 16, unsigned int cutoffThreshold = 2) {
+	static unsigned long filterDuplicateFragmentPairs(ReadSet &reads, unsigned char sequenceLength = 16, unsigned int cutoffThreshold = 2) {
 	  unsigned long affectedCount = 0;
 
 	  // select the number of bytes from each pair to scan
@@ -318,20 +322,29 @@ public:
 			if (reads.isValidRead(pair.read1) && reads.isValidRead(pair.read2)) {
 			  const Read read1 = reads.getRead(pair.read1);
 			  const Read read2 = reads.getRead(pair.read2);
-			  if ((read1.getMarkupBasesCount() == 0 || read1.getMarkups()[0].second > sequenceLength)
-			     && (read2.getMarkupBasesCount() == 0 || read2.getMarkups()[0].second > sequenceLength)) {
+			  if (read1.isDiscarded() || read2.isDiscarded())
+				  continue;
 
-				  // create read1 + the reverse complement of read2
-				  // when it is represented as a kmer, the leastcomplement will be stored
-				  // and properly account for identical fragment pairs
+			  // create read1 + the reverse complement of read2
+			  // when it is represented as a kmer, the leastcomplement will be stored
+			  // and properly account for duplicate fragment pairs
 
+			  Sequence::BaseLocationVectorType markups = read1.getMarkups();
+			  if (markups.empty() || markups[0].second > sequenceLength) {
 				  memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
-			      TwoBitSequence::reverseComplement( read2.getTwoBitSequence(), tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, bytes*4);
-
-				  // store the pairIdx (not readIdx)
-			      ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
-
+			  } else {
+				  continue;
 			  }
+			  markups = read2.getMarkups();
+			  if (markups.empty() || markups[0].second > sequenceLength) {
+				  TwoBitSequence::reverseComplement( read2.getTwoBitSequence(), tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, bytes*4);
+			  } else {
+				  continue;
+			  }
+
+			  // store the pairIdx (not readIdx)
+			  ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
+
 			}
 		}
 		if (Options::getDebug() > 3) {
@@ -402,14 +415,16 @@ public:
 		    	    Pair &pair = reads.getPair(pairIdx);
 		    	    Read &read1 = reads.getRead(pair.read1);
 		    	    Read &read2 = reads.getRead(pair.read2);
-		    		read1.markupBases(0, -1, 'X');
-		    		read2.markupBases(0, -1, 'X');
+		    		read1.discard();
+		    		read2.discard();
 		    		affectedCount += 2;
 		    	}
 
 		    }
 		}
-		std::cerr << "Built " << newReads.getSize() << " new consensus reads" << std::endl;
+		std::cerr << "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() << std::endl;
+		ks.reset();
+		std::cerr << "Built " << newReads.getSize() << " new consensus reads: " <<  MemoryUtils::getMemoryUsage() << std::endl;
 		newReads.identifyPairs();
 		reads.append(newReads);
 	  }

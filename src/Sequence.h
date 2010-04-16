@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.23 2010-03-16 06:42:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.24 2010-04-16 22:44:18 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -6,22 +6,38 @@
 #include <string>
 #include <vector>
 
-#include <tr1/memory>
+#include <boost/shared_ptr.hpp>
 
+#include "config.h"
 #include "TwoBitSequence.h"
+#include "Utils.h"
 
 class Sequence {
 public:
-	static const char REF_QUAL = 0xff;
-	static const char FASTQ_START_CHAR = 64;
-	static const char PRINT_REF_QUAL = 126;
+	static const char REF_QUAL = KoMer::REF_QUAL;
+	static const char FASTQ_START_CHAR = KoMer::FASTQ_START_CHAR;
+	static const char PRINT_REF_QUAL = KoMer::PRINT_REF_QUAL;
+
+	static long constructCount;
+	static long destructCount;
 
 public:
 	typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
-	const static SequenceLengthType MAX_SEQUENCE_LENGTH =
-			(SequenceLengthType) -1;
+	typedef TwoBitSequenceBase::SequenceLengthType1 SequenceLengthType1;
+	typedef TwoBitSequenceBase::SequenceLengthType2 SequenceLengthType2;
 	typedef TwoBitSequenceBase::BaseLocationType BaseLocationType;
+	typedef TwoBitSequenceBase::BaseLocationType1 BaseLocationType1;
+	typedef TwoBitSequenceBase::BaseLocationType2 BaseLocationType2;
 	typedef TwoBitSequenceBase::BaseLocationVectorType BaseLocationVectorType;
+	typedef TwoBitSequenceBase::MarkupElementSizeType MarkupElementSizeType;
+
+	const static SequenceLengthType MAX_SEQUENCE_LENGTH = (SequenceLengthType) -1;
+	typedef KoMer::RecordPtr RecordPtr;
+	typedef TwoBitSequenceBase::TwoBitEncodingPtr DataPtr;
+
+	typedef boost::shared_ptr< Sequence > SequencePtr;
+	typedef std::pair< DataPtr, SequencePtr > CachedSequence;
+	typedef std::vector< CachedSequence > CachedSequenceVector;
 
 private:
 	inline const Sequence &constThis() const {
@@ -29,41 +45,223 @@ private:
 	}
 
 protected:
-	SequenceLengthType _length;
+	static CachedSequenceVector threadCacheSequence;
 
-	/*
-	 _data contains a composite of 1 fields:
-	 +0                 : the sequence as NCBI 2NA (2 bits per base ACGT)
-	 += (length +3)/4   : non-ACGT bases: count followed by array of markups
-	 */
-	std::tr1::shared_ptr<unsigned char> _data;
+protected:
+	char _flags;
+	static const char MMAPED       = 0x80;
+	static const char MARKUPS1     = 0x40;
+	static const char MARKUPS2     = 0x20;
+	static const char MARKUPS4     = MARKUPS1|MARKUPS2; // 0x60
+	static const char HASQUALS     = 0x10;
+	static const char MMAPED_QUALS = 0x08;
+	static const char DISCARDED    = 0x04;
+	static const char _UNUSED_     = 0x02;
+	static const char INVALID      = 0x01;
+	// 0x80 - mmaped data
+	// 0x40 - markups in unsigned char
+	// 0x20 - markups in unsigned short
+	//      - 0x40|0x20 (0x60) markups in unsigned int
+	// 0x10 - hasQuals
+	// 0x08 - mmaped quals
+	// 0x04 - isDiscarded
+	// 0x01 - invalid state
+
+	DataPtr _data;
+	// if mmaped, _data consists of:
+	//   +0 : char * = pointerToMmapedFileRecordStart
+	//   if mmaped_quals
+	//     + sizeof(char*) : char * = pointerToMmapedQualRecordStart
+	//
+	//   if markups4
+	//     +sizeof(char*) : unsigned int = markupsCount
+	//     +sizeof(unsigned int) : = BaseLocationType[markupsCount]
+	//   else if markups1
+	//     +sizeof(char*) : unsigned char = markupsCount
+	//     +sizeof(unsigned char) : = BaseLocationType1[markupsCount]
+	//   else if markups2
+	//     +sizeof(char*) : unsigned short = markupsCount
+	//     +sizeof(unsigned short) : = BaseLocationType2[markupsCount]
+    //
+	// else, _data consists of:
+	//   +0 : SequenceLengthType = sequenceLength
+	//   +sizeof(SequenceLengthType) : = TwoBitEncoding[ (sequenceLength+3)/4 ]
+	//   if markups 1,2 or 4....
+	//     +(sequenceLength+3)/4 : markupsCount 1,2 or 4 & BaseLocationType 1,2 or 4 [markupsCount]
+	//
+
+	void setFlag(char f);
+	void unsetFlag(char f);
+
+	RecordPtr *_getRecord();
+	const RecordPtr *_getRecord() const;
+
+	RecordPtr *_getQualRecord();
+	const RecordPtr *_getQualRecord() const;
+
+	SequenceLengthType *_getLength();
+	const SequenceLengthType *_getLength() const;
+
+	TwoBitEncoding *_getTwoBitSequence();
+	const TwoBitEncoding *_getTwoBitSequence() const;
+
+	SequenceLengthType _getStoredMarkupBasesCount() const;
 
 	SequenceLengthType *_getMarkupBasesCount();
 	const SequenceLengthType *_getMarkupBasesCount() const;
+
+	SequenceLengthType1 *_getMarkupBasesCount1();
+	const SequenceLengthType1 *_getMarkupBasesCount1() const;
+
+	SequenceLengthType2 *_getMarkupBasesCount2();
+	const SequenceLengthType2 *_getMarkupBasesCount2() const;
+
 	BaseLocationType *_getMarkupBases();
 	const BaseLocationType *_getMarkupBases() const;
 
-	void reset();
+	BaseLocationType1 *_getMarkupBases1();
+	const BaseLocationType1 *_getMarkupBases1() const;
 
-	void setSequence(std::string fasta, unsigned int extraBytes);
+	BaseLocationType2 *_getMarkupBases2();
+	const BaseLocationType2 *_getMarkupBases2() const;
+
+	BaseLocationVectorType _getMarkups() const;
+
+	void reset(char flags = 0);
+
+	void setSequence(std::string fasta, long extraBytes);
+	void setSequence(RecordPtr mmapRecordStart, const BaseLocationVectorType &markups, long extraBytes, RecordPtr mmapQualRecordStart = NULL);
+	void setSequence(RecordPtr mmapRecordStart, long extraBytes, RecordPtr mmapQualRecordStart = NULL);
+
+	void setMarkups(MarkupElementSizeType markupElementSize, const BaseLocationVectorType &markups);
+
+	SequencePtr getCache() const {
+		assert(isMmaped());
+		int threadNum = omp_get_thread_num();
+		CachedSequence cache = threadCacheSequence[threadNum];
+		if (_data.get() != cache.first.get()) {
+			return setCache();
+		} else {
+			return cache.second;
+		}
+	}
+	SequencePtr setCache() const {
+		return setCache(SequencePtr());
+	}
+	SequencePtr setCache(SequencePtr expandedSequence) const {
+		assert(isMmaped());
+		int threadNum = omp_get_thread_num();
+		CachedSequence cache = threadCacheSequence[threadNum];
+		if (_data.get() != cache.first.get()) {
+			if (expandedSequence.get() == NULL) {
+				expandedSequence = readMmaped();
+			}
+			cache = CachedSequence(_data, expandedSequence);
+			threadCacheSequence[threadNum] = cache;
+		}
+		return cache.second;
+	}
+
 public:
 
 	Sequence();
+	Sequence(const Sequence &copy) {
+		*this = copy;
+	}
 	Sequence(std::string fasta);
+	Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
+	Sequence &operator=(const Sequence &other) {
+		if (this == &other)
+			return *this;
+		_flags = other._flags;
+		_data = other._data;
+		return *this;
+	}
+	Sequence &clone(const Sequence &other) {
+		if (other.isMmaped()) {
+			RecordPtr record = other.getRecord();
+			RecordPtr qualRecord = NULL;
+			if (other.isQualMmaped())
+				qualRecord = other.getQualRecord();
+			BaseLocationVectorType markups = other.getMarkups();
+			setSequence(record, markups, qualRecord);
+		} else {
+		    setSequence(other.getFasta());
+		}
+		return *this;
+	}
 
 	~Sequence();
 
+	static void setThreadCache(Sequence &mmapedSequence, SequencePtr expandedSequence) {
+		mmapedSequence.setCache(expandedSequence);
+	}
+	static CachedSequence getThreadCache() {
+		int threadNum = omp_get_thread_num();
+		return threadCacheSequence[threadNum];
+	}
+
+public:
+	inline bool isMmaped()     const { return (_flags & MMAPED)    == MMAPED; }
+	inline bool isMarkups4()   const { return (_flags & MARKUPS4)  == MARKUPS4; }
+	inline bool isMarkups2()   const { return (_flags & MARKUPS4)  == MARKUPS2; }
+	inline bool isMarkups1()   const { return (_flags & MARKUPS4)  == MARKUPS1; }
+	inline bool hasMarkups()   const { return (_flags & MARKUPS4)  != 0; }
+	inline bool hasQuals()     const { return (_flags & HASQUALS)  == HASQUALS; }
+	inline bool isQualMmaped() const { return (_flags & MMAPED_QUALS) == MMAPED_QUALS; }
+	inline bool isDiscarded()  const { return (_flags & DISCARDED) == DISCARDED; }
+	inline bool isValid()      const { return (_flags & INVALID)   == 0; }
+
 	void setSequence(std::string fasta);
+	void setSequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
+	void setSequence(RecordPtr mmapRecordStart, const BaseLocationVectorType &markups, RecordPtr mmapQualRecordStart = NULL);
+
+	void discard() {
+		setFlag(DISCARDED);
+	}
 
 	SequenceLengthType getLength() const;
+
+	const RecordPtr getRecord() const {
+		assert(isMmaped());
+		return *_getRecord();
+	}
+	RecordPtr getRecord() {
+		return const_cast<RecordPtr> (constThis().getRecord());
+	}
+	const RecordPtr getQualRecord() const {
+		assert(isMmaped() && isQualMmaped());
+		return *_getQualRecord();
+	}
+	RecordPtr getQualRecord() {
+		return const_cast<RecordPtr> (constThis().getQualRecord());
+	}
+
 	std::string getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
 	std::string getFastaNoMarkup() const;
-	SequenceLengthType getMarkupBasesCount() const { return *_getMarkupBasesCount(); }
+
+	SequenceLengthType getMarkupBasesCount() const;
 	BaseLocationVectorType getMarkups() const;
 
 	SequenceLengthType getTwoBitEncodingSequenceLength() const;
-	TwoBitEncoding *getTwoBitSequence();
-	const TwoBitEncoding *getTwoBitSequence() const;
+	TwoBitEncoding *getTwoBitSequence() { return _getTwoBitSequence(); }
+	const TwoBitEncoding *getTwoBitSequence() const { return _getTwoBitSequence(); }
+
+	void readMmaped(std::string &name, std::string &bases, std::string &quals) const {
+		assert(isMmaped());
+		// TODO fix hack on NULL lastPtr
+		RecordPtr record(getRecord()), lastRecord(NULL), qualRecord(NULL), lastQualRecord(NULL);
+		if (isQualMmaped()) {
+		    qualRecord = getQualRecord();
+			lastQualRecord = NULL;
+		}
+		SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord);
+	}
+	SequencePtr readMmaped() const {
+		std::string name, bases, quals;
+		readMmaped(name, bases, quals);
+		return SequencePtr(new Sequence(bases));
+	}
 
 };
 
@@ -280,6 +478,10 @@ public:
 
 class Read : public Sequence {
 
+public:
+	typedef boost::shared_ptr< Sequence > ReadPtr;
+	typedef std::pair< DataPtr, ReadPtr > CachedRead;
+	typedef std::vector< CachedRead > CachedReadVector;
 
 private:
 	inline const Read &constThis() const {
@@ -305,16 +507,53 @@ private:
 	static int qualityToProbabilityInitialized;
 	static int
 			initializeQualityToProbability(unsigned char minQualityScore = 0);
+	static CachedReadVector threadCacheRead;
 
 public:
 
-	Read() :
-		Sequence() {
+	Read() : Sequence() {}
+	Read(const Read &copy) {
+		*this = copy;
 	}
-	;
 	Read(std::string name, std::string fasta, std::string qualBytes);
+	Read(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
+	Read(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart = NULL);
+	Read &operator=(const Read &other) {
+		Sequence::operator=(other);
+	    // there are no extra data members
+	    return *this;
+	}
+	Read &clone(const Read &other) {
+		if (other.isMmaped()) {
+			((Sequence)*this).clone((Sequence) other);
+		} else {
+			setRead(other.getName(), other.getFasta(), other.getQuals());
+		}
+		return *this;
+	}
+
 
 	void setRead(std::string name, std::string fasta, std::string qualBytes);
+	void setRead(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
+	void setRead(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart);
+
+	ReadPtr readMmaped() const {
+		BaseLocationVectorType markups = _getMarkups();
+		std::string name, bases, quals;
+		Sequence::readMmaped(name, bases, quals);
+		TwoBitSequence::applyMarkup(bases, markups);
+		return ReadPtr(new Read(name, bases, quals));
+	}
+
+	bool recordHasQuals() const {
+		assert(isMmaped());
+		if (isQualMmaped())
+			return true;
+		else
+			// TODO make this more general
+		    return *getRecord() == '@'; // FASTQ
+	}
+
 
 	std::string getName() const;
 	std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
@@ -360,6 +599,54 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.24  2010-04-16 22:44:18  regan
+// merged HEAD with changes for mmap and intrusive pointer
+//
+// Revision 1.23.2.12.2.3  2010-04-16 21:38:18  regan
+// removed commented code
+//
+// Revision 1.23.2.12.2.2  2010-04-16 17:49:42  regan
+// fixed comments
+//
+// Revision 1.23.2.12.2.1  2010-04-16 05:29:59  regan
+// checkpoint.. broke it
+//
+// Revision 1.23.2.12  2010-04-15 21:31:50  regan
+// bugfix in markups and duplicate fragment filter
+//
+// Revision 1.23.2.11  2010-04-15 17:29:02  regan
+// checkpoint, working with some optimizations
+//
+// Revision 1.23.2.10  2010-04-14 22:36:06  regan
+// round of bugfixes
+//
+// Revision 1.23.2.9  2010-04-14 17:51:43  regan
+// checkpoint
+//
+// Revision 1.23.2.8  2010-04-14 05:35:37  regan
+// checkpoint. compiles but segfaults
+//
+// Revision 1.23.2.7  2010-04-14 03:51:19  regan
+// checkpoint. compiles but segfaults
+//
+// Revision 1.23.2.6  2010-04-12 22:37:47  regan
+// checkpoint
+//
+// Revision 1.23.2.5  2010-04-12 20:59:45  regan
+// mmap checkpoint
+//
+// Revision 1.23.2.4  2010-04-05 05:42:53  regan
+// checkpoint mmaping input files
+//
+// Revision 1.23.2.3  2010-04-05 02:56:08  regan
+// bugfixes
+//
+// Revision 1.23.2.2  2010-04-04 15:58:02  regan
+// fixed assertion code to obey debug rules
+//
+// Revision 1.23.2.1  2010-04-04 15:31:27  regan
+// checkpoint - refactored underlying data structure t compress markups
+//
 // Revision 1.23  2010-03-16 06:42:50  regan
 // bugfixes
 //

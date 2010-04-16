@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.29 2010-03-15 15:00:21 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.30 2010-04-16 22:44:18 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -102,6 +102,13 @@ public:
 		this->hasSingletons = other.hasSingletons;
 		this->purgedSingletons = other.purgedSingletons;
 		return *this;
+	}
+	void reset() {
+		solid.clear();
+		weak.clear();
+		singleton.clear();
+		hasSolids = false;
+		purgedSingletons = 0;
 	}
 
 	static unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKmersPerBucket = 64) {

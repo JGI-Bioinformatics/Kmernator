@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.20 2010-03-08 18:11:55 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.21 2010-04-16 22:44:15 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -37,7 +37,8 @@ else()
                                  boost_regex-mt-static 
                                  boost_test_exec_monitor-mt-static
                                  boost_unit_test_framework-mt-static
-                                 boost_program_options-mt-static)
+                                 boost_program_options-mt-static
+                                 boost_iostreams-mt-static)
   include_directories( ${CMAKE_CURRENT_BINARY_DIR}/${BOOST_INSTALL_VER} )
   link_directories( ${CMAKE_CURRENT_BINARY_DIR}/lib )
 endif()
@@ -52,6 +53,12 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 add_subdirectory( apps )
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.21  2010-04-16 22:44:15  regan
+# merged HEAD with changes for mmap and intrusive pointer
+#
+# Revision 1.20.2.1  2010-04-07 22:33:10  regan
+# checkpoint mmaping input files
+#
 # Revision 1.20  2010-03-08 18:11:55  regan
 # bugfix
 #

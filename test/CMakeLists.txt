@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.18 2010-03-10 13:18:03 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.19 2010-04-16 22:44:25 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -15,19 +15,26 @@ IF(CXX_FLAGS)
 ENDIF(CXX_FLAGS)
 
 
+set_source_files_properties( TwoBitSequenceTest
+                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
 add_executable( TwoBitSequenceTest TwoBitSequenceTest )
 target_link_libraries( TwoBitSequenceTest TwoBitSequence
                                           boost_test_exec_monitor-mt 
                                           boost_unit_test_framework-mt )
 add_test( TwoBitSequenceTest TwoBitSequenceTest )
 
-
+set_source_files_properties( ReadSetTest
+                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
+                            
 add_executable( ReadSetTest ReadSetTest )
 target_link_libraries( ReadSetTest Sequence
                                    ReadSet 
                                    boost_program_options-mt-static 
                                    boost_test_exec_monitor-mt 
-                                   boost_unit_test_framework-mt )
+                                   boost_unit_test_framework-mt 
+                                   boost_iostreams-mt-static)
 add_test( ReadSetTest ReadSetTest )
                             
 set_source_files_properties( KmerTest
@@ -48,7 +55,9 @@ set_source_files_properties( ktest2
 add_executable( ktest2 ktest2 )
 target_link_libraries( ktest2 Sequence Kmer
                               ReadSet
-                              boost_program_options-mt-static )
+                              boost_program_options-mt-static 
+                              boost_iostreams-mt-static
+                              )
 add_test(ktest2 ktest2 21 10.fastq)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
@@ -58,6 +67,18 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.19  2010-04-16 22:44:25  regan
+# merged HEAD with changes for mmap and intrusive pointer
+#
+# Revision 1.18.2.2.2.1  2010-04-16 05:30:02  regan
+# checkpoint.. broke it
+#
+# Revision 1.18.2.2  2010-04-05 05:42:57  regan
+# checkpoint mmaping input files
+#
+# Revision 1.18.2.1  2010-04-05 03:32:14  regan
+# moved read file reader
+#
 # Revision 1.18  2010-03-10 13:18:03  regan
 # fixed linking
 #

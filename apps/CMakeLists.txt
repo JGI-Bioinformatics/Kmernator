@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.5 2010-04-14 15:58:34 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.6 2010-04-16 22:44:23 regan Exp $
 #
  
 cmake_minimum_required(VERSION 2.6)
@@ -20,7 +20,8 @@ target_link_libraries( CompareSpectrums
                               Sequence 
                               Kmer
                               ReadSet
-                              boost_program_options-mt-static )
+                              boost_program_options-mt-static 
+                              boost_iostreams-mt-static)
 
 
 set_source_files_properties( FilterReads
@@ -31,19 +32,14 @@ target_link_libraries( FilterReads
                               Sequence
                               Kmer
                               ReadSet
-                              boost_program_options-mt-static )
-                              
-add_executable( Fastq2Fasta Fastq2Fasta )
-target_link_libraries( Fastq2Fasta
-                              Sequence
-                              ReadSet
                               boost_program_options-mt-static
-                              )
-set_source_files_properties( Fastq2FastaQual
+                              boost_iostreams-mt-static )
+                              
+set_source_files_properties( Fastq2Fasta
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )
-add_executable( Fastq2FastaQual Fastq2FastaQual )
-target_link_libraries( Fastq2FastaQual
+add_executable( Fastq2Fasta Fastq2Fasta )
+target_link_libraries( Fastq2Fasta
                               Sequence
                               ReadSet
                               boost_program_options-mt-static
@@ -53,8 +49,14 @@ target_link_libraries( Fastq2FastaQual
 
 #
 # $Log: CMakeLists.txt,v $
-# Revision 1.5  2010-04-14 15:58:34  regan
-# fixed and added fastq2fastaqual
+# Revision 1.6  2010-04-16 22:44:23  regan
+# merged HEAD with changes for mmap and intrusive pointer
+#
+# Revision 1.4.2.2  2010-04-05 05:42:56  regan
+# checkpoint mmaping input files
+#
+# Revision 1.4.2.1  2010-04-05 03:32:13  regan
+# moved read file reader
 #
 # Revision 1.4  2010-03-16 18:58:10  regan
 # created a simple fastq2fasta program

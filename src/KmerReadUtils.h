@@ -1,8 +1,10 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.5 2010-03-14 16:55:13 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.6 2010-04-16 22:44:18 regan Exp $
 //
 
 #ifndef _KMER_READ_UTILS_H
 #define _KMER_READ_UTILS_H
+
+#include "config.h"
 
 class KmerReadUtils {
 public:

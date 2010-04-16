@@ -1,8 +1,19 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.19 2010-03-02 14:27:00 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.20 2010-04-16 22:44:18 regan Exp $
 //
 
 #include <cstring>
 #include "TwoBitSequence.h"
+
+void boost::intrusive_ptr_add_ref(TwoBitSequenceBase::_TwoBitEncodingPtr* r)
+{
+    r->increment();
+}
+
+void boost::intrusive_ptr_release(TwoBitSequenceBase::_TwoBitEncodingPtr* r)
+{
+    if (r->decrement())
+    	TwoBitSequenceBase::_TwoBitEncodingPtr::release(r);
+}
 
 static unsigned char compressBase(char base) {
 	switch (base) {
@@ -72,6 +83,7 @@ void TwoBitSequence::initPermutationsTable() {
 	}
 }
 
+// NULL for out is okay to just get markups
 BaseLocationVectorType TwoBitSequence::compressSequence(const char *bases,
 		TwoBitEncoding *out) {
 	BaseLocationVectorType otherBases;
@@ -90,7 +102,8 @@ BaseLocationVectorType TwoBitSequence::compressSequence(const char *bases,
 			offset++;
 			c |= cbase << i;
 		}
-		*out++ = c;
+		if (out != NULL)
+		  *out++ = c;
 	}
 
 	return otherBases;
@@ -110,18 +123,25 @@ void TwoBitSequence::uncompressSequence(const TwoBitEncoding *in,
 	*bases = '\0';
 }
 
-void TwoBitSequence::applyMarkup(char *bases,
-		BaseLocationVectorType markupBases) {
-	for (BaseLocationVectorType::iterator ptr = markupBases.begin(); ptr
-			!= markupBases.end(); ptr++)
-		bases[ptr->second] = ptr->first;
-}
 void TwoBitSequence::applyMarkup(std::string &bases,
-		SequenceLengthType markupBasesSize, const BaseLocationType *markupBases) {
+	const BaseLocationVectorType &markupBases) {
+	for (BaseLocationVectorType::const_iterator ptr = markupBases.begin(); ptr
+			!= markupBases.end(); ptr++) {
+                if (ptr->second >= bases.length())
+                   break;
+		bases[ptr->second] = ptr->first;
+        }
+}
+
+void TwoBitSequence::applyMarkup(std::string &bases,
+	SequenceLengthType markupBasesSize, const BaseLocationType *markupBases) {
 	if (markupBasesSize > 0) {
 		for (const BaseLocationType *ptr = markupBases; ptr < markupBases
-				+ markupBasesSize && ptr->second < bases.length(); ptr++)
+				+ markupBasesSize && ptr->second < bases.length(); ptr++) {
+                  if (ptr->second >= bases.length())
+                      break;
 			bases[ptr->second] = ptr->first;
+                }
 	}
 }
 
@@ -183,8 +203,52 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut,
 
 }
 
+TwoBitSequenceBase::MarkupElementSizeType TwoBitSequence::getMarkupElementSize(const BaseLocationVectorType &markups) {
+	long totalMarkupSize;
+	return getMarkupElementSize(markups, totalMarkupSize);
+}
+TwoBitSequenceBase::MarkupElementSizeType TwoBitSequence::getMarkupElementSize(const BaseLocationVectorType &markups, long &totalMarkupSize) {
+	MarkupElementSizeType markupElementSize(0,0);
+	SequenceLengthType size = markups.size();
+	if (size > 0) {
+		if (size < 255 && markups[size-1].second < 255) {
+			markupElementSize.first = sizeof(SequenceLengthType1);
+			markupElementSize.second = sizeof(BaseLocationType1);
+		} else if (size < 65535 && markups[size-1].second < 65535) {
+			markupElementSize.first = sizeof(SequenceLengthType2);
+			markupElementSize.second = sizeof(BaseLocationType2);
+		} else {
+			markupElementSize.first = sizeof(SequenceLengthType);
+			markupElementSize.second = sizeof(BaseLocationType);
+		}
+	    totalMarkupSize = markupElementSize.first + markupElementSize.second * size;
+	} else {
+		totalMarkupSize = 0;
+	}
+	return markupElementSize;
+}
+
+
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.20  2010-04-16 22:44:18  regan
+// merged HEAD with changes for mmap and intrusive pointer
+//
+// Revision 1.19.2.3.2.2  2010-04-16 17:43:19  regan
+// changed allocation / deallocation rules to hide counter
+//
+// Revision 1.19.2.3.2.1  2010-04-16 05:30:00  regan
+// checkpoint.. broke it
+//
+// Revision 1.19.2.3  2010-04-14 03:51:19  regan
+// checkpoint. compiles but segfaults
+//
+// Revision 1.19.2.2  2010-04-04 16:22:31  regan
+// bugfix
+//
+// Revision 1.19.2.1  2010-04-04 15:29:28  regan
+// migrated markup types and methods
+//
 // Revision 1.19  2010-03-02 14:27:00  regan
 // reformatted
 //

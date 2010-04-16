@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.21 2010-03-15 18:07:01 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.22 2010-04-16 22:44:18 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -10,13 +10,21 @@
 #include "Options.h"
 #include "Sequence.h"
 #include "Utils.h"
-
-class ReadFileReader;
+#include "ReadFileReader.h"
 
 class ReadSet {
 public:
 	typedef unsigned int ReadSetSizeType;
 	typedef std::vector< ReadSetSizeType > ReadIdxVector;
+	typedef ReadFileReader::MmapSource MmapSource;
+	typedef std::pair<MmapSource,MmapSource> MmapSourcePair;
+	typedef std::vector< MmapSourcePair > MmapSourceVector;
+	typedef ReadFileReader::SequenceStreamParser SequenceStreamParser;
+	typedef ReadFileReader::SequenceStreamParserPtr SequenceStreamParserPtr;
+	typedef Read::ReadPtr ReadPtr;
+	typedef Sequence::RecordPtr RecordPtr;
+
+	static MmapSourceVector mmapSources;
 
 	static const ReadSetSizeType MAX_READ_IDX = (unsigned int) -1;
 	class Pair {
@@ -51,6 +59,12 @@ public:
 
 private:
 	std::vector<Read> _reads;
+
+private:
+	inline const ReadSet &constThis() const {
+		return *this;
+	}
+
 protected:
 	PartitioningData<ReadSetSizeType> _filePartitions;
 	unsigned long _baseCount;
@@ -59,6 +73,7 @@ protected:
 
 private:
 	void addRead(Read &read);
+	void addRead(Read &read, SequenceLengthType readLength);
 	inline bool setMaxSequenceLength(SequenceLengthType len) {
 		if (len > _maxSequenceLength) {
 			_maxSequenceLength = len;
@@ -67,8 +82,21 @@ private:
 		return false;
 	}
 
-	void incrementFile() {
+	void incrementFile(ReadFileReader &reader) {
+		incrementFile(reader.getParser());
+	}
+	void incrementFile(SequenceStreamParserPtr parser) {
 		_filePartitions.addPartition( _reads.size() );
+		addMmaps( MmapSourcePair( parser->getMmap(), parser->getQualMmap() ));
+	}
+
+	MmapSource mmapFile(string filePath);
+
+	static void addMmaps(MmapSourcePair mmaps) {
+#ifdef _USE_OPENMP
+#pragma omp critical
+#endif
+		mmapSources.push_back(mmaps);
 	}
 
 public:
@@ -82,9 +110,9 @@ public:
 		return _maxSequenceLength;
 	}
 
-	void appendAnyFile(std::string filePath, std::string filePath2 = "");
 	void appendAllFiles(Options::FileListType &files);
-	void appendFastaFile(std::string &is);
+	SequenceStreamParserPtr appendAnyFile(std::string filePath, std::string filePath2 = "");
+	SequenceStreamParserPtr appendFastaFile(std::string &is);
 
 	void append(const ReadSet &reads);
 	void append(const Read &read) {
@@ -106,15 +134,32 @@ public:
 		return index < getSize();
 	}
 
+	ReadPtr parseMmapedRead(ReadSetSizeType index) const {
+		const Read &read = _reads[index];
+		ReadPtr readPtr = read.readMmaped();
+//		const SequenceStreamParserPtr parser = getParser(index);
+//		string name, bases, qual;
+//		parser->readRecord(read.getRecord(), name, bases, qual);
+		return readPtr;
+	}
+	inline const Read &getRead(ReadSetSizeType index) const {
+		const Read &read = _reads[index];
+//		if (read.isMmaped()) {
+//			// assume each thread modifies only one read at a time!!!
+//			Read::setThreadCache((Sequence&) read, parseMmapedRead(index));
+//		}
+        return read;
+	}
 	inline Read &getRead(ReadSetSizeType index) {
-		return _reads[index];
+		return const_cast<Read&>(constThis().getRead(index));
 	}
-	inline const Read getRead(ReadSetSizeType index) const {
-		return _reads[index];
-	}
+
 	inline int getReadFileNum(ReadSetSizeType index) const {
-		return _filePartitions.getPartitionNum(index);
+		return _filePartitions.getPartitionIdx(index)+1;
 	}
+//	const SequenceStreamParserPtr getParser(ReadSetSizeType index) const {
+//		return _fileParsers[getReadFileNum(index)-1];
+//	}
 
 	// by default no pairs are identified
 	ReadSetSizeType identifyPairs();
@@ -146,13 +191,14 @@ public:
 	static Read getConsensusRead(const ProbabilityBases &probs, std::string name);
 
 protected:
-	void appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
-	void appendFasta(ReadFileReader &reader);
+	SequenceStreamParserPtr appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
+	SequenceStreamParserPtr appendFasta(MmapSource &mmap);
+	SequenceStreamParserPtr appendFasta(ReadFileReader &reader);
 
-	void appendFastq(std::string fastqFilePath);
-	void appendFastqBlockedOMP(std::string fastaFilePath,
-			std::string qualFilePath = "");
-	void appendFastqBatchedOMP(std::string fastaFilePath,
+	SequenceStreamParserPtr appendFastq(MmapSource &mmap);
+	//void appendFastq(ReadFileReader &reader);
+	SequenceStreamParserPtr appendFastqBlockedOMP(MmapSource &mmap);
+	SequenceStreamParserPtr appendFastqBatchedOMP(std::string fastaFilePath,
 			std::string qualFilePath = "");
 
 };
@@ -173,6 +219,39 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.22  2010-04-16 22:44:18  regan
+// merged HEAD with changes for mmap and intrusive pointer
+//
+// Revision 1.21.2.10  2010-04-15 17:29:02  regan
+// checkpoint, working with some optimizations
+//
+// Revision 1.21.2.9  2010-04-14 20:53:49  regan
+// checkpoint and passes unit tests!
+//
+// Revision 1.21.2.8  2010-04-14 17:51:43  regan
+// checkpoint
+//
+// Revision 1.21.2.7  2010-04-14 05:35:37  regan
+// checkpoint. compiles but segfaults
+//
+// Revision 1.21.2.6  2010-04-14 03:51:20  regan
+// checkpoint. compiles but segfaults
+//
+// Revision 1.21.2.5  2010-04-12 22:37:47  regan
+// checkpoint
+//
+// Revision 1.21.2.4  2010-04-12 20:59:45  regan
+// mmap checkpoint
+//
+// Revision 1.21.2.3  2010-04-07 22:33:08  regan
+// checkpoint mmaping input files
+//
+// Revision 1.21.2.2  2010-04-05 05:42:53  regan
+// checkpoint mmaping input files
+//
+// Revision 1.21.2.1  2010-04-05 03:32:10  regan
+// moved read file reader
+//
 // Revision 1.21  2010-03-15 18:07:01  regan
 // minor refactor and added consensus read
 //

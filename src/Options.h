@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.11 2010-03-15 07:42:39 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.12 2010-04-16 22:44:18 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -45,6 +45,8 @@ private:
 	unsigned int minReadLength;
 	unsigned int ignoreQual;
 	unsigned int periodicSingletonPurge;
+	unsigned int skipArtifactFilter;
+	unsigned int mmapInput;
 
 	Options() {
 		setOptions();
@@ -97,6 +99,12 @@ public:
 	static inline unsigned int &getPeriodicSingletonPurge() {
 		return getOptions().periodicSingletonPurge;
 	}
+	static inline unsigned int &getSkipArtifactFilter() {
+		return getOptions().skipArtifactFilter;
+	}
+	static inline unsigned int &getMmapInput() {
+		return getOptions().mmapInput;
+	}
 	const static unsigned int MAX_INT = (unsigned int) -1;
 
 private:
@@ -144,7 +152,13 @@ private:
 				"ignore the quality score, to save memory or if they are untrusted")
 
 		("periodic-singleton-purge", po::value<unsigned int>()->default_value(0),
-				"Purge singleton memory structure every # of reads");
+				"Purge singleton memory structure every # of reads")
+
+		("skip-artifact-filter", po::value<unsigned int>()->default_value(0),
+				"Skip homo-polymer, primer-dimer and duplicated fragment pair filtering")
+
+		("mmap-input", po::value<unsigned int>()->default_value(1),
+				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)");
 
 	}
 
@@ -252,6 +266,12 @@ public:
 			// set periodic singleton purge value
 			getPeriodicSingletonPurge() = vm["periodic-singleton-purge"].as<unsigned int> ();
 
+			// set skipArtifactFilterin
+			getSkipArtifactFilter() = vm["skip-artifact-filter"].as<unsigned int> ();
+
+			// set mmapInput
+			getMmapInput() = vm["mmap-input"].as<unsigned int>();
+
 		} catch (std::exception& e) {
 			std::cerr << "error: " << e.what() << std::endl;
 			return false;
@@ -268,6 +288,15 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.12  2010-04-16 22:44:18  regan
+// merged HEAD with changes for mmap and intrusive pointer
+//
+// Revision 1.11.2.2  2010-04-15 17:59:52  regan
+// made mmap optional
+//
+// Revision 1.11.2.1  2010-04-15 17:47:19  regan
+// added option to skip artifact filter
+//
 // Revision 1.11  2010-03-15 07:42:39  regan
 // added kmer of 0 to skip kmer calculations
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.7 2010-02-26 13:01:21 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.8 2010-04-16 22:44:25 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -128,7 +128,7 @@ void testCompressUncompress() {
 
 void testMarkup() {
 	TwoBitEncoding bin[1024];
-	char fasta[1024];
+	std::string fasta(1024, '\0');
 
 	BaseLocationVectorType markup;
 	markup = TwoBitSequence::compressSequence(n1, bin);
@@ -203,6 +203,12 @@ BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 
 //
 // $Log: TwoBitSequenceTest.cpp,v $
+// Revision 1.8  2010-04-16 22:44:25  regan
+// merged HEAD with changes for mmap and intrusive pointer
+//
+// Revision 1.7.2.1  2010-04-04 16:22:29  regan
+// bugfix
+//
 // Revision 1.7  2010-02-26 13:01:21  regan
 // reformatted
 //

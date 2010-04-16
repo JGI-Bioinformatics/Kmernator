@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.31 2010-03-04 06:37:42 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.32 2010-04-16 22:44:18 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -14,9 +14,12 @@
 #include <tr1/memory>
 
 #include <boost/foreach.hpp>
+#include <boost/unordered_map.hpp>
+
 #define foreach BOOST_FOREACH
 
 #include "config.h"
+#include "Options.h"
 
 class OfstreamMap {
 public:
@@ -74,12 +77,12 @@ public:
     inline bool hasPartitions() const {
     	return ! _partitions.empty();
     }
-    inline int getPartitionNum(DataType score) const {
+    inline int getPartitionIdx(DataType score) const {
 		// TODO binary search?
 		for(unsigned int i = 0; i < _partitions.size(); i++)
 			if (score < _partitions[i])
-				return i+1;
-		return _partitions.size() + 1;
+				return i;
+		return _partitions.size();
 	}
     inline Partitions getPartitions() const {
     	return _partitions;
@@ -138,10 +141,97 @@ typedef BucketedData<double, TwoByte> DoubleToTwoByte;
 typedef BucketedData<double, FourByte> DoubleToFourByte;
 typedef BucketedData<double, EightByte> DoubleToEightByte;
 
+class SequenceRecordParser
+{
+public:
+	static inline std::string &nextLine(std::string &buffer, KoMer::RecordPtr &recordPtr) {
+		KoMer::RecordPtr nextPtr = strchr(recordPtr, '\n');
+		long len = nextPtr - recordPtr;
+		if (len > 0) {
+		  buffer.assign(recordPtr, len);
+		} else {
+		  buffer.clear();
+		}
+	    recordPtr = ++nextPtr;
+	    return buffer;
+	}
+	static void parse(KoMer::RecordPtr record, KoMer::RecordPtr lastRecord,
+			          std::string &name, std::string &bases, std::string &quals,
+			          KoMer::RecordPtr qualRecord = NULL, KoMer::RecordPtr lastQualRecord = NULL) {
+		std::string buf;
+		if (*record == '@') {
+			record++;
+			nextLine(name,  record);
+			nextLine(bases, record);
+			nextLine(buf,   record);
+			nextLine(quals, record);
+			if (buf[0] != '+') {
+				throw "Invalid FASTQ record!";
+			}
+		} else if (*record == '>') {
+			// FASTA
+			record++;
+			nextLine(name, record);
+
+			// TODO FIXME HACK!
+			if (lastRecord == NULL) // only read one line if no last record is given
+				lastRecord = record+1;
+
+			while (record < lastRecord && *record != '>') {
+				bases += nextLine(buf, record);
+			}
+			if (qualRecord != NULL) {
+				qualRecord++;
+				nextLine(buf, qualRecord);
+				if (buf != name) {
+					throw "fasta and qual do not match names!";
+				}
+
+                // TODO FIXME HACK!
+				if (lastQualRecord == NULL) // only read one line if no last record is given
+					lastQualRecord = qualRecord+1;
+				while (qualRecord < lastQualRecord && *qualRecord != '>') {
+					quals += nextLine(buf, qualRecord);
+				}
+				quals = convertQualIntsToChars(quals);
+			} else {
+				quals.assign(bases.length(), KoMer::REF_QUAL);
+			}
+		} else {
+			throw "Do not know how to parse this file!";
+		}
+	}
+	static std::string convertQualIntsToChars(const std::string &qualInts) {
+		std::istringstream ss(qualInts);
+		std::ostringstream oss;
+		while (!ss.eof()) {
+			int qVal;
+			ss >> qVal;
+			if (ss.fail())
+				break;
+			qVal += KoMer::FASTQ_START_CHAR;
+			oss << (char) qVal;
+		}
+        return oss.str();
+	}
+};
+
 #endif
 
 //
 // $Log: Utils.h,v $
+// Revision 1.32  2010-04-16 22:44:18  regan
+// merged HEAD with changes for mmap and intrusive pointer
+//
+// Revision 1.31.2.3  2010-04-14 20:53:49  regan
+// checkpoint and passes unit tests!
+//
+// Revision 1.31.2.2  2010-04-14 17:51:43  regan
+// checkpoint
+//
+// Revision 1.31.2.1  2010-04-14 03:51:19  regan
+// checkpoint. compiles but segfaults
+//
 // Revision 1.31  2010-03-04 06:37:42  regan
 // fixed compiler warnings
 //

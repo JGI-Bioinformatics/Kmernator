@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.77 2010-03-15 14:59:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.78 2010-04-16 22:44:18 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -795,7 +795,7 @@ template<typename T>
 class TrackingDataMinimal {
 public:
 	typedef T DataType;
-typedef	typename TrackingData::CountType CountType;
+    typedef	typename TrackingData::CountType CountType;
 	typedef typename TrackingData::WeightType WeightType;
 	typedef typename TrackingData::ReadIdType ReadIdType;
 	typedef typename TrackingData::PositionType PositionType;
@@ -1755,7 +1755,7 @@ public:
 	typedef Value ValueType;
 	typedef Kmer::NumberType NumberType;
 	typedef KmerArray<Value> BucketType;
-typedef	typename BucketType::Iterator BucketTypeIterator;
+    typedef	typename BucketType::Iterator BucketTypeIterator;
 	typedef typename BucketType::ElementType ElementType;
 
 	typedef std::vector< BucketType > BucketsVector;
@@ -2208,6 +2208,12 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.78  2010-04-16 22:44:18  regan
+// merged HEAD with changes for mmap and intrusive pointer
+//
+// Revision 1.77.2.1  2010-04-04 11:59:41  regan
+// minor formatting
+//
 // Revision 1.77  2010-03-15 14:59:50  regan
 // minor refactor
 // disabled mergePromote as there is some error/race condition

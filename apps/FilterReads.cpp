@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.15 2010-03-15 18:05:04 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.16 2010-04-16 22:44:23 regan Exp $
 //
 
 #include <iostream>
@@ -69,7 +69,6 @@ int main(int argc, char *argv[]) {
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	ReadSet reads;
-	FilterKnownOddities filter;
 	KmerSizer::set(Options::getKmerSize());
 
 	Options::FileListType inputs = Options::getInputFiles();
@@ -84,15 +83,22 @@ int main(int argc, char *argv[]) {
 	cerr << numPairs << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	cerr << "Applying sequence artifact filter to Input Files" << endl;
-	unsigned long filtered = filter.applyFilter(reads);
-	cerr << "filter affected " << filtered << " Reads " << endl;
-	cerr << MemoryUtils::getMemoryUsage() << endl;
+	if (Options::getSkipArtifactFilter() == 0) {
 
-	cerr << "Applying IdenticalFragmentPair Filter to Input Files" << endl;
-	unsigned long identicalFragments = filter.filterIdenticalFragmentPairs(reads);
-	cerr << "filter affected " << identicalFragments << endl;
-	cerr << MemoryUtils::getMemoryUsage() << endl;
+	  cerr << "Preparing artifact filter: ";
+      FilterKnownOddities filter;
+      cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	  cerr << "Applying sequence artifact filter to Input Files" << endl;
+	  unsigned long filtered = filter.applyFilter(reads);
+	  cerr << "filter affected " << filtered << " Reads " << endl;;
+	  cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	  cerr << "Applying DuplicateFragmentPair Filter to Input Files" << endl;
+	  unsigned long duplicateFragments = filter.filterDuplicateFragmentPairs(reads);
+	  cerr << "filter affected " << duplicateFragments << endl;
+	  cerr << MemoryUtils::getMemoryUsage() << endl;
+	}
 
 	KS spectrum(0);
 
@@ -116,8 +122,10 @@ int main(int argc, char *argv[]) {
 	  }
 	}
 
-	cerr << "Picking reads: " << endl;
+	cerr << "Trimming reads: ";
 	RS selector(reads, spectrum.weak, Options::getMinDepth());
+	cerr << MemoryUtils::getMemoryUsage() << endl;
+	cerr << "Picking reads: " << endl;
 
 	long oldPicked = 0;
 	long picked = 0;
@@ -136,12 +144,15 @@ int main(int argc, char *argv[]) {
 			else
 				picked += selector.pickBestCoveringSubsetReads(depth,
 						Options::getMinDepth(), Options::getMinReadLength());
+            cerr << MemoryUtils::getMemoryUsage() << endl;
 		}
 
 		if (picked > 0 && !outputFilename.empty()) {
 			cerr << "Writing " << picked << " reads to output file(s)" << endl;
 			selector.writePicks(ofmap, oldPicked);
 		}
+        cerr << MemoryUtils::getMemoryUsage() << endl;
+
 
 	} else {
 
@@ -171,6 +182,7 @@ int main(int argc, char *argv[]) {
 			}
 			cerr << "At or above coverage: " << depth << " Picked " << picked
 					<< " / " << reads.getSize() << " reads" << endl;
+            cerr << MemoryUtils::getMemoryUsage() << endl;
 
 			if (picked > 0 && !outputFilename.empty()) {
 				cerr << "Writing " << picked << " reads  to output files" << endl;

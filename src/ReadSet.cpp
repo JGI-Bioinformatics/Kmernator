@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.31 2010-03-15 18:06:50 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.32 2010-04-16 22:44:18 regan Exp $
 //
 
 #include <exception>
@@ -10,400 +10,54 @@
 #include <locale>
 #include <algorithm>
 
+#include <boost/lexical_cast.hpp>
+
 #include "ReadSet.h"
 
-using namespace std;
-
-class ReadFileReader {
-private:
-	class SequenceStreamParser;
-
-	SequenceStreamParser *_parser;
-	string _path;
-	ifstream _ifs;
-	ifstream _qs;
-	istringstream _iss;
-
-public:
-
-	ReadFileReader(string fastaFilePath, string qualFilePath) :
-		_parser(NULL), _path(fastaFilePath) {
-		_ifs.open(fastaFilePath.c_str());
-
-		if (_ifs.fail())
-			throw runtime_error("Could not open : " + fastaFilePath);
-
-		if (Options::getIgnoreQual())
-			qualFilePath.clear();
-
-		if (!qualFilePath.empty()) {
-			_qs.open(qualFilePath.c_str());
-			if (_qs.fail())
-				throw runtime_error("Could not open : " + qualFilePath);
-
-			_parser = new FastaQualStreamParser(_ifs, _qs);
-		} else {
-		     if (!Options::getIgnoreQual()) {
-			   // test for an implicit qual file
-			   _qs.open((fastaFilePath + ".qual").c_str());
-			   if (!_qs.fail())
-			     _parser = new FastaQualStreamParser(_ifs, _qs);
-			 }
-
-			 if (_parser == NULL) {
-			      if (_ifs.peek() == '@')
-				     _parser = new FastqStreamParser(_ifs);
-			      else
-				     _parser = new FastaStreamParser(_ifs);
-			 }
-		}
-
-	}
-
-	ReadFileReader(string &fasta) :
-		_iss(fasta) {
-		_parser = new FastaStreamParser(_iss);
-	}
-
-	~ReadFileReader() {
-		_ifs.close();
-		_qs.close();
-		if (_parser)
-			delete _parser;
-	}
-
-	bool nextRead(string &name, string &bases, string &quals) {
-		try {
-			name = _parser->getName();
-			if (name.empty())
-				return false;
-
-			bases = _parser->getBases();
-			std::transform(bases.begin(), bases.end(), bases.begin(), ::toupper);
-
-			quals = _parser->getQuals();
-
-			if (quals.length() != bases.length())
-				if (!(quals.length() == 1 && quals[0] == Read::REF_QUAL))
-					throw runtime_error((string("Number of bases and quals not equal: ") + bases + " " + quals).c_str());
-			return true;
-		}
-
-		catch (runtime_error &e) {
-			stringstream error;
-			error << e.what() << " in file '" << _path << "' at line "
-					<< _parser->lineNumber() << " position:" << _parser->tellg() << " " \
-					<< _parser->getName() << _parser->getBases() << _parser->getQuals() \
-					<< " '" << _parser->getLineBuffer() << _parser->nextLine() << "'";
-			throw runtime_error(error.str());
-		}
-	}
-
-	unsigned long getFileSize() {
-		ifstream::streampos current = _ifs.tellg();
-		_ifs.seekg(0, ios_base::end);
-		unsigned long size = _ifs.tellg();
-		_ifs.seekg(current);
-		return size;
-	}
-
-	unsigned long getBlockSize(unsigned int numThreads) {
-		return getFileSize() / numThreads;
-	}
-
-	inline unsigned long getPos() {
-		return _parser->getPos();
-	}
-
-	void seekToNextRecord(unsigned long minimumPos) {
-		_parser->seekToNextRecord(minimumPos);
-	}
-	int getType() {
-		return _parser->getType();
-	}
-
-private:
-
-	class SequenceStreamParser {
-		istream * _stream;
-		unsigned long _line;
-		char _marker;
-		unsigned long _pos;
-
-	protected:
-		string _nameBuffer;
-		string _basesBuffer;
-		string _qualsBuffer;
-		string _lineBuffer;
-
-	public:
-		inline string &nextLine(string &buffer) {
-			_line++;
-			buffer.clear();
-			getline(*_stream, buffer);
-			_pos += buffer.length() + 1;
-			return buffer;
-		}
-		inline string &nextLine() {
-			nextLine(_lineBuffer);
-			return _lineBuffer;
-		}
-		string getLineBuffer() const {
-			return _lineBuffer;
-		}
-
-		SequenceStreamParser(istream &stream, char marker) :
-			_stream(&stream), _line(0), _marker(marker), _pos(0) {
-		}
-
-		virtual ~SequenceStreamParser() {
-		}
-
-		unsigned long lineNumber() {
-			return _line;
-		}
-		unsigned long tellg() {
-			return _stream->tellg();
-		}
-		void seekg(unsigned long pos) {
-			_pos = pos;
-			_stream->seekg(_pos);
-		}
-		bool endOfStream() {
-			return _stream->eof();
-		}
-		int peek() {
-			return _stream->peek();
-		}
-
-		virtual string &getName() {
-			nextLine(_nameBuffer);
-
-			while (_nameBuffer.length() == 0) // skip empty lines at end of stream
-			{
-				if (endOfStream()) {
-					_nameBuffer.clear();
-					return _nameBuffer;
-				}
-				nextLine(_nameBuffer);
-			}
-
-			if (_nameBuffer[0] != _marker)
-				throw runtime_error(
-						(string("Missing name marker '") + _marker + "'").c_str());
-
-			//         char *space = strchr(name,' ');
-			//         if (space != NULL)
-			//             space = '\0';
-			//         char *tab = strchr(name,'\t');
-			//         if (tab !=NULL)
-			//             tab = '\0';
-
-			return _nameBuffer.erase(0, 1);
-		}
-
-		virtual string &getBases() = 0;
-		virtual string &getQuals() = 0;
-		virtual int getType() = 0;
-
-		virtual unsigned long getPos() {
-			return _pos;
-		}
-		virtual void seekToNextRecord(unsigned long minimumPos) {
-			// get to the first line after the pos
-			if (minimumPos > 0) {
-				seekg(minimumPos - 1);
-				if (endOfStream())
-					return;
-				if (peek() == '\n') {
-					seekg(minimumPos);
-				} else
-					nextLine();
-			} else {
-				seekg(0);
-			}
-			while ( (!endOfStream()) && _stream->peek() != _marker) {
-				nextLine();
-			}
-			if (_marker == '@' && (!endOfStream())) {
-				// since '@' is a valid quality character in a FASTQ (sometimes)
-				// verify that the next line is not also starting with '@', as that would be the true start of the record
-				unsigned long tmpPos = tellg();
-				string current = _lineBuffer;
-				string tmp = nextLine();
-				if (endOfStream() || _stream->peek() != _marker) {
-					seekg(tmpPos);
-					_lineBuffer = current;
-
-					if (Options::getDebug()) {
-					  std::cerr << "Correctly picked record break point to read fastq in parallel: "
-					  << current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg() << std::endl;
-					}
-
-				} else {
-					if (Options::getDebug()) {
-					  std::cerr << "Needed to skip an extra line to read fastq in parallel: "
-					  << current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg() << std::endl;
-					}
-				}
-			}
-
-		}
-
-	};
-
-	class FastqStreamParser: public SequenceStreamParser {
-
-	public:
-		FastqStreamParser(istream &s) :
-			SequenceStreamParser(s, '@') {
-		}
-
-		string &getBases() {
-			nextLine(_basesBuffer);
-
-			if (_basesBuffer.empty() || _basesBuffer.length()
-					== _basesBuffer.max_size())
-				throw runtime_error("Missing or too many bases");
-
-			string &qualName = nextLine();
-			if (qualName.empty() || qualName[0] != '+')
-				throw runtime_error((string("Missing '+' in fastq, got: ") + _basesBuffer + " " + qualName).c_str());
-
-			return _basesBuffer;
-		}
-
-		string &getQuals() {
-			nextLine(_qualsBuffer);
-			if (Options::getIgnoreQual()) {
-				_qualsBuffer.assign(_qualsBuffer.length(), Read::REF_QUAL);
-			}
-			return _qualsBuffer;
-		}
-		int getType() {
-			return 0;
-		}
-	};
-
-	class FastaStreamParser: public SequenceStreamParser {
-		static const char fasta_marker = '>';
-
-	public:
-
-		FastaStreamParser(istream &s) :
-			SequenceStreamParser(s, fasta_marker) {
-		}
-
-		virtual string &getBases() {
-			string &bases = getBasesOrQuals();
-			_qualsBuffer.assign(bases.length(), Read::REF_QUAL);
-			return bases;
-		}
-
-		virtual string &getQuals() {
-			return _qualsBuffer;
-		}
-
-		virtual string &getBasesOrQuals() {
-			_basesBuffer.clear();
-			while (!endOfStream()) {
-				nextLine();
-
-				if (_lineBuffer.empty())
-					break;
-
-				_basesBuffer += _lineBuffer;
-				if (_basesBuffer.size() == _basesBuffer.max_size())
-					throw runtime_error("Sequence/Qual too large to read");
-
-				if (peek() == fasta_marker)
-					break;
-			}
-			return _basesBuffer;
-		}
-		int getType() {
-			return 1;
-		}
-	};
-
-	class FastaQualStreamParser: public FastaStreamParser {
-		FastaStreamParser _qualParser; // odd, but it works
-
-	public:
-		FastaQualStreamParser(istream &fastaStream, istream &qualStream) :
-			FastaStreamParser(fastaStream), _qualParser(qualStream) {
-		}
-
-		string &getName() {
-			string &qualName = _qualParser.getName();
-			string &name = FastaStreamParser::getName();
-			if (name != qualName)
-				throw runtime_error("fasta and quals have different names");
-			return name;
-		}
-
-		string &getBases() {
-			return getBasesOrQuals();
-		}
-
-		string &getQuals() {
-			// odd, but it works
-			string &qualValues = _qualParser.getBasesOrQuals();
-			istringstream ss(qualValues);
-
-			_qualsBuffer.clear();
-			while (!ss.eof()) {
-				int qVal;
-				ss >> qVal;
-				if (ss.fail())
-					break;
-				qVal += 64;
-				_qualsBuffer.push_back(qVal);
-			}
-			return _qualsBuffer;
-		}
-		int getType() {
-			return 1;
-		}
-	};
-};
-
-/*
- std::ifstream::pos_type _fileSize(ifstream &f)
- {
- std::ifstream::pos_type current = f.tellg();
- f.seekg(0, std::ios_base::beg);
- std::ifstream::pos_type begin_pos = f.tellg();
- f.seekg(0, std::ios_base::end);
- std::ifstream::pos_type size = f.tellg() - begin_pos;
- f.seekg(current,std::ios_base::beg);
-
- return size;
- }*/
+ReadSet::MmapSourceVector ReadSet::mmapSources;
 
 void ReadSet::addRead(Read &read) {
+	SequenceLengthType readLength = read.getLength();
+	addRead(read, readLength);
+}
+void ReadSet::addRead(Read &read, SequenceLengthType readLength) {
 	_reads.push_back(read);
-	SequenceLengthType len = read.getLength();
-	_baseCount += len;
-	setMaxSequenceLength(len);
+	_baseCount += readLength;
+	setMaxSequenceLength(readLength);
+}
+ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
+	MmapSource mmap(filePath, ReadFileReader::getFileSize(filePath));
+	addMmaps( MmapSourcePair(mmap, MmapSource()) );
+	return mmap;
 }
 
-void ReadSet::appendAnyFile(string filePath, string filePath2) {
-	ReadFileReader reader(filePath, filePath2);
+ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFile(string fastaFilePath, string qualFilePath) {
+    MmapSource mmap = mmapFile(fastaFilePath);
+
+    ReadFileReader reader;
+    if (!qualFilePath.empty()) {
+    	MmapSource mmap2 = mmapFile(qualFilePath);
+    	reader.setReader(mmap, mmap2);
+    } else {
+	    reader.setReader(mmap);
+    }
+
 	switch (reader.getType()) {
 	case 0:
-		appendFastq(filePath);
+		appendFastq(mmap);
 		break;
 	case 1:
 		appendFasta(reader);
 	}
-	incrementFile();
+	incrementFile(reader);
+	return reader.getParser();
 }
 
 void ReadSet::appendAllFiles(Options::FileListType &files) {
 
 #ifdef _USE_OPENMP
 	ReadSet myReads[ files.size() ];
+	SequenceStreamParserPtr parsers[ files.size() ];
 	int numThreads = omp_get_max_threads() / MAX_FILE_PARALLELISM;
 	if ( numThreads > 1 ) {
 		omp_set_nested(1);
@@ -424,9 +78,12 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 
 #ifdef _USE_OPENMP
 		// append int this thread's ReadSet buffer (note: line continues)
-		myReads[ i ].
+		parsers[i] = myReads[ i ].appendAnyFile(files[i]);
+#else
+		SequenceStreamParserPtr parser = appendAnyFile(files[i]);
+		incrementFile(parser);
 #endif
-		appendAnyFile(files[i]);
+
 
 #ifdef _USE_OPENMP
 #pragma omp critical
@@ -440,7 +97,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 	{	std::cerr << "concatenating ReadSet buffers" << std::endl;}
 	for(int i = 0; i< (long) files.size(); i++) {
 	    append(myReads[i]);
-	    incrementFile();
+	    incrementFile(parsers[i]);
 	}
 #endif
 
@@ -475,28 +132,59 @@ void ReadSet::append(const ReadSet &reads) {
 
 }
 
-void ReadSet::appendFasta(string fastaFilePath, string qualFilePath) {
+ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(string fastaFilePath, string qualFilePath) {
 	ReadFileReader reader(fastaFilePath, qualFilePath);
 	appendFasta(reader);
-	incrementFile();
+	incrementFile(reader);
+	return reader.getParser();
 }
-void ReadSet::appendFasta(ReadFileReader &reader) {
-	string name, bases, quals;
-	while (reader.nextRead(name, bases, quals)) {
-		Read read(name, bases, quals);
-		addRead(read);
-	}
+ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadSet::MmapSource &mmap) {
+	ReadFileReader reader(mmap);
+	appendFasta(reader);
+	incrementFile(reader);
+	return reader.getParser();
 }
 
-void ReadSet::appendFastaFile(string &str) {
+ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader) {
+	string name, bases, quals;
+	if (reader.isMmaped() && Options::getMmapInput() != 0) {
+	    RecordPtr recordPtr = reader.getStreamRecordPtr();
+	    RecordPtr qualPtr = reader.getStreamQualRecordPtr();
+	    RecordPtr nextRecordPtr = recordPtr;
+	    std::string name, bases, quals;
+	    bool isMultiline;
+	    while (reader.nextRead(nextRecordPtr, name, bases, quals, isMultiline)) {
+            if (isMultiline) {
+            	// store the read in memory
+            	Read read(name,bases,quals);
+            	addRead(read, bases.length());
+            } else {
+            	Read read(recordPtr, qualPtr);
+            	addRead(read, bases.length());
+            }
+            recordPtr = nextRecordPtr;
+	    	qualPtr = reader.getStreamQualRecordPtr();
+	    }
+	} else {
+	    while (reader.nextRead(name, bases, quals)) {
+	        Read read(name, bases, quals);
+	        addRead(read, bases.length());
+	    }
+	}
+	return reader.getParser();
+}
+
+ReadSet::SequenceStreamParserPtr ReadSet::appendFastaFile(string &str) {
 	ReadFileReader reader(str);
 	appendFasta(reader);
-	incrementFile();
+	incrementFile(reader);
+	return reader.getParser();
 }
 
+// TODO FIXME does not like mmap..
 #ifdef _USE_OPENMP
 
-void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
+ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSource &mmap)
 {
 
 	unsigned long startIdx = _reads.size();
@@ -511,6 +199,7 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
 	unsigned long seekPos[ numThreads ];
 	for(int i = 0; i < numThreads; i++)
 	numReads[i] = 0;
+	SequenceStreamParserPtr singleParser;
 
 #pragma omp parallel num_threads(numThreads)
 	{
@@ -519,14 +208,17 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
 		throw "OMP thread count discrepancy!";
 
 		ReadSet myReads;
-		ReadFileReader reader(fastaFilePath,qualFilePath);
+		ReadFileReader reader(mmap);
+
+		if (omp_get_thread_num() == 0)
+			singleParser = reader.getParser();
 
 #pragma omp single
 		{
 			blockSize = reader.getBlockSize(numThreads);
 			if (blockSize < 100)
 			blockSize = 100;
-			std::cerr << "Reading " << fastaFilePath << " with " << numThreads << " threads" << std::endl;
+			std::cerr << "Reading " << mmap << " with " << numThreads << " threads" << std::endl;
 		}
 		reader.seekToNextRecord( blockSize * omp_get_thread_num() );
 		seekPos[ omp_get_thread_num() ] = reader.getPos();
@@ -546,13 +238,34 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
 		//#pragma omp critical
 		//{ std::cerr << omp_get_thread_num() << " " << blockSize << " seeked to " << reader.getPos() << " will read: " << hasNext << std::endl; }
 
-		while (hasNext && reader.nextRead(name,bases,quals))
-		{
-			Read read(name, bases, quals);
-			myReads.addRead( read );
-			// todo look into getPos() to optimize
-			hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
+		if (reader.isMmaped() && Options::getMmapInput() != 0) {
+		    RecordPtr recordPtr = reader.getStreamRecordPtr();
+		    RecordPtr qualPtr = reader.getStreamQualRecordPtr();
+		    RecordPtr nextRecordPtr = recordPtr;
+		    std::string name, bases, quals;
+		    bool isMultiline;
+		    while (hasNext && reader.nextRead(nextRecordPtr, name, bases, quals, isMultiline)) {
+	            if (isMultiline) {
+	            	// store the read in memory, as mmap does not currently work
+	            	Read read(name,bases,quals);
+	            	myReads.addRead(read, bases.length());
+	            } else {
+	            	Read read(recordPtr, qualPtr);
+                    myReads.addRead(read, bases.length());
+	            }
+
+		    	recordPtr = nextRecordPtr;
+		    	qualPtr = reader.getStreamQualRecordPtr();
+		    	hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
+		    }
+		} else {
+		    while (hasNext && reader.nextRead(name, bases, quals)) {
+		        Read read(name, bases, quals);
+		        myReads.addRead(read, bases.length());
+		        hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
+		    }
 		}
+
 		numReads[ omp_get_thread_num() ] = myReads.getSize();
 
 		//#pragma omp critical
@@ -583,23 +296,23 @@ void ReadSet::appendFastqBlockedOMP(string fastaFilePath,string qualFilePath)
 		_reads[startIdx + numReads[ omp_get_thread_num() ] + j] = myReads.getRead(j);
 	}
 
-	incrementFile();
+    incrementFile(singleParser);
 	// reset omp variables
 	omp_set_nested(OMP_NESTED_DEFAULT);
-
+	return singleParser;
 }
 
-void ReadSet::appendFastq(string fastaFilePath)
+ReadSet::SequenceStreamParserPtr ReadSet::appendFastq(ReadSet::MmapSource &mmap)
 {
-	appendFastqBlockedOMP(fastaFilePath);
+	return appendFastqBlockedOMP(mmap);
 }
 
 #else // _USE_OPENMP
-void ReadSet::appendFastq(string fastaFilePath) {
-	appendFasta(fastaFilePath);
+ReadSet::SequenceStreamParserPtr ReadSet::appendFastq(ReadSet::MmapSource &mmap) {
+	return appendFasta(mmap);
 }
-
 #endif // _USE_OPENMP
+
 std::string _commonName(const std::string &readName) {
 	return readName.substr(0, readName.length() - 1);
 }
@@ -748,7 +461,7 @@ ReadSet::ReadSetSizeType ReadSet::getCentroidRead(const ProbabilityBases &probs)
 
 Read ReadSet::getConsensusRead() const {
 	ProbabilityBases probs = getProbabilityBases();
-    return getConsensusRead(probs, string("C-") + getRead(0).getName());
+    return getConsensusRead(probs, string("C") + boost::lexical_cast<std::string>(getSize()) + string("-") + getRead(0).getName());
 }
 Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) {
     stringstream fasta;
@@ -763,6 +476,54 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.32  2010-04-16 22:44:18  regan
+// merged HEAD with changes for mmap and intrusive pointer
+//
+// Revision 1.31.2.13.2.2  2010-04-16 21:38:39  regan
+// addressed part of hack where multi-line records are dangerous to read mmaped
+//
+// Revision 1.31.2.13.2.1  2010-04-16 17:42:34  regan
+// fixed parallelism
+//
+// Revision 1.31.2.13  2010-04-15 21:31:50  regan
+// bugfix in markups and duplicate fragment filter
+//
+// Revision 1.31.2.12  2010-04-15 20:48:04  regan
+// honor mmap-input option in parallel read
+//
+// Revision 1.31.2.11  2010-04-15 20:42:35  regan
+// bugfix in parallel fasta/fastq read
+//
+// Revision 1.31.2.10  2010-04-15 17:59:52  regan
+// made mmap optional
+//
+// Revision 1.31.2.9  2010-04-14 22:36:06  regan
+// round of bugfixes
+//
+// Revision 1.31.2.8  2010-04-14 20:53:49  regan
+// checkpoint and passes unit tests!
+//
+// Revision 1.31.2.7  2010-04-14 17:51:43  regan
+// checkpoint
+//
+// Revision 1.31.2.6  2010-04-14 05:35:37  regan
+// checkpoint. compiles but segfaults
+//
+// Revision 1.31.2.5  2010-04-12 22:37:47  regan
+// checkpoint
+//
+// Revision 1.31.2.4  2010-04-12 20:59:45  regan
+// mmap checkpoint
+//
+// Revision 1.31.2.3  2010-04-07 22:33:08  regan
+// checkpoint mmaping input files
+//
+// Revision 1.31.2.2  2010-04-05 05:42:53  regan
+// checkpoint mmaping input files
+//
+// Revision 1.31.2.1  2010-04-05 03:32:10  regan
+// moved read file reader
+//
 // Revision 1.31  2010-03-15 18:06:50  regan
 // minor refactor and added consensus read
 //
