@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.32 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.33 2010-04-21 23:39:17 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -6,12 +6,15 @@
 
 #include <cmath>
 #include <iostream>
+#include <ios>
 #include <iomanip>
 #include <fstream>
 #include <cstdlib>
 #include <vector>
 #include <algorithm>
 #include <tr1/memory>
+#include <string>
+#include <ostream>
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
@@ -216,10 +219,31 @@ public:
 	}
 };
 
+class TempFile {
+public:
+	static std::string buildNew(long size) {
+		char * tmp = tempnam(NULL, "Kmmap");
+		std::string filename = tmp;
+		free(tmp);
+		std::ofstream os(filename.c_str());
+		os.seekp(size);
+		os << '\0';
+		return filename;
+	}
+	static KoMer::MmapFile buildNewMmap(long size) {
+		std::string filename = buildNew(size);
+		KoMer::MmapFile mmap(filename, std::ios_base::in | std::ios_base::out, size);
+		unlink(filename.c_str());
+		return mmap;
+	}
+};
 #endif
 
 //
 // $Log: Utils.h,v $
+// Revision 1.33  2010-04-21 23:39:17  regan
+// added tempfile util
+//
 // Revision 1.32  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //
