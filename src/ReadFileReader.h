@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.2 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.3 2010-04-21 23:39:04 regan Exp $
 //
 
 #ifndef _READ_FILE_READER_H
@@ -7,8 +7,6 @@
 #include <cstdlib>
 
 #include <boost/shared_ptr.hpp>
-#include <boost/iostreams/device/mapped_file.hpp>
-#include <boost/iostreams/stream.hpp>
 #include <boost/unordered_map.hpp>
 
 #include "config.h"
@@ -18,8 +16,8 @@ using namespace std;
 class ReadFileReader {
 public:
 	typedef KoMer::RecordPtr RecordPtr;
-	typedef boost::iostreams::mapped_file_source MmapSource;
-	typedef boost::iostreams::stream< MmapSource > MmapIStream;
+	typedef KoMer::MmapSource MmapSource;
+	typedef KoMer::MmapIStream MmapIStream;
 
     class SequenceStreamParser;
 	typedef boost::shared_ptr< SequenceStreamParser > SequenceStreamParserPtr;

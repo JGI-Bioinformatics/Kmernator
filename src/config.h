@@ -1,6 +1,9 @@
 #ifndef _KOMER_CONFIG_H
 #define _KOMER_CONFIG_H
 
+#include <boost/iostreams/device/mapped_file.hpp>
+#include <boost/iostreams/stream.hpp>
+
 #ifdef ENABLE_OPENMP
 #define _USE_OPENMP
 //#define _USE_THREADSAFE_KMER
@@ -27,6 +30,12 @@ namespace KoMer {
    static const char REF_QUAL = 0xff;
    static const char FASTQ_START_CHAR = 64;
    static const char PRINT_REF_QUAL = 126;
+
+   typedef boost::iostreams::mapped_file MmapFile;
+   typedef boost::iostreams::mapped_file_source MmapSource;
+   typedef boost::iostreams::stream< MmapSource > MmapIStream;
+
+
 };
 
 #endif
