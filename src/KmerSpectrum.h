@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.30 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.31 2010-04-21 00:33:20 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -194,7 +194,156 @@ public:
 				singletonElem = spectrum->getIfExistsSingleton(kmer);
 			}
 		}
+		double getCount(bool useWeights = false) const {
+			if (useWeights) {
+				if (spectrum->hasSolids && solidElem.isValid())
+					return solidElem.value().getWeightedCount();
+				else if (weakElem.isValid())
+					return weakElem.value().getWeightedCount();
+				else if (singletonElem.isValid())
+					return singletonElem.value().getWeightedCount();
+				else
+					return 0.0;
+			} else {
+				if (spectrum->hasSolids && solidElem.isValid())
+					return solidElem.value().getCount();
+				else if (weakElem.isValid())
+					return weakElem.value().getCount();
+				else if (singletonElem.isValid())
+					return singletonElem.value().getCount();
+				else
+					return 0.0;
+			}
+		}
 	};
+
+	// returns the count for a single kmer
+	double getCount(const Kmer &kmer, bool useWeights = false) {
+		DataPointers pointer(*this, kmer);
+		return pointer.getCount(useWeights);
+	}
+
+	// sets the counts for each kmer
+	void getCounts(KmerWeights &weights, bool useWeights = false) {
+		DataPointers pointers(*this);
+		for(SequenceLengthType idx = 0; idx < weights.size(); idx++) {
+			pointers.set(weights[idx]);
+			weights.valueAt(idx) = pointers.getCount(useWeights);
+		}
+	}
+
+	void consolidate(const Kmer &myKmer, bool useWeights = false) {
+		// find all matches to this spectrum
+		KmerWeights weights = KmerWeights::permuteBases(myKmer, useWeights);
+		double myCount = getCount(myKmer, useWeights);
+		getCounts(weights, useWeights);
+		consolidate(myKmer, myCount, weights);
+	}
+
+	// test and optionally shuffle myKmer into our out of one of its first degree permutations
+	void consolidate(const Kmer &myKmer, double myCount, const KmerWeights &weights, bool useWeights = false) {
+		SequenceLengthType size = weights.size();
+
+		SequenceLengthType firstMatch = size;
+		double firstCount = myCount;
+		SequenceLengthType firstNonZero = 0;
+		for(SequenceLengthType idx = 0; idx < size; idx++) {
+			double testCount = weights.valueAt(idx);
+			if (testCount > 0.0) {
+			    firstNonZero++;
+			    if (testCount >= firstCount) {
+				    firstMatch = idx;
+				    firstCount = testCount;
+			    }
+			}
+		}
+
+		if (firstNonZero >= 1) {
+			if (firstCount == size) {
+				// one or more first degree matches, none better or equal to myKmer
+                // do nothing, let them merge on their turn
+			} else {
+				// there was (at least) one equal or better match
+				const Kmer &bestKmer = weights[firstMatch];
+
+				if (firstCount == myCount) {
+					// tie, test count of first degree to bestMatch
+					KmerWeights secondWeights = KmerWeights::permuteBases(bestKmer, useWeights);
+					getCounts(secondWeights, useWeights);
+
+					SequenceLengthType bestNonZero = 0;
+					for(SequenceLengthType idx = 0; idx < size; idx++)
+						if (secondWeights.valueAt(idx) > 0.0)
+							bestNonZero++;
+					if (bestNonZero == firstNonZero) {
+						// tie, pick greater kmer
+						if (myKmer < bestKmer) {
+							// move myKmer into bestKmer
+							migrateKmerData(myKmer, bestKmer);
+						} else {
+							// do nothing let the best match merge on its turn
+							//migrateKmerData(bestKmer, myKmer);
+						}
+					} else {
+						// one has more first degrees than other.  Move to higher number of first degrees
+						if (firstNonZero < bestNonZero) {
+							// move myKmer into bestKmer
+							migrateKmerData(myKmer, bestKmer);
+						} else {
+							// do nothing let bestKmer merge on its turn
+							//migrateKmerData(bestKmer, myKmer);
+						}
+					}
+
+				} else {
+			        // one or more first degree matches, one clearly better than myKmer
+				    // merge myKmer with bestMatch
+					migrateKmerData(myKmer, bestKmer);
+				}
+			}
+		}
+	}
+
+	// adds/moves tracking from one kmer to another
+	void migrateKmerData(const Kmer &srcKmer, const Kmer &dstKmer) {
+		bool trans = false;
+#pragma omp critical
+		{
+			if (Options::getDebug() >= 1) {
+			    std::cerr << "Merging kmers " << srcKmer.toFasta() << " to " << dstKmer.toFasta() << std::endl;
+			}
+
+			if (hasSolids) {
+			    SolidElementType src = getIfExistsSolid(srcKmer);
+			    if (src.isValid()) {
+			    	SolidElementType dst = getSolid(dstKmer);
+			    	dst.value().add(src.value());
+			    	trans = true;
+			    	src.value().reset();
+			    }
+		    }
+		    if (!trans) {
+		    	WeakElementType src = getIfExistsWeak(srcKmer);
+		    	if (src.isValid()) {
+		    		WeakElementType dst = getWeak(dstKmer);
+		    		dst.value().add(src.value());
+		    		trans = true;
+		    		src.value().reset();
+		    	}
+		    }
+		    if (!trans && hasSingletons) {
+		    	SingletonElementType src = getIfExistsSingleton(srcKmer);
+		    	if (src.isValid()) {
+		    		SingletonElementType dst = getSingleton(dstKmer);
+		    		dst.value().add(src.value());
+		    		trans = true;
+		    		src.value().reset();
+		    	}
+		    }
+		}
+		assert(trans);
+	}
+
 
 	class Histogram {
 	public:
@@ -1419,8 +1568,10 @@ public:
 		  for (unsigned int i = 1; i < vec.size(); i++) {
 			vec[0].singleton.mergePromote(vec[i].singleton, vec[0].weak);
 		  }
+		  if (minimumCount > 1)
+			  vec[0].singleton.clear();
 		}
-		// purge if min > 2
+		// TODO purge if weak count < minimumCount
 	}
 };
 

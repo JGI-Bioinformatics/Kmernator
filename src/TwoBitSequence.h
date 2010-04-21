@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.20 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.21 2010-04-21 00:33:20 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -148,6 +148,9 @@ public:
 	static MarkupElementSizeType getMarkupElementSize(const BaseLocationVectorType &markups);
 	static MarkupElementSizeType getMarkupElementSize(const BaseLocationVectorType &markups, long &totalMarkupSize);
 
+	static void permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1, TwoBitEncoding *out2, TwoBitEncoding *out3,
+			SequenceLengthType sequenceLength, SequenceLengthType permuteBaseIdx);
+
     static SequenceLengthType fastaLengthToTwoBitLength(SequenceLengthType fastaLength)
     {
        return (fastaLength + 3)/4;
@@ -158,6 +161,12 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.21  2010-04-21 00:33:20  regan
+// merged with branch to detect duplicated fragment pairs with edit distance
+//
+// Revision 1.20.2.1  2010-04-19 18:20:51  regan
+// refactored base permutation
+//
 // Revision 1.20  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //

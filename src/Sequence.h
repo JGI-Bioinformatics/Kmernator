@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.24 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.25 2010-04-21 00:33:19 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -577,10 +577,14 @@ public:
 			double otherProb = (1.0 - prob) / 3.0;
 			ProbabilityBase &base = probs[i];
 			switch (fasta[i]) {
-			case 'A': base.a += prob; base.c += otherProb; base.g += otherProb; base.t += otherProb; break;
-			case 'C': base.c += prob; base.a += otherProb; base.g += otherProb; base.t += otherProb; break;
-			case 'G': base.g += prob; base.a += otherProb; base.c += otherProb; base.t += otherProb; break;
-			case 'T': base.t += prob; base.a += otherProb; base.c += otherProb; base.g += otherProb; break;
+			case 'A':
+			case 'a': base.a += prob; base.c += otherProb; base.g += otherProb; base.t += otherProb; break;
+			case 'C':
+			case 'c': base.c += prob; base.a += otherProb; base.g += otherProb; base.t += otherProb; break;
+			case 'G':
+			case 'g': base.g += prob; base.a += otherProb; base.c += otherProb; base.t += otherProb; break;
+			case 'T':
+			case 't': base.t += prob; base.a += otherProb; base.c += otherProb; base.g += otherProb; break;
 			}
 		}
 		return probs;
@@ -599,6 +603,12 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.25  2010-04-21 00:33:19  regan
+// merged with branch to detect duplicated fragment pairs with edit distance
+//
+// Revision 1.24.2.1  2010-04-16 23:46:06  regan
+// checkpoint
+//
 // Revision 1.24  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //

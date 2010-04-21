@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.8 2010-04-16 22:44:25 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.9 2010-04-21 00:33:18 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -24,9 +24,49 @@ const char n3[] = "NCGTANTACTNCGACGTGCCAG";
 const char n4[] = "NCGTANTACTNCGACNTGCCAGT";
 const char n5[] = "NCGTANTACTNCGACNTGCCAGTN";
 
-TwoBitEncoding in[1024], out[1024], test[1024];
+TwoBitEncoding in[1024], out[1024], out1[1024], out2[1024], out3[1024], test[1024];
 char fasta[1024];
 SequenceLengthType twoBitLength, sequenceLength;
+
+
+//static void permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1, TwoBitEncoding *out2, TwoBitEncoding *out3, SequenceLengthType sequenceLength, SequenceLengthType permuteBaseIdx);
+
+#define PERMUTE_BASE(inFasta, targetFasta1, targetFasta2, targetFasta3, baseIdx) \
+	  sequenceLength = std::strlen(inFasta);\
+	  twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
+	  TwoBitSequence::compressSequence(inFasta, in);\
+	  TwoBitSequence::permuteBase(in, out1, out2, out3, sequenceLength, baseIdx);\
+	  TwoBitSequence::uncompressSequence(out1, sequenceLength, fasta);\
+	  BOOST_CHECK_EQUAL(targetFasta1, fasta);\
+	  TwoBitSequence::uncompressSequence(out2, sequenceLength, fasta);\
+	  BOOST_CHECK_EQUAL(targetFasta2, fasta);\
+	  TwoBitSequence::uncompressSequence(out3, sequenceLength, fasta);\
+	  BOOST_CHECK_EQUAL(targetFasta3, fasta);
+
+void testPermuteBase() {
+	PERMUTE_BASE("A", "C", "G", "T", 0);
+	PERMUTE_BASE("AA", "CA", "GA", "TA", 0);
+	PERMUTE_BASE("AC", "CC", "GC", "TC", 0);
+	PERMUTE_BASE("AG", "CG", "GG", "TG", 0);
+	PERMUTE_BASE("AT", "CT", "GT", "TT", 0);
+
+	PERMUTE_BASE("AA", "AC", "AG", "AT", 1);
+	PERMUTE_BASE("AC", "AA", "AG", "AT", 1);
+	PERMUTE_BASE("AG", "AA", "AC", "AT", 1);
+	PERMUTE_BASE("AT", "AA", "AC", "AG", 1);
+
+    PERMUTE_BASE("ACGT", "CCGT", "GCGT", "TCGT", 0);
+    PERMUTE_BASE("ACGT", "AAGT", "AGGT", "ATGT", 1);
+    PERMUTE_BASE("ACGT", "ACAT", "ACCT", "ACTT", 2);
+    PERMUTE_BASE("ACGT", "ACGA", "ACGC", "ACGG", 3);
+
+    PERMUTE_BASE("ACGTT", "CCGTT", "GCGTT", "TCGTT", 0);
+    PERMUTE_BASE("ACGTG", "AAGTG", "AGGTG", "ATGTG", 1);
+    PERMUTE_BASE("ACGTC", "ACATC", "ACCTC", "ACTTC", 2);
+    PERMUTE_BASE("ACGTA", "ACGAA", "ACGCA", "ACGGA", 3);
+    PERMUTE_BASE("ACGTT", "ACGTA", "ACGTC", "ACGTG", 4);
+
+}
 
 //static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases);
 
@@ -199,10 +239,17 @@ BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 	testCompressUncompress();
 	testMarkup();
 	testReverseComplement();
+	testPermuteBase();
 }
 
 //
 // $Log: TwoBitSequenceTest.cpp,v $
+// Revision 1.9  2010-04-21 00:33:18  regan
+// merged with branch to detect duplicated fragment pairs with edit distance
+//
+// Revision 1.8.2.1  2010-04-19 18:20:50  regan
+// refactored base permutation
+//
 // Revision 1.8  2010-04-16 22:44:25  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //

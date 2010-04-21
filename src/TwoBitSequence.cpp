@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.20 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.21 2010-04-21 00:33:20 regan Exp $
 //
 
 #include <cstring>
@@ -228,9 +228,45 @@ TwoBitSequenceBase::MarkupElementSizeType TwoBitSequence::getMarkupElementSize(c
 	return markupElementSize;
 }
 
+void TwoBitSequence::permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1, TwoBitEncoding *out2, TwoBitEncoding *out3,
+		SequenceLengthType sequenceLength, SequenceLengthType permuteBaseIdx) {
+
+	assert(permuteBaseIdx < sequenceLength);
+
+	SequenceLengthType bytes = fastaLengthToTwoBitLength(sequenceLength);
+    SequenceLengthType permuteByteIdx = fastaLengthToTwoBitLength(permuteBaseIdx+1) - 1;
+
+    // start off identical
+    memcpy(out1, in, bytes);
+    memcpy(out2, in, bytes);
+    memcpy(out3, in, bytes);
+
+    SequenceLengthType j = (permuteBaseIdx % 4) * 3;
+
+    unsigned int arrayIdx = *(in + permuteByteIdx) * 12;
+
+    TwoBitEncoding *ptr;
+
+    ptr = out1 + permuteByteIdx;
+    *ptr = permutations[ arrayIdx + j ];
+
+    ptr = out2 + permuteByteIdx;
+    *ptr = permutations[ arrayIdx + j + 1 ];
+
+    ptr = out3 + permuteByteIdx;
+    *ptr = permutations[ arrayIdx + j + 2 ];
+
+}
+
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.21  2010-04-21 00:33:20  regan
+// merged with branch to detect duplicated fragment pairs with edit distance
+//
+// Revision 1.20.2.1  2010-04-19 18:20:51  regan
+// refactored base permutation
+//
 // Revision 1.20  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //

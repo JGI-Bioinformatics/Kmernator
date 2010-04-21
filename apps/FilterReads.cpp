@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.16 2010-04-16 22:44:23 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.17 2010-04-21 00:33:22 regan Exp $
 //
 
 #include <iostream>
@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
 	if (!FilterReadsOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
-	cerr << MemoryUtils::getMemoryUsage() << endl;
+	MemoryUtils::getMemoryUsage();
 
 	ReadSet reads;
 	KmerSizer::set(Options::getKmerSize());

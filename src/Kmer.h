@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.78 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.79 2010-04-21 00:33:20 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -1487,30 +1487,22 @@ public:
 	}
 
 	// return a KmerArray that has one entry for each possible single-base substitution
-	static KmerArray permuteBases(const Kmer &kmer, bool leastComplement =
-			false) {
+	static KmerArray permuteBases(const Kmer &kmer, bool leastComplement = false) {
 		KmerArray kmers(KmerSizer::getSequenceLength() * 3);
 		TEMP_KMER(tmp);
-		for (SequenceLengthType byteIdx = 0; byteIdx < KmerSizer::getByteSize(); byteIdx++) {
-			unsigned int max = 12;
-			if (byteIdx + 1 == KmerSizer::getByteSize())
-				max = 3* (KmerSizer ::getSequenceLength()%4);
-				if (max == 0)
-				max = 12;
-				for(SequenceLengthType j=0; j<max; j++) {
-					SequenceLengthType kmerIdx = byteIdx*12+j;
-					tmp = kmer;
-					TwoBitEncoding *ptr = tmp.getTwoBitSequence();
-					ptr += byteIdx;
-					*ptr = TwoBitSequence::permutations[ ((const TwoBitEncoding)*ptr)*12 + j ];
-        if (leastComplement)
-          tmp.buildLeastComplement( kmers[kmerIdx] );
-        else
-          kmers[kmerIdx] = tmp;
-      }
-    }
-				return kmers;
+		for (SequenceLengthType baseIdx = 0; baseIdx < KmerSizer::getSequenceLength(); baseIdx++) {
+			TwoBitSequence::permuteBase(kmer.getTwoBitSequence(), kmers[baseIdx*3].getTwoBitSequence(), kmers[baseIdx*3+1].getTwoBitSequence(), kmers[baseIdx*3+2].getTwoBitSequence(),
+					KmerSizer::getSequenceLength(), baseIdx);
+			if (leastComplement) {
+				for(int i = 0 ; i < 3; i++) {
+				   if (! kmers[baseIdx*3+i].buildLeastComplement(tmp) ) {
+				      kmers[baseIdx*3+i] = tmp;
+				   }
+				}
 			}
+		}
+		return kmers;
+	}
 
 		protected:
 			IndexType _find(const Kmer &target) const {
@@ -2034,6 +2026,7 @@ public:
            merged.reset(false);
            b.reset(true);
        }
+       src.clear();
 	}
 
 	template< typename OtherDataType >
@@ -2082,6 +2075,7 @@ public:
 	           merged.reset(false);
 	           b.reset(true);
 	       }
+	       src.clear();
 	}
 
 public:
@@ -2198,6 +2192,28 @@ public:
 	ConstIterator begin() const {return Iterator(this);}
 	ConstIterator end() const {return Iterator(this, _buckets.end());}
 
+	typedef std::pair<BucketsVectorIterator, BucketsVectorIterator> ThreadedBuckets;
+	ThreadedBuckets _getThreadedBuckets() {
+		long threads = omp_get_num_threads();
+
+		if (threads == 1) {
+			return ThreadedBuckets(_buckets.begin(), _buckets.end());
+		} else {
+			long threadNum = omp_get_thread_num();
+			long step = _buckets.size() / threads;
+			if (step == 0)
+				step = 1;
+			BucketsVectorIterator begin = _buckets.begin() + step*threadNum;
+			BucketsVectorIterator end = begin + step;
+			if (threadNum + 1 == threads || end > _buckets.end())
+				end = _buckets.end();
+			return ThreadedBuckets(begin,end);
+		}
+	}
+	Iterator beginThreaded() {
+		return Iterator(this, _getThreadedBuckets().first);}
+	Iterator endThreaded() {return Iterator(this, _getThreadedBuckets().second);}
+
 };
 
 typedef KmerArray<char> Kmers;
@@ -2208,6 +2224,18 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.79  2010-04-21 00:33:20  regan
+// merged with branch to detect duplicated fragment pairs with edit distance
+//
+// Revision 1.78.2.3  2010-04-20 23:55:37  regan
+// added parallel/threaded iterator handles
+//
+// Revision 1.78.2.2  2010-04-19 18:20:51  regan
+// refactored base permutation
+//
+// Revision 1.78.2.1  2010-04-16 23:46:06  regan
+// checkpoint
+//
 // Revision 1.78  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //

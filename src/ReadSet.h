@@ -1,10 +1,11 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.22 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.23 2010-04-21 00:33:20 regan Exp $
 //
 
 #ifndef _READ_SET_H
 #define _READ_SET_H
 #include <string>
 #include <boost/unordered_map.hpp>
+#include <sys/mman.h>
 
 #include "config.h"
 #include "Options.h"
@@ -25,6 +26,20 @@ public:
 	typedef Sequence::RecordPtr RecordPtr;
 
 	static MmapSourceVector mmapSources;
+    static void madviseMmaps(int advise) {
+		for(MmapSourceVector::iterator it = mmapSources.begin(); it != mmapSources.end(); it++) {
+			if (it->first.is_open())
+				madvise(const_cast<char*>(it->first.data()), it->first.size(), advise);
+			if (it->second.is_open())
+				madvise(const_cast<char*>(it->second.data()), it->second.size(), advise);
+		}
+    }
+	static void madviseMmapsRandom() {
+		madviseMmaps(MADV_RANDOM);
+	}
+	static void madviseMmapsSequential() {
+		madviseMmaps(MADV_SEQUENTIAL);
+	}
 
 	static const ReadSetSizeType MAX_READ_IDX = (unsigned int) -1;
 	class Pair {
@@ -97,6 +112,7 @@ private:
 #pragma omp critical
 #endif
 		mmapSources.push_back(mmaps);
+		madviseMmapsSequential();
 	}
 
 public:
@@ -219,6 +235,12 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.23  2010-04-21 00:33:20  regan
+// merged with branch to detect duplicated fragment pairs with edit distance
+//
+// Revision 1.22.2.1  2010-04-20 23:56:43  regan
+// added madvise handles for mmap optimization
+//
 // Revision 1.22  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //

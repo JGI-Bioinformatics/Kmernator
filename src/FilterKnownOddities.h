@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.15 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.16 2010-04-21 00:33:19 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -283,7 +283,7 @@ public:
 	typedef ReadSet::Pair Pair;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 
-	static unsigned long filterDuplicateFragmentPairs(ReadSet &reads, unsigned char sequenceLength = 16, unsigned int cutoffThreshold = 2) {
+	static unsigned long filterDuplicateFragmentPairs(ReadSet &reads, unsigned char sequenceLength = 16, unsigned int cutoffThreshold = 2, unsigned int editDistance = 1) {
 	  unsigned long affectedCount = 0;
 
 	  // select the number of bytes from each pair to scan
@@ -295,15 +295,12 @@ public:
 	  KmerSizer::set(bytes * 4 * 2);
 	  {
 
-		// TODO parallelize - build one KS per thread, then merge, skipping singletons
+		// build one KS per thread, then merge, skipping singletons
         // no need to include quality scores
 
 		// build the kmer spectrum with the concatenated prefixes
 		// from each read in the pair
-		int numThreads = 1;
-#ifdef _USE_OPENMP
-		numThreads = omp_get_max_threads();
-#endif
+		int numThreads = omp_get_max_threads();
 		KS::Vector ksv(numThreads);
 		KmerWeights::Vector tmpKmerv(numThreads);
 		for(int i = 0; i < numThreads; i++) {
@@ -312,13 +309,13 @@ public:
 		  tmpKmerv[i].valueAt(0) = 1.0;
 		}
 		ReadSetSizeType pairSize =  reads.getPairSize();
+
+		ReadSet::madviseMmapsSequential();
 #pragma omp parallel for
 		for(long pairIdx = 0; pairIdx < pairSize; pairIdx++) {
 			Pair &pair = reads.getPair(pairIdx);
-			int threadNum = 0;
-#ifdef _USE_OPENMP
-			threadNum = omp_get_thread_num();
-#endif
+			int threadNum = omp_get_thread_num();
+
 			if (reads.isValidRead(pair.read1) && reads.isValidRead(pair.read2)) {
 			  const Read read1 = reads.getRead(pair.read1);
 			  const Read read2 = reads.getRead(pair.read2);
@@ -356,22 +353,44 @@ public:
 			std::cerr << "merging duplicate fragment spectrums" << std::endl;
 		}
 
-		KS::mergeVector(ksv, 2);
+		KS::mergeVector(ksv, 1);
 		KS &ks = ksv[0];
 
 		// analyze the spectrum
 		ks.printHistograms();
-		// TODO parallelize (partition by bucket range)
+
+		// TODO parallelize (partition by bucket range does not work as side affects dominate)
 
 		ReadSet newReads;
-		for(KS::WeakIterator it = ks.weak.begin(); it != ks.weak.end(); it++) {
+		if (editDistance > 0) {
+			// TODO honor edit distance > 1
+			std::cerr << "Merging kmers within edit-distance of " << editDistance << " " << MemoryUtils::getMemoryUsage() << std::endl;
+// TODO Not deterministic!!
+//#pragma omp parallel
+//		    for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
+		    for(KS::WeakIterator it = ks.weak.begin(); it != ks.weak.end(); it++) {
+			  unsigned int count = it->value().getCount();
+			  if (count > 0 && count < cutoffThreshold) {
+				// check for edit distance matches
+				Kmer &myKmer = it->key();
+
+				ks.consolidate(myKmer, false);
+
+			  }
+		    }
+		}
+
+		ks.printHistograms();
+
+		ReadSet::madviseMmapsRandom();
+		std::cerr << "Building consensus reads. " << MemoryUtils::getMemoryUsage() << std::endl;
+#pragma omp parallel
+		for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
 		    if (it->value().getCount() >= cutoffThreshold) {
 		    	RPW rpw = it->value().getEachInstance();
 
 		    	ReadSet tmpReadSet1;
 		    	ReadSet tmpReadSet2;
-
-		    	// std::stringstream out1, out2, out1a, out2a;
 
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
@@ -384,32 +403,20 @@ public:
 
 		    		tmpReadSet1.append( read1 );
 		    		tmpReadSet2.append( read2 );
-		    		//out1 << read1.getFasta() << std::endl;
-		    		//out1a << read1.getQuals() << std::endl;
-		    		//out2 << read2.getFasta() << std::endl;
-		    		//out2a << read2.getQuals() << std::endl;
+
 		    	}
 
 		    	Read consensus1 = tmpReadSet1.getConsensusRead();
 		    	Read consensus2 = tmpReadSet2.getConsensusRead();
-		    	newReads.append(consensus1);
-		    	newReads.append(consensus2);
-
-
-		    	//	std::cerr << consensus1.getName() << std::endl
-		    	//	<< out1.str() << consensus1.getFasta() << std::endl << out1a.str()
-		    	//	<< consensus1.getQuals() << std::endl;
-		    	//	std::cerr << consensus2.getName() << std::endl
-		    	//	<< out2.str() << consensus2.getFasta() << std::endl << out2a.str()
-		    	//	<< consensus2.getQuals() << std::endl;
-
-
-		    	//ReadSetSizeType readIdx = tmpReadSet.getCentroidRead();
-		    	//ReadSetSizeType count = 0;
+#pragma omp critical
+		    	{
+		    	   newReads.append(consensus1);
+		    	   newReads.append(consensus2);
+		    	   affectedCount += 2 * rpw.size();
+		        }
 
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
-		    	    //if (count++ == readIdx)
-		    	    //	continue;
+
 		    	    ReadSetSizeType pairIdx = rpwit->readId;
 
 		    	    Pair &pair = reads.getPair(pairIdx);
@@ -417,7 +424,6 @@ public:
 		    	    Read &read2 = reads.getRead(pair.read2);
 		    		read1.discard();
 		    		read2.discard();
-		    		affectedCount += 2;
 		    	}
 
 		    }
@@ -429,6 +435,8 @@ public:
 		reads.append(newReads);
 	  }
       KmerSizer::set(oldKmerSize);
+      ReadSet::madviseMmapsSequential();
+
 	  return affectedCount;
 	}
 
