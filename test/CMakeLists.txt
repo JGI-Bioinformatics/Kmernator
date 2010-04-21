@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.19 2010-04-16 22:44:25 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.20 2010-04-21 23:39:39 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -45,6 +45,7 @@ add_executable( KmerTest KmerTest )
 target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet
                                 boost_test_exec_monitor-mt 
                                 boost_unit_test_framework-mt
+                                boost_iostreams-mt-static
                                  )
 add_test( KmerTest KmerTest )
 
@@ -67,6 +68,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.20  2010-04-21 23:39:39  regan
+# got kmermap mmap store and restore working
+#
 # Revision 1.19  2010-04-16 22:44:25  regan
 # merged HEAD with changes for mmap and intrusive pointer
 #

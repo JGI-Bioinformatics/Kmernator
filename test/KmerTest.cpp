@@ -1,7 +1,7 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.35 2010-02-26 13:01:22 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.36 2010-04-21 23:39:39 regan Exp $
 //
 
-
+#include "config.h"
 #include "TwoBitSequence.h"
 #include "Kmer.h"
 
@@ -486,8 +486,32 @@ void testKmerMap(SequenceLengthType size) {
 		BOOST_CHECK_EQUAL(i * 3.0, kmerP[kmersC[i]].second);
 
 		//BOOST_MESSAGE ( kmerF.toString() );
+	}
 
+      KoMer::MmapFile mmapF = kmerF.store();
+	  BOOST_CHECK(mmapF.is_open());
+	  BOOST_CHECK(mmapF.size() > 0);
+	  KoMer::MmapFile mmapP = kmerP.store();
+	  BOOST_CHECK(mmapP.is_open());
+	  BOOST_CHECK(mmapP.size() > 0);
 
+	{
+
+	  KmerMap<float> kmf = KmerMap<float>::restore(mmapF.data());
+	  KmerMap<Pair>  kmp = KmerMap<Pair>::restore(mmapP.data());
+
+	  KmerMap<float> kcf(mmapF.data());
+	  KmerMap<Pair>  kcp(mmapP.data());
+
+	  for (unsigned int i = 0; i < kmersC.size(); i++) {
+	      Kmer &kmer = kmersC[i];
+	      BOOST_CHECK_EQUAL( kmerF[kmer], kmf[kmer] );
+	      BOOST_CHECK_EQUAL( kmerP[kmer].first,  kmp[kmer].first );
+	      BOOST_CHECK_EQUAL( kmerP[kmer].second, kmp[kmer].second );
+	      BOOST_CHECK_EQUAL( kmerF[kmer], kcf[kmer] );
+	      BOOST_CHECK_EQUAL( kmerP[kmer].first,  kcp[kmer].first );
+	      BOOST_CHECK_EQUAL( kmerP[kmer].second, kcp[kmer].second );
+	  }
 	}
 
 	kmerF.clear();
@@ -598,6 +622,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.36  2010-04-21 23:39:39  regan
+// got kmermap mmap store and restore working
+//
 // Revision 1.35  2010-02-26 13:01:22  regan
 // reformatted
 //

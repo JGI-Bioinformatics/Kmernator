@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.79 2010-04-21 00:33:20 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.80 2010-04-21 23:39:37 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -21,6 +21,8 @@
 #include "config.h"
 #include "TwoBitSequence.h"
 #include "MemoryUtils.h"
+#include "KmerTrackingData.h"
+#include "Utils.h"
 
 using namespace TwoBitSequenceBase;
 
@@ -308,573 +310,6 @@ public:
 
 };
 
-class TrackingDataSingleton;
-class TrackingDataWithAllReads;
-
-class TrackingData {
-public:
-	typedef unsigned short CountType;
-	typedef float WeightType;
-	typedef unsigned int ReadIdType;
-	typedef unsigned short PositionType;
-
-	class ReadPosition {
-	public:
-		ReadIdType readId;
-		PositionType position;
-
-		ReadPosition(ReadIdType _read = 0, PositionType _pos = 0) :
-			readId(_read), position(_pos) {
-		}
-	};
-
-	class ReadPositionWeight: public ReadPosition {
-	public:
-		WeightType weight;
-
-		ReadPositionWeight(ReadIdType _read = 0, PositionType _pos = 0,
-				WeightType _weight = 0.0) :
-			ReadPosition(_read, _pos), weight(_weight) {
-		}
-	};
-	typedef std::vector<ReadPositionWeight> ReadPositionWeightVector;
-
-	static WeightType minimumWeight;
-	static CountType minimumDepth;
-	static const CountType MAX_COUNT = (CountType) -1;
-	static unsigned long discarded;
-
-	static CountType maxCount;
-	static WeightType maxWeightedCount;
-
-	static void resetGlobalCounters() {
-		discarded = 0;
-		maxCount = 0;
-		maxWeightedCount = 0.0;
-	}
-	static void resetForGlobals(CountType count) {
-	}
-	static void setGlobals(CountType count, WeightType weightedCount) {
-		if (count > maxCount) {
-			maxCount = count;
-		}
-		if (weightedCount > maxWeightedCount) {
-			maxWeightedCount = weightedCount;
-		}
-	}
-	static inline bool isDiscard(WeightType weight) {
-		if (weight < minimumWeight) {
-#ifdef _USE_OPENMP
-#pragma omp atomic
-#endif
-			discarded++;
-			return true;
-		} else
-			return false;
-	}
-
-protected:
-	CountType count;
-	WeightType weightedCount;
-
-public:
-	TrackingData() :
-		count(0),  weightedCount(0.0) {
-	}
-
-	void reset() {
-		resetForGlobals(getCount());
-		count = 0;
-		weightedCount = 0.0;
-	}
-	inline bool operator==(const TrackingData &other) const {
-		return getCount() == other.getCount();// && weightedCount == other.weightedCount;
-	}
-	inline bool operator<(const TrackingData &other) const {
-		return getCount() < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
-	}
-
-	bool track(double weight, bool forward, ReadIdType readIdx = 0,
-			PositionType readPos = 0) {
-		if (isDiscard(weight))
-			return false;
-
-		if (count < MAX_COUNT) {
-#ifdef _USE_THREADSAFE_KMER
-#pragma omp critical
-#endif
-			{
-				count++;
-				weightedCount += weight;
-			}
-
-			setGlobals(getCount(), getWeightedCount());
-
-			return true;
-		} else
-			return false;
-
-	}
-
-	inline unsigned long getCount() const {
-		return count;
-	}
-	inline unsigned long getDirectionBias() const {
-		return count / 2;
-	}
-	inline double getWeightedCount() const {
-		return weightedCount;
-	}
-	inline double getAverageWeight() const {
-		return weightedCount / count;
-	}
-	inline double getNormalizedDirectionBias() const {
-		return 0.5;
-	}
-
-	ReadPositionWeightVector getEachInstance() const {
-		//returns count entries from read -1, position 0
-		ReadPositionWeight dummy1((ReadIdType) -1, 0, getWeightedCount()
-				/ getCount());
-		ReadPositionWeightVector dummy(getCount(), dummy1);
-		return dummy;
-	}
-
-	std::string toString() const {
-		std::stringstream ss;
-		ss << count << ":" << std::fixed << std::setprecision(2)
-				<< getNormalizedDirectionBias();
-		ss << ':' << std::fixed << std::setprecision(2)
-				<< ((double) weightedCount / (double) count);
-		return ss.str();
-	}
-
-	TrackingData &add(const TrackingData &other) {
-		count += other.count;
-		weightedCount += other.weightedCount;
-		return *this;
-	}
-	TrackingData &operator=(const TrackingDataSingleton &other);
-	TrackingData &operator=(const TrackingDataWithAllReads &other);
-};
-
-class TrackingDataWithDirection: public TrackingData {
-public:
-
-protected:
-	CountType directionBias;
-
-public:
-	TrackingDataWithDirection(): TrackingData(), directionBias(0) {}
-	void reset() {
-		TrackingData::reset();
-		directionBias = 0;
-	}
-
-	bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos) {
-		bool ret = TrackingData::track(weight,forward);
-
-		if (ret) {
-			if (forward)
-				directionBias++;
-		}
-		return ret;
-	}
-	inline unsigned long getDirectionBias() const {
-		return directionBias;
-	}
-	inline double getNormalizedDirectionBias() const {
-		return (double) directionBias / (double) count;
-	}
-
-	TrackingDataWithDirection &add(const TrackingDataWithDirection &other) {
-		TrackingData::add((TrackingData) other);
-		directionBias += other.directionBias;
-		return *this;
-	}
-
-};
-
-class TrackingDataWithLastRead: public TrackingDataWithDirection {
-public:
-
-protected:
-	ReadPosition readPosition;
-
-public:
-	TrackingDataWithLastRead() :
-		TrackingDataWithDirection(), readPosition() {
-	}
-
-	void reset() {
-		TrackingDataWithDirection::reset();
-		readPosition = ReadPosition();
-	}
-	bool track(double weight, bool forward, ReadIdType readIdx,
-			PositionType readPos) {
-		bool ret = TrackingDataWithDirection::track(weight, forward, readIdx, readPos);
-		if (ret)
-			readPosition = ReadPosition(readIdx, readPos);
-		return ret;
-	}
-	ReadPositionWeightVector getEachInstance() const {
-		//returns count entries from read -1, position 0
-		ReadPositionWeight dummy1(readPosition.readId, readPosition.position,
-				getWeightedCount() / getCount());
-		ReadPositionWeightVector dummy(getCount(), dummy1);
-		return dummy;
-	}
-
-	TrackingDataWithLastRead &add(const TrackingDataWithLastRead &other) {
-		TrackingDataWithDirection::add((TrackingDataWithDirection) other);
-		readPosition = other.readPosition;
-		return *this;
-	}
-
-
-};
-
-class TrackingDataSingleton {
-public:
-	typedef TrackingData::PositionType PositionType;
-	typedef TrackingData::ReadPositionWeight ReadPositionWeight;
-	typedef TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
-	typedef TrackingData::CountType CountType;
-	typedef TrackingData::WeightType WeightType;
-	typedef TrackingData::ReadIdType ReadIdType;
-
-protected:
-	unsigned char _weight;
-
-public:
-	TrackingDataSingleton() : _weight(0) {}
-	void reset() {
-		TrackingData::resetForGlobals(getCount());
-		_weight = 0;
-	}
-	inline bool operator==(const TrackingDataSingleton &other) const {
-		return getCount() == other.getCount();
-	}
-	inline bool operator<(const TrackingDataSingleton &other) const {
-		return getCount() < other.getCount();
-	}
-	bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
-		if (TrackingData::isDiscard(weight))
-			return false;
-		_weight = (unsigned char) ((weight * 254.0)) + 1;
-		TrackingData::setGlobals(1, weight);
-		return true;
-	}
-
-	inline unsigned long getCount() const {
-		return _weight == 0 ? 0 : 1;
-	}
-	inline unsigned long getDirectionBias() const {
-		return 0;
-	}
-	inline double getWeightedCount() const {
-		return _weight == 0 ? 0.0 : (_weight - 1 ) / 254.0;
-	}
-	inline double getNormalizedDirectionBias() const {
-		return 0.5;
-	}
-
-	ReadPositionWeightVector getEachInstance() const {
-		//returns count entries from read -1, position 0
-		ReadPositionWeight dummy1((ReadIdType) -1, 0, getWeightedCount()
-				/ getCount());
-		ReadPositionWeightVector dummy(getCount(), dummy1);
-		return dummy;
-	}
-
-	std::string toString() const {
-		std::stringstream ss;
-		ss << getCount() << ":" << std::fixed << std::setprecision(2)
-				<< getNormalizedDirectionBias();
-		ss << ':' << std::fixed << std::setprecision(2)
-				<< ((double) getWeightedCount() / (double) getCount());
-		return ss.str();
-	}
-};
-
-class TrackingDataSingletonWithReadPosition {
-public:
-	typedef TrackingData::ReadPositionWeight ReadPositionWeight;
-	typedef TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
-	typedef TrackingData::CountType CountType;
-	typedef TrackingData::WeightType WeightType;
-	typedef TrackingData::ReadIdType ReadIdType;
-	typedef TrackingData::PositionType PositionType;
-
-protected:
-	ReadPositionWeight instance; // save space and store direction within sign of weight.
-
-public:
-	TrackingDataSingletonWithReadPosition() :
-		instance(0, 0, 0.0) {
-	}
-
-	void reset() {
-		// destructor should *not* call this
-		TrackingData::resetForGlobals(getCount());
-		instance = ReadPositionWeight(0, 0, 0.0);
-	}
-	inline bool operator==(const TrackingDataSingletonWithReadPosition &other) const {
-		return getCount() == other.getCount();// && weightedCount == other.weightedCount;
-	}
-	inline bool operator<(const TrackingDataSingletonWithReadPosition &other) const {
-		return getCount() < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
-	}
-
-	bool track(double weight, bool forward, ReadIdType readIdx = 0,
-			PositionType readPos = 0) {
-		if (TrackingData::isDiscard(weight))
-			return false;
-#ifdef _USE_THREADSAFE_KMER
-#pragma omp critical
-#endif
-		instance = ReadPositionWeight(readIdx, readPos, forward ? weight : -1.0
-				* weight);
-
-		TrackingData::setGlobals(getCount(), getWeightedCount());
-
-		return true;
-	}
-
-	inline unsigned long getCount() const {
-		return instance.weight == 0.0 ? 0 : 1;
-	}
-	inline unsigned long getDirectionBias() const {
-		return instance.weight > 0 ? 1 : 0;
-	}
-	inline double getWeightedCount() const {
-		return instance.weight > 0 ? instance.weight : -1.0 * instance.weight;
-	}
-	inline double getNormalizedDirectionBias() const {
-		return (double) getDirectionBias() / (double) getCount();
-	}
-
-	inline ReadPositionWeightVector getEachInstance() const {
-		return ReadPositionWeightVector(1, instance);
-	}
-
-	inline ReadIdType getReadId() const {
-		return instance.readId;
-	}
-	inline PositionType getPosition() const {
-		return instance.position;
-	}
-
-	std::string toString() const {
-		std::stringstream ss;
-		ss << getCount() << ":" << std::fixed << std::setprecision(2)
-				<< getNormalizedDirectionBias();
-		ss << ':' << std::fixed << std::setprecision(2)
-				<< ((double) getWeightedCount() / (double) getCount());
-		return ss.str();
-	}
-
-};
-
-class TrackingDataWithAllReads {
-public:
-	typedef TrackingData::ReadPositionWeight ReadPositionWeight;
-	typedef TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
-	typedef TrackingData::CountType CountType;
-	typedef TrackingData::WeightType WeightType;
-	typedef TrackingData::ReadIdType ReadIdType;
-	typedef TrackingData::PositionType PositionType;
-
-protected:
-	ReadPositionWeightVector instances;
-	unsigned int directionBias;
-	WeightType weightedCount; // for performance reasons
-
-public:
-	TrackingDataWithAllReads() :
-		instances(), directionBias(0), weightedCount(0.0) {
-	}
-
-	void reset() {
-		TrackingData::resetForGlobals(getCount());
-		instances.clear();
-		directionBias = 0;
-		weightedCount = 0.0;
-	}
-	inline bool operator==(const TrackingDataWithAllReads &other) const {
-		return getCount() == other.getCount();// && weightedCount == other.weightedCount;
-	}
-	inline bool operator<(const TrackingDataWithAllReads &other) const {
-		return getCount() < other.getCount();// || (count == other.count && weightedCount < other.weightedCount);
-	}
-
-	bool track(double weight, bool forward, ReadIdType readIdx = 0,
-			PositionType readPos = 0) {
-		if (TrackingData::isDiscard(weight))
-			return false;
-#ifdef _USE_THREADSAFE_KMER
-#pragma omp critical
-#endif
-		{
-			if (forward)
-				directionBias++;
-
-			ReadPositionWeight rpw(readIdx, readPos, weight);
-
-			instances.push_back(rpw);
-			weightedCount += weight;
-		}
-		TrackingData::setGlobals(getCount(), getWeightedCount());
-
-		return true;
-	}
-
-	inline unsigned long getCount() const {
-		return instances.size();
-	}
-	inline unsigned long getDirectionBias() const {
-		return directionBias;
-	}
-	inline double getWeightedCount() const {
-		return weightedCount;
-	}
-	double _getWeightedCount() const {
-		double weightedCount = 0.0;
-		for (ReadPositionWeightVector::const_iterator it = instances.begin(); it
-				!= instances.end(); it++)
-			weightedCount += it->weight;
-		return weightedCount;
-	}
-	inline double getNormalizedDirectionBias() const {
-		return (double) getDirectionBias() / (double) getCount();
-	}
-
-	inline ReadPositionWeightVector getEachInstance() const {
-		return instances;
-	}
-
-	std::string toString() const {
-		std::stringstream ss;
-		ss << getCount() << ":" << std::fixed << std::setprecision(2)
-				<< getNormalizedDirectionBias();
-		ss << ':' << std::fixed << std::setprecision(2)
-				<< ((double) getWeightedCount() / (double) getCount());
-		return ss.str();
-	}
-	TrackingDataWithAllReads &operator=(const TrackingDataSingleton &other) {
-		this->reset();
-		if (other.getCount() > 0) {
-			directionBias = other.getDirectionBias();
-			instances = other.getEachInstance();
-			weightedCount = _getWeightedCount();
-		}
-		return *this;
-	}
-	TrackingDataWithAllReads &add(const TrackingDataWithAllReads &other) {
-		instances.insert(instances.end(), other.instances.begin(), other.instances.end());
-		directionBias += other.directionBias;
-		weightedCount += other.weightedCount;
-		return *this;
-	}
-
-	TrackingDataWithAllReads &add(const TrackingDataSingleton &other) {
-		if (other.getCount() > 0) {
-	       instances.push_back(ReadPositionWeight((ReadIdType) -1, 0, other.getWeightedCount()));
-	       weightedCount += other.getWeightedCount();
-		}
-		return *this;
-	}
-
-};
-
-std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
-std::ostream &operator<<(std::ostream &stream, TrackingDataSingleton &ob);
-std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob);
-
-template<typename T>
-class TrackingDataMinimal {
-public:
-	typedef T DataType;
-    typedef	typename TrackingData::CountType CountType;
-	typedef typename TrackingData::WeightType WeightType;
-	typedef typename TrackingData::ReadIdType ReadIdType;
-	typedef typename TrackingData::PositionType PositionType;
-	typedef typename TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
-
-private:
-	DataType count;
-
-public:
-	TrackingDataMinimal() : count(0) {}
-	void reset() {
-		TrackingData::resetForGlobals(getCount());
-	    count = 0;
-	}
-
-	bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos)
-	{
-		if (TrackingData::isDiscard(weight)) {
-			return false;
-		}
-		DataType test = (DataType) weight;
-		// handle both integers and floats "properly"
-		if (test < weight) {
-			count += 1;
-		} else {
-			count += (DataType) weight;
-		}
-		if (weight > 1.0) {
-			std::stringstream ss;
-			ss << "How can the weight be greater than one? " << weight << "," << forward << "," << readIdx << "," << readPos;
-			throw std::invalid_argument(ss.str());
-		}
-		TrackingData::setGlobals(getCount(), getWeightedCount());
-		return true;
-	}
-	inline unsigned long getCount() const { unsigned long tmp = count; return (tmp<count) ? tmp+1 : tmp; }
-	inline unsigned long getDirectionBias() const {return count / 2;}
-	inline double getWeightedCount() const {return count;}
-	inline double getNormalizedDirectionBias() const {return 0.5;}
-	ReadPositionWeightVector getEachInstance() const
-	{
-		return ReadPositionWeightVector(0);
-	}
-
-	std::string toString() const {
-		std::stringstream ss;
-		ss << getCount();
-		return ss.str();
-	}
-	TrackingDataMinimal &operator=(const TrackingData &other) {
-		count = (DataType) other.getWeightedCount();
-		return *this;
-	}TrackingDataMinimal &operator=(const TrackingDataWithAllReads &other) {
-		count = (DataType) other.getWeightedCount();
-		return *this;
-	}
-	TrackingDataMinimal &operator=(const TrackingDataSingleton &other) {
-		count = (DataType) other.getWeightedCount();
-		return *this;
-	}
-	TrackingDataMinimal &add(const TrackingDataMinimal &other) {
-		count += other.count;
-		return *this;
-	}
-
-};
-
-typedef TrackingDataMinimal<unsigned char> TrackingDataMinimal1;
-typedef TrackingDataMinimal<unsigned short> TrackingDataMinimal2;
-typedef TrackingDataMinimal<unsigned int> TrackingDataMinimal4;
-typedef TrackingDataMinimal<float> TrackingDataMinimal4f;
-typedef TrackingDataMinimal<double> TrackingDataMinimal8;
-
-template<typename T>
-std::ostream &operator<<(std::ostream &stream, TrackingDataMinimal<T> &ob) {
-	stream << ob.toString();
-	return stream;
-}
-;
 
 template<typename Value>
 class KmerArray {
@@ -968,6 +403,11 @@ private:
 	void *_begin; // safer than Kmer *: prevents incorrect ptr arithmetic: _begin+1 , use _add instead
 	IndexType _size;
 	IndexType _capacity;
+
+	// if capacity == MAX_INDEX, this is a constant mmaped instance
+	inline bool isMmaped() const {
+		return _capacity == MAX_INDEX;
+	}
 
 #ifdef _USE_THREADSAFE_KMER
 
@@ -1151,6 +591,10 @@ public:
 		resize(size);
 	}
 
+private:
+	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity) {}
+
+public:
 	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length,
 			bool leastComplement = false) :
 		_begin(NULL), _size(0), _capacity(0) {
@@ -1180,6 +624,13 @@ public:
 		if (this == &other)
 			return *this;
 		reset();
+		if (other.isMmaped()) {
+			_begin = other._begin;
+			_size = other._size;
+			_capacity = other._capacity;
+			return *this;
+		}
+
 		setExclusiveLock();
 		resize(other.size());
 		if (size() == 0) {
@@ -1194,6 +645,37 @@ public:
 
 		unsetExclusiveLock();
 		return *this;
+	}
+
+	// restore a new array from a mmap
+	KmerArray(const void *src) : _begin(NULL), _size(0), _capacity(0) {
+		initLock();
+		IndexType *size = (IndexType *) src;
+	    resize(*size);
+		void *ptr = ++size;
+		if (_size > 0) {
+			long kmerSize  = _size * KmerSizer::getByteSize();
+			_copyRange(ptr, (ValueType *) (((char*)ptr)+kmerSize), 0, 0, _size, false);
+		}
+	}
+
+	// store an existing array to a mmap
+	const void *store(void *dst) const {
+		// store IndexType + _size * getElementByteSize()
+		IndexType *sizePtr = (IndexType *) dst;
+		*sizePtr = _size;
+		char *ptr = (char*) ++sizePtr;
+		long kmerSize  = _size * KmerSizer::getByteSize();
+		long valueSize = _size * sizeof(Value);
+		_copyRange((void*)ptr, (Value*)(ptr+kmerSize), _begin, getValueStart(), 0, 0, _size, false);
+		return ptr + kmerSize + valueSize;
+	}
+	static const KmerArray restore(const void *src) {
+		const IndexType *size = (const IndexType *) src;
+		IndexType xsize = *(size++);
+		const void *ptr = size;
+		KmerArray array(const_cast<void*>(ptr), xsize, MAX_INDEX);
+		return array;
 	}
 
 protected:
@@ -1261,6 +743,13 @@ public:
 	}
 
 	void reset(bool releaseMemory = true) {
+		if (isMmaped()) {
+			_begin = NULL;
+			_size = 0;
+			_capacity = 0;
+			return;
+		}
+
 		setExclusiveLock();
 
 		if (_begin != NULL && releaseMemory) {
@@ -1282,12 +771,17 @@ public:
 		return _size;
 	}
 	inline IndexType capacity() const {
-		return _capacity;
+		if (isMmaped())
+			return _size;
+		else
+		    return _capacity;
 	}
 	inline bool empty() const {
 		return _size == 0;
 	}
 	void reserve(IndexType size) {
+		assert(!isMmaped()); // mmaped can not be modified!
+
 		if (size < _capacity) {
 		  IndexType oldSize = _size;
 		  resize(size, MAX_INDEX, false);
@@ -1299,6 +793,8 @@ public:
 		resize(size, MAX_INDEX, false);
 	}
 	void resize(IndexType size, IndexType idx, bool reserveExtra = true) {
+		assert(!isMmaped()); // mmaped can not be modified!
+
 		if (size == _size)
 			return;
 		IndexType oldSize = _size;
@@ -1325,16 +821,22 @@ public:
 	void _copyRange(const void * srcKmer, const ValueType *srcValue,
 			IndexType idx, IndexType srcIdx, IndexType count,
 			bool isOverlapped = false) {
+		assert(!isMmaped()); // mmaped can not be modified!
+		_copyRange(_begin, getValueStart(), srcKmer, srcValue, idx, srcIdx, count, isOverlapped);
+	}
+	static void _copyRange(void * dstKmer, ValueType *dstValue,
+			            const void * srcKmer, const ValueType *srcValue,
+						IndexType idx, IndexType srcIdx, IndexType count,
+						bool isOverlapped = false) {
 
 		if (isOverlapped)
-			memmove(_add(_begin, idx), _add(srcKmer, srcIdx), count
+			memmove(_add(dstKmer, idx), _add(srcKmer, srcIdx), count
 					* KmerSizer::getByteSize());
 		else
-			memcpy(_add(_begin, idx), _add(srcKmer, srcIdx), count
+			memcpy(_add(dstKmer, idx), _add(srcKmer, srcIdx), count
 					* KmerSizer::getByteSize());
 
 		//assignment copy Values
-		Value *dstValue = getValueStart();
 		if (isOverlapped) {// && dstValue + idx > srcValue + srcIdx) {
 			Value *tmp = new Value[count];
 			for (IndexType i = 0; i < count; i++)
@@ -1350,6 +852,8 @@ public:
 	}
 
 	void _setMemory(IndexType size, IndexType idx, bool reserveExtra = true) {
+		assert(!isMmaped()); // mmaped can not be modified!
+
 		// preserve old pointers and metrics
 		void *oldBegin = _begin;
 		IndexType oldSize = _size;
@@ -1439,6 +943,7 @@ public:
 
 	void build(const TwoBitEncoding *twoBit, SequenceLengthType length,
 			bool leastComplement = false) {
+		assert(!isMmaped()); // mmaped can not be modified!
 		setExclusiveLock();
 		SequenceLengthType numKmers = length - KmerSizer::getSequenceLength()
 				+ 1;
@@ -1560,7 +1065,8 @@ public:
 
 		protected:
 			void _insertAt(IndexType idx, const Kmer &target) {
-				if (idx > size())
+				assert(!isMmaped()); // mmaped can not be modified!
+                if (idx > size())
 				throw std::invalid_argument("attempt to access index greater than size in KmerArray insertAt");
 				resize(size() + 1, idx);
 				get(idx) = target;
@@ -1634,12 +1140,14 @@ public:
 				unsetExclusiveLock();
 			}
 			void remove(IndexType idx) {
+				assert(!isMmaped()); // mmaped can not be modified!
 				setExclusiveLock();
 				resize(size()-1,idx);
 				unsetExclusiveLock();
 			}
 
 			void swap(IndexType idx1, IndexType idx2) {
+				assert(!isMmaped()); // mmaped can not be modified!
 				if (idx1 == idx2)
 				return;
 				if (idx1 >= size() || idx2 >= size())
@@ -1746,6 +1254,7 @@ public:
 	typedef Kmer KeyType;
 	typedef Value ValueType;
 	typedef Kmer::NumberType NumberType;
+	typedef NumberType * NumberTypePtr;
 	typedef KmerArray<Value> BucketType;
     typedef	typename BucketType::Iterator BucketTypeIterator;
 	typedef typename BucketType::ElementType ElementType;
@@ -1782,6 +1291,66 @@ public:
 	~KmerMap()
 	{
 		clear();
+	}
+
+	// restore new instance from mmap
+	KmerMap(const void *src) {
+		NumberType size(0), *offsetArray;
+		const void *ptr;
+		_getMmapSizes(src, size, BUCKET_MASK, offsetArray);
+		_buckets.resize(size);
+		for (NumberType idx = 0 ; idx < size ; idx++) {
+			ptr = ((char*)src) + *(offsetArray + idx);
+			_buckets[idx] = BucketType(ptr);
+		}
+	}
+	const KoMer::MmapFile store() const {
+		long size = getSizeToStore();
+		KoMer::MmapFile mmap = TempFile::buildNewMmap(size);
+		store(mmap.data());
+		return mmap;
+	}
+	// store to mmap
+	const void *store(void *dst) const {
+		NumberType size = (NumberType) _buckets.size();
+		NumberType *numbers = (NumberType *) dst;
+		*(numbers++) = size;
+		*(numbers++) = BUCKET_MASK;
+		NumberType *offsetArray = numbers;
+		NumberType offset = sizeof(NumberType) * (2+size);
+
+		for(NumberType idx = 0 ; idx < size; idx++) {
+			*(offsetArray++) = offset;
+			void *ptr = ((char*)dst) + offset;
+			const char *newPtr = (const char *) _buckets[idx].store(ptr);
+			NumberType newSize = (newPtr - (const char *) ptr);
+			offset += newSize;
+		}
+		return ((char*)dst) + offset;
+	}
+	static const KmerMap restore(const void *src) {
+		KmerMap map;
+		NumberType size(0), *offsetArray;
+		const void *ptr;
+		_getMmapSizes(src, size, map.BUCKET_MASK, offsetArray);
+		map._buckets.resize(size);
+		for (NumberType idx = 0 ; idx < size ; idx++) {
+			ptr = ((char*)src) + *(offsetArray + idx);
+			map._buckets[idx] = BucketType::restore(ptr);
+		}
+		return map;
+	}
+
+	static const void _getMmapSizes(const void *src, NumberType &size, NumberType &mask, NumberTypePtr &offsetArray) {
+		NumberType *numbers = (NumberType *) src;
+		size = *(numbers++);
+		mask = *(numbers++);
+		offsetArray = numbers;
+	}
+	long getSizeToStore() const {
+		return sizeof(NumberType)*(2+_buckets.size())
+		    + _buckets.size()*sizeof(IndexType)
+		    + size()*BucketType::getElementByteSize();
 	}
 
 	void reset() {
@@ -2224,6 +1793,9 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.80  2010-04-21 23:39:37  regan
+// got kmermap mmap store and restore working
+//
 // Revision 1.79  2010-04-21 00:33:20  regan
 // merged with branch to detect duplicated fragment pairs with edit distance
 //
