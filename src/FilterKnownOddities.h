@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.16 2010-04-21 00:33:19 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.17 2010-04-22 23:41:31 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -327,13 +327,13 @@ public:
 			  // and properly account for duplicate fragment pairs
 
 			  Sequence::BaseLocationVectorType markups = read1.getMarkups();
-			  if (markups.empty() || markups[0].second > sequenceLength) {
+			  if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
 				  memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
 			  } else {
 				  continue;
 			  }
 			  markups = read2.getMarkups();
-			  if (markups.empty() || markups[0].second > sequenceLength) {
+			  if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
 				  TwoBitSequence::reverseComplement( read2.getTwoBitSequence(), tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, bytes*4);
 			  } else {
 				  continue;

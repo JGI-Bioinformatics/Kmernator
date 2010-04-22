@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.21 2010-04-21 00:33:20 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.22 2010-04-22 23:41:32 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -141,6 +141,11 @@ public:
     static void applyMarkup(std::string &bases, const BaseLocationVectorType &markupBases);
     static void applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, const BaseLocationType *markupBases);
 
+    static SequenceLengthType firstMarkup(const BaseLocationVectorType &markups);
+    static SequenceLengthType firstMarkupN(const BaseLocationVectorType &markups);
+    static SequenceLengthType firstMarkupX(const BaseLocationVectorType &markups);
+    static SequenceLengthType firstMarkupNorX(const BaseLocationVectorType &markups);
+
     static std::string getFasta(const TwoBitEncoding *in, SequenceLengthType length);
     static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
     static void shiftLeft(const void *in, void *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases, bool hasExtraByte = false);
@@ -161,6 +166,9 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.22  2010-04-22 23:41:32  regan
+// fixed a few bugs
+//
 // Revision 1.21  2010-04-21 00:33:20  regan
 // merged with branch to detect duplicated fragment pairs with edit distance
 //

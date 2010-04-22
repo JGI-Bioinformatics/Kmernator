@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.13 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.14 2010-04-22 23:41:31 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -398,9 +398,11 @@ public:
 			  KmerArray<char> kmers = getKmersForRead(i);
 			  SequenceLengthType numKmers = kmers.size();
 
-			  if ( ! markups.empty() ) {
-			    // find first markup and that is the maximum trim point
-				SequenceLengthType maxTrimPoint = markups[0].second + 1;
+			  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
+			  if ( markupLength != 0 ) {
+			    // find first N or X markup and that is the maximum trim point
+				SequenceLengthType maxTrimPoint = markupLength;
+				maxTrimPoint = maxTrimPoint == 0 ? read.getLength() : maxTrimPoint;
 				if (maxTrimPoint > KmerSizer::getSequenceLength()) {
 					numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
 				} else {
@@ -421,11 +423,12 @@ public:
 				break;
 			  }
 			} else {
-			  if ( markups.empty() ) {
+			  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
+			  if ( markupLength == 0 ) {
 				  trim.trimLength = read.getLength();
 			  } else {
-				  // trim at first markup
-				  trim.trimLength = markups[0].second;
+				  // trim at first N or X markup
+				  trim.trimLength = markupLength - 1;
 			  }
 			  trim.score = trim.trimLength;
 

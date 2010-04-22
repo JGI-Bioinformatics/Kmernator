@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.29 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.30 2010-04-22 23:41:32 regan Exp $
 //
 
 #include <cstring>
@@ -554,8 +554,16 @@ string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting) const {
 	Sequence::readMmaped(name, bases, quals);
 	SequenceLengthType len = bases.length();
 	len = (trimOffset <= len ? trimOffset : len);
+
 	if (len > 0) {
-	    return quals.substr(0,len);
+		  if ( (!hasQuals()) || quals[0] == REF_QUAL) {
+			if (forPrinting)
+				return string(len, PRINT_REF_QUAL);
+			else
+				return string(len, REF_QUAL);
+		  } else {
+		      return quals.substr(0,len);
+		  }
 	} else {
 		// to support printing paired reads where 1 read is trimmed to 0
 		return string(1, FASTQ_START_CHAR+1);
@@ -603,6 +611,9 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.30  2010-04-22 23:41:32  regan
+// fixed a few bugs
+//
 // Revision 1.29  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.21 2010-04-21 00:33:20 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.22 2010-04-22 23:41:32 regan Exp $
 //
 
 #include <cstring>
@@ -145,6 +145,44 @@ void TwoBitSequence::applyMarkup(std::string &bases,
 	}
 }
 
+SequenceLengthType TwoBitSequence::firstMarkup(const BaseLocationVectorType &markups) {
+	if (markups.empty()) {
+		return 0;
+	} else {
+		return markups[0].second + 1;
+	}
+}
+SequenceLengthType TwoBitSequence::firstMarkupN(const BaseLocationVectorType &markups) {
+	if (markups.empty()) {
+		return 0;
+	} else {
+		for(BaseLocationVectorType::const_iterator it = markups.begin(); it != markups.end(); it++)
+			if (it->first == 'N')
+				return it->second + 1;
+		return 0;
+	}
+}
+SequenceLengthType TwoBitSequence::firstMarkupX(const BaseLocationVectorType &markups) {
+	if (markups.empty()) {
+		return 0;
+	} else {
+		for(BaseLocationVectorType::const_iterator it = markups.begin(); it != markups.end(); it++)
+			if (it->first == 'X')
+				return it->second + 1;
+		return 0;
+	}
+}
+SequenceLengthType TwoBitSequence::firstMarkupNorX(const BaseLocationVectorType &markups) {
+	if (markups.empty()) {
+		return 0;
+	} else {
+		for(BaseLocationVectorType::const_iterator it = markups.begin(); it != markups.end(); it++)
+			if (it->first == 'N' || it->first == 'X')
+				return it->second + 1;
+		return 0;
+	}
+}
+
 std::string TwoBitSequence::getFasta(const TwoBitEncoding *in,
 		SequenceLengthType length) {
 
@@ -261,6 +299,9 @@ void TwoBitSequence::permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1,
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.22  2010-04-22 23:41:32  regan
+// fixed a few bugs
+//
 // Revision 1.21  2010-04-21 00:33:20  regan
 // merged with branch to detect duplicated fragment pairs with edit distance
 //
