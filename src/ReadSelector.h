@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.14 2010-04-22 23:41:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.15 2010-04-23 17:39:53 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -402,7 +402,6 @@ public:
 			  if ( markupLength != 0 ) {
 			    // find first N or X markup and that is the maximum trim point
 				SequenceLengthType maxTrimPoint = markupLength;
-				maxTrimPoint = maxTrimPoint == 0 ? read.getLength() : maxTrimPoint;
 				if (maxTrimPoint > KmerSizer::getSequenceLength()) {
 					numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
 				} else {
@@ -422,7 +421,7 @@ public:
 				} else
 				break;
 			  }
-			} else {
+			} else { // !useKmers
 			  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 			  if ( markupLength == 0 ) {
 				  trim.trimLength = read.getLength();
