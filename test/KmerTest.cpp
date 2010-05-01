@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.36 2010-04-21 23:39:39 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.37 2010-05-01 21:57:51 regan Exp $
 //
 
 #include "config.h"
@@ -488,6 +488,9 @@ void testKmerMap(SequenceLengthType size) {
 		//BOOST_MESSAGE ( kmerF.toString() );
 	}
 
+	unsigned int s = kmersC.size();
+	BOOST_CHECK_EQUAL(s, kmersC.size());
+
       KoMer::MmapFile mmapF = kmerF.store();
 	  BOOST_CHECK(mmapF.is_open());
 	  BOOST_CHECK(mmapF.size() > 0);
@@ -622,6 +625,12 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.37  2010-05-01 21:57:51  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.36.2.1  2010-04-27 22:53:43  regan
+// *** empty log message ***
+//
 // Revision 1.36  2010-04-21 23:39:39  regan
 // got kmermap mmap store and restore working
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.30 2010-03-02 15:04:03 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ktest2.cpp,v 1.31 2010-05-01 21:57:51 regan Exp $
 //
 
 #include <iostream>
@@ -38,9 +38,8 @@ int main(int argc, char *argv[]) {
 
 	ReadSet refReads, reads;
 
+	MemoryUtils::getMemoryUsage();
 	cerr << MemoryUtils::getMemoryUsage() << endl;
-
-	FilterKnownOddities filter;
 
 	KmerSizer::set(Options::getKmerSize());
 	Options::FileListType references = Options::getReferenceFiles();
@@ -53,6 +52,7 @@ int main(int argc, char *argv[]) {
 	test2.insertAt(0, blah);
 	test2.valueAt(0).track(0.98, true, 2, 3);
 
+	cerr << MemoryUtils::getMemoryUsage() << endl;
 	cerr << "Reading Reference Files" << endl;
 	refReads.appendAllFiles(references);
 	cerr << "loaded " << refReads.getSize() << " Reads, "
@@ -60,9 +60,8 @@ int main(int argc, char *argv[]) {
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	unsigned long numBuckets = KS::estimateWeakKmerBucketSize(refReads, 256);
-	cerr << "targetting " << numBuckets << " buckets for reference " << endl;
+	cerr << "targeting " << numBuckets << " buckets for reference " << endl;
 	KS refSpectrum(numBuckets);
-	refSpectrum.weak.clear();
 	refSpectrum.buildKmerSpectrum(refReads, true);
 	TrackingData::resetGlobalCounters();
 	cerr << MemoryUtils::getMemoryUsage() << endl;
@@ -73,13 +72,21 @@ int main(int argc, char *argv[]) {
 			<< " Bases " << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	cerr << "Applying filter to Input Files" << endl;
-	unsigned long filtered = filter.applyFilter(reads);
-	cerr << "filter affected " << filtered << " Reads " << endl;
+	{
+	  cerr << "Preparing filter" << endl;
+	  FilterKnownOddities filter;
+	  cerr << MemoryUtils::getMemoryUsage() << endl;
+
+	  cerr << "Applying filter to Input Files" << endl;
+	  unsigned long filtered = filter.applyFilter(reads);
+	  cerr << "filter affected " << filtered << " Reads " << endl;
+	  cerr << MemoryUtils::getMemoryUsage() << endl;
+	  cerr << "Purging filter" << endl;
+	}
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
-	cerr << "targetting " << numBuckets << " buckets for reads " << endl;
+	cerr << "targeting " << numBuckets << " buckets for reads " << endl;
 
 	KS spectrum(numBuckets);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
@@ -87,6 +94,8 @@ int main(int argc, char *argv[]) {
 	TrackingData::minimumDepth = Options::getMinDepth();
 	TrackingData::minimumWeight = Options::getMinKmerQuality();
 
+	cerr << "building spectrum" << endl;
+	cerr << MemoryUtils::getMemoryUsage() << endl;
 	spectrum.buildKmerSpectrum(reads);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
@@ -127,6 +136,12 @@ int main(int argc, char *argv[]) {
 
 //
 // $Log: ktest2.cpp,v $
+// Revision 1.31  2010-05-01 21:57:51  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.30.8.1  2010-04-26 22:52:44  regan
+// more testing
+//
 // Revision 1.30  2010-03-02 15:04:03  regan
 // modified to use options
 //

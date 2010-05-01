@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.32 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.33 2010-05-01 21:57:54 regan Exp $
 //
 
 #include <exception>
@@ -101,6 +101,11 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 	}
 #endif
 
+	// Let the kernel know how these pages will be used
+	if (Options::getMmapInput() == 0)
+		madviseMmapsDontNeed();
+	else
+		madviseMmapsSequential();
 }
 
 void ReadSet::append(const ReadSet &reads) {
@@ -476,6 +481,12 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.33  2010-05-01 21:57:54  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.32.4.1  2010-04-27 22:53:27  regan
+// added madvise calls
+//
 // Revision 1.32  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //

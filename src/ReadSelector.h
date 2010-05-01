@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.15 2010-04-23 17:39:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.16 2010-05-01 21:57:53 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -466,55 +466,55 @@ public:
 	    }
 		if (offset >= _picks.size())
 			return;
-			
+
 		std::sort(_picks.begin() + offset, _picks.end());
 		_lastSortedPick = _picks.size();
 	}
 
-	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx) const {
+	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, int format = 0) const {
 		if (readIdx == ReadSet::MAX_READ_IDX)
 			return os;
 		const ReadTrimType &trim = _trims[readIdx];
-		return _writePickRead(os, readIdx, trim);
+		return _writePickRead(os, readIdx, trim, format);
 	}
-	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, const ReadTrimType &trim) const {
-		return os << _reads.getRead( readIdx ).toFastq( trim.trimLength, trim.label );
+	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, const ReadTrimType &trim, int format = 0) const {
+		return _reads.write(os, readIdx, trim.trimLength, trim.label, format);
 	}
-	std::ostream &writePick(std::ostream &os, ReadSetSizeType pickIdx) const {
+	std::ostream &writePick(std::ostream &os, ReadSetSizeType pickIdx, int format = 0) const {
 		Pair &pair = _picks[pickIdx];
-		_writePickRead(os, pair.read1);
-		_writePickRead(os, pair.read2);
+		_writePickRead(os, pair.read1, format);
+		_writePickRead(os, pair.read2, format);
 		return os;
 	}
-	std::ostream &writePicks(std::ostream &os, ReadSetSizeType offset = 0) const {
-		return writePicks(os, offset, _picks.size() - offset);
+	std::ostream &writePicks(std::ostream &os, ReadSetSizeType offset = 0, int format = 0) const {
+		return writePicks(os, offset, _picks.size() - offset, format);
 	}
-	std::ostream &writePicks(std::ostream &os, ReadSetSizeType offset, ReadSetSizeType length) const {
+	std::ostream &writePicks(std::ostream &os, ReadSetSizeType offset, ReadSetSizeType length, int format = 0) const {
 		for(ReadSetSizeType i = offset; i < length + offset; i++) {
-			writePick(os, i);
+			writePick(os, i, format);
 		}
 		return os;
 	}
 
-	void writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = true) const {
-		writePicks(ofstreamMap, offset, _picks.size() - offset, byInputFile);
+	void writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = true, int format = 0 ) const {
+		writePicks(ofstreamMap, offset, _picks.size() - offset, byInputFile, format);
 	}
-	void writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile = true) const {
+	void writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile = true, int format = 0) const {
 		for(ReadSetSizeType pickIdx = offset; pickIdx < length + offset; pickIdx++) {
 			const Pair &pair = _picks[pickIdx];
-			writePick(ofstreamMap, pair.read1, byInputFile);
-			writePick(ofstreamMap, pair.read2, byInputFile);
+			writePick(ofstreamMap, pair.read1, byInputFile, format);
+			writePick(ofstreamMap, pair.read2, byInputFile, format);
 		}
 	}
-	void writePick(OfstreamMap &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = true) const {
+	void writePick(OfstreamMap &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = true, int format = 0) const {
 		if (readIdx == ReadSet::MAX_READ_IDX)
 			return;
 		const ReadTrimType &trim = _trims[ readIdx ];
 		std::string key;
 		if (byInputFile) {
-			key += "-" + boost::lexical_cast< std::string >( _reads.getReadFileNum(readIdx) );
+			key += _reads.getReadFileNamePrefix(readIdx);
 		}
-		_writePickRead(ofstreamMap.getOfstream(key), readIdx, trim);
+		_writePickRead(ofstreamMap.getOfstream(key), readIdx, trim, format);
 	}
 };
 

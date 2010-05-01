@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.12 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.13 2010-05-01 21:57:53 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -32,7 +32,9 @@ private:
 	// cache of variables (for inline lookup and defaults)
 	FileListType referenceFiles;
 	FileListType inputFiles;
+	FileListType inputFilePrefixes;
 	std::string outputFile;
+	std::string tmpDir;
 	unsigned int kmerSize;
 	double solidQuantile;
 	double minKmerQuality;
@@ -46,9 +48,17 @@ private:
 	unsigned int ignoreQual;
 	unsigned int periodicSingletonPurge;
 	unsigned int skipArtifactFilter;
+	unsigned int maskSimpleRepeats;
+	unsigned int phiXOutput;
+	unsigned int filterOutput;
+	unsigned int deDupEditDistance;
 	unsigned int mmapInput;
+	unsigned int buildPartitions;
 
-	Options() {
+	Options() : tmpDir("/tmp"), kmerSize(31), minKmerQuality(0.10), verbosity(1), debug(0),
+	minQuality(10), minDepth(10), minReadLength(20), ignoreQual(0),
+	periodicSingletonPurge(0), skipArtifactFilter(0), maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
+	deDupEditDistance(0), mmapInput(1), buildPartitions(0) {
 		setOptions();
 	}
 
@@ -62,6 +72,9 @@ public:
 	}
 	static inline std::string &getOutputFile() {
 		return getOptions().outputFile;
+	}
+	static inline std::string &getTmpDir() {
+		return getOptions().tmpDir;
 	}
 	static inline unsigned int &getKmerSize() {
 		return getOptions().kmerSize;
@@ -102,41 +115,86 @@ public:
 	static inline unsigned int &getSkipArtifactFilter() {
 		return getOptions().skipArtifactFilter;
 	}
+	static inline unsigned int &getMaskSimpleRepeats() {
+		return getOptions().maskSimpleRepeats;
+	}
+	static inline unsigned int &getPhiXOutput(){
+		return getOptions().phiXOutput;
+	}
+	static inline unsigned int &getFilterOutput(){
+		return getOptions().filterOutput;
+	}
+	static inline unsigned int &getDeDupEditDistance() {
+		return getOptions().deDupEditDistance;
+	}
 	static inline unsigned int &getMmapInput() {
 		return getOptions().mmapInput;
 	}
+	static inline unsigned int &getBuildPartitions() {
+		return getOptions().buildPartitions;
+	}
 	const static unsigned int MAX_INT = (unsigned int) -1;
 
+	static std::string &getInputFileSubstring(unsigned int fileIdx) {
+		if (getOptions().inputFilePrefixes.empty()) {
+			// populate all the file indexes
+			for(FileListType::iterator it = getOptions().inputFiles.begin(); it != getOptions().inputFiles.end(); it++) {
+				size_t start = it->find_last_of('/');
+				if (start == std::string::npos)
+					start = 0;
+				else
+					start++;
+				size_t end = it->find_last_of('.');
+				if (end == std::string::npos)
+					end = it->length() - 1;
+
+				std::string fileprefix = it->substr( start, end-start );
+				if (getDebug() > 0) {
+					std::cerr << "InputFilePrefix: " << fileprefix << std::endl;
+				}
+				getOptions().inputFilePrefixes.push_back( fileprefix );
+			}
+		}
+		return getOptions().inputFilePrefixes[fileIdx];
+	}
 private:
 	void setOptions() {
 
 		desc.add_options()("help", "produce help message")
 
-		("verbose", po::value<unsigned int>()->default_value(0),
+		("verbose", po::value<unsigned int>()->default_value(verbosity),
 				"level of verbosity (0+)")
 
-		("debug", po::value<unsigned int>()->default_value(0),
+		("debug", po::value<unsigned int>()->default_value(debug),
 				"level of debug verbosity (0+)")
 
 		("reference-file", po::value<FileListType>(), "set reference file(s)")
 
-		("kmer-size", po::value<unsigned int>(), "kmer size.  A size of 0 will skip k-mer calculations")
+		("kmer-size", po::value<unsigned int>()->default_value(kmerSize), "kmer size.  A size of 0 will skip k-mer calculations")
 
 		("input-file", po::value<FileListType>(), "input file(s)")
 
-		("output-file", po::value<std::string>(), "output file or dir")
+		("output-file", po::value<std::string>(), "output file pattern")
+
+        ("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
+		        "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
+
+		("filter-output", po::value<unsigned int>()->default_value(filterOutput),
+				"if set, artifact filter reads will be output into a separate file. If not set, then affected reads will be trimmed and then output normally.  (requires --output-file set)")
+
+		("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to deposit mmap file")
 
 		("min-read-length",
-				po::value<int>()->default_value(0),
+				po::value<int>()->default_value(minReadLength),
 				"minimum (trimmed) read length of selected reads.  0: (default) no minimum, -1: full read length")
 
-		("min-kmer-quality", po::value<double>()->default_value(0.10),
+		("min-kmer-quality", po::value<double>()->default_value(minKmerQuality),
 				"minimum quality-adjusted kmer probability (0-1)")
 
-		("min-quality-score", po::value<unsigned int>()->default_value(10),
+		("min-quality-score", po::value<unsigned int>()->default_value(minQuality),
 				"minimum quality score over entire kmer")
 
-		("min-depth", po::value<unsigned int>()->default_value(10),
+		("min-depth", po::value<unsigned int>()->default_value(minDepth),
 				"minimum depth for a solid kmer")
 
 		("solid-quantile", po::value<double>()->default_value(0.05),
@@ -148,17 +206,26 @@ private:
 		("second-order-weight", po::value<double>()->default_value(0.00),
 				"second order permuted bases weight")
 
-		("ignore-quality", po::value<unsigned int>()->default_value(0),
+		("ignore-quality", po::value<unsigned int>()->default_value(ignoreQual),
 				"ignore the quality score, to save memory or if they are untrusted")
 
-		("periodic-singleton-purge", po::value<unsigned int>()->default_value(0),
+		("periodic-singleton-purge", po::value<unsigned int>()->default_value(periodicSingletonPurge),
 				"Purge singleton memory structure every # of reads")
 
-		("skip-artifact-filter", po::value<unsigned int>()->default_value(0),
+		("skip-artifact-filter", po::value<unsigned int>()->default_value(skipArtifactFilter),
 				"Skip homo-polymer, primer-dimer and duplicated fragment pair filtering")
 
-		("mmap-input", po::value<unsigned int>()->default_value(1),
-				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)");
+		("mask-simple-repeats", po::value<unsigned int>()->default_value(maskSimpleRepeats),
+				"if filtering artifacts, also mask simple repeats")
+
+		("dedup-edit-distance", po::value<unsigned int>()->default_value(deDupEditDistance),
+				"if -1, no fragment de-duplication will occur, if 0, only exact match, ...")
+
+		("mmap-input", po::value<unsigned int>()->default_value(mmapInput),
+				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
+
+		("build-partitions", po::value<unsigned int>()->default_value(buildPartitions),
+				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.  Must be a power of 2");
 
 	}
 
@@ -228,8 +295,13 @@ public:
 			}
 			if (vm.count("output-file")) {
 				getOutputFile() = vm["output-file"].as<std::string> ();
-				std::cerr << "Output file (or dir) is: " << getOutputFile()
+				std::cerr << "Output file pattern: " << getOutputFile()
 						<< std::endl;
+			}
+
+			if (vm.count("temp-dir")) {
+				getTmpDir() = vm["temp-dir"].as<std::string> ();
+				std::cerr << "Tmp dir is: " << getTmpDir() << std::endl;
 			}
 
 			// set kmer quality
@@ -266,11 +338,23 @@ public:
 			// set periodic singleton purge value
 			getPeriodicSingletonPurge() = vm["periodic-singleton-purge"].as<unsigned int> ();
 
-			// set skipArtifactFilterin
+			// set skipArtifactFiltering
 			getSkipArtifactFilter() = vm["skip-artifact-filter"].as<unsigned int> ();
+
+			// set simple repeat masking
+			getMaskSimpleRepeats() = vm["mask-simple-repeats"].as<unsigned int> ();
+			// set phix masking
+			getPhiXOutput() = vm["phix-output"].as<unsigned int> ();
+			// set simple repeat masking
+			getFilterOutput() = vm["filter-output"].as<unsigned int> ();
+			// set dedup edit distance
+			getDeDupEditDistance() = vm["dedup-edit-distance"].as<unsigned int>();
 
 			// set mmapInput
 			getMmapInput() = vm["mmap-input"].as<unsigned int>();
+
+			// set buildPartitions
+			getBuildPartitions() = vm["build-partitions"].as<unsigned int>();
 
 		} catch (std::exception& e) {
 			std::cerr << "error: " << e.what() << std::endl;
@@ -288,6 +372,51 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.13  2010-05-01 21:57:53  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.12.4.14  2010-05-01 05:57:40  regan
+// made edit distance for dedup fragment pairs optional
+//
+// Revision 1.12.4.13  2010-04-30 16:33:21  regan
+// better option descriptions
+//
+// Revision 1.12.4.12  2010-04-29 20:33:29  regan
+// bugfix
+//
+// Revision 1.12.4.11  2010-04-29 16:54:07  regan
+// bugfixes
+//
+// Revision 1.12.4.10  2010-04-29 06:58:55  regan
+// modified default optoins
+//
+// Revision 1.12.4.9  2010-04-29 04:26:44  regan
+// phix changes
+//
+// Revision 1.12.4.8  2010-04-28 22:28:10  regan
+// refactored writing routines
+//
+// Revision 1.12.4.7  2010-04-28 16:57:00  regan
+// bugfix in output filenames
+//
+// Revision 1.12.4.6  2010-04-27 23:17:50  regan
+// fixed naming of output files
+//
+// Revision 1.12.4.5  2010-04-27 22:53:20  regan
+// reworked defaults
+//
+// Revision 1.12.4.4  2010-04-27 18:25:20  regan
+// bugfix in temp directory usage
+//
+// Revision 1.12.4.3  2010-04-27 05:48:46  regan
+// added bulild in parts to main code and options
+//
+// Revision 1.12.4.2  2010-04-26 22:56:26  regan
+// bugfix
+//
+// Revision 1.12.4.1  2010-04-26 22:53:08  regan
+// added more global options
+//
 // Revision 1.12  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //

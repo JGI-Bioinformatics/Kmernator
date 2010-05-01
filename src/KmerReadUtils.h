@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.6 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.7 2010-05-01 21:57:53 regan Exp $
 //
 
 #ifndef _KMER_READ_UTILS_H
@@ -8,10 +8,10 @@
 
 class KmerReadUtils {
 public:
-	static KmerWeights buildWeightedKmers(const Read &read, bool leastComplement =
-			false) {
-		KmerWeights kmers(read.getTwoBitSequence(), read.getLength(),
-				leastComplement);
+	static KmerWeights buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
+		SequenceLengthType readLength = read.getLength();
+		bool bools[readLength];
+		KmerWeights kmers(read.getTwoBitSequence(), readLength, leastComplement, bools);
 		std::string quals = read.getQuals();
 		SequenceLengthType markupIdx = 0;
 
@@ -46,7 +46,7 @@ public:
 				weight = 0.0;
 				//  	    std::cerr << "markupAt " << markups[markupIdx].first << " " << markups[markupIdx].second << "\t";
 			}
-			kmers.valueAt(i) = weight;
+			kmers.valueAt(i) = leastComplementForNegativeWeight && bools[i] ? weight : (0.0-weight);
 			//  	std::cerr << i << ":" << std::fixed << std::setprecision(3) << quals[i+KmerSizer::getSequenceLength()-1] << "-" << change << "/" << weight << "\t";
 
 		}

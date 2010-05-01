@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.22 2010-04-22 23:41:32 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.23 2010-05-01 21:57:53 regan Exp $
 //
 
 #include <cstring>
@@ -96,7 +96,11 @@ BaseLocationVectorType TwoBitSequence::compressSequence(const char *bases,
 				break;
 
 			if (cbase == 255) {
-				otherBases.push_back(BaseLocationType(bases[offset], offset));
+				char base = bases[offset];
+				// translate . to N
+				if (base == '.')
+					base = 'N';
+				otherBases.push_back(BaseLocationType(base, offset));
 				cbase = 0;
 			}
 			offset++;
@@ -197,7 +201,7 @@ void TwoBitSequence::reverseComplement(const TwoBitEncoding *in,
 	SequenceLengthType twoBitLength = fastaLengthToTwoBitLength(length);
 
 	out += twoBitLength;
-	unsigned long bitShift = length % 4;
+	unsigned long bitShift = length & 0x03;
 
 	for (SequenceLengthType i = 0; i < twoBitLength; i++)
 		*(--out) = reverseComplementTable[*in++];
@@ -279,7 +283,7 @@ void TwoBitSequence::permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1,
     memcpy(out2, in, bytes);
     memcpy(out3, in, bytes);
 
-    SequenceLengthType j = (permuteBaseIdx % 4) * 3;
+    SequenceLengthType j = (permuteBaseIdx & 0x03) * 3;
 
     unsigned int arrayIdx = *(in + permuteByteIdx) * 12;
 
@@ -299,6 +303,21 @@ void TwoBitSequence::permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1,
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.23  2010-05-01 21:57:53  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.21.2.4  2010-04-29 20:33:23  regan
+// minor optimization
+//
+// Revision 1.21.2.3  2010-04-28 23:45:29  regan
+// made '.' recognized as 'N'
+//
+// Revision 1.21.2.2  2010-04-28 22:59:19  regan
+// made '.' recognized as 'N'
+//
+// Revision 1.21.2.1  2010-04-23 17:46:20  regan
+// merged bugfixes from head
+//
 // Revision 1.22  2010-04-22 23:41:32  regan
 // fixed a few bugs
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.33 2010-04-21 23:39:17 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.34 2010-05-01 21:57:54 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -18,6 +18,7 @@
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
+#include <boost/lexical_cast.hpp>
 
 #define foreach BOOST_FOREACH
 
@@ -35,6 +36,7 @@ private:
     std::string _suffix;
 
 public:
+	OfstreamMap() {}
 	OfstreamMap(std::string outputFilePathPrefix, std::string suffix = "")
 	 : _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {}
 	~OfstreamMap() {
@@ -54,8 +56,8 @@ public:
 		std::string filename = _outputFilePathPrefix + key + _suffix;
 		Iterator it = _map.find(filename);
 		if (it == _map.end()) {
-			if (Options::getDebug()) {
-			  std::cerr << "Opening " << filename << std::endl;
+			if (Options::getVerbosity()) {
+			  std::cerr << "Writing to " << filename << std::endl;
 		    }
 
 			OStreamPtr osp(new std::ofstream(filename.c_str()));
@@ -220,11 +222,14 @@ public:
 };
 
 class TempFile {
+	static int getUnique() { static int id = 0; return id++; }
 public:
 	static std::string buildNew(long size) {
-		char * tmp = tempnam(NULL, "Kmmap");
-		std::string filename = tmp;
-		free(tmp);
+		std::string filename = Options::getTmpDir() + "/Kmmap-";
+		filename += boost::lexical_cast<std::string>( getpid() );
+		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
+		filename += getenv("HOST") == NULL ? "unknown" : getenv("HOST");
+		std::cerr << "Creating new tmp file: " << filename << " " << size << std::endl;
 		std::ofstream os(filename.c_str());
 		os.seekp(size);
 		os << '\0';
@@ -241,6 +246,24 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.34  2010-05-01 21:57:54  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.33.2.5  2010-05-01 21:28:44  regan
+// fixed constructor
+//
+// Revision 1.33.2.4  2010-04-28 22:28:10  regan
+// refactored writing routines
+//
+// Revision 1.33.2.3  2010-04-27 18:25:20  regan
+// bugfix in temp directory usage
+//
+// Revision 1.33.2.2  2010-04-26 22:56:36  regan
+// honor temp-dir option
+//
+// Revision 1.33.2.1  2010-04-26 04:59:19  regan
+// more output
+//
 // Revision 1.33  2010-04-21 23:39:17  regan
 // added tempfile util
 //

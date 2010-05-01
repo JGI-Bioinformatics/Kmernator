@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.9 2010-04-21 00:33:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.10 2010-05-01 21:57:51 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -133,6 +133,34 @@ void testReverseComplement() {
 	REV_COMP(fasta3,rev3);
 	REV_COMP(fasta4,rev4);
 
+	REV_COMP("ACGT", "ACGT");
+	REV_COMP("AGCT", "AGCT");
+	REV_COMP("GCTA", "TAGC");
+	REV_COMP("TTAA", "TTAA");
+	REV_COMP("ATAT", "ATAT");
+	REV_COMP("TACC", "GGTA");
+	REV_COMP("A", "T");
+	REV_COMP("T", "A");
+	REV_COMP("C", "G");
+	REV_COMP("G", "C");
+	REV_COMP("AA", "TT");
+	REV_COMP("AC", "GT");
+	REV_COMP("AG", "CT");
+	REV_COMP("AT", "AT");
+	REV_COMP("CA", "TG");
+	REV_COMP("CC", "GG");
+	REV_COMP("CG", "CG");
+	REV_COMP("CT", "AG");
+	REV_COMP("GA", "TC");
+	REV_COMP("GC", "GC");
+	REV_COMP("GG", "CC");
+	REV_COMP("GT", "AC");
+	REV_COMP("TA", "TA");
+	REV_COMP("TC", "GA");
+	REV_COMP("TG", "CA");
+	REV_COMP("TT", "AA");
+
+
 }
 
 void testCompressUncompress() {
@@ -244,6 +272,12 @@ BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 
 //
 // $Log: TwoBitSequenceTest.cpp,v $
+// Revision 1.10  2010-05-01 21:57:51  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.9.2.1  2010-04-23 23:39:16  regan
+// added more tests
+//
 // Revision 1.9  2010-04-21 00:33:18  regan
 // merged with branch to detect duplicated fragment pairs with edit distance
 //

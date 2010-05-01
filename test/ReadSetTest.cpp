@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.12 2010-03-14 16:57:09 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.13 2010-05-01 21:57:51 regan Exp $
 //
 
 #include "config.h"
@@ -90,13 +90,29 @@ void testFastaWithQualFile(string f, string q) {
 
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
+	Sequence::clearCaches();
 	testZeroReads();
+
+	Sequence::clearCaches();
 	testFastQFile("10.fastq");
+
+	Sequence::clearCaches();
 	testFastaWithQualFile("10.fasta","10.qual");
+
+	Sequence::clearCaches();
 }
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.13  2010-05-01 21:57:51  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.12.8.2  2010-04-30 23:53:17  regan
+// attempt to fix a bug.  clearing Sequence caches when it makes sense
+//
+// Revision 1.12.8.1  2010-04-30 21:53:59  regan
+// reuse memory efficiently for cache lookups
+//
 // Revision 1.12  2010-03-14 16:57:09  regan
 // minor refactor
 //

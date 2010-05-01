@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.31 2010-04-21 00:33:20 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.32 2010-05-01 21:57:54 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <vector>
 #include <algorithm>
+#include <sys/mman.h>
 
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
@@ -64,6 +65,8 @@ public:
 
 	typedef std::vector< KmerSpectrum > Vector;
 
+	typedef Kmer::NumberType NumberType;
+
 	typedef accumulator_set<double,
 	stats< tag::variance(lazy),
 	tag::mean
@@ -103,15 +106,15 @@ public:
 		this->purgedSingletons = other.purgedSingletons;
 		return *this;
 	}
-	void reset() {
-		solid.clear();
-		weak.clear();
-		singleton.clear();
+	void reset(bool releaseMemory = true) {
+		solid.clear(releaseMemory);
+		weak.clear(releaseMemory);
+		singleton.clear(releaseMemory);
 		hasSolids = false;
 		purgedSingletons = 0;
 	}
 
-	static unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKmersPerBucket = 64) {
+	static unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKmersPerBucket = 128) {
 		unsigned long baseCount = store.getBaseCount();
 		if (baseCount == 0 || store.getSize() == 0)
 		return 128;
@@ -240,7 +243,7 @@ public:
 		consolidate(myKmer, myCount, weights);
 	}
 
-	// test and optionally shuffle myKmer into our out of one of its first degree permutations
+	// test and optionally shuffle myKmer into one of its first degree permutations
 	void consolidate(const Kmer &myKmer, double myCount, const KmerWeights &weights, bool useWeights = false) {
 		SequenceLengthType size = weights.size();
 
@@ -1016,28 +1019,37 @@ public:
 		return header.str();
 	}
 
-	inline void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false) {
-		return append(kmers, readIdx, isSolid, 0, kmers.size());
+	inline void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false, NumberType partIdx = 0, NumberType partBitMask = 0) {
+		return append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, partBitMask);
 	}
 
-	void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid, unsigned long kmerIdx, unsigned long kmerLen ) {
-
-		TEMP_KMER (least);
+	void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid, unsigned long kmerIdx, unsigned long kmerLen, NumberType partIdx, NumberType partBitMask ) {
 
 		DataPointers pointers(*this);
 
-		//unsigned long j=0;
-		//for (KmerWeights::Iterator it(kmers.begin()), itEnd(kmers.end()); it != itEnd ; it++,j++)
 		for(unsigned long j=0; j < kmerLen; j++)
 		{
-			bool keepDirection = kmers[kmerIdx+j].buildLeastComplement( least );
+			Kmer &least = kmers[kmerIdx+j];
+			if (partBitMask > 1 && getDMPThread(least, partBitMask, true) != partIdx)
+				continue;
+
+			bool keepDirection = true;
 			double weight = kmers.valueAt(kmerIdx+j);
+			if (weight < 0.0) {
+				keepDirection = false;
+				weight = 0.0-weight;
+			}
+			if ( TrackingData::isDiscard( weight ) )  {
+				if (Options::getDebug() > 2)
+					std::cerr << "discarded kmer " << readIdx << "@" << j << " " << weight << " " << least.toFasta() << std::endl;
+				continue;
+			}
 
 			if ( isSolid ) {
 				pointers.reset();
 				SolidElementType elem = getSolid( least );
 				elem.value().track( weight, keepDirection, readIdx, j );
-			} else if (! TrackingData::isDiscard( weight ) ) {
+			} else {
 				pointers.set( least );
 
 				if (pointers.solidElem.isValid()) {
@@ -1071,8 +1083,6 @@ public:
 						}
 					}
 				}
-			} else if (Options::getDebug() > 2){
-				std::cerr << "discarded kmer " << readIdx << "@" << j << " " << weight << " " << least.toFasta() << std::endl;
 			}
 		}
 	}
@@ -1083,7 +1093,7 @@ public:
 		if (fullStats) {
 			std::cerr << ", " << solid.size() << " solid / " << weak.size() << " weak / "
 			<< TrackingData::discarded << " discarded / "
-			<< singleton.size() + purgedSingletons << " singleton - kmers so far " << std::endl;
+			<< singleton.size() + purgedSingletons << " singleton (" << purgedSingletons << " purged) - kmers so far " << std::endl;
 		}
 		std::cerr << MemoryUtils::getMemoryUsage() << std::endl;
 	}
@@ -1101,16 +1111,35 @@ public:
 
 	}
 
-	inline unsigned int getSMPThread( Kmer &kmer, unsigned int numThreads ) {
+	inline bool getSMPThread( Kmer &kmer, unsigned short &smpThreadId, unsigned short numSMPThreads, unsigned short dmpThreadId, unsigned short threadBitMask, bool isLeastComplement = false) {
 		// return the smallest KmerMap in the spectrum's getLocalThreadId()
-		TEMP_KMER(tmp);
-		kmer.buildLeastComplement(tmp);
-		return solid.getLocalThreadId(tmp, numThreads);
+		if (isLeastComplement) {
+			return solid.getLocalThreadId(kmer, smpThreadId, numSMPThreads, dmpThreadId, threadBitMask);
+		} else {
+		    TEMP_KMER(tmp);
+		    kmer.buildLeastComplement(tmp);
+		    return solid.getLocalThreadId(tmp, smpThreadId, numSMPThreads, dmpThreadId, threadBitMask);
+		}
 	}
-	inline unsigned int getDMPThread( Kmer &kmer, unsigned int numThreads ) {
-		TEMP_KMER(tmp);
-		kmer.buildLeastComplement(tmp);
-		return solid.getDistributedThreadId(tmp, numThreads);
+
+	inline unsigned short getSMPThread( Kmer &kmer, unsigned short numThreads, bool isLeastComplement = false) {
+		// return the smallest KmerMap in the spectrum's getLocalThreadId()
+		if (isLeastComplement) {
+			return solid.getLocalThreadId(kmer, numThreads);
+		} else {
+		    TEMP_KMER(tmp);
+		    kmer.buildLeastComplement(tmp);
+		    return solid.getLocalThreadId(tmp, numThreads);
+		}
+	}
+	inline unsigned short getDMPThread( Kmer &kmer, NumberType threadBitMask, bool isLeastComplement = false ) {
+		if (isLeastComplement) {
+			return solid.getDistributedThreadId(kmer, threadBitMask);
+		} else {
+		    TEMP_KMER(tmp);
+		    kmer.buildLeastComplement(tmp);
+		    return solid.getDistributedThreadId(tmp, threadBitMask);
+		}
 	}
 
 	unsigned long resetSingletons() {
@@ -1123,12 +1152,92 @@ public:
 		singleton.reset();
 		return singletonCount;
 	}
-	void buildKmerSpectrum( ReadSet &store, bool isSolid = false )
-	{
 
-		weak.reset();
-		solid.reset();
-		singleton.reset();
+	void purgeMinDepth(long minimumCount, bool purgeSolidsToo = false) {
+		if (hasSolids && purgeSolidsToo)
+			solid.purgeMinCount(minimumCount);
+		weak.purgeMinCount(minimumCount);
+		if (hasSingletons && minimumCount > 1)
+			singleton.clear(false);
+	}
+
+	// important! returned memory maps must remain in scope!
+	KoMer::MmapFileVector buildKmerSpectrumInParts(ReadSet &store, NumberType numParts) {
+		bool isSolid = false; // not supported for references...
+		if (numParts == 0) {
+			buildKmerSpectrum(store);
+			return KoMer::MmapFileVector();
+		}
+
+		assert((numParts & (numParts-1)) == 0); // numParts must be a power of 2
+		KoMer::MmapFileVector mmaps(numParts*2);
+
+		// build each part of the spectrum
+		for (NumberType partIdx = 0; partIdx < numParts; partIdx++) {
+			std::cerr << "Building part of spectrum: " << (partIdx+1) << " of " << numParts << std::endl << MemoryUtils::getMemoryUsage() << std::endl;
+
+			// build
+			buildKmerSpectrum(store, isSolid, partIdx, numParts);
+
+			// purge
+			purgeMinDepth(Options::getMinDepth());
+
+			// store
+			mmaps[partIdx] = weak.store();
+			if (Options::getMinDepth() <= 1)
+				mmaps[partIdx + numParts] = singleton.store();
+
+			// optimize memory preallocations
+			weak.rotateDMPBuffers(numParts);
+			singleton.rotateDMPBuffers(numParts);
+		}
+
+		std::cerr << "Merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() << std::endl;
+
+		const WeakMapType constWeak(weak.getNumBuckets());
+		const SingletonMapType constSingleton(singleton.getNumBuckets());
+
+		// restore and merge
+		for (NumberType partIdx = 0; partIdx < numParts; partIdx++) {
+			const WeakMapType tmpWMap = WeakMapType::restore( mmaps[partIdx].data() ) ;
+			constWeak.merge( tmpWMap );
+			if (mmaps[partIdx+numParts].is_open()) {
+				const SingletonMapType tmpSMap = SingletonMapType::restore( mmaps[partIdx+numParts].data() );
+				constSingleton.merge( tmpSMap );
+			}
+		}
+		weak.swap( const_cast<WeakMapType&>(constWeak) );
+		if (Options::getMinDepth() <= 1)
+			singleton.swap( const_cast<SingletonMapType&>( constSingleton) );
+
+		std::cerr << "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() << std::endl;
+		printStats(store.getSize(), isSolid, true);
+		if (!isSolid) {
+			printHistograms();
+		}
+
+		for(KoMer::MmapFileVector::iterator it = mmaps.begin(); it != mmaps.end(); it++) {
+			if (it->is_open())
+				madvise(const_cast<char*>(it->data()), it->size(), MADV_RANDOM);
+		}
+		return mmaps;
+	}
+
+	void buildKmerSpectrum( ReadSet &store, bool isSolid = false, NumberType partIdx = 0, NumberType numParts = 1)
+	{
+		assert( numParts != 0 && (numParts & (numParts-1)) == 0); // numParts must be a power of 2
+		assert(partIdx < numParts);
+		NumberType partBitMask = numParts-1;
+
+		solid.reset(false);
+		if (isSolid) {
+			// no need to keep this memory around then...
+			weak.clear();
+			singleton.clear();
+		} else {
+		    weak.reset(false);
+		    singleton.reset(false);
+		}
 
 		long purgeEvery = Options::getPeriodicSingletonPurge();
 		long purgedSingletons = 0;
@@ -1179,11 +1288,13 @@ public:
 				long readIdx = batchIdx + i;
 				if (readIdx >= store.getSize() )
 				continue;
-				kmers = KmerReadUtils::buildWeightedKmers(store.getRead( readIdx ));
+				kmers = KmerReadUtils::buildWeightedKmers(store.getRead( readIdx ), true, true);
 				for (long j = 0; j < numThreads; j++)
 				startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 				for (IndexType j = 0; j < kmers.size(); j++) {
-					kmerBuffers[ omp_get_thread_num() ][ getSMPThread( kmers[j], numThreads ) ].append(kmers[j], kmers.valueAt(j));
+					unsigned short smpThreadId;
+					if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, partBitMask, true) )
+					    kmerBuffers[ omp_get_thread_num() ][ smpThreadId ].append(kmers[j], kmers.valueAt(j));
 				}
 			}
 			//std::cerr << "Loaded buffers" << std::endl;
@@ -1215,7 +1326,8 @@ public:
 							len = kmerBuffers[threads][ omp_get_thread_num() ].size() - startIdx;
 						}
 						if (len > 0)
-						append(kmerBuffers[threads][ omp_get_thread_num() ], readPos.first, isSolid, startIdx, len);
+						    //append(kmerBuffers[threads][ omp_get_thread_num() ], readPos.first, isSolid, startIdx, len, partIdx, partBitMask);
+							append(kmerBuffers[threads][ omp_get_thread_num() ], readPos.first, isSolid, startIdx, len, 0, 0);
 					}
 				}
 				//std::cerr << omp_get_thread_num() << ", ";
@@ -1227,13 +1339,12 @@ public:
 				purgeCount++;
 			}
 		}
-
 #else // not using OpenMP
 		for (long i=0; i < (long) store.getSize(); i++)
 		{
-			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead(i));
+			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead(i), true, true);
 
-			append(kmers, i, isSolid);
+			append(kmers, i, isSolid, partIdx, partBitMask);
 
 			if (i % batch == 0) {
 				printStats(i, isSolid);
@@ -1571,7 +1682,8 @@ public:
 		  if (minimumCount > 1)
 			  vec[0].singleton.clear();
 		}
-		// TODO purge if weak count < minimumCount
+		if (minimumCount > 1)
+		    vec[0].purgeMinDepth(minimumCount);
 	}
 };
 

@@ -1,6 +1,8 @@
 #ifndef _KOMER_CONFIG_H
 #define _KOMER_CONFIG_H
 
+#include <vector>
+
 #include <boost/iostreams/device/mapped_file.hpp>
 #include <boost/iostreams/stream.hpp>
 
@@ -34,6 +36,7 @@ namespace KoMer {
    typedef boost::iostreams::mapped_file MmapFile;
    typedef boost::iostreams::mapped_file_source MmapSource;
    typedef boost::iostreams::stream< MmapSource > MmapIStream;
+   typedef std::vector< MmapFile > MmapFileVector;
 
 
 };

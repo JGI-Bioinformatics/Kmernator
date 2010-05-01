@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.25 2010-04-21 00:33:19 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.26 2010-05-01 21:57:54 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -7,10 +7,12 @@
 #include <vector>
 
 #include <boost/shared_ptr.hpp>
+#include <list>
 
 #include "config.h"
 #include "TwoBitSequence.h"
 #include "Utils.h"
+#include "LRUCache.h"
 
 class Sequence {
 public:
@@ -36,8 +38,50 @@ public:
 	typedef TwoBitSequenceBase::TwoBitEncodingPtr DataPtr;
 
 	typedef boost::shared_ptr< Sequence > SequencePtr;
-	typedef std::pair< DataPtr, SequencePtr > CachedSequence;
-	typedef std::vector< CachedSequence > CachedSequenceVector;
+	typedef std::pair< void*, SequencePtr > _CachedSequenceElement;
+	typedef LRUCache< _CachedSequenceElement::first_type, _CachedSequenceElement::second_type > CachedSequences;
+	typedef std::vector< CachedSequences > CachedSequencesVector;
+	const static long maxCachePerThread = 31;
+
+private:
+	class DataPtrListVector
+	{
+		typedef std::list< DataPtr > DataPtrList;
+		typedef std::vector< DataPtrList > _DataPtrListVector;
+		_DataPtrListVector _vec;
+		bool _isValid;
+		DataPtrList &getList() {
+			return _vec[omp_get_thread_num()];
+		}
+	public:
+		static const long size = 511;
+		DataPtrListVector() : _isValid(false) {
+			_vec = _DataPtrListVector(OMP_MAX_THREADS, DataPtrList());
+			_isValid = true;
+		}
+		~DataPtrListVector() {
+			_isValid = false;
+		}
+		inline bool isValid() const { return _isValid; }
+		void reset() {
+			_isValid = false;
+			_vec = _DataPtrListVector(OMP_MAX_THREADS, DataPtrList());
+			_isValid = true;
+		}
+		DataPtr retrieveDataPtr();
+		void returnDataPtr(DataPtr &ptr);
+	};
+
+	// dangling pointer
+    // it is very important that ~Sequence::DataPtrListVector() NEVER gets called, as ~Sequence() inserts into it.
+	static DataPtrListVector *preAllocatedDataPtrs;
+
+public:
+	static void clearCaches() {
+		threadCacheSequences = CachedSequencesVector(OMP_MAX_THREADS, CachedSequences(Sequence::maxCachePerThread));
+		preAllocatedDataPtrs->reset();
+	}
+
 
 private:
 	inline const Sequence &constThis() const {
@@ -45,7 +89,7 @@ private:
 	}
 
 protected:
-	static CachedSequenceVector threadCacheSequence;
+	static CachedSequencesVector threadCacheSequences;
 
 protected:
 	char _flags;
@@ -56,7 +100,7 @@ protected:
 	static const char HASQUALS     = 0x10;
 	static const char MMAPED_QUALS = 0x08;
 	static const char DISCARDED    = 0x04;
-	static const char _UNUSED_     = 0x02;
+	static const char PREALLOCATED = 0x02;
 	static const char INVALID      = 0x01;
 	// 0x80 - mmaped data
 	// 0x40 - markups in unsigned char
@@ -70,7 +114,7 @@ protected:
 	DataPtr _data;
 	// if mmaped, _data consists of:
 	//   +0 : char * = pointerToMmapedFileRecordStart
-	//   if mmaped_quals
+	//   if mmaped && hasquals
 	//     + sizeof(char*) : char * = pointerToMmapedQualRecordStart
 	//
 	//   if markups4
@@ -129,37 +173,44 @@ protected:
 
 	void reset(char flags = 0);
 
-	void setSequence(std::string fasta, long extraBytes);
+	void setSequence(std::string fasta, long extraBytes, bool usePreAllocation = false);
 	void setSequence(RecordPtr mmapRecordStart, const BaseLocationVectorType &markups, long extraBytes, RecordPtr mmapQualRecordStart = NULL);
 	void setSequence(RecordPtr mmapRecordStart, long extraBytes, RecordPtr mmapQualRecordStart = NULL);
 
 	void setMarkups(MarkupElementSizeType markupElementSize, const BaseLocationVectorType &markups);
 
+	static CachedSequences &getCachedSequencesForThread() {
+		int threadNum = omp_get_thread_num();
+		return threadCacheSequences[threadNum];
+	}
 	SequencePtr getCache() const {
 		assert(isMmaped());
-		int threadNum = omp_get_thread_num();
-		CachedSequence cache = threadCacheSequence[threadNum];
-		if (_data.get() != cache.first.get()) {
+
+		CachedSequences &cache = getCachedSequencesForThread();
+		SequencePtr cachedSequence = cache.fetch( (void*)_data.get()->get() );
+		if ( cachedSequence.get() == NULL ) {
 			return setCache();
 		} else {
-			return cache.second;
+			return cachedSequence;
 		}
 	}
 	SequencePtr setCache() const {
-		return setCache(SequencePtr());
+		SequencePtr ptr;
+		return setCache(ptr);
 	}
-	SequencePtr setCache(SequencePtr expandedSequence) const {
+	SequencePtr &setCache(SequencePtr &expandedSequence) const {
 		assert(isMmaped());
-		int threadNum = omp_get_thread_num();
-		CachedSequence cache = threadCacheSequence[threadNum];
-		if (_data.get() != cache.first.get()) {
-			if (expandedSequence.get() == NULL) {
-				expandedSequence = readMmaped();
-			}
-			cache = CachedSequence(_data, expandedSequence);
-			threadCacheSequence[threadNum] = cache;
-		}
-		return cache.second;
+
+		if (expandedSequence.get() == NULL)
+			expandedSequence = readMmaped(true);
+		CachedSequences &cache = getCachedSequencesForThread();
+		cache.insert( (void*)_data.get()->get(), expandedSequence);
+		return expandedSequence;
+	}
+
+public:
+	static void setThreadCache(Sequence &mmapedSequence, SequencePtr &expandedSequence) {
+		mmapedSequence.setCache(expandedSequence);
 	}
 
 public:
@@ -168,7 +219,7 @@ public:
 	Sequence(const Sequence &copy) {
 		*this = copy;
 	}
-	Sequence(std::string fasta);
+	Sequence(std::string fasta, bool usePreAllocation = false);
 	Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	Sequence &operator=(const Sequence &other) {
 		if (this == &other)
@@ -193,31 +244,28 @@ public:
 
 	~Sequence();
 
-	static void setThreadCache(Sequence &mmapedSequence, SequencePtr expandedSequence) {
-		mmapedSequence.setCache(expandedSequence);
-	}
-	static CachedSequence getThreadCache() {
-		int threadNum = omp_get_thread_num();
-		return threadCacheSequence[threadNum];
-	}
 
 public:
-	inline bool isMmaped()     const { return (_flags & MMAPED)    == MMAPED; }
-	inline bool isMarkups4()   const { return (_flags & MARKUPS4)  == MARKUPS4; }
-	inline bool isMarkups2()   const { return (_flags & MARKUPS4)  == MARKUPS2; }
-	inline bool isMarkups1()   const { return (_flags & MARKUPS4)  == MARKUPS1; }
-	inline bool hasMarkups()   const { return (_flags & MARKUPS4)  != 0; }
-	inline bool hasQuals()     const { return (_flags & HASQUALS)  == HASQUALS; }
-	inline bool isQualMmaped() const { return (_flags & MMAPED_QUALS) == MMAPED_QUALS; }
-	inline bool isDiscarded()  const { return (_flags & DISCARDED) == DISCARDED; }
-	inline bool isValid()      const { return (_flags & INVALID)   == 0; }
+	inline bool isMmaped()       const { return (_flags & MMAPED)        == MMAPED; }
+	inline bool isMarkups4()     const { return (_flags & MARKUPS4)      == MARKUPS4; }
+	inline bool isMarkups2()     const { return (_flags & MARKUPS4)      == MARKUPS2; }
+	inline bool isMarkups1()     const { return (_flags & MARKUPS4)      == MARKUPS1; }
+	inline bool hasMarkups()     const { return (_flags & MARKUPS4)      != 0; }
+	inline bool hasQuals()       const { return (_flags & HASQUALS)      == HASQUALS; }
+	inline bool isQualMmaped()   const { return (_flags & MMAPED_QUALS)  == MMAPED_QUALS; }
+	inline bool isDiscarded()    const { return (_flags & DISCARDED)     == DISCARDED; }
+	inline bool isPreAllocated() const { return (_flags & PREALLOCATED)  == PREALLOCATED; }
+	inline bool isValid()        const { return (_flags & INVALID)       == 0; }
 
-	void setSequence(std::string fasta);
+	void setSequence(std::string fasta, bool usePreAllocation = false);
 	void setSequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	void setSequence(RecordPtr mmapRecordStart, const BaseLocationVectorType &markups, RecordPtr mmapQualRecordStart = NULL);
 
 	void discard() {
 		setFlag(DISCARDED);
+	}
+	void unDiscard() {
+		unsetFlag(DISCARDED);
 	}
 
 	SequenceLengthType getLength() const;
@@ -238,7 +286,7 @@ public:
 	}
 
 	std::string getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
-	std::string getFastaNoMarkup() const;
+	std::string getFastaNoMarkup(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
 
 	SequenceLengthType getMarkupBasesCount() const;
 	BaseLocationVectorType getMarkups() const;
@@ -249,7 +297,7 @@ public:
 
 	void readMmaped(std::string &name, std::string &bases, std::string &quals) const {
 		assert(isMmaped());
-		// TODO fix hack on NULL lastPtr
+		// TODO fix hack on NULL lastPtr.  Presently only works for single-lined fastas
 		RecordPtr record(getRecord()), lastRecord(NULL), qualRecord(NULL), lastQualRecord(NULL);
 		if (isQualMmaped()) {
 		    qualRecord = getQualRecord();
@@ -257,10 +305,10 @@ public:
 		}
 		SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord);
 	}
-	SequencePtr readMmaped() const {
+	SequencePtr readMmaped(bool usePreAllocation = false) const {
 		std::string name, bases, quals;
 		readMmaped(name, bases, quals);
-		return SequencePtr(new Sequence(bases));
+		return SequencePtr(new Sequence(bases, usePreAllocation));
 	}
 
 };
@@ -480,8 +528,6 @@ class Read : public Sequence {
 
 public:
 	typedef boost::shared_ptr< Sequence > ReadPtr;
-	typedef std::pair< DataPtr, ReadPtr > CachedRead;
-	typedef std::vector< CachedRead > CachedReadVector;
 
 private:
 	inline const Read &constThis() const {
@@ -507,7 +553,6 @@ private:
 	static int qualityToProbabilityInitialized;
 	static int
 			initializeQualityToProbability(unsigned char minQualityScore = 0);
-	static CachedReadVector threadCacheRead;
 
 public:
 
@@ -515,7 +560,7 @@ public:
 	Read(const Read &copy) {
 		*this = copy;
 	}
-	Read(std::string name, std::string fasta, std::string qualBytes);
+	Read(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false);
 	Read(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	Read(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart = NULL);
 	Read &operator=(const Read &other) {
@@ -533,16 +578,16 @@ public:
 	}
 
 
-	void setRead(std::string name, std::string fasta, std::string qualBytes);
+	void setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false);
 	void setRead(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	void setRead(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart);
 
-	ReadPtr readMmaped() const {
+	ReadPtr readMmaped(bool usePreAllocation = false) const {
 		BaseLocationVectorType markups = _getMarkups();
 		std::string name, bases, quals;
 		Sequence::readMmaped(name, bases, quals);
 		TwoBitSequence::applyMarkup(bases, markups);
-		return ReadPtr(new Read(name, bases, quals));
+		return ReadPtr(new Read(name, bases, quals, usePreAllocation));
 	}
 
 	bool recordHasQuals() const {
@@ -557,11 +602,15 @@ public:
 
 	std::string getName() const;
 	std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
-			bool forPrinting = false) const;
+			bool forPrinting = false, bool unmasked = false) const;
 	void markupBases(SequenceLengthType offset, SequenceLengthType length, char mask = 'X');
 
 	std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
-			std::string label = "") const;
+			std::string label = "", bool unmasked = false) const;
+	std::string toFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
+			std::string label = "", bool unmasked = false) const;
+	std::string toQual(SequenceLengthType trimOffset, std::string label) const;
+
 	std::string getFormattedQuals(SequenceLengthType trimOffset =
 			MAX_SEQUENCE_LENGTH) const;
 
@@ -597,12 +646,59 @@ public:
 
 	static double qualityToProbability[256];
 	static void setMinQualityScore(unsigned char minQualityScore);
+
+	// format == 0 fastq
+	// format == 1 fasta
+	// format == 2 fastq unmasked
+	// format == 3 fasta unmasked
+	inline static std::ostream &write(std::ostream &os, const Read &read,
+			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) {
+		switch (format) {
+		case 0: os << read.toFastq(trimOffset, label); break;
+		case 1: os << read.toFasta(trimOffset, label); break;
+		case 2: os << read.toFastq(trimOffset, label, true) ; break;
+		case 3: os << read.toFasta(trimOffset, label, true); break;
+		}
+		return os;
+	}
+	inline std::ostream &write(std::ostream &os,
+			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
+		return write(os, *this, trimOffset, label, format);
+	}
+
 };
 
 #endif
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.26  2010-05-01 21:57:54  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.25.2.8  2010-05-01 21:28:50  regan
+// bugfix
+//
+// Revision 1.25.2.7  2010-04-30 23:53:14  regan
+// attempt to fix a bug.  clearing Sequence caches when it makes sense
+//
+// Revision 1.25.2.6  2010-04-30 23:33:37  regan
+// replaced read cache with LRU 3rd party cache
+//
+// Revision 1.25.2.5  2010-04-30 22:29:58  regan
+// added comments about dangling pointer
+//
+// Revision 1.25.2.4  2010-04-30 21:53:52  regan
+// reuse memory efficiently for cache lookups
+//
+// Revision 1.25.2.3  2010-04-29 06:58:42  regan
+// reworked output parameters to include option to print unmasked reads
+//
+// Revision 1.25.2.2  2010-04-29 04:26:32  regan
+// bugfix in output filenames and content
+//
+// Revision 1.25.2.1  2010-04-28 22:28:11  regan
+// refactored writing routines
+//
 // Revision 1.25  2010-04-21 00:33:19  regan
 // merged with branch to detect duplicated fragment pairs with edit distance
 //

@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.20 2010-04-21 23:39:39 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.21 2010-05-01 21:57:51 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -21,7 +21,9 @@ set_source_files_properties( TwoBitSequenceTest
 add_executable( TwoBitSequenceTest TwoBitSequenceTest )
 target_link_libraries( TwoBitSequenceTest TwoBitSequence
                                           boost_test_exec_monitor-mt 
-                                          boost_unit_test_framework-mt )
+                                          boost_unit_test_framework-mt 
+                                          boost_thread-mt-static
+                                          )
 add_test( TwoBitSequenceTest TwoBitSequenceTest )
 
 set_source_files_properties( ReadSetTest
@@ -34,7 +36,9 @@ target_link_libraries( ReadSetTest Sequence
                                    boost_program_options-mt-static 
                                    boost_test_exec_monitor-mt 
                                    boost_unit_test_framework-mt 
-                                   boost_iostreams-mt-static)
+                                   boost_iostreams-mt-static
+                                   boost_thread-mt-static
+                                   )
 add_test( ReadSetTest ReadSetTest )
                             
 set_source_files_properties( KmerTest
@@ -43,10 +47,12 @@ set_source_files_properties( KmerTest
                                                                                                            
 add_executable( KmerTest KmerTest )
 target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet
+                                boost_program_options-mt-static 
                                 boost_test_exec_monitor-mt 
                                 boost_unit_test_framework-mt
                                 boost_iostreams-mt-static
-                                 )
+                                boost_thread-mt-static
+                                )
 add_test( KmerTest KmerTest )
 
 set_source_files_properties( ktest2
@@ -58,8 +64,23 @@ target_link_libraries( ktest2 Sequence Kmer
                               ReadSet
                               boost_program_options-mt-static 
                               boost_iostreams-mt-static
+                              boost_thread-mt-static
                               )
-add_test(ktest2 ktest2 21 10.fastq)
+add_test(ktest2 ktest2 --mask-simple-repeats 0 21 10.fastq)
+
+set_source_files_properties( HashTester
+                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
+add_executable( HashTester HashTester)
+target_link_libraries( HashTester 
+                              Sequence 
+                              Kmer
+                              ReadSet
+                              boost_program_options-mt-static 
+                              boost_iostreams-mt-static
+                              boost_thread-mt-static
+                              )
+
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 # v2.8: file(COPY test/500.fasta test/500.qual DESTINATION test)
@@ -68,6 +89,18 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.21  2010-05-01 21:57:51  regan
+# merged head with serial threaded build partitioning
+#
+# Revision 1.20.2.3  2010-04-30 23:33:44  regan
+# replaced read cache with LRU 3rd party cache
+#
+# Revision 1.20.2.2  2010-04-26 22:52:44  regan
+# more testing
+#
+# Revision 1.20.2.1  2010-04-23 23:39:23  regan
+# added a quick program to test hashes
+#
 # Revision 1.20  2010-04-21 23:39:39  regan
 # got kmermap mmap store and restore working
 #

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.22 2010-04-22 23:41:32 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.23 2010-05-01 21:57:53 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -166,6 +166,12 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.23  2010-05-01 21:57:53  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.21.2.1  2010-04-23 17:46:20  regan
+// merged bugfixes from head
+//
 // Revision 1.22  2010-04-22 23:41:32  regan
 // fixed a few bugs
 //

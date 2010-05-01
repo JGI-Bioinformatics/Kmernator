@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.23 2010-04-21 00:33:20 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.24 2010-05-01 21:57:53 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -27,6 +27,7 @@ public:
 
 	static MmapSourceVector mmapSources;
     static void madviseMmaps(int advise) {
+#pragma omp critical
 		for(MmapSourceVector::iterator it = mmapSources.begin(); it != mmapSources.end(); it++) {
 			if (it->first.is_open())
 				madvise(const_cast<char*>(it->first.data()), it->first.size(), advise);
@@ -39,6 +40,9 @@ public:
 	}
 	static void madviseMmapsSequential() {
 		madviseMmaps(MADV_SEQUENTIAL);
+	}
+	static void madviseMmapsDontNeed() {
+		madviseMmaps(MADV_DONTNEED);
 	}
 
 	static const ReadSetSizeType MAX_READ_IDX = (unsigned int) -1;
@@ -117,7 +121,7 @@ private:
 
 public:
 	ReadSet() :
-		_baseCount(0) {
+		_baseCount(0), _maxSequenceLength(0) {
 	}
 	~ReadSet() {
 	}
@@ -153,17 +157,10 @@ public:
 	ReadPtr parseMmapedRead(ReadSetSizeType index) const {
 		const Read &read = _reads[index];
 		ReadPtr readPtr = read.readMmaped();
-//		const SequenceStreamParserPtr parser = getParser(index);
-//		string name, bases, qual;
-//		parser->readRecord(read.getRecord(), name, bases, qual);
 		return readPtr;
 	}
 	inline const Read &getRead(ReadSetSizeType index) const {
 		const Read &read = _reads[index];
-//		if (read.isMmaped()) {
-//			// assume each thread modifies only one read at a time!!!
-//			Read::setThreadCache((Sequence&) read, parseMmapedRead(index));
-//		}
         return read;
 	}
 	inline Read &getRead(ReadSetSizeType index) {
@@ -173,9 +170,14 @@ public:
 	inline int getReadFileNum(ReadSetSizeType index) const {
 		return _filePartitions.getPartitionIdx(index)+1;
 	}
-//	const SequenceStreamParserPtr getParser(ReadSetSizeType index) const {
-//		return _fileParsers[getReadFileNum(index)-1];
-//	}
+	string getReadFileNamePrefix(ReadSetSizeType index) const {
+		unsigned int filenum = getReadFileNum(index);
+		if (filenum > Options::getInputFiles().size()) {
+			return std::string("consensus-") + boost::lexical_cast<std::string>(filenum);
+		} else {
+			return Options::getInputFileSubstring(filenum-1);
+		}
+	}
 
 	// by default no pairs are identified
 	ReadSetSizeType identifyPairs();
@@ -206,6 +208,15 @@ public:
 	Read getConsensusRead() const;
 	static Read getConsensusRead(const ProbabilityBases &probs, std::string name);
 
+	inline std::ostream &write(std::ostream &os, ReadSetSizeType readIdx,
+			SequenceLengthType trimOffset = Sequence::MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
+		return getRead(readIdx).write(os, trimOffset, label, format);
+	}
+	inline std::ostream &write(OfstreamMap &om, ReadSetSizeType readIdx,
+			SequenceLengthType trimOffset = Sequence::MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
+		return write(om.getOfstream( getReadFileNamePrefix(readIdx) ), readIdx, trimOffset, label, format);
+	}
+
 protected:
 	SequenceStreamParserPtr appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
 	SequenceStreamParserPtr appendFasta(MmapSource &mmap);
@@ -235,6 +246,42 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.24  2010-05-01 21:57:53  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.23.2.11  2010-05-01 21:29:00  regan
+// fixed naming of output files
+//
+// Revision 1.23.2.10  2010-05-01 05:56:38  regan
+// bugfix
+//
+// Revision 1.23.2.9  2010-04-30 23:53:14  regan
+// attempt to fix a bug.  clearing Sequence caches when it makes sense
+//
+// Revision 1.23.2.8  2010-04-30 21:53:52  regan
+// reuse memory efficiently for cache lookups
+//
+// Revision 1.23.2.7  2010-04-29 04:26:32  regan
+// bugfix in output filenames and content
+//
+// Revision 1.23.2.6  2010-04-28 22:28:11  regan
+// refactored writing routines
+//
+// Revision 1.23.2.5  2010-04-28 16:57:00  regan
+// bugfix in output filenames
+//
+// Revision 1.23.2.4  2010-04-27 23:17:50  regan
+// fixed naming of output files
+//
+// Revision 1.23.2.3  2010-04-27 22:53:35  regan
+// added madvise calls
+//
+// Revision 1.23.2.2  2010-04-26 23:34:41  regan
+// bugfix
+//
+// Revision 1.23.2.1  2010-04-26 22:53:55  regan
+// fixed warnings
+//
 // Revision 1.23  2010-04-21 00:33:20  regan
 // merged with branch to detect duplicated fragment pairs with edit distance
 //

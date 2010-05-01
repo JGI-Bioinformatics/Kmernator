@@ -3,5 +3,7 @@
 cmake ~/robsandbox/KoMer -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
 # for debug
 cmake . -DCMAKE_CXX_FLAGS="-O0 -g -Wall -static -DDEBUG"
+# for profile
+cmake . -DCMAKE_CXX_FLAGS="-O3 -g -pg -static -Wall"
 
 

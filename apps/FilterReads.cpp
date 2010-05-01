@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.17 2010-04-21 00:33:22 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.18 2010-05-01 21:58:00 regan Exp $
 //
 
 #include <iostream>
@@ -102,6 +102,8 @@ int main(int argc, char *argv[]) {
 
 	KS spectrum(0);
 
+	KoMer::MmapFileVector spectrumMmaps;
+
 	if (Options::getKmerSize() > 0) {
 
 	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
@@ -112,7 +114,7 @@ int main(int argc, char *argv[]) {
 
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
-	  spectrum.buildKmerSpectrum(reads);
+	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	  if (Options::getMinDepth() > 1) {
@@ -163,7 +165,10 @@ int main(int argc, char *argv[]) {
 
 		for (unsigned int depth = maxDepth; depth >= 1; depth /= 2) {
 
-			string ofname = outputFilename + "-" + boost::lexical_cast< string >( depth );
+			string ofname = outputFilename + '-';
+			if (maxDepth > 1) {
+				ofname += "-MinDepth" + boost::lexical_cast< string >( depth );
+			}
 			ofmap = OfstreamMap(ofname, ".fastq");
 			float minDepth = std::max(Options::getMinDepth(), depth);
 			if (Options::getKmerSize() == 0) {

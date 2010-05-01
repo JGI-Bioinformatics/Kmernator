@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.6 2010-04-16 22:44:23 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.7 2010-05-01 21:58:00 regan Exp $
 #
  
 cmake_minimum_required(VERSION 2.6)
@@ -21,7 +21,9 @@ target_link_libraries( CompareSpectrums
                               Kmer
                               ReadSet
                               boost_program_options-mt-static 
-                              boost_iostreams-mt-static)
+                              boost_iostreams-mt-static
+                              boost_thread-mt-static
+                              )
 
 
 set_source_files_properties( FilterReads
@@ -33,7 +35,9 @@ target_link_libraries( FilterReads
                               Kmer
                               ReadSet
                               boost_program_options-mt-static
-                              boost_iostreams-mt-static )
+                              boost_iostreams-mt-static
+                              boost_thread-mt-static
+                              )
                               
 set_source_files_properties( Fastq2Fasta
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
@@ -44,11 +48,18 @@ target_link_libraries( Fastq2Fasta
                               ReadSet
                               boost_program_options-mt-static
                               boost_iostreams-mt-static
+                              boost_thread-mt-static
                               )
 
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.7  2010-05-01 21:58:00  regan
+# merged head with serial threaded build partitioning
+#
+# Revision 1.6.4.1  2010-04-30 23:33:42  regan
+# replaced read cache with LRU 3rd party cache
+#
 # Revision 1.6  2010-04-16 22:44:23  regan
 # merged HEAD with changes for mmap and intrusive pointer
 #

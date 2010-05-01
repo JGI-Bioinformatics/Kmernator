@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.1 2010-04-21 23:39:37 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.2 2010-05-01 21:57:54 regan Exp $
 //
 
 #ifndef _KMER_TRACKING_DATA_H
@@ -94,6 +94,8 @@ public:
 
 	bool track(double weight, bool forward, ReadIdType readIdx = 0,
 			PositionType readPos = 0) {
+		assert(weight <= 1.0);
+
 		if (isDiscard(weight))
 			return false;
 
@@ -147,13 +149,23 @@ public:
 		return ss.str();
 	}
 
-	TrackingData &add(const TrackingData &other) {
-		count += other.count;
-		weightedCount += other.weightedCount;
-		return *this;
+	// cast operator
+	operator CountType() const {
+		return getCount();
 	}
-	TrackingData &operator=(const TrackingDataSingleton &other);
-	TrackingData &operator=(const TrackingDataWithAllReads &other);
+
+	template<typename U>
+	TrackingData &add(const U &other) {
+			count += other.getCount();
+			weightedCount += other.getWeightedCount();
+			return *this;
+	}
+	template<typename U>
+	TrackingData &operator=(const U &other) {
+		count = other.getCount();
+		weightedCount = other.getWeightedCount();
+		return *this;
+	};
 };
 
 class TrackingDataWithDirection: public TrackingData {
@@ -170,6 +182,8 @@ public:
 	}
 
 	bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos) {
+		assert(weight <= 1.0);
+
 		bool ret = TrackingData::track(weight,forward);
 
 		if (ret) {
@@ -185,11 +199,12 @@ public:
 		return (double) directionBias / (double) count;
 	}
 
-	TrackingDataWithDirection &add(const TrackingDataWithDirection &other) {
-		TrackingData::add((TrackingData) other);
+	template<typename U>
+	TrackingDataWithDirection &add(const U &other) {
+		TrackingData::add(other);
 		directionBias += other.directionBias;
 		return *this;
-	}
+	};
 
 };
 
@@ -210,6 +225,8 @@ public:
 	}
 	bool track(double weight, bool forward, ReadIdType readIdx,
 			PositionType readPos) {
+		assert(weight <= 1.0);
+
 		bool ret = TrackingDataWithDirection::track(weight, forward, readIdx, readPos);
 		if (ret)
 			readPosition = ReadPosition(readIdx, readPos);
@@ -223,8 +240,9 @@ public:
 		return dummy;
 	}
 
-	TrackingDataWithLastRead &add(const TrackingDataWithLastRead &other) {
-		TrackingDataWithDirection::add((TrackingDataWithDirection) other);
+	template<typename U>
+	TrackingDataWithLastRead &add(const U &other) {
+		TrackingDataWithDirection::add(other);
 		readPosition = other.readPosition;
 		return *this;
 	}
@@ -257,6 +275,8 @@ public:
 		return getCount() < other.getCount();
 	}
 	bool track(double weight, bool forward, ReadIdType readIdx = 0, PositionType readPos = 0) {
+		assert(weight <= 1.0);
+
 		if (TrackingData::isDiscard(weight))
 			return false;
 		_weight = (unsigned char) ((weight * 254.0)) + 1;
@@ -285,6 +305,11 @@ public:
 		return dummy;
 	}
 
+	// cast operator
+	operator CountType() const {
+		return getCount();
+	}
+
 	std::string toString() const {
 		std::stringstream ss;
 		ss << getCount() << ":" << std::fixed << std::setprecision(2)
@@ -293,6 +318,7 @@ public:
 				<< ((double) getWeightedCount() / (double) getCount());
 		return ss.str();
 	}
+
 };
 
 class TrackingDataSingletonWithReadPosition {
@@ -326,6 +352,8 @@ public:
 
 	bool track(double weight, bool forward, ReadIdType readIdx = 0,
 			PositionType readPos = 0) {
+		assert(weight <= 1.0);
+
 		if (TrackingData::isDiscard(weight))
 			return false;
 #ifdef _USE_THREADSAFE_KMER
@@ -363,6 +391,11 @@ public:
 		return instance.position;
 	}
 
+	// cast operator
+	operator CountType() const {
+		return getCount();
+	}
+
 	std::string toString() const {
 		std::stringstream ss;
 		ss << getCount() << ":" << std::fixed << std::setprecision(2)
@@ -371,6 +404,7 @@ public:
 				<< ((double) getWeightedCount() / (double) getCount());
 		return ss.str();
 	}
+
 
 };
 
@@ -408,6 +442,8 @@ public:
 
 	bool track(double weight, bool forward, ReadIdType readIdx = 0,
 			PositionType readPos = 0) {
+		assert(weight <= 1.0);
+
 		if (TrackingData::isDiscard(weight))
 			return false;
 #ifdef _USE_THREADSAFE_KMER
@@ -449,6 +485,11 @@ public:
 
 	inline ReadPositionWeightVector getEachInstance() const {
 		return instances;
+	}
+
+	// cast operator
+	operator CountType() const {
+		return getCount();
 	}
 
 	std::string toString() const {
@@ -511,6 +552,7 @@ public:
 
 	bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos)
 	{
+		assert(weight <= 1.0);
 		if (TrackingData::isDiscard(weight)) {
 			return false;
 		}
@@ -520,11 +562,6 @@ public:
 			count += 1;
 		} else {
 			count += (DataType) weight;
-		}
-		if (weight > 1.0) {
-			std::stringstream ss;
-			ss << "How can the weight be greater than one? " << weight << "," << forward << "," << readIdx << "," << readPos;
-			throw std::invalid_argument(ss.str());
 		}
 		TrackingData::setGlobals(getCount(), getWeightedCount());
 		return true;
@@ -538,26 +575,37 @@ public:
 		return ReadPositionWeightVector(0);
 	}
 
+	// cast operator
+	operator CountType() const {
+		return getCount();
+	}
+
 	std::string toString() const {
 		std::stringstream ss;
 		ss << getCount();
 		return ss.str();
 	}
-	TrackingDataMinimal &operator=(const TrackingData &other) {
-		count = (DataType) other.getWeightedCount();
+	template<typename U>
+	TrackingDataMinimal &operator=(const U &other) {
+		double weight = other.getWeightedCount();
+		DataType weightD = weight;
+		if (weightD < weight)
+			count = other.getCount();
+		else
+		    count = weightD;
 		return *this;
-	}TrackingDataMinimal &operator=(const TrackingDataWithAllReads &other) {
-		count = (DataType) other.getWeightedCount();
+	};
+
+	template<typename U>
+	TrackingDataMinimal &add(const U &other) {
+		double weight = other.getWeightedCount();
+		DataType weightD = weight;
+		if (weightD < weight)
+			count += other.getCount();
+		else
+		    count += weightD;
 		return *this;
-	}
-	TrackingDataMinimal &operator=(const TrackingDataSingleton &other) {
-		count = (DataType) other.getWeightedCount();
-		return *this;
-	}
-	TrackingDataMinimal &add(const TrackingDataMinimal &other) {
-		count += other.count;
-		return *this;
-	}
+	};
 
 };
 
@@ -577,6 +625,15 @@ std::ostream &operator<<(std::ostream &stream, TrackingDataMinimal<T> &ob) {
 #endif
 
 // $Log: KmerTrackingData.h,v $
+// Revision 1.2  2010-05-01 21:57:54  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.1.2.2  2010-04-27 05:38:32  regan
+// added count cast operator
+//
+// Revision 1.1.2.1  2010-04-26 04:59:46  regan
+// bugfix and templated some tracking methods
+//
 // Revision 1.1  2010-04-21 23:39:37  regan
 // got kmermap mmap store and restore working
 //

@@ -13,31 +13,18 @@ unsigned long TrackingData::discarded = 0;
 std::ostream &operator<<(std::ostream &stream, TrackingData &ob) {
 	stream << ob.toString();
 	return stream;
-}
-;
+};
 
 std::ostream &operator<<(std::ostream &stream, TrackingDataSingleton &ob) {
 	stream << ob.toString();
 	return stream;
-}
-;
+};
 
 std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob) {
 	stream << ob.toString();
 	return stream;
-}
-;
+};
 
-TrackingData &TrackingData::operator=(const TrackingDataSingleton &copy) {
-	count = copy.getCount();
-	weightedCount = copy.getWeightedCount();
-	return *this;
-}
-TrackingData &TrackingData::operator=(const TrackingDataWithAllReads &copy) {
-	count = copy.getCount();
-	weightedCount = copy.getWeightedCount();
-	return *this;
-}
 
 ClassicMemory ClassicMemory::singleton;
 BoostPoolManager BoostPoolManager::singleton;

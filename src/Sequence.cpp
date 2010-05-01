@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.30 2010-04-22 23:41:32 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.31 2010-05-01 21:57:53 regan Exp $
 //
 
 #include <cstring>
@@ -14,9 +14,46 @@ using namespace std;
 
 /*----------------------------- SEQUENCE -------------------------------------------*/
 
-Sequence::CachedSequenceVector Sequence::threadCacheSequence(OMP_MAX_THREADS, CachedSequence());
+Sequence::CachedSequencesVector Sequence::threadCacheSequences(OMP_MAX_THREADS, Sequence::CachedSequences(Sequence::maxCachePerThread));
 long Sequence::constructCount = 0;
 long Sequence::destructCount = 0;
+
+// dangling pointer
+Sequence::DataPtrListVector *Sequence::preAllocatedDataPtrs = new Sequence::DataPtrListVector();
+Sequence::DataPtr Sequence::DataPtrListVector::retrieveDataPtr() {
+	DataPtrList &list = getList();
+	DataPtr ptr;
+//#pragma omp critical
+	{
+	if (!list.empty()) {
+		ptr = list.front();
+		list.pop_back();
+		//std::cerr << "Retrieved " << ptr << " " << (int) ptr.get()->count() << " " << omp_get_thread_num() << std::endl;
+	} else {
+		ptr = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
+		//std::cerr << "Allocated " << ptr << " " << (int) ptr.get()->count() << " " << omp_get_thread_num()  << std::endl;
+	}
+	}
+	assert(ptr.get()->count() == 1);
+	return ptr;
+}
+void Sequence::DataPtrListVector::returnDataPtr(DataPtr &dataPtr) {
+	// claim ownership
+	DataPtr newPtr;
+	newPtr.swap(dataPtr);
+
+	TwoBitSequenceBase::_TwoBitEncodingPtr *ptr = newPtr.get();
+	if (ptr == NULL || ptr->count() != 1 || !isValid())
+		return;
+
+	DataPtrList &list = getList();
+//#pragma omp critical
+	{
+	list.push_back( newPtr );
+	//std::cerr << "Returned " << newPtr << " " << (int) newPtr.get()->count() << " " << omp_get_thread_num() << std::endl;
+	}
+	assert(newPtr.get()->count() == 2);
+}
 
 Sequence::Sequence() {
 #pragma omp atomic
@@ -24,11 +61,11 @@ Sequence::Sequence() {
 	reset(INVALID);
 }
 
-Sequence::Sequence(std::string fasta) :
+Sequence::Sequence(std::string fasta, bool usePreAllocation) :
 	_flags(0) {
 #pragma omp atomic
 	constructCount++;
-	setSequence(fasta);
+	setSequence(fasta, usePreAllocation);
 }
 
 Sequence::Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart) :
@@ -44,11 +81,11 @@ Sequence::~Sequence() {
 	reset(INVALID);
 }
 
-void Sequence::setSequence(std::string fasta) {
-	setSequence(fasta, 0);
+void Sequence::setSequence(std::string fasta, bool usePreAllocation) {
+	setSequence(fasta, 0, usePreAllocation);
 }
 
-void Sequence::setSequence(std::string fasta, long extraBytes) {
+void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAllocation) {
 	reset(INVALID);
 	SequenceLengthType length = fasta.length();
 	bool freeBuffer = false;
@@ -77,9 +114,14 @@ void Sequence::setSequence(std::string fasta, long extraBytes) {
 		        + buffSize
 				+ totalMarkupSize
 				+ extraBytes;
-		_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
+		if (usePreAllocation && size <= DataPtrListVector::size) {
+			_data = preAllocatedDataPtrs->retrieveDataPtr();
+			setFlag(PREALLOCATED);
+		} else {
+		    _data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
+	    }
 	} catch (...) {
-		throw new std::runtime_error(
+		throw std::runtime_error(
 				"Cannot allocate memory in Sequence::setSequence()");
 	}
 
@@ -113,7 +155,7 @@ void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes,
 	try {
 		_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
 	} catch (...) {
-		throw new std::runtime_error("Can not allocate memory for Sequence::setSequence(mmap)");
+		throw std::runtime_error("Can not allocate memory for Sequence::setSequence(mmap)");
 	}
 	unsetFlag(INVALID);
 	*_getRecord() = mmapRecordStart;
@@ -125,6 +167,9 @@ void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes,
 }
 
 void Sequence::reset(char flags) {
+	if (isPreAllocated()) {
+		preAllocatedDataPtrs->returnDataPtr(_data);
+	}
 	_flags = flags;
 	_data.reset();
 }
@@ -184,20 +229,32 @@ void Sequence::setMarkups(MarkupElementSizeType markupElementSize, const BaseLoc
 	}
 }
 
-string Sequence::getFastaNoMarkup() const {
+string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset) const {
 	if (_data.get() == NULL)
 	    return string("");
+
 	if (isMmaped()) {
 		string name, bases, quals;
 		readMmaped(name, bases, quals);
-		return bases;
+		SequenceLengthType len = bases.length();
+		if (trimOffset < len)
+			return bases.substr(0,len);
+		else
+			return bases;
 	} else {
-	    return TwoBitSequence::getFasta(getTwoBitSequence(), getLength());
+		SequenceLengthType len = getLength();
+		if (trimOffset < len)
+			len = trimOffset;
+	    return TwoBitSequence::getFasta(getTwoBitSequence(), len);
 	}
 }
 string Sequence::getFasta(SequenceLengthType trimOffset) const {
 	if (_data.get() == NULL)
 		return string("");
+	if (isDiscarded() || trimOffset <= 1) {
+		// to support printing paired reads where 1 read is trimmed to 0
+		return string(1, 'N');
+	}
 	string fasta;
 	if (isMmaped()) {
 		SequencePtr sequencePtr = getCache();
@@ -206,7 +263,7 @@ string Sequence::getFasta(SequenceLengthType trimOffset) const {
 	    SequenceLengthType len = getLength();
 	    if (trimOffset < len)
 		    len = trimOffset;
-	    if (len == 0) {
+	    if (len <= 1) {
 		    // to support printing paired reads where 1 read is trimmed to 0
 		    return string(1, 'N');
 	    }
@@ -417,8 +474,8 @@ void Read::setMinQualityScore(unsigned char minQualityScore) {
 	Read::initializeQualityToProbability(minQualityScore);
 }
 
-Read::Read(std::string name, std::string fasta, std::string qualBytes) {
-	setRead(name, fasta, qualBytes);
+Read::Read(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation) {
+	setRead(name, fasta, qualBytes, usePreAllocation);
 }
 Read::Read(Sequence::RecordPtr mmapRecordStart, Sequence::RecordPtr mmapQualRecordStart) {
 	setRead(mmapRecordStart, mmapQualRecordStart);
@@ -468,18 +525,18 @@ char * Read::_getName() {
 	return const_cast<char*> (constThis()._getName());
 }
 
-void Read::setRead(std::string name, std::string fasta, std::string qualBytes) {
+void Read::setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation) {
 	assert(!isMmaped());
 	if (fasta.length() != qualBytes.length())
-		throw new std::invalid_argument(
-				"fasta length != qual length for name = " + name);
+		throw std::invalid_argument(
+				"fasta length != qual length for name = " + name + " " + fasta + " " + qualBytes);
 
 	// do not store quals if it is a reference
 	if (qualBytes.length() > 1 && qualBytes[0] == REF_QUAL) {
 		qualBytes.clear();
 	}
 
-	Sequence::setSequence(fasta, qualBytes.length() + (name.length() + 1));
+	Sequence::setSequence(fasta, qualBytes.length() + (name.length() + 1), usePreAllocation);
 
 	if (qualBytes.empty()) {
 		unsetFlag(HASQUALS);
@@ -502,6 +559,9 @@ void Read::setRead(Sequence::RecordPtr mmapRecordStart, std::string markupFasta,
 }
 
 void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, char mask) {
+  if (isDiscarded())
+	  return;
+
   string fasta = getFasta();
   SequenceLengthType len = getLength();
   if (offset + length > len)
@@ -511,10 +571,8 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
   // so only need to mark the first base
   if ((fasta.length()>0 && fasta[0] == 'X')
 		|| (offset == 0 && mask == 'X')) {
-		fasta = getFastaNoMarkup();
-		offset = 0;
-		length = 1;
-		mask = 'X';
+		setFlag(DISCARDED);
+		return;
   }
   fasta.replace(offset, length, length, mask);
 
@@ -548,7 +606,11 @@ string Read::getName() const {
 	}
 }
 
-string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting) const {
+string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting, bool unmasked) const {
+  if ((isDiscarded() || trimOffset <= 1) && !unmasked) {
+	  // to support printing paired reads where 1 read is trimmed to 0
+	  return string(1, FASTQ_START_CHAR+1);
+  }
   if (isMmaped()) {
 	string name, bases, quals;
 	Sequence::readMmaped(name, bases, quals);
@@ -593,11 +655,31 @@ string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting) const {
   }
 }
 
-string Read::toFastq(SequenceLengthType trimOffset, std::string label) const {
+string Read::toFastq(SequenceLengthType trimOffset, std::string label, bool unmasked) const {
+	std::string fasta;
+	if (unmasked)
+		fasta = getFastaNoMarkup(trimOffset);
+	else
+		fasta = getFasta(trimOffset);
 	return string('@' + getName() + (label.length() > 0 ? " " + label : "")
-			+ "\n" + getFasta(trimOffset) + "\n+\n"
-			+ getQuals(trimOffset, true) + "\n");
+			+ "\n" + fasta + "\n+\n"
+			+ getQuals(trimOffset, true, unmasked) + "\n");
 }
+string Read::toFasta(SequenceLengthType trimOffset, std::string label, bool unmasked) const {
+	std::string fasta;
+	if (unmasked)
+		fasta = getFastaNoMarkup(trimOffset);
+	else
+		fasta = getFasta(trimOffset);
+	return string('>' + getName() + (label.length() > 0 ? " " + label : "")
+			+ "\n" + fasta + "\n");
+}
+string Read::toQual(SequenceLengthType trimOffset, std::string label) const {
+	return string('>' + getName() + (label.length() > 0 ? " " + label : "")
+			+ "\n" + getFormattedQuals(trimOffset) + "\n");
+}
+
+// TODO format with linebreaks
 string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 	string quals = getQuals(trimOffset, true);
 	stringstream ss;
@@ -611,8 +693,35 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.31  2010-05-01 21:57:53  regan
+// merged head with serial threaded build partitioning
+//
 // Revision 1.30  2010-04-22 23:41:32  regan
 // fixed a few bugs
+//
+// Revision 1.29.4.8  2010-04-30 23:53:14  regan
+// attempt to fix a bug.  clearing Sequence caches when it makes sense
+//
+// Revision 1.29.4.7  2010-04-30 23:33:37  regan
+// replaced read cache with LRU 3rd party cache
+//
+// Revision 1.29.4.6  2010-04-30 22:29:58  regan
+// added comments about dangling pointer
+//
+// Revision 1.29.4.5  2010-04-30 21:53:52  regan
+// reuse memory efficiently for cache lookups
+//
+// Revision 1.29.4.4  2010-04-29 06:58:43  regan
+// reworked output parameters to include option to print unmasked reads
+//
+// Revision 1.29.4.3  2010-04-28 22:28:11  regan
+// refactored writing routines
+//
+// Revision 1.29.4.2  2010-04-26 22:53:45  regan
+// bugfixes
+//
+// Revision 1.29.4.1  2010-04-23 17:46:20  regan
+// merged bugfixes from head
 //
 // Revision 1.29  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer

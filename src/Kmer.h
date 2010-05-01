@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.80 2010-04-21 23:39:37 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.81 2010-05-01 21:57:54 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -23,6 +23,7 @@
 #include "MemoryUtils.h"
 #include "KmerTrackingData.h"
 #include "Utils.h"
+#include "lookup8.h"
 
 using namespace TwoBitSequenceBase;
 
@@ -72,7 +73,7 @@ public:
 
 class Kmer {
 public:
-	typedef unsigned long NumberType;
+	typedef unsigned long long NumberType;
 
 private:
 	inline static boost::hash<NumberType> &getHasher() {
@@ -212,7 +213,7 @@ public:
 				output.getTwoBitSequence(), getLength());
 	}
 
-	// returns true if this is the least complement, false otherwise
+	// returns true if this is the least complement, false otherwise (output is least)
 	bool buildLeastComplement(Kmer &output) const {
 		buildReverseComplement(output);
 		if (*this <= output) {
@@ -303,8 +304,12 @@ public:
 
 		// boost::hash<std::string> hasher ; return hasher((toFasta( )));
 
-		return jenkins_one_at_a_time_hash(
-				(unsigned char *) getTwoBitSequence(), getTwoBitLength());
+
+		NumberType number = toNumber();
+		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
+
+		//return jenkins_one_at_a_time_hash(
+		//		(unsigned char *) getTwoBitSequence(), getTwoBitLength());
 		// return MurmurHash64A(getTwoBitSequence(),getTwoBitLength(),0xDEADBEEF);
 	}
 
@@ -595,15 +600,14 @@ private:
 	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity) {}
 
 public:
-	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length,
-			bool leastComplement = false) :
+	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false, bool *bools = NULL) :
 		_begin(NULL), _size(0), _capacity(0) {
 		initLock();
 		if (KmerSizer::getSequenceLength() <= length) {
 			SequenceLengthType numKmers = length
 					- KmerSizer::getSequenceLength() + 1;
 			resize(numKmers, MAX_INDEX, false);
-			build(twoBit, length, leastComplement);
+			build(twoBit, length, leastComplement, bools);
 		} else {
 			resize(0);
 		}
@@ -942,7 +946,7 @@ public:
 	}
 
 	void build(const TwoBitEncoding *twoBit, SequenceLengthType length,
-			bool leastComplement = false) {
+			bool leastComplement = false, bool *bools = NULL) {
 		assert(!isMmaped()); // mmaped can not be modified!
 		setExclusiveLock();
 		SequenceLengthType numKmers = length - KmerSizer::getSequenceLength()
@@ -966,7 +970,7 @@ public:
 				TwoBitEncoding *lastByte =
 						kmers[i + bitShift].getTwoBitSequence()
 								+ KmerSizer::getTwoBitLength() - 1;
-				switch (KmerSizer::getSequenceLength() % 4) {
+				switch (KmerSizer::getSequenceLength() & 0x03) {
 				case 1:
 					*lastByte &= 0xc0;
 					break;
@@ -981,12 +985,18 @@ public:
 		}
 		if (leastComplement) {
 			TEMP_KMER(least);
+			bool isLeast;
 #ifdef _USE_OPENMP
 #pragma omp parallel for if(numKmers >= 10000)
 #endif
-			for (long i = 0; i < (long) numKmers; i++)
-				if (!kmers[i].buildLeastComplement(least))
+			for (long i = 0; i < (long) numKmers; i++) {
+				isLeast = kmers[i].buildLeastComplement(least);
+				if (!isLeast)
 					kmers[i] = least;
+				if (bools != NULL)
+					*(bools+i) = isLeast;
+			}
+
 		}
 		unsetExclusiveLock();
 	}
@@ -1006,6 +1016,12 @@ public:
 				}
 			}
 		}
+		return kmers;
+	}
+	static KmerArray permuteBases(const Kmer &kmer, const ValueType defaultValue, bool leastComplement = false) {
+		KmerArray kmers = permuteBases(kmer, leastComplement);
+		for(SequenceLengthType idx = 0; idx < kmers.size(); idx++)
+			kmers.valueAt(idx) = defaultValue;
 		return kmers;
 	}
 
@@ -1166,6 +1182,42 @@ public:
 				std::swap(_begin, other._begin);
 				std::swap(_size, other._size);
 				std::swap(_capacity, other._capacity);
+			}
+
+			// purge all element where the value is less than minimumCount
+			// assumes that ValueType can be cast into long
+			IndexType purgeMinCount(long minimumCount) {
+				setExclusiveLock();
+				// scan values that pass, keep list and count
+				IndexType maxSize = size();
+				IndexType passing[maxSize];
+				IndexType passed = 0;
+				IndexType affected;
+
+				ValueType *valuePtr = getValueStart();
+				for(IndexType i = 0; i < maxSize; i++) {
+					if ( minimumCount <= (long) *(valuePtr++) ) {
+						passing[passed++] = i;
+					}
+				}
+				if (passed == 0) {
+					reset(true);
+					affected = maxSize;
+				} else if (passed == maxSize) {
+					affected = 0;
+				} else {
+					affected = maxSize - passed;
+					KmerArray tmp;
+					tmp.reserve(passed);
+					for(IndexType i = 0 ; i < passed ; i++) {
+						ElementType elem = getElement(passing[i]);
+						tmp.append( elem.key(), elem.value() );
+					}
+					swap(tmp);
+				}
+
+				unsetExclusiveLock();
+				return affected;
 			}
 
 			std::string toString() {
@@ -1341,6 +1393,13 @@ public:
 		return map;
 	}
 
+	void swap(KmerMap &other) {
+		_buckets.swap(other._buckets);
+		NumberType tmp = other.BUCKET_MASK;
+		other.BUCKET_MASK = BUCKET_MASK;
+		BUCKET_MASK = tmp;
+	}
+
 	static const void _getMmapSizes(const void *src, NumberType &size, NumberType &mask, NumberTypePtr &offsetArray) {
 		NumberType *numbers = (NumberType *) src;
 		size = *(numbers++);
@@ -1353,13 +1412,14 @@ public:
 		    + size()*BucketType::getElementByteSize();
 	}
 
-	void reset() {
+	void reset(bool releaseMemory = true) {
 		for(IndexType i=0; i< _buckets.size(); i++)
-		_buckets[i].reset();
+		_buckets[i].reset(releaseMemory);
 	}
-	void clear() {
-		reset();
-		_buckets.resize(1); // iterators require at least 1
+	void clear(bool releaseMemory = true) {
+		reset(releaseMemory);
+		if (releaseMemory)
+		    _buckets.resize(1); // iterators require at least 1
 	}
 
 	void setReadOnlyOptimization() {
@@ -1374,19 +1434,48 @@ public:
 	inline unsigned short getLocalThreadId(NumberType hash, unsigned short numThreads) const {
 		// use the bottom bits of hash (which are used to sort by bucket)
 		// partition by numThreads blocks
+		// splits into numThread contiguous blocks
 		return (hash & BUCKET_MASK) / (_buckets.size() / numThreads + 1);
 	}
 	inline unsigned short getLocalThreadId(const KeyType &key, unsigned short numThreads) const {
 		return getLocalThreadId(key.hash(), numThreads);
 	}
-	inline unsigned short getDistributedThreadId(NumberType hash, unsigned short numThreads) const {
+	inline unsigned short getDistributedThreadId(NumberType hash, NumberType threadBitMask) const {
+		assert( threadBitMask != 0 && ((threadBitMask+1) & threadBitMask) == 0); // number of threads must be a power of 2
+
+		// stripe within the contiguous blocks for the local thread
+		return (hash & threadBitMask);
+
 		// use top bits of hash (unused to sort by bucket)
-		// partition roundrobin by numThreads
-		return (hash >> 32 & BUCKET_MASK) % numThreads;
+		//return (hash >> 32 & BUCKET_MASK) & threadBitMask;
 	}
-	inline unsigned short getDistributedThreadId(const KeyType &key, unsigned short numThreads) const {
-		return getDistributedThreadId(key.hash(), numThreads);
+	inline unsigned short getDistributedThreadId(const KeyType &key, NumberType threadBitMask) const {
+		return getDistributedThreadId(key.hash(), threadBitMask);
 	}
+
+	// optimized to look at both possible thead partitions
+	// if this is the correct distributed thread, return true and set the proper localThread
+	// otherwise return false
+	inline bool getLocalThreadId(const KeyType &key, unsigned short &localThreadId, unsigned short numLocalThreads, unsigned short distributedThreadId, NumberType distributedThreadBitMask) const {
+		NumberType hash = key.hash();
+		if (distributedThreadBitMask == 0 || getDistributedThreadId(hash, distributedThreadBitMask) == distributedThreadId) {
+			localThreadId = getLocalThreadId(hash, numLocalThreads);
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	// optimization to move the buckets with pre-allocated memory to the next DMP thread
+	void rotateDMPBuffers(unsigned short numThreads) {
+		BucketType tmp;
+		tmp.swap(_buckets[ 0 ]);
+		for(unsigned int i = 0 ; i < _buckets.size() - 1; i++) {
+			_buckets[i].swap(_buckets[i+1]);
+		}
+		tmp.swap(_buckets[ _buckets.size() - 1]);
+	}
+
 
 	inline NumberType getBucketIdx(NumberType hash) const {
 		return hash & BUCKET_MASK;
@@ -1467,8 +1556,9 @@ public:
 		IndexType existingIdx;
 		ElementType element;
 		bucket.setSharedLock();
-		if (_exists(key, existingIdx, bucket))
-		element = bucket.getElement(existingIdx);
+		if (_exists(key, existingIdx, bucket)) {
+		    element = bucket.getElement(existingIdx);
+		}
 		bucket.unsetSharedLock();
 		return element;
 	}
@@ -1480,19 +1570,28 @@ public:
 		return getElementIfExists(key, getBucket(key));
 	}
 
-	ElementType getElement(const KeyType &key, BucketType &bucket) {
+	ElementType getOrSetElement(const KeyType &key, BucketType &bucket, ValueType &value) {
 		IndexType existingIdx;
 		ElementType element;
 		bucket.setExclusiveLock();
-		if (_exists(key, existingIdx, bucket))
-		element = bucket.getElement(existingIdx);
-		else
-		element = insert(key, Value(), bucket);
+		if (_exists(key, existingIdx, bucket)) {
+		    element = bucket.getElement(existingIdx);
+		} else {
+		    element = insert(key, value, bucket);
+		}
 		bucket.unsetExclusiveLock();
 		return element;
 	}
+	ElementType getOrSetElement(const KeyType &key, ValueType &value) {
+		return getOrSetElement(key, getBucket(key), value);
+	}
+	ElementType getElement(const KeyType &key, BucketType &bucket) {
+		ValueType value = Value();
+		return getOrSetElement(key, bucket, value);
+	}
 	ElementType getElement(const KeyType &key) {
-		return getElement(key, getBucket(key));
+		ValueType value = Value();
+		return getOrSetElement(key, value);
 	}
 
 	// not thread safe!
@@ -1540,6 +1639,18 @@ public:
 		}
 		return biggest;
 	}
+
+	IndexType purgeMinCount(long minimumCount) {
+		long affected = 0;
+#ifdef _USE_OPENMP
+#pragma omp parallel for reduction(+:affected)
+#endif
+		for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
+			affected += _buckets[idx].purgeMinCount(minimumCount);
+		}
+		return affected;
+	}
+
 private:
 	int _compare(const BucketType &a, const BucketType &b, IndexType &idxA, IndexType &idxB) {
  	   int cmp;
@@ -1555,6 +1666,38 @@ private:
 	   return cmp;
 	}
 public:
+
+	static bool _mergeTrivial(BucketType &a, BucketType &b) {
+		if (b.size() == 0) {
+		    // do nothing.  a is good as is
+			return true;
+		} else if (a.size() == 0) {
+			// swap a and b
+			a.swap(b);
+			return true;
+		}
+		return false;
+	}
+
+	// optimized merge for DMP threaded (interlaced) KmerMaps
+	void merge(const KmerMap &src) const {
+	    if (getNumBuckets() != src.getNumBuckets()) {
+	    	 throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
+	    }
+#ifdef _USE_OPENMP
+#pragma omp parallel for
+#endif
+	  	for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
+	    	   BucketType &a = const_cast<BucketType&>(_buckets[idx]);
+	    	   BucketType &b = const_cast<BucketType&>(src._buckets[idx]);
+
+	    	   if (! _mergeTrivial(a,b) ) {
+	    		   throw std::invalid_argument("Expected one bucket to be zero in this optimized method: KmerMap::merge(const KmerMap &src) const");
+	    	   }
+	  	}
+
+	}
+
 	void mergeAdd(KmerMap &src) {
        if (getNumBuckets() != src.getNumBuckets()) {
     	   throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
@@ -1567,6 +1710,11 @@ public:
     	   // buckets are sorted so perform a sorted merge by bucket
     	   BucketType &a = _buckets[idx];
     	   BucketType &b = src._buckets[idx];
+
+    	   // short circuit if one of the buckets is empty
+    	   if (_mergeTrivial(a,b))
+    		   continue;
+
     	   IndexType capacity = std::max(a.size(), b.size());
 
     	   merged.reserve(capacity);
@@ -1793,6 +1941,30 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.81  2010-05-01 21:57:54  regan
+// merged head with serial threaded build partitioning
+//
+// Revision 1.80.2.7  2010-04-29 20:33:52  regan
+// *** empty log message ***
+//
+// Revision 1.80.2.6  2010-04-29 06:59:10  regan
+// a few more methods
+//
+// Revision 1.80.2.5  2010-04-27 05:39:10  regan
+// got distributed thread merge working
+//
+// Revision 1.80.2.4  2010-04-26 05:25:49  regan
+// bugfix and optimization
+//
+// Revision 1.80.2.3  2010-04-24 04:56:20  regan
+// bugfixes
+//
+// Revision 1.80.2.2  2010-04-23 23:39:41  regan
+// a few changes in how lest complement is derived
+//
+// Revision 1.80.2.1  2010-04-22 22:55:23  regan
+// checkpoint
+//
 // Revision 1.80  2010-04-21 23:39:37  regan
 // got kmermap mmap store and restore working
 //
