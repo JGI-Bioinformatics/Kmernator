@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.13 2010-05-01 21:57:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.14 2010-05-04 23:49:21 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -51,6 +51,8 @@ private:
 	unsigned int maskSimpleRepeats;
 	unsigned int phiXOutput;
 	unsigned int filterOutput;
+	unsigned int deDupMode;
+	unsigned int deDupSingle;
 	unsigned int deDupEditDistance;
 	unsigned int mmapInput;
 	unsigned int buildPartitions;
@@ -58,7 +60,7 @@ private:
 	Options() : tmpDir("/tmp"), kmerSize(31), minKmerQuality(0.10), verbosity(1), debug(0),
 	minQuality(10), minDepth(10), minReadLength(20), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
-	deDupEditDistance(0), mmapInput(1), buildPartitions(0) {
+	deDupMode(1), deDupSingle(0), deDupEditDistance(0), mmapInput(1), buildPartitions(0) {
 		setOptions();
 	}
 
@@ -123,6 +125,12 @@ public:
 	}
 	static inline unsigned int &getFilterOutput(){
 		return getOptions().filterOutput;
+	}
+	static inline unsigned int &getDeDupMode() {
+		return getOptions().deDupMode;
+	}
+	static inline unsigned int &getDeDupSingle() {
+		return getOptions().deDupSingle;
 	}
 	static inline unsigned int &getDeDupEditDistance() {
 		return getOptions().deDupEditDistance;
@@ -217,6 +225,12 @@ private:
 
 		("mask-simple-repeats", po::value<unsigned int>()->default_value(maskSimpleRepeats),
 				"if filtering artifacts, also mask simple repeats")
+
+		("dedup-mode", po::value<unsigned int>()->default_value(deDupMode),
+				"if 0, no fragment de-duplication will occur.  if 1, single orientation (AB and BA are separated) will collapse to consensus. if 2, both orientations (AB and BA are the same) will collapse")
+
+        ("dedup-single", po::value<unsigned int>()->default_value(deDupSingle),
+		    "if 0, no single read de-duplication will occur.  if 1, then single read deduplication will occur")
 
 		("dedup-edit-distance", po::value<unsigned int>()->default_value(deDupEditDistance),
 				"if -1, no fragment de-duplication will occur, if 0, only exact match, ...")
@@ -347,8 +361,21 @@ public:
 			getPhiXOutput() = vm["phix-output"].as<unsigned int> ();
 			// set simple repeat masking
 			getFilterOutput() = vm["filter-output"].as<unsigned int> ();
+
+			// set dedup mode
+			getDeDupMode() = vm["dedup-mode"].as<unsigned int>();
+			// set dedup single
+			getDeDupSingle() = vm["dedup-single"].as<unsigned int>();
+			if (getDeDupSingle() > 0) {
+			    std::cerr << "Unsupported options dedup-single (unimplemented)" << std::endl;
+			    return false;
+			}
 			// set dedup edit distance
 			getDeDupEditDistance() = vm["dedup-edit-distance"].as<unsigned int>();
+			if (getDeDupEditDistance() > 1) {
+				std::cerr <<"Unsupported option dedup-edit-distance > 1" << std::endl;
+			    return false;
+			}
 
 			// set mmapInput
 			getMmapInput() = vm["mmap-input"].as<unsigned int>();
@@ -372,6 +399,15 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.14  2010-05-04 23:49:21  regan
+// merged changes for FixConsensusOutput-201000504
+//
+// Revision 1.13.6.2  2010-05-04 23:41:30  regan
+// checkpoint
+//
+// Revision 1.13.6.1  2010-05-04 21:51:47  regan
+// checkpoint
+//
 // Revision 1.13  2010-05-01 21:57:53  regan
 // merged head with serial threaded build partitioning
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.18 2010-05-01 21:57:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.19 2010-05-04 23:49:21 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -232,11 +232,12 @@ public:
 
 	static unsigned long filterDuplicateFragmentPairs(ReadSet &reads, unsigned char sequenceLength = 16, unsigned int cutoffThreshold = 2, unsigned int editDistance = Options::getDeDupEditDistance()) {
 
-	  if (editDistance == (unsigned int) -1) {
+	  if ( Options::getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
 			std::cerr << "Skipping filter and merge of duplicate fragments" << std::endl;
 			return 0;
 	  }
 	  unsigned long affectedCount = 0;
+	  bool useReverseComplement = (Options::getDeDupMode() == 2);
 
 	  // select the number of bytes from each pair to scan
 	  unsigned char bytes = sequenceLength / 4;
@@ -267,32 +268,46 @@ public:
 		for(long pairIdx = 0; pairIdx < pairSize; pairIdx++) {
 			Pair &pair = reads.getPair(pairIdx);
 			int threadNum = omp_get_thread_num();
+			KmerWeights &kmerWeights = tmpKmerv[threadNum];
+			Kmer &kmer = kmerWeights[0];
+
+			// TODO implement Options::getDeDupSingle() == 1
+
 
 			if (reads.isValidRead(pair.read1) && reads.isValidRead(pair.read2)) {
-			  const Read read1 = reads.getRead(pair.read1);
-			  const Read read2 = reads.getRead(pair.read2);
+			  const Read &read1 = reads.getRead(pair.read1);
+			  const Read &read2 = reads.getRead(pair.read2);
 			  if (read1.isDiscarded() || read2.isDiscarded())
 				  continue;
 
-			  // create read1 + the reverse complement of read2
-			  // when it is represented as a kmer, the leastcomplement will be stored
+			  // create read1 + the reverse complement of read2 (1:rev2)
+			  // when useReverseComplement, it is represented as a kmer, and the leastcomplement of 1:rev2 and 2:rev1 will be stored
 			  // and properly account for duplicate fragment pairs
 
 			  Sequence::BaseLocationVectorType markups = read1.getMarkups();
 			  if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
-				  memcpy(tmpKmerv[threadNum][0].getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
+				  memcpy(kmer.getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
 			  } else {
 				  continue;
 			  }
 			  markups = read2.getMarkups();
 			  if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
-				  TwoBitSequence::reverseComplement( read2.getTwoBitSequence(), tmpKmerv[threadNum][0].getTwoBitSequence() + bytes, bytes*4);
+				  TwoBitSequence::reverseComplement( read2.getTwoBitSequence(), kmer.getTwoBitSequence() + bytes, bytes*4);
 			  } else {
 				  continue;
 			  }
 
+			  long myPairIdx = pairIdx;
+			  if (useReverseComplement) {
+				  // choose orientation and flag in pairIdx
+				  TEMP_KMER(tmpRevComp);
+				  if (! kmer.buildLeastComplement(tmpRevComp) ) {
+					  kmer = tmpRevComp;
+					  myPairIdx = pairIdx + pairSize;
+				  }
+			  }
 			  // store the pairIdx (not readIdx)
-			  ksv[threadNum].append(tmpKmerv[threadNum], pairIdx);
+			  ksv[threadNum].append(kmerWeights, myPairIdx);
 
 			}
 		}
@@ -350,9 +365,15 @@ public:
 		    		// iterator readId is actually the pairIdx built above
 		    		ReadSetSizeType pairIdx = rpwit->readId;
 
+		    		// correct orientation
+		    		bool isCorrectOrientation = true;
+		    		if (pairIdx >= pairSize) {
+		    			isCorrectOrientation = false;
+		    			pairIdx = pairIdx - pairSize;
+		    		}
 		    		Pair &pair = reads.getPair(pairIdx);
-		    		const Read &read1 = reads.getRead(pair.read1);
-		    		const Read &read2 = reads.getRead(pair.read2);
+		    		const Read &read1 = reads.getRead(isCorrectOrientation ? pair.read1 : pair.read2);
+		    		const Read &read2 = reads.getRead(isCorrectOrientation ? pair.read2 : pair.read1);
 
 		    		tmpReadSet1.append( read1 );
 		    		tmpReadSet2.append( read2 );
@@ -372,6 +393,10 @@ public:
 
 		    	    ReadSetSizeType pairIdx = rpwit->readId;
 
+		    	    // orientation does not matter here, but correcting the index is important!
+		    	    if (pairIdx >= pairSize) {
+		    	    	pairIdx = pairIdx - pairSize;
+		    	    }
 		    	    Pair &pair = reads.getPair(pairIdx);
 		    	    Read &read1 = reads.getRead(pair.read1);
 		    	    Read &read2 = reads.getRead(pair.read2);
