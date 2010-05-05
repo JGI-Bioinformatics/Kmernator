@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.3 2010-04-21 23:39:04 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.4 2010-05-05 06:28:35 regan Exp $
 //
 
 #ifndef _READ_FILE_READER_H
@@ -340,23 +340,26 @@ public:
 		}
 
 		virtual string &readName() {
-			int threadNum = omp_get_thread_num();
-			nextLine(_nameBuffer[threadNum]);
+			std::string &name = getName();
+			nextLine( name );
 
-			while (_nameBuffer[threadNum].length() == 0) // skip empty lines at end of stream
+			while (name.length() == 0) // skip empty lines at end of stream
 			{
 				if (endOfStream()) {
-					_nameBuffer[threadNum].clear();
-					return _nameBuffer[threadNum];
+					name.clear();
+					return name;
 				}
-				nextLine(_nameBuffer[threadNum]);
+				nextLine( name );
 			}
 
-			if (_nameBuffer[threadNum][0] != _marker)
+			if (name[0] != _marker)
 				throw runtime_error(
 						(string("Missing name marker '") + _marker + "'").c_str());
 
-			return _nameBuffer[threadNum].erase(0, 1);
+			// remove marker and any extra comments or fields
+            SequenceRecordParser::trimName( name );
+
+			return name;
 		}
 
 
@@ -466,7 +469,10 @@ public:
 			    // skip the first character
 				throw;
 			}
-			nextLine(_nameBuffer[threadNum], recordPtr);  // name
+			std::string &name = _nameBuffer[threadNum];
+			nextLine(name, recordPtr);
+			SequenceRecordParser::trimName( name );  // name
+
 			nextLine(_basesBuffer[threadNum], recordPtr); // fasta
 			nextLine(_lineBuffer[threadNum], recordPtr);  // qual name
 			nextLine(_qualsBuffer[threadNum], recordPtr); // quals
@@ -528,11 +534,13 @@ public:
 		}
 		RecordPtr readRecord(RecordPtr recordPtr) const {
 			int threadNum = omp_get_thread_num();
-			if (*(recordPtr++) != _marker) {
-				// skip the first character
-				throw;
+			if (*recordPtr != _marker) {
+				throw std::invalid_argument("Could not FastaStreamParser::readRecord()");
 			}
-			nextLine(_nameBuffer[threadNum], recordPtr);  // name
+			std::string &name = _nameBuffer[threadNum];
+			nextLine(name, recordPtr);  // name
+			SequenceRecordParser::trimName(name);
+
 			_basesBuffer[threadNum].clear();
 			_isMultiline[threadNum] = false;
 			long count = 0;

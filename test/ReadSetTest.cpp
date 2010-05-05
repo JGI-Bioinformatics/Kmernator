@@ -1,9 +1,11 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.13 2010-05-01 21:57:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.14 2010-05-05 06:28:38 regan Exp $
 //
 
 #include "config.h"
 #include "Sequence.h"
 #include "ReadSet.h"
+#include "ReadFileReader.h"
+#include "Utils.h"
 #define BOOST_TEST_MODULE ReadSetTest
 #include <boost/test/unit_test.hpp>
 #include <iostream>
@@ -88,8 +90,39 @@ void testFastaWithQualFile(string f, string q) {
 
 }
 
+#define TEST_TRIM_NAME_PARSER(_target,_test) \
+	target = _target; test = _test; \
+	SequenceRecordParser::trimName(test); \
+	BOOST_CHECK_EQUAL(target,test);
+
+void testParser()
+{
+	std::string target, test;
+
+	TEST_TRIM_NAME_PARSER("asdf1234",    ">asdf1234");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  ">asdf1234/1");
+	TEST_TRIM_NAME_PARSER("asdf1234/A",  ">asdf1234/A");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  ">asdf1234/1 ");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  ">asdf1234/1 blah=blah2");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  ">asdf1234/1 blah=blah2\n");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  ">asdf1234/1\tblah=blah2\n");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  ">asdf1234/1  blah=blah2\n");
+
+	TEST_TRIM_NAME_PARSER("asdf1234",    "@asdf1234");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1");
+	TEST_TRIM_NAME_PARSER("asdf1234/A",  "@asdf1234/A");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1 ");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1 blah=blah2");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1 blah=blah2\n");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1\tblah=blah2\n");
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1  blah=blah2\n");
+
+}
+
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
+	testParser();
+
 	Sequence::clearCaches();
 	testZeroReads();
 
@@ -104,6 +137,15 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.14  2010-05-05 06:28:38  regan
+// merged changes from FixPairOutput-20100504
+//
+// Revision 1.13.4.1  2010-05-05 05:57:56  regan
+// fixed pairing
+// fixed name to exclude labels and comments after whitespace
+// applied some performance optimizations from other branch
+// created FixPair application
+//
 // Revision 1.13  2010-05-01 21:57:51  regan
 // merged head with serial threaded build partitioning
 //

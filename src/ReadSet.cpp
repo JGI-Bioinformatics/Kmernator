@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.33 2010-05-01 21:57:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.34 2010-05-05 06:28:35 regan Exp $
 //
 
 #include <exception>
@@ -24,6 +24,22 @@ void ReadSet::addRead(Read &read, SequenceLengthType readLength) {
 	_reads.push_back(read);
 	_baseCount += readLength;
 	setMaxSequenceLength(readLength);
+	if (_reads.size() > 1 && !previousReadName.empty()) {
+		if (isPair(previousReadName, read)) {
+			// mark the previous read, but not this one
+			// signaling, in conjunction with NOT populating this entry in _pairs
+			// that these two are sequential and paired...
+			// this gets around the parallel nature of building ReadSets in multiple threads
+			// as the pairs are identified after all ReadSets are consolidated
+			Read &lastRead = _reads[_reads.size() - 2];
+			lastRead.markPaired();
+			previousReadName.clear();
+		} else {
+			previousReadName = read.getName();
+		}
+	} else {
+	    previousReadName = read.getName();
+	}
 }
 ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 	MmapSource mmap(filePath, ReadFileReader::getFileSize(filePath));
@@ -344,6 +360,40 @@ int _readNum(const std::string &readName) {
 	return retVal;
 }
 
+bool ReadSet::isPair(const std::string &readNameA, const Read &readB) {
+	std::string commonA = _commonName(readNameA);
+	std::string readNameB = readB.getName();
+	std::string commonB = _commonName(readB.getName());
+	if (commonA == commonB) {
+		int readNumA = _readNum(readNameA);
+		int readNumB = _readNum(readNameB);
+		if (readNumA != 0 && readNumB != 0 && readNumA != readNumB) {
+			return true;
+		} else {
+			return false;
+		}
+	} else {
+		return false;
+	}
+}
+bool ReadSet::isPair(const Read &readA, const Read &readB) {
+	std::string readNameA = readA.getName();
+	return isPair(readNameA, readB);
+}
+
+Read ReadSet::fakePair(const Read &unPaired) {
+	std::string name = unPaired.getName();
+	int readNum = _readNum(name);
+	std::string newName = _commonName(name);
+	if (readNum == 1) {
+		newName += '2';
+	} else if (readNum == 2) {
+		newName += '1';
+	} else if (readNum == 0)
+		throw std::invalid_argument( (std::string("Can not fake pair reads that were not paired end to start with: ") + name).c_str() );
+	return Read(newName, "N", "A", true);
+}
+
 ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	ReadSetSizeType size = getSize();
 
@@ -359,6 +409,27 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	}
 	if (size <= readIdx)
 		return _pairs.size();
+
+	// first scan the reads adding in sequential pairs which
+	// were flagged during addRead()
+	long sequentialPairs = 0;
+	for(ReadSetSizeType spIdx = readIdx; spIdx < size - 1; spIdx++) {
+		Read &read1 = _reads[spIdx];
+		Read &read2 = _reads[spIdx+1];
+		if (read1.isPaired() && ! read2.isPaired()) {
+			// special signal that these two are sequential pairs
+			_pairs.push_back( Pair(spIdx, spIdx+1) );
+			read2.markPaired();
+			spIdx++;
+			if (Options::getDebug() > 2) {
+			  std::cerr << "Paired sequential reads: " << read1.getName() << " " << read2.getName() << std::endl;
+			}
+			sequentialPairs++;
+		}
+	}
+
+	if (Options::getVerbosity())
+		std::cerr << "Paired sequential reads (fast): " << sequentialPairs << std::endl;
 
 	boost::unordered_map<std::string, ReadSetSizeType> unmatchedNames;
 	boost::unordered_map<std::string, ReadSetSizeType>::iterator unmatchedIt;
@@ -377,9 +448,16 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	int readNum = 0;
 	bool isPairable = true;
 
+	long countNewPaired = 0;
 	while (readIdx < size) {
 
-		string name = getRead(readIdx).getName();
+		const Read &read = getRead(readIdx);
+		if (read.isPaired()) {
+			readIdx++;
+			continue;
+		}
+
+		string name = read.getName();
 		readNum = _readNum(name);
 		common = _commonName(name);
 
@@ -394,7 +472,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 							<< name << std::endl;
 					break;
 				}
-				_pairs[unmatchedIt->second].read2 = readIdx;
+				test.read2 = readIdx;
 			} else {
 				if (test.read1 != MAX_READ_IDX) {
 					isPairable = false;
@@ -403,9 +481,12 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 							<< name << std::endl;
 					break;
 				}
-				_pairs[unmatchedIt->second].read1 = readIdx;
+				test.read1 = readIdx;
 			}
 			unmatchedNames.erase(unmatchedIt);
+			getRead(test.read1).markPaired();
+			getRead(test.read2).markPaired();
+
 		} else {
 			Pair pair;
 			if (readNum == 2)
@@ -418,8 +499,8 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 		}
 
 		readIdx++;
-		if (readIdx % 10000000 == 0)
-			std::cerr << "Processed " << readIdx << " reads for pairing"
+		if (++countNewPaired % 10000000 == 0)
+			std::cerr << "Processed " << countNewPaired << " pairs for pairing"
 					<< std::endl;
 	}
 
@@ -481,6 +562,21 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.34  2010-05-05 06:28:35  regan
+// merged changes from FixPairOutput-20100504
+//
+// Revision 1.33.4.1  2010-05-05 05:57:53  regan
+// fixed pairing
+// fixed name to exclude labels and comments after whitespace
+// applied some performance optimizations from other branch
+// created FixPair application
+//
+// Revision 1.33.2.2  2010-05-03 21:34:18  regan
+// more logging
+//
+// Revision 1.33.2.1  2010-05-02 05:40:50  regan
+// added methods and cache variable for fast sequential read pair identification
+//
 // Revision 1.33  2010-05-01 21:57:54  regan
 // merged head with serial threaded build partitioning
 //

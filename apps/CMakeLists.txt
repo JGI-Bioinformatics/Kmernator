@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.7 2010-05-01 21:58:00 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.8 2010-05-05 06:28:40 regan Exp $
 #
  
 cmake_minimum_required(VERSION 2.6)
@@ -51,9 +51,40 @@ target_link_libraries( Fastq2Fasta
                               boost_thread-mt-static
                               )
 
+set_source_files_properties( Fastq2FastaQual
+                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
+add_executable( Fastq2FastaQual Fastq2FastaQual )
+target_link_libraries( Fastq2FastaQual
+                              Sequence
+                              ReadSet
+                              boost_program_options-mt-static
+                              boost_iostreams-mt-static
+                              boost_thread-mt-static
+                              )
+
+
+set_source_files_properties( FixPair
+                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
+add_executable( FixPair FixPair )
+target_link_libraries( FixPair
+                              Sequence
+                              ReadSet
+                              boost_program_options-mt-static
+                              boost_iostreams-mt-static
+                              boost_thread-mt-static
+                              )
+
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.8  2010-05-05 06:28:40  regan
+# merged changes from FixPairOutput-20100504
+#
+# Revision 1.7.4.1  2010-05-04 21:33:44  regan
+# checkpoint
+#
 # Revision 1.7  2010-05-01 21:58:00  regan
 # merged head with serial threaded build partitioning
 #

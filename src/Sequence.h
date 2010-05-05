@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.26 2010-05-01 21:57:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.27 2010-05-05 06:28:35 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -98,7 +98,7 @@ protected:
 	static const char MARKUPS2     = 0x20;
 	static const char MARKUPS4     = MARKUPS1|MARKUPS2; // 0x60
 	static const char HASQUALS     = 0x10;
-	static const char MMAPED_QUALS = 0x08;
+	static const char PAIRED       = 0x08;
 	static const char DISCARDED    = 0x04;
 	static const char PREALLOCATED = 0x02;
 	static const char INVALID      = 0x01;
@@ -228,18 +228,8 @@ public:
 		_data = other._data;
 		return *this;
 	}
-	Sequence &clone(const Sequence &other) {
-		if (other.isMmaped()) {
-			RecordPtr record = other.getRecord();
-			RecordPtr qualRecord = NULL;
-			if (other.isQualMmaped())
-				qualRecord = other.getQualRecord();
-			BaseLocationVectorType markups = other.getMarkups();
-			setSequence(record, markups, qualRecord);
-		} else {
-		    setSequence(other.getFasta());
-		}
-		return *this;
+	Sequence clone() const {
+		return Sequence(getFasta());
 	}
 
 	~Sequence();
@@ -252,7 +242,7 @@ public:
 	inline bool isMarkups1()     const { return (_flags & MARKUPS4)      == MARKUPS1; }
 	inline bool hasMarkups()     const { return (_flags & MARKUPS4)      != 0; }
 	inline bool hasQuals()       const { return (_flags & HASQUALS)      == HASQUALS; }
-	inline bool isQualMmaped()   const { return (_flags & MMAPED_QUALS)  == MMAPED_QUALS; }
+	inline bool isPaired()       const { return (_flags & PAIRED)        == PAIRED; }
 	inline bool isDiscarded()    const { return (_flags & DISCARDED)     == DISCARDED; }
 	inline bool isPreAllocated() const { return (_flags & PREALLOCATED)  == PREALLOCATED; }
 	inline bool isValid()        const { return (_flags & INVALID)       == 0; }
@@ -267,6 +257,9 @@ public:
 	void unDiscard() {
 		unsetFlag(DISCARDED);
 	}
+	void markPaired() {
+		setFlag(PAIRED);
+	}
 
 	SequenceLengthType getLength() const;
 
@@ -278,7 +271,7 @@ public:
 		return const_cast<RecordPtr> (constThis().getRecord());
 	}
 	const RecordPtr getQualRecord() const {
-		assert(isMmaped() && isQualMmaped());
+		assert(isMmaped() && hasQuals());
 		return *_getQualRecord();
 	}
 	RecordPtr getQualRecord() {
@@ -299,7 +292,7 @@ public:
 		assert(isMmaped());
 		// TODO fix hack on NULL lastPtr.  Presently only works for single-lined fastas
 		RecordPtr record(getRecord()), lastRecord(NULL), qualRecord(NULL), lastQualRecord(NULL);
-		if (isQualMmaped()) {
+		if (hasQuals()) {
 		    qualRecord = getQualRecord();
 			lastQualRecord = NULL;
 		}
@@ -568,15 +561,9 @@ public:
 	    // there are no extra data members
 	    return *this;
 	}
-	Read &clone(const Read &other) {
-		if (other.isMmaped()) {
-			((Sequence)*this).clone((Sequence) other);
-		} else {
-			setRead(other.getName(), other.getFasta(), other.getQuals());
-		}
-		return *this;
+	Read clone() const {
+		return Read(getName(), getFasta(), getQuals());
 	}
-
 
 	void setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false);
 	void setRead(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
@@ -592,7 +579,7 @@ public:
 
 	bool recordHasQuals() const {
 		assert(isMmaped());
-		if (isQualMmaped())
+		if (hasQuals())
 			return true;
 		else
 			// TODO make this more general
@@ -672,6 +659,24 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.27  2010-05-05 06:28:35  regan
+// merged changes from FixPairOutput-20100504
+//
+// Revision 1.26.4.1  2010-05-05 05:57:53  regan
+// fixed pairing
+// fixed name to exclude labels and comments after whitespace
+// applied some performance optimizations from other branch
+// created FixPair application
+//
+// Revision 1.26.2.3  2010-05-03 21:34:07  regan
+// fixed clone method
+//
+// Revision 1.26.2.2  2010-05-02 05:39:47  regan
+// added method to use PAIRED flag
+//
+// Revision 1.26.2.1  2010-05-02 04:38:30  regan
+// replaced mmap quals flag with paired
+//
 // Revision 1.26  2010-05-01 21:57:54  regan
 // merged head with serial threaded build partitioning
 //

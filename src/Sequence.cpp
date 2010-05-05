@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.31 2010-05-01 21:57:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.32 2010-05-05 06:28:35 regan Exp $
 //
 
 #include <cstring>
@@ -160,7 +160,7 @@ void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes,
 	unsetFlag(INVALID);
 	*_getRecord() = mmapRecordStart;
 	if (mmapQualRecordStart != NULL) {
-		setFlag(MMAPED_QUALS);
+		setFlag(HASQUALS);
 		*_getQualRecord() = mmapQualRecordStart;
 	}
 
@@ -283,7 +283,7 @@ Sequence::RecordPtr *Sequence::_getRecord() {
 	return const_cast<RecordPtr *> (constThis()._getRecord());
 }
 const Sequence::RecordPtr *Sequence::_getQualRecord() const {
-	assert(isQualMmaped());
+	assert(isMmaped() && hasQuals());
 	return (_getRecord() + 1);
 }
 Sequence::RecordPtr *Sequence::_getQualRecord() {
@@ -317,7 +317,7 @@ TwoBitEncoding *Sequence::_getTwoBitSequence() {
 
 const SequenceLengthType *Sequence::_getMarkupBasesCount() const {
 	if (isMmaped()) {
-		if (isQualMmaped()) {
+		if (hasQuals()) {
 			return (SequenceLengthType *) (_getQualRecord() + 1);
 		} else {
 		    return (SequenceLengthType *) (_getRecord() + 1);
@@ -579,7 +579,7 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
   if (isMmaped()) {
 	RecordPtr record = getRecord();
 	RecordPtr qualRecord = NULL;
-	if (isQualMmaped())
+	if (hasQuals())
 		qualRecord = getQualRecord();
 
 	reset();
@@ -693,6 +693,18 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.32  2010-05-05 06:28:35  regan
+// merged changes from FixPairOutput-20100504
+//
+// Revision 1.31.4.1  2010-05-05 05:57:53  regan
+// fixed pairing
+// fixed name to exclude labels and comments after whitespace
+// applied some performance optimizations from other branch
+// created FixPair application
+//
+// Revision 1.31.2.1  2010-05-02 04:38:39  regan
+// replaced mmap quals flag with paired
+//
 // Revision 1.31  2010-05-01 21:57:53  regan
 // merged head with serial threaded build partitioning
 //

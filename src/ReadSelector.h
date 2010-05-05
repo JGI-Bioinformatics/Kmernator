@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.16 2010-05-01 21:57:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.17 2010-05-05 06:28:35 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -471,20 +471,14 @@ public:
 		_lastSortedPick = _picks.size();
 	}
 
-	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, int format = 0) const {
-		if (readIdx == ReadSet::MAX_READ_IDX)
-			return os;
-		const ReadTrimType &trim = _trims[readIdx];
-		return _writePickRead(os, readIdx, trim, format);
-	}
-	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, const ReadTrimType &trim, int format = 0) const {
-		return _reads.write(os, readIdx, trim.trimLength, trim.label, format);
-	}
-	std::ostream &writePick(std::ostream &os, ReadSetSizeType pickIdx, int format = 0) const {
-		Pair &pair = _picks[pickIdx];
+	std::ostream &writePick(std::ostream &os, const Pair &pair, int format = 0) const {
 		_writePickRead(os, pair.read1, format);
 		_writePickRead(os, pair.read2, format);
 		return os;
+	}
+	std::ostream &writePick(std::ostream &os, ReadSetSizeType pickPairIdx, int format = 0) const {
+		Pair &pair = _picks[pickPairIdx];
+		return writePick(os, pair, format);
 	}
 	std::ostream &writePicks(std::ostream &os, ReadSetSizeType offset = 0, int format = 0) const {
 		return writePicks(os, offset, _picks.size() - offset, format);
@@ -500,14 +494,18 @@ public:
 		writePicks(ofstreamMap, offset, _picks.size() - offset, byInputFile, format);
 	}
 	void writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile = true, int format = 0) const {
-		for(ReadSetSizeType pickIdx = offset; pickIdx < length + offset; pickIdx++) {
-			const Pair &pair = _picks[pickIdx];
-			writePick(ofstreamMap, pair.read1, byInputFile, format);
-			writePick(ofstreamMap, pair.read2, byInputFile, format);
+		for(ReadSetSizeType pickPairidx = offset; pickPairidx < length + offset; pickPairidx++) {
+			const Pair &pair = _picks[pickPairidx];
+			std::string key;
+			if (byInputFile) {
+				key += _reads.getReadFileNamePrefix(pair);
+			}
+			std::ostream &os = ofstreamMap.getOfstream(key);
+			writePick(os, pair, format);
 		}
 	}
-	void writePick(OfstreamMap &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = true, int format = 0) const {
-		if (readIdx == ReadSet::MAX_READ_IDX)
+	void writePickRead(OfstreamMap &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = true, int format = 0) const {
+		if (! _reads.isValidRead( readIdx ))
 			return;
 		const ReadTrimType &trim = _trims[ readIdx ];
 		std::string key;
@@ -515,6 +513,15 @@ public:
 			key += _reads.getReadFileNamePrefix(readIdx);
 		}
 		_writePickRead(ofstreamMap.getOfstream(key), readIdx, trim, format);
+	}
+	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, int format = 0) const {
+		if (! _reads.isValidRead( readIdx ))
+			return os;
+		const ReadTrimType &trim = _trims[readIdx];
+		return _writePickRead(os, readIdx, trim, format);
+	}
+	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, const ReadTrimType &trim, int format = 0) const {
+		return _reads.write(os, readIdx, trim.trimLength, trim.label, format);
 	}
 };
 

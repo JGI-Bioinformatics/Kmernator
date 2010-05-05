@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/Fastq2Fasta.cpp,v 1.3 2010-05-01 21:58:00 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/Fastq2Fasta.cpp,v 1.4 2010-05-05 06:28:40 regan Exp $
 //
 
 #include <iostream>
@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
 
 	string filekey;
 	for(ReadSet::ReadSetSizeType idx = 0 ; idx < reads.getSize(); idx++) {
-		const Read read = reads.getRead(idx);
+		const Read &read = reads.getRead(idx);
 
 		if (hasOfMap)
 		    filekey = reads.getReadFileNamePrefix(idx);

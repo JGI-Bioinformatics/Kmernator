@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.24 2010-05-01 21:57:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.25 2010-05-05 06:28:35 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -89,6 +89,7 @@ protected:
 	unsigned long _baseCount;
 	SequenceLengthType _maxSequenceLength;
 	PairedIndexType _pairs;
+	std::string previousReadName; // for fast pairing
 
 private:
 	void addRead(Read &read);
@@ -170,13 +171,26 @@ public:
 	inline int getReadFileNum(ReadSetSizeType index) const {
 		return _filePartitions.getPartitionIdx(index)+1;
 	}
-	string getReadFileNamePrefix(ReadSetSizeType index) const {
-		unsigned int filenum = getReadFileNum(index);
+	string _getReadFileNamePrefix(unsigned int filenum) const {
 		if (filenum > Options::getInputFiles().size()) {
 			return std::string("consensus-") + boost::lexical_cast<std::string>(filenum);
 		} else {
 			return Options::getInputFileSubstring(filenum-1);
 		}
+	}
+	string getReadFileNamePrefix(ReadSetSizeType index) const {
+		unsigned int filenum = getReadFileNum(index);
+		return _getReadFileNamePrefix(filenum);
+	}
+	// returns the first file to match either read from the pair
+	string getReadFileNamePrefix(const Pair &pair) const {
+		unsigned int filenum1 = -1;
+		unsigned int filenum2 = -1;
+		if (isValidRead(pair.read1))
+			filenum1 = getReadFileNum(pair.read1);
+		if (isValidRead(pair.read2))
+			filenum2 = getReadFileNum(pair.read2);
+		return _getReadFileNamePrefix( filenum1 < filenum2 ? filenum1 : filenum2);
 	}
 
 	// by default no pairs are identified
@@ -184,6 +198,8 @@ public:
 	bool hasPairs() {
 		return getPairSize() != 0 && getPairSize() < getSize();
 	}
+	static bool isPair(const Read &readA, const Read &readB);
+	static bool isPair(const std::string &readNameA, const Read &readB);
 
 	// may return either as MAX_READ_IDX
 	inline Pair &getPair(ReadSetSizeType pairIndex) {
@@ -216,6 +232,26 @@ public:
 			SequenceLengthType trimOffset = Sequence::MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
 		return write(om.getOfstream( getReadFileNamePrefix(readIdx) ), readIdx, trimOffset, label, format);
 	}
+	inline std::ostream &write(OfstreamMap &om, const Pair &pair,
+			SequenceLengthType trimOffset1 = Sequence::MAX_SEQUENCE_LENGTH, std::string label1 = "",
+			SequenceLengthType trimOffset2 = Sequence::MAX_SEQUENCE_LENGTH, std::string label2 = "",
+			int format = 0, bool forcePair = false) const {
+		std::ostream &os = om.getOfstream(getReadFileNamePrefix(pair));
+		if (isValidRead(pair.read1))
+			write(os, pair.read1, trimOffset1, label1, format);
+		else if (forcePair)
+			fakePair(getRead(pair.read2)).write(os);
+
+		if (isValidRead(pair.read2))
+			write(os, pair.read2, trimOffset2, label2, format);
+		else if (forcePair)
+			fakePair(getRead(pair.read1)).write(os);
+
+		return os;
+	}
+	static Read fakePair(const Read &unPaired);
+
+
 
 protected:
 	SequenceStreamParserPtr appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
@@ -246,6 +282,18 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.25  2010-05-05 06:28:35  regan
+// merged changes from FixPairOutput-20100504
+//
+// Revision 1.24.4.2  2010-05-05 05:57:53  regan
+// fixed pairing
+// fixed name to exclude labels and comments after whitespace
+// applied some performance optimizations from other branch
+// created FixPair application
+//
+// Revision 1.24.4.1  2010-05-04 21:33:42  regan
+// checkpoint
+//
 // Revision 1.24  2010-05-01 21:57:53  regan
 // merged head with serial threaded build partitioning
 //

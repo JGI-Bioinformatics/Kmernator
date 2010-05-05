@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.34 2010-05-01 21:57:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.35 2010-05-05 06:28:35 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -160,13 +160,33 @@ public:
 	    recordPtr = ++nextPtr;
 	    return buffer;
 	}
+	static std::string &trimName(std::string &nameLine) {
+		if (nameLine.length() == 0)
+			return nameLine;
+
+		char &marker = nameLine[0];
+		if (marker != '>' && marker != '@') {
+			throw std::invalid_argument( (std::string("Can not parse name without a marker: ") + nameLine).c_str() );
+		} else {
+		    // remove marker
+		    nameLine.erase(0,1);
+		}
+
+		// trim at first whitespace
+		size_t pos = nameLine.find_first_of(" \t\r\n");
+		if (pos != std::string::npos) {
+			nameLine.erase(pos);
+		}
+		return nameLine;
+	}
 	static void parse(KoMer::RecordPtr record, KoMer::RecordPtr lastRecord,
 			          std::string &name, std::string &bases, std::string &quals,
 			          KoMer::RecordPtr qualRecord = NULL, KoMer::RecordPtr lastQualRecord = NULL) {
 		std::string buf;
 		if (*record == '@') {
-			record++;
+			// FASTQ
 			nextLine(name,  record);
+			trimName(name);
 			nextLine(bases, record);
 			nextLine(buf,   record);
 			nextLine(quals, record);
@@ -175,8 +195,8 @@ public:
 			}
 		} else if (*record == '>') {
 			// FASTA
-			record++;
 			nextLine(name, record);
+			trimName(name);
 
 			// TODO FIXME HACK!
 			if (lastRecord == NULL) // only read one line if no last record is given
@@ -186,8 +206,8 @@ public:
 				bases += nextLine(buf, record);
 			}
 			if (qualRecord != NULL) {
-				qualRecord++;
 				nextLine(buf, qualRecord);
+				trimName(buf);
 				if (buf != name) {
 					throw "fasta and qual do not match names!";
 				}
@@ -246,6 +266,15 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.35  2010-05-05 06:28:35  regan
+// merged changes from FixPairOutput-20100504
+//
+// Revision 1.34.4.1  2010-05-05 05:57:53  regan
+// fixed pairing
+// fixed name to exclude labels and comments after whitespace
+// applied some performance optimizations from other branch
+// created FixPair application
+//
 // Revision 1.34  2010-05-01 21:57:54  regan
 // merged head with serial threaded build partitioning
 //
