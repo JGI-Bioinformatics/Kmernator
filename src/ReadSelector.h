@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.18 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.19 2010-05-06 22:26:18 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -514,7 +514,7 @@ public:
 		if (byInputFile) {
 			key += _reads.getReadFileNamePrefix(readIdx);
 		}
-		if (Options::getDebug())
+		if (Options::getDebug() > 1)
 			std::cerr << "Writing to " << key << " " << readIdx << std::endl;
 		_writePickRead(ofstreamMap.getOfstream(key), readIdx, trim, format);
 	}
@@ -524,6 +524,9 @@ public:
 
 
 // $Log: ReadSelector.h,v $
+// Revision 1.19  2010-05-06 22:26:18  regan
+// changed debug level for messages
+//
 // Revision 1.18  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //
