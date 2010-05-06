@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.11 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.12 2010-05-06 22:55:05 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
@@ -179,7 +179,6 @@ public:
 			ss << " statm: " << buffer;
 		}
 
-		ss << " Sequences: " << Sequence::constructCount << " " << Sequence::destructCount;
 		return ss.str();
 	}
 
@@ -189,11 +188,17 @@ public:
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.12  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
 // Revision 1.11  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //
 // Revision 1.10.6.1  2010-05-04 19:49:51  regan
 // minor rework on include headers
+//
+// Revision 1.10.14.1  2010-05-06 18:45:36  regan
+// broke it...
 //
 // Revision 1.10  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer

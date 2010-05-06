@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.22 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.23 2010-05-06 22:55:05 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -105,16 +105,14 @@ public:
 		KmerSizer::set(length);
 
 		unsigned long affectedCount = 0;
-#ifdef _USE_OPENMP
-#pragma omp parallel for schedule(dynamic) reduction(+:affectedCount)
-#endif
+
+		#pragma omp parallel for schedule(dynamic) reduction(+:affectedCount)
 		for (long readIdx = 0; readIdx < (long) reads.getSize(); readIdx++) {
 			Read &read = reads.getRead(readIdx);
 
 			if (Options::getDebug() > 2) {
-#ifdef _USE_OPENMP
-#pragma omp critical
-#endif
+
+			  #pragma omp critical
 			  std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
 			}
 			SequenceLengthType seqLen = read.getLength();
@@ -163,9 +161,8 @@ public:
 			if (wasAffected) {
 				affectedCount++;
 				// TODO optimize this section
-#ifdef _USE_OPENMP
-#pragma omp critical
-#endif
+
+				#pragma omp critical
                 {
 				    counts[ value ]++;
 				    if (wasPhiX) {
@@ -267,7 +264,8 @@ public:
 		ReadSetSizeType pairSize =  reads.getPairSize();
 
 		ReadSet::madviseMmapsSequential();
-#pragma omp parallel for
+
+	    #pragma omp parallel for
 		for(long pairIdx = 0; pairIdx < pairSize; pairIdx++) {
 			Pair &pair = reads.getPair(pairIdx);
 			int threadNum = omp_get_thread_num();
@@ -339,19 +337,25 @@ public:
 			// (singletons will not be included in this round)
 			KSElementVector elems;
 
-#pragma omp parallel private(elems)
+			#pragma omp parallel private(elems)
 			{
 				for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
 					KSElementType &elem = *it;
 					if (elem.isValid() && elem.value().getCount() >= cutoffThreshold)
 						elems.push_back(elem);
 				}
-#pragma omp critical
-				std::cerr << "Sorting all nodes > " << cutoffThreshold << " count: " << elems.size() << MemoryUtils::getMemoryUsage() << std::endl;
+
+				#pragma omp critical
+				{
+					std::cerr << "Sorting all nodes > " << cutoffThreshold << " count: " << elems.size() << MemoryUtils::getMemoryUsage() << std::endl;
+				}
 				std::sort(elems.begin(), elems.end());
 
-#pragma omp critical
-				std::cerr << "Merging elements." << MemoryUtils::getMemoryUsage() << std::endl;
+
+				#pragma omp critical
+				{
+					std::cerr << "Merging elements." << MemoryUtils::getMemoryUsage() << std::endl;
+				}
 				for(KSElementVector::reverse_iterator it = elems.rbegin(); it != elems.rend(); it++) {
 					KSElementType &elem = *it;
 					if (elem.isValid() && elem.value().getCount() >= cutoffThreshold) {
@@ -370,7 +374,7 @@ public:
 						}
 					}
 				}
-			}
+			} // omp parallel
 
 			std::cerr << "Merged histogram. " << MemoryUtils::getMemoryUsage() << std::endl;
 			ks.printHistograms();
@@ -379,7 +383,8 @@ public:
 
 		ReadSet::madviseMmapsRandom();
 		std::cerr << "Building consensus reads. " << MemoryUtils::getMemoryUsage() << std::endl;
-#pragma omp parallel
+
+		#pragma omp parallel
 		for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
 		    if (it->value().getCount() >= cutoffThreshold) {
 		    	RPW rpw = it->value().getEachInstance();
@@ -409,7 +414,8 @@ public:
 
 		    	Read consensus1 = tmpReadSet1.getConsensusRead();
 		    	Read consensus2 = tmpReadSet2.getConsensusRead();
-#pragma omp critical
+
+		    	#pragma omp critical
 		    	{
 		    	   newReads.append(consensus1);
 		    	   newReads.append(consensus2);
@@ -1054,6 +1060,9 @@ public:
 #endif
 
 // $Log: FilterKnownOddities.h,v $
+// Revision 1.23  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
 // Revision 1.22  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //

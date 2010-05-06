@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.27 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.28 2010-05-06 22:55:05 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -28,7 +28,8 @@ public:
 
 	static MmapSourceVector mmapSources;
     static void madviseMmaps(int advise) {
-#pragma omp critical
+
+		#pragma omp critical
 		for(MmapSourceVector::iterator it = mmapSources.begin(); it != mmapSources.end(); it++) {
 			if (it->first.is_open())
 				madvise(const_cast<char*>(it->first.data()), it->first.size(), advise);
@@ -114,10 +115,10 @@ private:
 	MmapSource mmapFile(string filePath);
 
 	static void addMmaps(MmapSourcePair mmaps) {
-#ifdef _USE_OPENMP
-#pragma omp critical
-#endif
+
+		#pragma omp critical
 		mmapSources.push_back(mmaps);
+
 		madviseMmapsSequential();
 	}
 
@@ -282,8 +283,17 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.28  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
 // Revision 1.27  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
+//
+// Revision 1.26.2.2  2010-05-06 18:47:50  regan
+// fixed
+//
+// Revision 1.26.2.1  2010-05-06 18:45:36  regan
+// broke it...
 //
 // Revision 1.26  2010-05-06 16:43:56  regan
 // merged changes from ConsensusTesting-20100505

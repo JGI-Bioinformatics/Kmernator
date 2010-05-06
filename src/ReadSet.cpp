@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.36 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.37 2010-05-06 22:55:05 regan Exp $
 //
 
 #include <exception>
@@ -81,13 +81,12 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 		numThreads = omp_get_max_threads();
 		omp_set_nested(0);
 	}
+#endif
 
-#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
-#endif
+	#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 	for (long i = 0; i < (long) files.size(); i++) {
-#ifdef _USE_OPENMP
-#pragma omp critical
-#endif
+
+		#pragma omp critical
 		{
 			std::cerr << "reading " << files[i] << std::endl;
 		}
@@ -100,10 +99,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 		incrementFile(parser);
 #endif
 
-
-#ifdef _USE_OPENMP
-#pragma omp critical
-#endif
+		#pragma omp critical
 		{
 			std::cerr << "finished reading " << files[i] << std::endl;
 		}
@@ -128,9 +124,8 @@ void ReadSet::append(const ReadSet &reads) {
 	unsigned long oldSize = _reads.size();
 	unsigned long newSize = oldSize + reads._reads.size();
 	_reads.resize(newSize);
-#ifdef _USE_OPENMP
-#pragma omp parallel for
-#endif
+
+	#pragma omp parallel for
 	for (long i = 0; i < (long) reads._reads.size(); i++)
 		_reads[oldSize + i] = reads._reads[i];
 
@@ -138,9 +133,7 @@ void ReadSet::append(const ReadSet &reads) {
 	unsigned long newPairSize = oldPairSize + reads._pairs.size();
 	_pairs.resize(newPairSize);
 
-#ifdef _USE_OPENMP
-#pragma omp parallel for
-#endif
+	#pragma omp parallel for
 	for (long i = 0; i < (long) reads._pairs.size(); i++) {
 		const Pair &tmp = reads._pairs[i];
 		_pairs[oldPairSize + i]
@@ -202,8 +195,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastaFile(string &str) {
 	return reader.getParser();
 }
 
-// TODO FIXME does not like mmap..
-#ifdef _USE_OPENMP
+
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSource &mmap)
 {
@@ -222,7 +214,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 	numReads[i] = 0;
 	SequenceStreamParserPtr singleParser;
 
-#pragma omp parallel num_threads(numThreads)
+	#pragma omp parallel num_threads(numThreads)
 	{
 
 		if (omp_get_num_threads() != numThreads)
@@ -234,7 +226,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		if (omp_get_thread_num() == 0)
 			singleParser = reader.getParser();
 
-#pragma omp single
+		#pragma omp single
 		{
 			blockSize = reader.getBlockSize(numThreads);
 			if (blockSize < 100)
@@ -252,9 +244,10 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		if (!hasNext)
 		seekPos[ omp_get_thread_num() ] = 0;
 
-#pragma omp barrier
+		#pragma omp barrier
+
 		if (hasNext && omp_get_thread_num() != 0 && seekPos[omp_get_thread_num()] == seekPos[omp_get_thread_num()-1])
-		hasNext = false;
+			hasNext = false;
 
 		//#pragma omp critical
 		//{ std::cerr << omp_get_thread_num() << " " << blockSize << " seeked to " << reader.getPos() << " will read: " << hasNext << std::endl; }
@@ -292,16 +285,16 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		//#pragma omp critical
 		//{ std::cerr << omp_get_thread_num() << " " << blockSize << " finished at " << reader.getPos() << " with " << myReads.getSize() << " " << numReads[ omp_get_thread_num() ]<< std::endl; }
 
-#pragma omp critical
+		#pragma omp critical
 		{
 			// set global counters
 			_baseCount += myReads._baseCount;
 			setMaxSequenceLength(myReads.getMaxSequenceLength());
 		}
 
-#pragma omp barrier
+		#pragma omp barrier
 
-#pragma omp single
+		#pragma omp single
 		{
 			unsigned long newReads = 0;
 			for(int i=0; i < numThreads; i++) {
@@ -325,14 +318,12 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendFastq(ReadSet::MmapSource &mmap)
 {
+#ifdef _USE_OPENMP
 	return appendFastqBlockedOMP(mmap);
-}
-
-#else // _USE_OPENMP
-ReadSet::SequenceStreamParserPtr ReadSet::appendFastq(ReadSet::MmapSource &mmap) {
+#else
 	return appendFasta(mmap);
+#endif
 }
-#endif // _USE_OPENMP
 
 std::string _commonName(const std::string &readName) {
 	return readName.substr(0, readName.length() - 1);
@@ -579,8 +570,14 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.37  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
 // Revision 1.36  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
+//
+// Revision 1.35.2.1  2010-05-06 18:45:35  regan
+// broke it...
 //
 // Revision 1.35  2010-05-06 16:43:56  regan
 // merged changes from ConsensusTesting-20100505

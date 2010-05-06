@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.19 2010-05-06 22:26:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.20 2010-05-06 22:55:05 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -387,9 +387,8 @@ public:
 	void scoreAndTrimReads(ScoreType minimumKmerScore) {
 		_trims.resize(_reads.getSize());
 		bool useKmers = Options::getKmerSize() != 0;
-#ifdef _USE_OPENMP
-#pragma omp parallel for schedule(dynamic)
-#endif
+
+		#pragma omp parallel for schedule(dynamic)
 		for(long i = 0; i < (long) _reads.getSize(); i++) {
 			ReadTrimType &trim = _trims[i];
 			const Read read = _reads.getRead(i);
@@ -524,6 +523,9 @@ public:
 
 
 // $Log: ReadSelector.h,v $
+// Revision 1.20  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
 // Revision 1.19  2010-05-06 22:26:18  regan
 // changed debug level for messages
 //

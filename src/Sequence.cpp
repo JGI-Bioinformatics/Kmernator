@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.32 2010-05-05 06:28:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.33 2010-05-06 22:55:05 regan Exp $
 //
 
 #include <cstring>
@@ -15,8 +15,6 @@ using namespace std;
 /*----------------------------- SEQUENCE -------------------------------------------*/
 
 Sequence::CachedSequencesVector Sequence::threadCacheSequences(OMP_MAX_THREADS, Sequence::CachedSequences(Sequence::maxCachePerThread));
-long Sequence::constructCount = 0;
-long Sequence::destructCount = 0;
 
 // dangling pointer
 Sequence::DataPtrListVector *Sequence::preAllocatedDataPtrs = new Sequence::DataPtrListVector();
@@ -56,28 +54,20 @@ void Sequence::DataPtrListVector::returnDataPtr(DataPtr &dataPtr) {
 }
 
 Sequence::Sequence() {
-#pragma omp atomic
-	constructCount++;
 	reset(INVALID);
 }
 
 Sequence::Sequence(std::string fasta, bool usePreAllocation) :
 	_flags(0) {
-#pragma omp atomic
-	constructCount++;
 	setSequence(fasta, usePreAllocation);
 }
 
 Sequence::Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart) :
 	_flags(0) {
-#pragma omp atomic
-	constructCount++;
 	setSequence(mmapRecordStart, mmapQualRecordStart);
 }
 
 Sequence::~Sequence() {
-#pragma omp atomic
-	destructCount++;
 	reset(INVALID);
 }
 
@@ -693,6 +683,12 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.33  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
+// Revision 1.32.4.1  2010-05-06 18:45:36  regan
+// broke it...
+//
 // Revision 1.32  2010-05-05 06:28:35  regan
 // merged changes from FixPairOutput-20100504
 //

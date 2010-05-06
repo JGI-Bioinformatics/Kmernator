@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.34 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.35 2010-05-06 22:55:05 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -260,7 +260,7 @@ public:
 	// adds/moves tracking from one kmer to another
 	void migrateKmerData(const Kmer &srcKmer, const Kmer &dstKmer) {
 		bool trans = false;
-#pragma omp critical
+		#pragma omp critical
 		{
 			if (Options::getDebug() >= 1) {
 			    std::cerr << "Merging kmers " << srcKmer.toFasta() << " to " << dstKmer.toFasta() << std::endl;
@@ -1182,6 +1182,113 @@ public:
 		return mmaps;
 	}
 
+	void _evaluateBatch(bool isSolid, long batchIdx, long purgeEvery, long purgeCount) {
+		printStats(batchIdx, isSolid);
+		if (purgeEvery > 0 && batchIdx >= (purgeCount+1)*purgeEvery) {
+			purgedSingletons += resetSingletons();
+			purgeCount++;
+		}
+
+	}
+	void _buildKmerSpectrumSerial(ReadSet &store, bool isSolid, NumberType partIdx, NumberType partBitMask, long batch, long purgeEvery, long &purgeCount) {
+		for (long batchIdx=0; batchIdx < (long) store.getSize(); batchIdx++)
+		{
+			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead( batchIdx ), true, true);
+
+			append(kmers, batchIdx, isSolid, partIdx, partBitMask);
+
+			if (batchIdx % batch == 0) {
+				_evaluateBatch(isSolid, batchIdx, purgeEvery, purgeCount);
+			}
+		}
+
+	}
+	void _buildKmerSpectrumParallel(ReadSet &store, bool isSolid, NumberType partIdx, NumberType partBitMask, long batch, long purgeEvery, long &purgeCount) {
+
+		int numThreads = omp_get_max_threads();
+		long batchIdx = 0;
+
+		// allocate a square matrix of buffers: KmerWeights[writingThread][readingThread]
+		KmerWeights kmerBuffers[ numThreads ][ numThreads ];
+		typedef std::pair< long, long > ReadPosType;
+		std::vector< ReadPosType > startReadIdx[ numThreads ][ numThreads ];
+
+		if (store.getSize() < batch)
+		batch = store.getSize() / 10 + 1;
+
+		#pragma omp parallel num_threads(numThreads)
+		{
+			if (numThreads != omp_get_num_threads())
+			throw "OMP thread count mis-match";
+
+			#pragma omp single
+			{
+				std::cerr << "Executing parallel buildKmerSpectrum with " << numThreads << std::endl;
+			}
+		}
+
+		while (batchIdx < (long) store.getSize())
+		{
+			printStats(batchIdx, isSolid);
+			for(int tmpThread1=0; tmpThread1 < numThreads; tmpThread1++)
+			{
+				for(int tmpThread2 = 0; tmpThread2 < numThreads; tmpThread2++) {
+					kmerBuffers [ tmpThread1 ][ tmpThread2 ].reset(false);
+					startReadIdx[ tmpThread1 ][ tmpThread2 ].resize(0);
+					startReadIdx[ tmpThread1 ][ tmpThread2 ].reserve(batch);
+				}
+			}
+
+
+            #pragma omp parallel for schedule(dynamic) num_threads(numThreads)
+			for (long i=0; i < batch; i++)
+			{
+				long readIdx = batchIdx + i;
+				if (readIdx >= store.getSize() )
+				continue;
+				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead( readIdx ), true, true);
+				for (long j = 0; j < numThreads; j++)
+				startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
+				for (IndexType j = 0; j < kmers.size(); j++) {
+					unsigned short smpThreadId;
+					if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, partBitMask, true) )
+					    kmerBuffers[ omp_get_thread_num() ][ smpThreadId ].append(kmers[j], kmers.valueAt(j));
+				}
+			}
+
+			#pragma omp parallel num_threads(numThreads)
+			{
+				if (numThreads != omp_get_num_threads()) {
+					throw "OMP thread count mis-match";
+				}
+
+				for(int threads = 0; threads < numThreads; threads++)
+				{
+					for(unsigned long idx = 0; idx < startReadIdx[ threads ][ omp_get_thread_num() ].size(); idx++)
+					{
+						ReadPosType readPos = startReadIdx[ threads ][ omp_get_thread_num() ][idx];
+						unsigned long startIdx = readPos.second;
+						unsigned long len = 0;
+						if ( idx < startReadIdx[ threads ][ omp_get_thread_num() ].size() -1) {
+							len = startReadIdx[ threads ][ omp_get_thread_num() ][idx+1].second - startIdx;
+						} else {
+							len = kmerBuffers[threads][ omp_get_thread_num() ].size() - startIdx;
+						}
+						if (len > 0) {
+							// do not include partIdx or partBitmMask , as getSMPThread() already accounted for partitioning
+						    append(kmerBuffers[threads][ omp_get_thread_num() ], readPos.first, isSolid, startIdx, len, 0, 0);
+						}
+					}
+				}
+
+			}
+
+			batchIdx += batch;
+			_evaluateBatch(isSolid, batchIdx, purgeEvery, purgeCount);
+		}
+
+	}
+
 	void buildKmerSpectrum( ReadSet &store, bool isSolid = false, NumberType partIdx = 0, NumberType numParts = 1)
 	{
 		assert( numParts != 0 && (numParts & (numParts-1)) == 0); // numParts must be a power of 2
@@ -1199,121 +1306,13 @@ public:
 		}
 
 		long purgeEvery = Options::getPeriodicSingletonPurge();
-		long purgedSingletons = 0;
-        long purgeCount = 0;
-		long batchIdx = 0;
+		long purgeCount = 0;
 		long batch = 1000000;
 
 #ifdef _USE_OPENMP
-
-		int numThreads = omp_get_max_threads();
-
-		// allocate a square matrix of buffers: KmerWeights[writingThread][readingThread]
-		KmerWeights kmerBuffers[ numThreads ][ numThreads ];
-		typedef std::pair< long, long > ReadPosType;
-		std::vector< ReadPosType > startReadIdx[ numThreads ][ numThreads ];
-
-		if (store.getSize() < batch)
-		batch = store.getSize() / 10 + 1;
-
-#pragma omp parallel num_threads(numThreads)
-		{
-			if (numThreads != omp_get_num_threads())
-			throw "OMP thread count mis-match";
-
-#pragma omp single
-			{
-				std::cerr << "Executing parallel buildKmerSpectrum with " << numThreads << std::endl;
-			}
-		}
-
-		while (batchIdx < (long) store.getSize())
-		{
-			printStats(batchIdx, isSolid);
-			for(int tmpThread1=0; tmpThread1 < numThreads; tmpThread1++)
-			{
-				for(int tmpThread2 = 0; tmpThread2 < numThreads; tmpThread2++) {
-					kmerBuffers [ tmpThread1 ][ tmpThread2 ].reset(false);
-					startReadIdx[ tmpThread1 ][ tmpThread2 ].resize(0);
-					startReadIdx[ tmpThread1 ][ tmpThread2 ].reserve(batch);
-				}
-			}
-			//std::cerr << "Reallocated buffers" << std::endl;
-
-#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
-			for (long i=0; i < batch; i++)
-			{
-				long readIdx = batchIdx + i;
-				if (readIdx >= store.getSize() )
-				continue;
-				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead( readIdx ), true, true);
-				for (long j = 0; j < numThreads; j++)
-				startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
-				for (IndexType j = 0; j < kmers.size(); j++) {
-					unsigned short smpThreadId;
-					if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, partBitMask, true) )
-					    kmerBuffers[ omp_get_thread_num() ][ smpThreadId ].append(kmers[j], kmers.valueAt(j));
-				}
-			}
-			//std::cerr << "Loaded buffers" << std::endl;
-			//for(long i=0; i<numThreads; i++) {
-			//   std::cerr << i ;
-			//   for (long j=0; j<numThreads; j++) {
-			//     std::cerr << "\t" << kmerBuffers[i][j].size();
-			//   }
-			//   std::cerr << std::endl;
-			// }
-
-#pragma omp parallel num_threads(numThreads)
-			{
-				//#pragma omp critical
-				//{ std::cerr << "running with " << omp_get_num_threads() << " this is " << omp_get_thread_num() << std::endl; }
-				if (numThreads != omp_get_num_threads())
-				throw "OMP thread count mis-match";
-
-				for(int threads = 0; threads < numThreads; threads++)
-				{
-					for(unsigned long idx = 0; idx < startReadIdx[ threads ][ omp_get_thread_num() ].size(); idx++)
-					{
-						ReadPosType readPos = startReadIdx[ threads ][ omp_get_thread_num() ][idx];
-						unsigned long startIdx = readPos.second;
-						unsigned long len = 0;
-						if ( idx < startReadIdx[ threads ][ omp_get_thread_num() ].size() -1) {
-							len = startReadIdx[ threads ][ omp_get_thread_num() ][idx+1].second - startIdx;
-						} else {
-							len = kmerBuffers[threads][ omp_get_thread_num() ].size() - startIdx;
-						}
-						if (len > 0)
-						    //append(kmerBuffers[threads][ omp_get_thread_num() ], readPos.first, isSolid, startIdx, len, partIdx, partBitMask);
-							append(kmerBuffers[threads][ omp_get_thread_num() ], readPos.first, isSolid, startIdx, len, 0, 0);
-					}
-				}
-				//std::cerr << omp_get_thread_num() << ", ";
-			}
-			//std::cerr << " appended buffers" << std::endl;
-			batchIdx += batch;
-			if (purgeEvery > 0 && batchIdx >= (purgeCount+1)*purgeEvery) {
-				purgedSingletons += resetSingletons();
-				purgeCount++;
-			}
-		}
+		_buildKmerSpectrumParallel(store, isSolid, partIdx, partBitMask, batch, purgeEvery, purgeCount);
 #else // not using OpenMP
-		for (long i=0; i < (long) store.getSize(); i++)
-		{
-			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead(i), true, true);
-
-			append(kmers, i, isSolid, partIdx, partBitMask);
-
-			if (i % batch == 0) {
-				printStats(i, isSolid);
-				batchIdx += batch;
-				if (purgeEvery > 0 && batchIdx >= (purgeCount+1)*purgeEvery) {
-					purgedSingletons += resetSingletons();
-					purgeCount++;
-				}
-			}
-		}
-
+		_buildKmerSpectrumSerial  (store, isSolid, partIdx, partBitMask, batch, purgeEvery, purgeCount);
 #endif
 
 		printStats(store.getSize(), isSolid, true);
@@ -1649,6 +1648,9 @@ public:
 
 
 // $Log: KmerSpectrum.h,v $
+// Revision 1.35  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
 // Revision 1.34  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //

@@ -1,5 +1,6 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.83 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.84 2010-05-06 22:55:05 regan Exp $
 //
+
 
 #ifndef _KMER_H
 #define _KMER_H
@@ -964,9 +965,8 @@ public:
 
 		KmerArray &kmers = *this;
 		long numBytes = (numKmers + 3) / 4;
-#ifdef _USE_OPENMP
-#pragma omp parallel for if(numKmers >= 10000)
-#endif
+
+		#pragma omp parallel for if(numKmers >= 10000)
 		for (long bytes = 0; bytes < numBytes; bytes++) {
 			SequenceLengthType i = bytes * 4;
 			const TwoBitEncoding *ref = twoBit + i / 4;
@@ -992,9 +992,8 @@ public:
 		if (leastComplement) {
 			TEMP_KMER(least);
 			bool isLeast;
-#ifdef _USE_OPENMP
-#pragma omp parallel for if(numKmers >= 10000)
-#endif
+
+			#pragma omp parallel for if(numKmers >= 10000)
 			for (long i = 0; i < (long) numKmers; i++) {
 				isLeast = kmers[i].buildLeastComplement(least);
 				if (!isLeast)
@@ -1613,9 +1612,8 @@ public:
 
 	IndexType size() const {
 		IndexType size = 0;
-#ifdef _USE_OPENMP
-#pragma omp parallel for reduction(+:size) if(_buckets.size()>1000000)
-#endif
+
+		#pragma omp parallel for reduction(+:size) if(_buckets.size()>1000000)
 		for(long i = 0; i < (long) _buckets.size(); i++)
 		size += _buckets[i].size();
 		return size;
@@ -1649,9 +1647,8 @@ public:
 
 	IndexType purgeMinCount(long minimumCount) {
 		long affected = 0;
-#ifdef _USE_OPENMP
-#pragma omp parallel for reduction(+:affected)
-#endif
+
+		#pragma omp parallel for reduction(+:affected)
 		for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
 			affected += _buckets[idx].purgeMinCount(minimumCount);
 		}
@@ -1691,9 +1688,8 @@ public:
 	    if (getNumBuckets() != src.getNumBuckets()) {
 	    	 throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
 	    }
-#ifdef _USE_OPENMP
-#pragma omp parallel for
-#endif
+
+		#pragma omp parallel for
 	  	for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
 	    	   BucketType &a = const_cast<BucketType&>(_buckets[idx]);
 	    	   BucketType &b = const_cast<BucketType&>(src._buckets[idx]);
@@ -1710,9 +1706,9 @@ public:
     	   throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
        }
        BucketType merged;
-#ifdef _USE_OPENMP
-#pragma omp parallel for private(merged)
-#endif
+
+
+       #pragma omp parallel for private(merged)
        for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
     	   // buckets are sorted so perform a sorted merge by bucket
     	   BucketType &a = _buckets[idx];
@@ -1765,9 +1761,8 @@ public:
 	       if (chunkSize <= 1)
 	    	   chunkSize = 2;
 	       BucketType merged;
-//#ifdef _USE_OPENMP
-//#pragma omp parallel for private(merged) schedule(static, chunkSize)
-//#endif
+
+           //#pragma omp parallel for private(merged) schedule(static, chunkSize)
 	       for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
 	    	   // buckets are sorted so perform a sorted merge by bucket
 	    	   BucketType &a = _buckets[idx];
@@ -1935,8 +1930,17 @@ public:
 		}
 	}
 	Iterator beginThreaded() {
-		return Iterator(this, _getThreadedBuckets().first);}
-	Iterator endThreaded() {return Iterator(this, _getThreadedBuckets().second);}
+		if (OMP_MAX_THREADS == 1)
+			return begin();
+		else
+		    return Iterator(this, _getThreadedBuckets().first);
+	}
+	Iterator endThreaded() {
+		if (OMP_MAX_THREADS == 1)
+			return end();
+		else
+			return Iterator(this, _getThreadedBuckets().second);
+	}
 
 };
 
@@ -1948,8 +1952,14 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.84  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
 // Revision 1.83  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
+//
+// Revision 1.82.2.1  2010-05-06 18:45:35  regan
+// broke it...
 //
 // Revision 1.82  2010-05-06 16:43:56  regan
 // merged changes from ConsensusTesting-20100505

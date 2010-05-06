@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.29 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.30 2010-05-06 22:55:05 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -19,9 +19,6 @@ public:
 	static const char REF_QUAL = KoMer::REF_QUAL;
 	static const char FASTQ_START_CHAR = KoMer::FASTQ_START_CHAR;
 	static const char PRINT_REF_QUAL = KoMer::PRINT_REF_QUAL;
-
-	static long constructCount;
-	static long destructCount;
 
 public:
 	typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
@@ -723,8 +720,14 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.30  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
 // Revision 1.29  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
+//
+// Revision 1.28.2.1  2010-05-06 18:45:35  regan
+// broke it...
 //
 // Revision 1.28  2010-05-06 16:43:56  regan
 // merged changes from ConsensusTesting-20100505

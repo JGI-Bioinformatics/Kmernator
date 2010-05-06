@@ -7,6 +7,7 @@
 #include <boost/iostreams/stream.hpp>
 
 #ifdef ENABLE_OPENMP
+
 #define _USE_OPENMP
 //#define _USE_THREADSAFE_KMER
 #include <omp.h>
@@ -14,13 +15,17 @@ const int OMP_NESTED_DEFAULT = omp_get_nested();
 const int OMP_DYNAMIC_DEFAULT = omp_get_dynamic();
 const int MAX_FILE_PARALLELISM = 4;
 const int OMP_MAX_THREADS = omp_get_max_threads();
+
 #else
+
 inline int omp_get_max_threads() { return 1; }
 inline int omp_get_num_threads() { return 1; }
 inline int omp_get_thread_num()  { return 0; }
 const int MAX_FILE_PARALLELISM = 1;
 const int OMP_MAX_THREADS = 1;
+
 #endif
+
 
 #ifndef DEBUG
 #define NDEBUG
@@ -45,6 +50,9 @@ namespace KoMer {
 
 
 // $Log: config.h,v $
+// Revision 1.9  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
 // Revision 1.8  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //

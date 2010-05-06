@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.2 2010-05-01 21:57:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.3 2010-05-06 22:55:05 regan Exp $
 //
 
 #ifndef _KMER_TRACKING_DATA_H
@@ -62,9 +62,8 @@ public:
 	}
 	static inline bool isDiscard(WeightType weight) {
 		if (weight < minimumWeight) {
-#ifdef _USE_OPENMP
-#pragma omp atomic
-#endif
+
+			#pragma omp atomic
 			discarded++;
 			return true;
 		} else
@@ -625,6 +624,12 @@ std::ostream &operator<<(std::ostream &stream, TrackingDataMinimal<T> &ob) {
 #endif
 
 // $Log: KmerTrackingData.h,v $
+// Revision 1.3  2010-05-06 22:55:05  regan
+// merged changes from CodeCleanup-20100506
+//
+// Revision 1.2.10.1  2010-05-06 18:45:35  regan
+// broke it...
+//
 // Revision 1.2  2010-05-01 21:57:54  regan
 // merged head with serial threaded build partitioning
 //
