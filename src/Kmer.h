@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.81 2010-05-01 21:57:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.82 2010-05-06 16:43:56 regan Exp $
 //
 
 #ifndef _KMER_H
@@ -327,20 +327,20 @@ public:
 
 	class ElementType {
 	private:
-		const Kmer *_key;
-		const ValueType *_value;
+		IndexType _idx;
 		const KmerArray *_array;
+		inline const ElementType &_constThis() const {return *this;}
 	public:
 		ElementType() :
-			_key(NULL), _value(NULL), _array(NULL) {
+			_idx(MAX_INDEX), _array(NULL) {
 		}
-		ElementType(const Kmer &key, const ValueType &value,
+		ElementType(IndexType idx,
 				const KmerArray &array) :
-			_key(&key), _value(&value), _array(&array) {
+			_idx(idx), _array(&array) {
 			setLock();
 		}
 		ElementType(const ElementType &copy) :
-			_key(NULL), _value(NULL), _array(NULL) {
+			_idx(MAX_INDEX), _array(NULL) {
 			*this = copy;
 		}
 		~ElementType() {
@@ -348,20 +348,18 @@ public:
 		}
 		ElementType &operator=(const ElementType &copy) {
 			reset();
-			_key = copy._key;
-			_value = copy._value;
+			_idx = copy._idx;
 			_array = copy._array;
 			setLock();
 			return *this;
 		}
 		void reset() {
 			unsetLock();
-			_key = NULL;
-			_value = NULL;
+			_idx = MAX_INDEX;
 			_array = NULL;
 		}
 		inline bool isValid() const {
-			return _array != NULL;
+			return _array != NULL && _idx != MAX_INDEX;
 		}
 		void setLock() {
 			if (isValid())
@@ -373,32 +371,40 @@ public:
 		}
 
 		const Kmer &key() const {
-			return *_key;
+		    assert(isValid());
+			return _array->get(_idx);
 		}
 		Kmer &key() {
-			return const_cast<Kmer&> (*_key);
+		    return const_cast<Kmer&> (_constThis().key());
 		}
 		const ValueType &value() const {
-			return *_value;
+		    assert(isValid());
+			return _array->valueAt(_idx);
 		}
 		ValueType &value() {
-			return const_cast<ValueType&> (*_value);
+			return const_cast<ValueType&> (_constThis().value());
 		}
 		inline bool operator==(const ElementType &other) const {
-			if (this->_value != NULL && other._value != NULL)
-				return *(this->_value) == *(other._value);
+			if (isValid() && other.isValid())
+				return value() == other.value() && key() == other.key();
 			else
-				return true;
+				return false;
 		}
 		inline bool operator<(const ElementType &other) const {
-			if (this->_value != NULL && other._value != NULL)
-				return *(this->_value) < *(other._value);
+			if (isValid() && other.isValid())
+				if (value() == other.value())
+					return key() < other.key();
+				else
+				    return value() < other.value();
 			else
 				return false;
 		}
 		inline bool operator>(const ElementType &other) const {
-			if (this->_value != NULL && other._value != NULL)
-				return *(this->_value) > *(other._value);
+			if (isValid() && other.isValid())
+				if (value() == other.value())
+					return key() > other.key();
+				else
+					return value() > other.value();
 			else
 				return false;
 		}
@@ -736,10 +742,10 @@ public:
 
 public:
 	const ElementType getElement(IndexType idx) const {
-		return ElementType(get(idx), valueAt(idx), *this);
+		return ElementType(idx, *this);
 	}
 	ElementType getElement(IndexType idx) {
-		return ElementType(get(idx), valueAt(idx), *this);
+		return ElementType(idx, *this);
 	}
 
 	static inline IndexType getElementByteSize() {
@@ -1547,8 +1553,9 @@ public:
 		IndexType existingIdx;
 		ElementType element;
 		bucket.setSharedLock();
-		if (_exists(key, existingIdx, bucket))
-		element = bucket.getElement(existingIdx);
+		if (_exists(key, existingIdx, bucket)) {
+		    element = bucket.getElement(existingIdx);
+		}
 		bucket.unsetSharedLock();
 		return element;
 	}
@@ -1941,6 +1948,12 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.82  2010-05-06 16:43:56  regan
+// merged changes from ConsensusTesting-20100505
+//
+// Revision 1.81.8.1  2010-05-05 23:46:22  regan
+// checkpoint... seems to compile
+//
 // Revision 1.81  2010-05-01 21:57:54  regan
 // merged head with serial threaded build partitioning
 //

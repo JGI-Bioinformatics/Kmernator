@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.18 2010-05-01 21:58:00 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.19 2010-05-06 16:43:59 regan Exp $
 //
 
 #include <iostream>
@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
 
 	cerr << "Identifying Pairs: ";
 	long numPairs = reads.identifyPairs();
-	cerr << numPairs << endl;
+	cerr << "Pairs + single = " << numPairs << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	if (Options::getSkipArtifactFilter() == 0) {
@@ -91,12 +91,12 @@ int main(int argc, char *argv[]) {
 
 	  cerr << "Applying sequence artifact filter to Input Files" << endl;
 	  unsigned long filtered = filter.applyFilter(reads);
-	  cerr << "filter affected " << filtered << " Reads " << endl;;
+	  cerr << "filter affected (trimmed/removed) " << filtered << " Reads " << endl;;
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	  cerr << "Applying DuplicateFragmentPair Filter to Input Files" << endl;
 	  unsigned long duplicateFragments = filter.filterDuplicateFragmentPairs(reads);
-	  cerr << "filter affected " << duplicateFragments << endl;
+	  cerr << "filter affected  (removed) " << duplicateFragments << endl;
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 	}
 

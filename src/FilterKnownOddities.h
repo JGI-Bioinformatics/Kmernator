@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.19 2010-05-04 23:49:21 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.20 2010-05-06 16:43:55 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -224,8 +224,11 @@ public:
 		return sequences;
 	}
 
-	typedef KmerSpectrum<TrackingDataWithAllReads, TrackingDataWithAllReads, TrackingDataWithAllReads> KS;
+	typedef TrackingDataWithAllReads TD;
+	typedef KmerSpectrum<TD, TD, TD> KS;
 	typedef TrackingData::ReadPositionWeightVector RPW;
+	typedef KS::WeakMapType::ElementType KSElementType;
+	typedef std::vector< KSElementType > KSElementVector;
 	typedef RPW::iterator RPWIterator;
 	typedef ReadSet::Pair Pair;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
@@ -330,21 +333,47 @@ public:
 
 		ReadSet newReads;
 		if (editDistance > 0) {
+
 			// TODO honor edit distance > 1
 			std::cerr << "Merging kmers within edit-distance of " << editDistance << " " << MemoryUtils::getMemoryUsage() << std::endl;
-// TODO Not deterministic!!
-//#pragma omp parallel
-//		    for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
-		    for(KS::WeakIterator it = ks.weak.begin(); it != ks.weak.end(); it++) {
-			  unsigned int count = it->value().getCount();
-			  if (count > 0 && count < cutoffThreshold) {
-				// check for edit distance matches
-				Kmer &myKmer = it->key();
 
-				ks.consolidate(myKmer, false);
+			// create a sorted set of elements with > cutoffThreshold count
+			// (singletons will not be included in this round)
+			KSElementVector elems;
 
-			  }
-		    }
+#pragma omp parallel private(elems)
+			{
+			for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
+				KSElementType &elem = *it;
+				if (elem.isValid() && elem.value().getCount() >= cutoffThreshold)
+					elems.push_back(elem);
+			}
+#pragma omp critical
+			std::cerr << "Sorting all nodes > " << cutoffThreshold << " count: " << elems.size() << MemoryUtils::getMemoryUsage() << std::endl;
+			std::sort(elems.begin(), elems.end());
+
+#pragma omp critical
+			std::cerr << "Merging elements." << MemoryUtils::getMemoryUsage() << std::endl;
+			for(KSElementVector::reverse_iterator it = elems.rbegin(); it != elems.rend(); it++) {
+				KSElementType &elem = *it;
+				if (elem.isValid() && elem.value().getCount() >= cutoffThreshold) {
+					ks.consolidate(elem.key(), false);
+				}
+			}
+			elems.clear();
+
+			// now merge those less than cutoff (singletons by default)
+			for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
+				KSElementType &elem = *it;
+				if (elem.isValid()) {
+					TD &value = elem.value();
+					if (value > 0 && value.getCount() < cutoffThreshold) {
+					    ks.consolidate(elem.key(), false);
+					}
+				}
+			}
+			}
+
 		    std::cerr << "Merged histogram. " << MemoryUtils::getMemoryUsage() << std::endl;
 			ks.printHistograms();
 

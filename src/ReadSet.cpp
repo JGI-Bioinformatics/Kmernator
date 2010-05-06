@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.34 2010-05-05 06:28:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.35 2010-05-06 16:43:56 regan Exp $
 //
 
 #include <exception>
@@ -410,6 +410,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	if (size <= readIdx)
 		return _pairs.size();
 
+	long newPairs = 0;
 	// first scan the reads adding in sequential pairs which
 	// were flagged during addRead()
 	long sequentialPairs = 0;
@@ -430,6 +431,8 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 
 	if (Options::getVerbosity())
 		std::cerr << "Paired sequential reads (fast): " << sequentialPairs << std::endl;
+
+	newPairs += sequentialPairs;
 
 	boost::unordered_map<std::string, ReadSetSizeType> unmatchedNames;
 	boost::unordered_map<std::string, ReadSetSizeType>::iterator unmatchedIt;
@@ -486,6 +489,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			unmatchedNames.erase(unmatchedIt);
 			getRead(test.read1).markPaired();
 			getRead(test.read2).markPaired();
+			newPairs++;
 
 		} else {
 			Pair pair;
@@ -514,6 +518,8 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			readIdx++;
 		}
 	}
+	if (Options::getVerbosity())
+		std::cerr << "Identified new pairs: " << newPairs << std::endl;
 
 	return _pairs.size();
 }
@@ -524,7 +530,6 @@ ProbabilityBases ReadSet::getProbabilityBases() const {
 	    const Read &read = getRead(readIdx);
 		probs += read.getProbabilityBases();
     }
-	probs *= 1.0 / (double) getSize();
 	return probs;
 }
 ReadSet::ReadSetSizeType ReadSet::getCentroidRead() const {
@@ -542,26 +547,47 @@ ReadSet::ReadSetSizeType ReadSet::getCentroidRead(const ProbabilityBases &probs)
 	    	bestScore = score;
 	    }
 	}
+	assert(bestRead != MAX_READ_IDX);
 	return bestRead;
 }
 
 Read ReadSet::getConsensusRead() const {
 	ProbabilityBases probs = getProbabilityBases();
-    return getConsensusRead(probs, string("C") + boost::lexical_cast<std::string>(getSize()) + string("-") + getRead(0).getName());
+    Read consensus = getConsensusRead(probs, string("C") + boost::lexical_cast<std::string>(getSize()) + string("-") + getRead(0).getName());
+    if (Options::getDebug() > 2) {
+#pragma omp critical
+    	{
+    		for(ReadVector::const_iterator it = _reads.begin(); it != _reads.end(); it++) {
+    			std::cerr << it->toString() << std::endl;
+    		}
+    		std::cerr << consensus.toString() << std::endl;
+    		std::cerr << probs.toString() << std::endl;
+    	}
+    }
+    return consensus;
 }
 Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) {
-    stringstream fasta;
-    stringstream qual;
+    char fasta[probs.size()];
+    char qual[probs.size()];
     for(size_t i = 0 ; i < probs.size(); i++) {
     	BaseQual base = probs[i].getBaseQual();
-    	fasta << base.base;
-    	qual << base.qual;
+    	fasta[i] = base.base;
+    	qual[i] = base.qual;
     }
-    return Read(name, fasta.str(), qual.str());
+    return Read(name, fasta, qual);
 }
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.35  2010-05-06 16:43:56  regan
+// merged changes from ConsensusTesting-20100505
+//
+// Revision 1.34.2.2  2010-05-06 16:39:02  regan
+// minor performance opt
+//
+// Revision 1.34.2.1  2010-05-05 23:46:23  regan
+// checkpoint... seems to compile
+//
 // Revision 1.34  2010-05-05 06:28:35  regan
 // merged changes from FixPairOutput-20100504
 //

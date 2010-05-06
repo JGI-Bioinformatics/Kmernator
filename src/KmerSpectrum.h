@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.32 2010-05-01 21:57:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.33 2010-05-06 16:43:56 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -243,68 +243,18 @@ public:
 		consolidate(myKmer, myCount, weights);
 	}
 
-	// test and optionally shuffle myKmer into one of its first degree permutations
+	// test and optionally shuffle lesser kmer counts from 1st degree permutations into myKmer
 	void consolidate(const Kmer &myKmer, double myCount, const KmerWeights &weights, bool useWeights = false) {
 		SequenceLengthType size = weights.size();
-
-		SequenceLengthType firstMatch = size;
-		double firstCount = myCount;
-		SequenceLengthType firstNonZero = 0;
 		for(SequenceLengthType idx = 0; idx < size; idx++) {
 			double testCount = weights.valueAt(idx);
-			if (testCount > 0.0) {
-			    firstNonZero++;
-			    if (testCount >= firstCount) {
-				    firstMatch = idx;
-				    firstCount = testCount;
-			    }
-			}
-		}
-
-		if (firstNonZero >= 1) {
-			if (firstCount == size) {
-				// one or more first degree matches, none better or equal to myKmer
-                // do nothing, let them merge on their turn
-			} else {
-				// there was (at least) one equal or better match
-				const Kmer &bestKmer = weights[firstMatch];
-
-				if (firstCount == myCount) {
-					// tie, test count of first degree to bestMatch
-					KmerWeights secondWeights = KmerWeights::permuteBases(bestKmer, useWeights);
-					getCounts(secondWeights, useWeights);
-
-					SequenceLengthType bestNonZero = 0;
-					for(SequenceLengthType idx = 0; idx < size; idx++)
-						if (secondWeights.valueAt(idx) > 0.0)
-							bestNonZero++;
-					if (bestNonZero == firstNonZero) {
-						// tie, pick greater kmer
-						if (myKmer < bestKmer) {
-							// move myKmer into bestKmer
-							migrateKmerData(myKmer, bestKmer);
-						} else {
-							// do nothing let the best match merge on its turn
-							//migrateKmerData(bestKmer, myKmer);
-						}
-					} else {
-						// one has more first degrees than other.  Move to higher number of first degrees
-						if (firstNonZero < bestNonZero) {
-							// move myKmer into bestKmer
-							migrateKmerData(myKmer, bestKmer);
-						} else {
-							// do nothing let bestKmer merge on its turn
-							//migrateKmerData(bestKmer, myKmer);
-						}
-					}
-
-				} else {
-			        // one or more first degree matches, one clearly better than myKmer
-				    // merge myKmer with bestMatch
-					migrateKmerData(myKmer, bestKmer);
+			if (testCount > 0.0 && myCount >= testCount) {
+				if (myCount > testCount || myKmer > weights[idx]) {
+					migrateKmerData(weights[idx], myKmer);
 				}
 			}
 		}
+
 	}
 
 	// adds/moves tracking from one kmer to another

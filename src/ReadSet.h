@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.25 2010-05-05 06:28:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.26 2010-05-06 16:43:56 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -24,6 +24,7 @@ public:
 	typedef ReadFileReader::SequenceStreamParserPtr SequenceStreamParserPtr;
 	typedef Read::ReadPtr ReadPtr;
 	typedef Sequence::RecordPtr RecordPtr;
+	typedef std::vector<Read> ReadVector;
 
 	static MmapSourceVector mmapSources;
     static void madviseMmaps(int advise) {
@@ -77,7 +78,7 @@ public:
 	typedef std::vector<Pair> PairedIndexType;
 
 private:
-	std::vector<Read> _reads;
+	ReadVector _reads;
 
 private:
 	inline const ReadSet &constThis() const {
@@ -282,6 +283,12 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.26  2010-05-06 16:43:56  regan
+// merged changes from ConsensusTesting-20100505
+//
+// Revision 1.25.2.1  2010-05-05 23:46:23  regan
+// checkpoint... seems to compile
+//
 // Revision 1.25  2010-05-05 06:28:35  regan
 // merged changes from FixPairOutput-20100504
 //

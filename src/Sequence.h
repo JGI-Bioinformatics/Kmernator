@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.27 2010-05-05 06:28:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.28 2010-05-06 16:43:56 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -314,15 +314,32 @@ public:
 	BaseQual(char _base, double prob) : base(_base), qual() {
 		qual = getQualChar(prob);
 	}
-	char getQualChar(double prob) {
+	static char getQualChar(double prob, bool ignoreLow = false) {
 		if (prob > 0.999) {
 			return Sequence::FASTQ_START_CHAR + 30;
 		} else if (prob > 0.99) {
 			return Sequence::FASTQ_START_CHAR + 20;
 		} else if (prob > 0.9) {
 			return Sequence::FASTQ_START_CHAR + 10;
-		} else {
+		} else if (!ignoreLow) {
 			return Sequence::FASTQ_START_CHAR + 1;
+		} else {
+			if (prob>=.7)
+				return '7';
+			else if (prob>=.6)
+				return '6';
+			else if (prob>=.5)
+				return '5';
+			else if (prob >= .4)
+				return '4';
+			else if (prob >= .3)
+				return '3';
+			else if (prob >= .2)
+				return '2';
+			else if (prob >= .1)
+				return '1';
+			else
+			    return ' ';
 		}
 	}
 };
@@ -333,8 +350,9 @@ public:
 	double a,c,g,t;
 	double top;
 	char best;
-	ProbabilityBase() : a(0.0), c(0.0), g(0.0), t(0.0), top(0.0), best(' ') {}
-	ProbabilityBase(const ProbabilityBase &copy) : a(copy.a), c(copy.c), g(copy.g), t(copy.t), top(copy.top), best(copy.best) {
+	short count;
+	ProbabilityBase() : a(0.0), c(0.0), g(0.0), t(0.0), top(0.0), best(' '), count(0) {}
+	ProbabilityBase(const ProbabilityBase &copy) : a(copy.a), c(copy.c), g(copy.g), t(copy.t), top(copy.top), best(copy.best), count(copy.count) {
 		setTop(*this);
 	}
 	ProbabilityBase &operator=(const ProbabilityBase &copy) {
@@ -342,9 +360,28 @@ public:
 		c = copy.c;
 		g = copy.g;
 		t = copy.t;
-		setTop(*this);
+		top = copy.top;
+		best = copy.best;
+		count = copy.count;
 		return *this;
 	}
+
+	void observe(char nuc, double prob) {
+		double otherProb = (1.0 - prob) / 3.0;
+		ProbabilityBase &base = *this;
+		switch (nuc) {
+		case 'A':
+		case 'a': base.a += prob; base.c += otherProb; base.g += otherProb; base.t += otherProb; break;
+		case 'C':
+		case 'c': base.c += prob; base.a += otherProb; base.g += otherProb; base.t += otherProb; break;
+		case 'G':
+		case 'g': base.g += prob; base.a += otherProb; base.c += otherProb; base.t += otherProb; break;
+		case 'T':
+		case 't': base.t += prob; base.a += otherProb; base.c += otherProb; base.g += otherProb; break;
+		}
+		base.count++;
+	}
+
 	void setTop(const ProbabilityBase &base) {
 		setTop(base.a, base.c, base.g, base.t);
 	}
@@ -372,12 +409,13 @@ public:
 		tmp.c += other.c;
 		tmp.g += other.g;
 		tmp.t += other.t;
+		tmp.count += other.count;
 		tmp.setTop(other);
 		return tmp;
 	}
 	ProbabilityBase &operator+=(const ProbabilityBase &other) {
 		*this = *this + other;
-		setTop(*this);
+		// setTop already called
 		return *this;
 	}
 	ProbabilityBase operator*(const ProbabilityBase &other) {
@@ -391,7 +429,7 @@ public:
 	}
 	ProbabilityBase &operator*=(const ProbabilityBase &other) {
 		*this = *this * other;
-		setTop(*this);
+		// setTop already called
 		return *this;
 	}
 	ProbabilityBase &operator*=(double factor) {
@@ -405,25 +443,25 @@ public:
 		return a+c+g+t;
 	}
 	double getA() const {
-		if (best == 'A')
+		if (best == 'A' && top < a * count)
 			return top;
 		else
 			return a;
 	}
 	double getC() const {
-		if (best == 'C')
+		if (best == 'C' && top < c * count)
 			return top;
 		else
 			return c;
 	}
 	double getG() const {
-		if (best == 'G')
+		if (best == 'G' && top < g * count)
 			return top;
 		else
 			return g;
 	}
 	double getT() const {
-		if (best == 'T')
+		if (best == 'T' && top < t * count)
 			return top;
 		else
 			return t;
@@ -514,6 +552,37 @@ public:
 		    _bases[i] *= factor;
 		}
 		return *this;
+	}
+	std::string toString() const {
+		std::stringstream ss;
+		for(unsigned int i = 0; i < _bases.size(); i++) {
+			ss << _bases[i].getBaseQual().base;
+		}
+		ss << std::endl;
+		for(unsigned int i = 0; i < _bases.size(); i++) {
+			ss << _bases[i].best;
+		}
+		ss << std::endl;
+		for(unsigned int i = 0; i < _bases.size(); i++) {
+			ss << _bases[i].getBaseQual().qual;
+		}
+		ss << std::endl;
+		for(unsigned int i = 0; i < _bases.size(); i++) {
+			ss << BaseQual::getQualChar( _bases[i].getA(), true );
+		}
+		ss << std::endl;
+		for(unsigned int i = 0; i < _bases.size(); i++) {
+			ss << BaseQual::getQualChar( _bases[i].getC(), true );
+		}
+		ss << std::endl;
+		for(unsigned int i = 0; i < _bases.size(); i++) {
+			ss << BaseQual::getQualChar( _bases[i].getG(), true );
+		}
+		ss << std::endl;
+		for(unsigned int i = 0; i < _bases.size(); i++) {
+			ss << BaseQual::getQualChar( _bases[i].getT(), true );
+		}
+		return ss.str();
 	}
 };
 
@@ -610,19 +679,10 @@ public:
 			if (prob < 0.2501) {
 				prob = 0.2501; // slightly better than random...
 			}
-			double otherProb = (1.0 - prob) / 3.0;
 			ProbabilityBase &base = probs[i];
-			switch (fasta[i]) {
-			case 'A':
-			case 'a': base.a += prob; base.c += otherProb; base.g += otherProb; base.t += otherProb; break;
-			case 'C':
-			case 'c': base.c += prob; base.a += otherProb; base.g += otherProb; base.t += otherProb; break;
-			case 'G':
-			case 'g': base.g += prob; base.a += otherProb; base.c += otherProb; base.t += otherProb; break;
-			case 'T':
-			case 't': base.t += prob; base.a += otherProb; base.c += otherProb; base.g += otherProb; break;
-			}
+			base.observe(fasta[i], prob);
 		}
+
 		return probs;
 	}
 	double scoreProbabilityBases(const ProbabilityBases &probs) const {
@@ -653,12 +713,22 @@ public:
 		return write(os, *this, trimOffset, label, format);
 	}
 
+	std::string toString() const {
+		return getFastaNoMarkup() + "\t" + getQuals(MAX_SEQUENCE_LENGTH, true, true) + "\t" + getName();
+	}
+
 };
 
 #endif
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.28  2010-05-06 16:43:56  regan
+// merged changes from ConsensusTesting-20100505
+//
+// Revision 1.27.2.1  2010-05-05 23:46:22  regan
+// checkpoint... seems to compile
+//
 // Revision 1.27  2010-05-05 06:28:35  regan
 // merged changes from FixPairOutput-20100504
 //
