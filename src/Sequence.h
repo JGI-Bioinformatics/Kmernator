@@ -1,9 +1,9 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.28 2010-05-06 16:43:56 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.29 2010-05-06 21:46:54 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
 
-#include <string>
+#include <cstring>
 #include <vector>
 
 #include <boost/shared_ptr.hpp>
@@ -723,6 +723,9 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.29  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
 // Revision 1.28  2010-05-06 16:43:56  regan
 // merged changes from ConsensusTesting-20100505
 //

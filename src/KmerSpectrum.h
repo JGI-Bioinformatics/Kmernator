@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.33 2010-05-06 16:43:56 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.34 2010-05-06 21:46:54 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -1136,10 +1136,19 @@ public:
 			mmaps[partIdx] = weak.store();
 			if (Options::getMinDepth() <= 1)
 				mmaps[partIdx + numParts] = singleton.store();
+			else if (Options::getVerbosity())
+				std::cerr << "Not storing singletons which would have been this size: " << singleton.getSizeToStore() << std::endl;
 
 			// optimize memory preallocations
 			weak.rotateDMPBuffers(numParts);
 			singleton.rotateDMPBuffers(numParts);
+		}
+
+
+		// first free up memory
+		if (Options::getMinDepth() <= 1) {
+			std::cerr << "Clearing memory from singletons" << std::endl << MemoryUtils::getMemoryUsage() << std::endl;
+		    singleton.clear();
 		}
 
 		std::cerr << "Merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() << std::endl;
@@ -1201,7 +1210,6 @@ public:
 
 		// allocate a square matrix of buffers: KmerWeights[writingThread][readingThread]
 		KmerWeights kmerBuffers[ numThreads ][ numThreads ];
-		KmerWeights kmers;
 		typedef std::pair< long, long > ReadPosType;
 		std::vector< ReadPosType > startReadIdx[ numThreads ][ numThreads ];
 
@@ -1232,13 +1240,13 @@ public:
 			}
 			//std::cerr << "Reallocated buffers" << std::endl;
 
-#pragma omp parallel for private(kmers) schedule(dynamic) num_threads(numThreads)
+#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 			for (long i=0; i < batch; i++)
 			{
 				long readIdx = batchIdx + i;
 				if (readIdx >= store.getSize() )
 				continue;
-				kmers = KmerReadUtils::buildWeightedKmers(store.getRead( readIdx ), true, true);
+				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead( readIdx ), true, true);
 				for (long j = 0; j < numThreads; j++)
 				startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 				for (IndexType j = 0; j < kmers.size(); j++) {
@@ -1639,3 +1647,9 @@ public:
 
 #endif
 
+
+// $Log: KmerSpectrum.h,v $
+// Revision 1.34  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

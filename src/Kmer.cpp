@@ -28,3 +28,11 @@ std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob) {
 
 ClassicMemory ClassicMemory::singleton;
 BoostPoolManager BoostPoolManager::singleton;
+
+
+// $Log: Kmer.cpp,v $
+// Revision 1.17  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+//
+

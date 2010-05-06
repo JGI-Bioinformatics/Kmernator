@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/Fastq2Fasta.cpp,v 1.4 2010-05-05 06:28:40 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/Fastq2Fasta.cpp,v 1.5 2010-05-06 21:46:57 regan Exp $
 //
 
 #include <iostream>
@@ -7,6 +7,7 @@
 
 #include "config.h"
 #include "ReadSet.h"
+#include "Options.h"
 
 using namespace std;
 
@@ -81,3 +82,9 @@ int main(int argc, char *argv[]) {
 	}
 
 }
+
+// $Log: Fastq2Fasta.cpp,v $
+// Revision 1.5  2010-05-06 21:46:57  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

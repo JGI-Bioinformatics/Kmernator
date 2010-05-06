@@ -1,9 +1,9 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.82 2010-05-06 16:43:56 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.83 2010-05-06 21:46:54 regan Exp $
 //
 
 #ifndef _KMER_H
 #define _KMER_H
-#include <tr1/memory>
+
 #include <sstream>
 #include <cstring>
 #include <cstdlib>
@@ -31,7 +31,7 @@ using namespace TwoBitSequenceBase;
 #define MAX_KMER_SIZE 1024
 #endif
 
-typedef std::tr1::shared_ptr<TwoBitEncoding> KmerSharedPtr;
+typedef boost::shared_ptr<TwoBitEncoding> KmerSharedPtr;
 typedef unsigned long IndexType;
 
 class KmerSizer {
@@ -1948,11 +1948,17 @@ typedef KmerArray<unsigned long> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.83  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
 // Revision 1.82  2010-05-06 16:43:56  regan
 // merged changes from ConsensusTesting-20100505
 //
 // Revision 1.81.8.1  2010-05-05 23:46:22  regan
 // checkpoint... seems to compile
+//
+// Revision 1.81.2.1  2010-05-04 19:49:51  regan
+// minor rework on include headers
 //
 // Revision 1.81  2010-05-01 21:57:54  regan
 // merged head with serial threaded build partitioning

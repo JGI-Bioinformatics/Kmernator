@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.21 2010-05-06 16:44:40 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.22 2010-05-06 21:46:54 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -1052,3 +1052,9 @@ public:
 };
 
 #endif
+
+// $Log: FilterKnownOddities.h,v $
+// Revision 1.22  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

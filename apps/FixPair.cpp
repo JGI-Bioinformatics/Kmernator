@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FixPair.cpp,v 1.2 2010-05-05 06:28:39 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FixPair.cpp,v 1.3 2010-05-06 21:46:57 regan Exp $
 //
 
 #include <iostream>
@@ -80,3 +80,9 @@ int main(int argc, char *argv[]) {
 	}
 
 }
+
+// $Log: FixPair.cpp,v $
+// Revision 1.3  2010-05-06 21:46:57  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

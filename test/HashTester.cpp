@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/HashTester.cpp,v 1.2 2010-05-01 21:57:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/HashTester.cpp,v 1.3 2010-05-06 21:46:51 regan Exp $
 //
 
 #include <iostream>
@@ -99,3 +99,9 @@ int main(int argc, char *argv[]) {
 	  }
 	}
 }
+
+// $Log: HashTester.cpp,v $
+// Revision 1.3  2010-05-06 21:46:51  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

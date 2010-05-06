@@ -1,12 +1,14 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.23 2010-05-01 21:57:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.24 2010-05-06 21:46:53 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
 #define _TWO_BIT_SEQUENCE_H
 
-#include <string>
+#include <cstring>
 #include <vector>
 #include <cstdlib>
+#include <cstdio>
+#include <iostream>
 
 #include <boost/intrusive_ptr.hpp>
 
@@ -166,6 +168,12 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.24  2010-05-06 21:46:53  regan
+// merged changes from PerformanceTuning-20100501
+//
+// Revision 1.23.2.1  2010-05-04 19:49:51  regan
+// minor rework on include headers
+//
 // Revision 1.23  2010-05-01 21:57:53  regan
 // merged head with serial threaded build partitioning
 //

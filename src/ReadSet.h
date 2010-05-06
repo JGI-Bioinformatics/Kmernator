@@ -1,9 +1,9 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.26 2010-05-06 16:43:56 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.27 2010-05-06 21:46:54 regan Exp $
 //
 
 #ifndef _READ_SET_H
 #define _READ_SET_H
-#include <string>
+#include <cstring>
 #include <boost/unordered_map.hpp>
 #include <sys/mman.h>
 
@@ -253,7 +253,6 @@ public:
 	static Read fakePair(const Read &unPaired);
 
 
-
 protected:
 	SequenceStreamParserPtr appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
 	SequenceStreamParserPtr appendFasta(MmapSource &mmap);
@@ -283,6 +282,9 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.27  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
 // Revision 1.26  2010-05-06 16:43:56  regan
 // merged changes from ConsensusTesting-20100505
 //
@@ -300,6 +302,12 @@ public:
 //
 // Revision 1.24.4.1  2010-05-04 21:33:42  regan
 // checkpoint
+//
+// Revision 1.24.2.2  2010-05-04 19:49:51  regan
+// minor rework on include headers
+//
+// Revision 1.24.2.1  2010-05-02 05:40:09  regan
+// added methods and cache variable for fast sequential read pair identification
 //
 // Revision 1.24  2010-05-01 21:57:53  regan
 // merged head with serial threaded build partitioning

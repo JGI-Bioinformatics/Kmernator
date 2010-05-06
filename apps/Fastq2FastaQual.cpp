@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/Fastq2FastaQual.cpp,v 1.1 2010-04-14 15:58:34 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/Fastq2FastaQual.cpp,v 1.2 2010-05-06 21:46:57 regan Exp $
 //
 
 #include <iostream>
@@ -27,3 +27,9 @@ int main(int argc, char *argv[]) {
 	}
 
 }
+
+// $Log: Fastq2FastaQual.cpp,v $
+// Revision 1.2  2010-05-06 21:46:57  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

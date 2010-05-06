@@ -1,24 +1,22 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.35 2010-05-05 06:28:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.36 2010-05-06 21:46:54 regan Exp $
 //
 
 #ifndef _UTILS_H
 #define _UTILS_H
 
-#include <cmath>
+#include <ostream>
 #include <iostream>
 #include <ios>
 #include <iomanip>
 #include <fstream>
 #include <cstdlib>
 #include <vector>
-#include <algorithm>
-#include <tr1/memory>
-#include <string>
-#include <ostream>
+#include <cstring>
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/shared_ptr.hpp>
 
 #define foreach BOOST_FOREACH
 
@@ -27,7 +25,7 @@
 
 class OfstreamMap {
 public:
-	typedef std::tr1::shared_ptr< std::ofstream > OStreamPtr;
+	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
 	typedef boost::unordered_map< std::string, OStreamPtr > Map;
 	typedef Map::iterator Iterator;
 private:
@@ -266,6 +264,12 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.36  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+// Revision 1.34.2.1  2010-05-04 19:49:51  regan
+// minor rework on include headers
+//
 // Revision 1.35  2010-05-05 06:28:35  regan
 // merged changes from FixPairOutput-20100504
 //

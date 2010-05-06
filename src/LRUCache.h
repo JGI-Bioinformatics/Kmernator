@@ -255,3 +255,10 @@ template<class Key,class Data> class LRUCache {
 			_index.erase( miter );
 		}
 };
+
+
+// $Log: LRUCache.h,v $
+// Revision 1.3  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

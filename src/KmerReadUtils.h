@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.7 2010-05-01 21:57:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.8 2010-05-06 21:46:54 regan Exp $
 //
 
 #ifndef _KMER_READ_UTILS_H
@@ -62,3 +62,9 @@ public:
 
 #endif
 
+
+// $Log: KmerReadUtils.h,v $
+// Revision 1.8  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

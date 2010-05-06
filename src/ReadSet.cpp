@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.35 2010-05-06 16:43:56 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.36 2010-05-06 21:46:54 regan Exp $
 //
 
 #include <exception>
@@ -567,8 +567,8 @@ Read ReadSet::getConsensusRead() const {
     return consensus;
 }
 Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) {
-    char fasta[probs.size()];
-    char qual[probs.size()];
+    std::string fasta(probs.size(), ' ');
+    std::string qual(probs.size(), ' ');
     for(size_t i = 0 ; i < probs.size(); i++) {
     	BaseQual base = probs[i].getBaseQual();
     	fasta[i] = base.base;
@@ -579,6 +579,9 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.36  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
 // Revision 1.35  2010-05-06 16:43:56  regan
 // merged changes from ConsensusTesting-20100505
 //

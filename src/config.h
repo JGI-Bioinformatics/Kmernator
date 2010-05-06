@@ -43,3 +43,9 @@ namespace KoMer {
 
 #endif
 
+
+// $Log: config.h,v $
+// Revision 1.8  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

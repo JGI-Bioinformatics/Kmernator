@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/lookup8.h,v 1.2 2010-05-01 21:57:53 regan Exp $:
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/lookup8.h,v 1.3 2010-05-06 21:46:54 regan Exp $:
 
 
 #ifndef _LOOKUP8_H
@@ -16,9 +16,9 @@ at producing 64-bit results.
 --------------------------------------------------------------------
 */
 
-#include <stdio.h>
-#include <stddef.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstddef>
+#include <cstdlib>
 typedef  unsigned long  long ub8;   /* unsigned 8-byte quantities */
 typedef  unsigned long  int  ub4;   /* unsigned 4-byte quantities */
 typedef  unsigned       char ub1;
@@ -279,3 +279,9 @@ static ub8 hash3( register ub1 *k, register ub8  length, register ub8  level)
 };
 
 #endif // lookup8.h
+
+// $Log: lookup8.h,v $
+// Revision 1.3  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

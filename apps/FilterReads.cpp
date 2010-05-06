@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.19 2010-05-06 16:43:59 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.20 2010-05-06 21:46:57 regan Exp $
 //
 
 #include <iostream>
@@ -201,3 +201,9 @@ int main(int argc, char *argv[]) {
 		}
 	}
 }
+
+// $Log: FilterReads.cpp,v $
+// Revision 1.20  2010-05-06 21:46:57  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

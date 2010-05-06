@@ -1,7 +1,6 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.23 2010-05-01 21:57:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.24 2010-05-06 21:46:54 regan Exp $
 //
 
-#include <cstring>
 #include "TwoBitSequence.h"
 
 void boost::intrusive_ptr_add_ref(TwoBitSequenceBase::_TwoBitEncodingPtr* r)
@@ -303,6 +302,12 @@ void TwoBitSequence::permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1,
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.24  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+// Revision 1.23.2.1  2010-05-04 19:49:51  regan
+// minor rework on include headers
+//
 // Revision 1.23  2010-05-01 21:57:53  regan
 // merged head with serial threaded build partitioning
 //

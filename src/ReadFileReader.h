@@ -1,9 +1,9 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.4 2010-05-05 06:28:35 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.5 2010-05-06 21:46:54 regan Exp $
 //
 
 #ifndef _READ_FILE_READER_H
 #define _READ_FILE_READER_H
-#include <string>
+#include <cstring>
 #include <cstdlib>
 
 #include <boost/shared_ptr.hpp>
@@ -661,3 +661,9 @@ public:
 
 #endif
 
+
+// $Log: ReadFileReader.h,v $
+// Revision 1.5  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+//

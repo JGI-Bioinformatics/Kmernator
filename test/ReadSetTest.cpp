@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.14 2010-05-05 06:28:38 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/ReadSetTest.cpp,v 1.15 2010-05-06 21:46:51 regan Exp $
 //
 
 #include "config.h"
@@ -119,6 +119,29 @@ void testParser()
 
 }
 
+void testConsensus(string filename)
+{
+	ReadSet store;
+	store.appendAnyFile(filename);
+	store.identifyPairs();
+	BOOST_CHECK_EQUAL(store.getSize() / 2, store.getPairSize());
+
+	ReadSet reads1, reads2;
+	for(unsigned int i = 0 ; i < store.getSize(); i+=2) {
+		reads1.append(store.getRead(i).clone());
+		reads2.append(store.getRead(i+1).clone());
+	}
+	BOOST_CHECK_EQUAL( reads1.getCentroidRead(), 0);
+	BOOST_CHECK_EQUAL( reads2.getCentroidRead(), 0);
+
+	Read consensus1 = reads1.getConsensusRead();
+	Read consensus2 = reads2.getConsensusRead();
+
+	BOOST_CHECK_EQUAL( consensus1.getFasta(), store.getRead(0).getFasta() );
+	BOOST_CHECK_EQUAL( consensus2.getFasta(), store.getRead(1).getFasta() );
+
+}
+
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
 	testParser();
@@ -133,10 +156,23 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 	testFastaWithQualFile("10.fasta","10.qual");
 
 	Sequence::clearCaches();
+	testConsensus("consensus1.fastq");
+	Sequence::clearCaches();
+	testConsensus("consensus2.fastq");
+	Sequence::clearCaches();
+	testConsensus("consensus3.fastq");
+	Sequence::clearCaches();
+	testConsensus("consensus2-diff.fastq");
+
+	Sequence::clearCaches();
+
 }
 
 //
 // $Log: ReadSetTest.cpp,v $
+// Revision 1.15  2010-05-06 21:46:51  regan
+// merged changes from PerformanceTuning-20100501
+//
 // Revision 1.14  2010-05-05 06:28:38  regan
 // merged changes from FixPairOutput-20100504
 //
@@ -145,6 +181,9 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 // fixed name to exclude labels and comments after whitespace
 // applied some performance optimizations from other branch
 // created FixPair application
+//
+// Revision 1.13.2.1  2010-05-03 21:34:37  regan
+// added consensus unit tests
 //
 // Revision 1.13  2010-05-01 21:57:51  regan
 // merged head with serial threaded build partitioning

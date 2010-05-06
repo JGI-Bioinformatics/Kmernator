@@ -1,13 +1,9 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.10 2010-04-16 22:44:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/MemoryUtils.h,v 1.11 2010-05-06 21:46:54 regan Exp $
 //
 
 #ifndef _MEMORY_UTILS_H
 #define _MEMORY_UTILS_H
 
-#include <boost/unordered_map.hpp>
-#include <boost/pool/pool.hpp>
-
-#include <tr1/memory>
 #include <cstdlib>
 #include <vector>
 #include <sys/time.h>
@@ -23,6 +19,11 @@
 #include <fstream>
 
 #include <execinfo.h>
+
+#include <boost/unordered_map.hpp>
+#include <boost/pool/pool.hpp>
+#include <boost/shared_ptr.hpp>
+
 
 #include "config.h"
 #include "Sequence.h"
@@ -75,7 +76,7 @@ private:
 	static BoostPoolManager singleton;
 public:
 	typedef boost::pool<> Pool;
-	typedef std::tr1::shared_ptr<Pool> PoolPtr;
+	typedef boost::shared_ptr<Pool> PoolPtr;
 	typedef std::vector<PoolPtr> SizePools;
 
 	BoostPoolManager() :
@@ -188,6 +189,12 @@ public:
 
 //
 // $Log: MemoryUtils.h,v $
+// Revision 1.11  2010-05-06 21:46:54  regan
+// merged changes from PerformanceTuning-20100501
+//
+// Revision 1.10.6.1  2010-05-04 19:49:51  regan
+// minor rework on include headers
+//
 // Revision 1.10  2010-04-16 22:44:18  regan
 // merged HEAD with changes for mmap and intrusive pointer
 //
