@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.35 2010-05-06 22:55:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.36 2010-05-18 20:50:24 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -37,6 +37,8 @@ using namespace boost::accumulators;
 template<typename So, typename We, typename Si = TrackingDataSingleton>
 class KmerSpectrum {
 public:
+
+	typedef KoMer::KmerIndexType IndexType;
 
 	typedef std::pair<double, double> DoublePairType;
 	typedef DoublePairType SolidWeakWeightType;
@@ -106,6 +108,13 @@ public:
 		this->purgedSingletons = other.purgedSingletons;
 		return *this;
 	}
+	void setSolidOnly(unsigned long buckets) {
+		solid.setNumBuckets(buckets);
+		weak.setNumBuckets(1);
+		singleton.setNumBuckets(1);
+		hasSolids=true;
+		hasSingletons = false;
+	}
 	void reset(bool releaseMemory = true) {
 		solid.clear(releaseMemory);
 		weak.clear(releaseMemory);
@@ -120,6 +129,8 @@ public:
 		return 128;
 		unsigned long avgSequenceLength = baseCount / store.getSize();
 		unsigned long kmersPerRead = (avgSequenceLength - KmerSizer::getSequenceLength() + 1);
+		if (KmerSizer::getSequenceLength() > avgSequenceLength)
+			kmersPerRead = 1;
 
 		unsigned long rawKmers = kmersPerRead * store.getSize();
 		// assume 1% error rate
@@ -361,7 +372,7 @@ public:
 		}
 		void finish() {
 			resetTotals();
-			for(unsigned int i = 0; i<buckets.size(); i++) {
+			for(size_t i = 0; i<buckets.size(); i++) {
 				HistogramElement &elem = buckets[ i ];
 				if (elem.visits > 0) {
 					count += elem.visits;
@@ -415,7 +426,9 @@ public:
 	};
 
 	void printHistograms(bool solidOnly = false) {
-
+		printHistograms(std::cerr, solidOnly);
+	}
+	void printHistograms(std::ostream &os, bool solidOnly = false) {
 		Histogram histogram(63);
 
 		if (!solidOnly) {
@@ -424,7 +437,7 @@ public:
 		}
 		setSolidHistogram(histogram);
 
-		std::cerr << histogram.toString();
+		os << histogram.toString();
 	}
 
 	void setWeakHistogram(Histogram &histogram) {
@@ -449,103 +462,75 @@ public:
 		}
 	}
 
-	void printHistogramsOld(bool solidOnly = false) {
+	class GCCoverageHeatMap {
+	private:
+		unsigned long maxCover;
+		std::vector< double > zeroes;
+		std::vector< std::vector< double > > gcCoverCounts;
+	public:
+		GCCoverageHeatMap() : maxCover(2), zeroes(KmerSizer::getSequenceLength()+1, 0), gcCoverCounts(maxCover, zeroes) {}
 
-		unsigned long numDataPoints = std::max(10ul, ((solidOnly ? 0 : weak.size()) + solid.size())/1000);
+		void addRecord(const Kmer& kmer, unsigned long count, double weight) {
+			if (count >= maxCover) {
+				maxCover = count + 1;
+				gcCoverCounts.resize(maxCover, zeroes);
 
-		unsigned long bins = 30;
-		unsigned long cacheSize = numDataPoints;//std::max(10ul, numDataPoints / 100000);
+			}
+			gcCoverCounts[count][kmer.getGC()] += weight;
+		}
 
-		typedef
-		accumulator_set<double,
-		stats< tag::variance,
-		tag::density,
-		stats<tag::median(with_density)>
-		>
-		> StdAccumulatorType;
-		StdAccumulatorType countAcc( tag::density::num_bins = bins, tag::density::cache_size = cacheSize );
-		StdAccumulatorType weightedCountAcc( tag::density::num_bins = bins, tag::density::cache_size = cacheSize );
-		StdAccumulatorType directionAcc( tag::density::num_bins = bins, tag::density::cache_size = cacheSize );
+		string toString() const {
+			stringstream ss;
 
-		typedef
-		accumulator_set<double,
-		stats< tag::weighted_variance,
-		tag::weighted_density
-		>,
-		double
-		> WeightedAccumulatorType;
-		WeightedAccumulatorType countWAcc( tag::weighted_density::num_bins = bins, tag::weighted_density::cache_size = cacheSize );
-		WeightedAccumulatorType weightedCountWAcc( tag::weighted_density::num_bins = bins, tag::weighted_density::cache_size = cacheSize );
-		WeightedAccumulatorType directionWAcc( tag::weighted_density::num_bins = bins, tag::weighted_density::cache_size = cacheSize );
+			for(SequenceLengthType gc = 0 ; gc <= KmerSizer::getSequenceLength(); gc++) {
+				ss << "depth\t" << 100.0 * (double) gc / (double) KmerSizer::getSequenceLength();
+			}
+			ss << endl;
+			for(unsigned long cover = 0 ; cover < maxCover; cover++) {
+				ss << cover;
+				for(SequenceLengthType gc = 0 ; gc < KmerSizer::getSequenceLength() + 1; gc++) {
+					ss << "\t";
+					double counts = gcCoverCounts[cover][gc];
+					if (counts != 0.0)
+						ss << counts;
+				}
+				ss << endl;
+			}
+			return ss.str();
+		}
+	};
+
+	void printGC(bool solidOnly = false) {
+		printGC(std::cerr, solidOnly);
+	}
+	void printGC(std::ostream &os, bool solidOnly = false) {
+		GCCoverageHeatMap hm;
 
 		if (!solidOnly) {
-			for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
-				WeakDataType &data = it->value();
-				countAcc( std::max(-1.0, (double)(data.getCount()) ) );
-				weightedCountAcc( std::max(-1.0, (double)(data.getWeightedCount())) );
-				directionAcc( data.getNormalizedDirectionBias() );
-
-				countWAcc( std::max(-1.0, (double)(data.getCount()) ), weight = data.getCount() );
-				weightedCountWAcc( std::max(-1.0, (double)(data.getWeightedCount())), weight = data.getCount() );
-				directionWAcc( data.getNormalizedDirectionBias(), weight = data.getCount() );
-			}
+			setWeakGCHM(hm);
+			setSingletonGCHM(hm);
 		}
+		setSolidGCHM(hm);
+
+		os << hm.toString();
+	}
+
+	void setWeakGCHM(GCCoverageHeatMap &hm) {
+		for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
+			WeakDataType &data = it->value();
+			hm.addRecord( it->key(), data.getCount(), data.getWeightedCount() );
+		}
+	}
+	void setSolidGCHM(GCCoverageHeatMap &hm) {
 		for(SolidIterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++) {
 			SolidDataType &data = it->value();
-			//std::cerr << data.getCount() << std::endl;
-			countAcc( std::max(-1.0, (double)(data.getCount()) ) );
-			weightedCountAcc( std::max(-1.0, (double)(data.getWeightedCount())) );
-			directionAcc( data.getNormalizedDirectionBias() );
-
-			countWAcc( std::max(-1.0, (double)(data.getCount()) ), weight = data.getCount() );
-			weightedCountWAcc( std::max(-1.0, (double)(data.getWeightedCount())), weight = data.getCount() );
-			directionWAcc( data.getNormalizedDirectionBias(), weight = data.getCount() );
+			hm.addRecord( it->key(), data.getCount(), data.getWeightedCount() );
 		}
-
-		typedef boost::iterator_range< std::vector< std::pair<double, double> >::iterator > HistogramType;
-		HistogramType countHist = density(countAcc);
-		HistogramType weightedCountHist = density(weightedCountAcc);
-		HistogramType directionHist = density(directionAcc);
-
-		HistogramType countHistW = weighted_density(countWAcc);
-		HistogramType weightedCountHistW = weighted_density(weightedCountWAcc);
-		HistogramType directionHistW = weighted_density(directionWAcc);
-
-		std::cerr << std::fixed << std::setprecision(3);
-
-		std::cerr << "Counts, Weights and Directions" << std::endl;
-
-		std::cerr << "Counts:\t";
-		std::cerr << mean(countAcc) << "/" << median(countAcc) << " +-";
-		std::cerr << sqrt(variance(countAcc)) << "\t";
-		std::cerr << mean(countWAcc) << " +-";
-		std::cerr << sqrt(variance(countWAcc)) << "\t";
-
-		std::cerr << "Weights:\t";
-		std::cerr << mean(weightedCountAcc) << "/" << median(weightedCountAcc) << " +-";
-		std::cerr << sqrt(variance(weightedCountAcc)) << "\t";
-		std::cerr << weighted_mean(weightedCountWAcc) << " +-";
-		std::cerr << sqrt(weighted_variance(weightedCountWAcc)) << "\t";
-
-		std::cerr << std::endl;
-
-		for (int i=0; i < countHist.size(); i++) {
-			std::cerr << countHist[i].first << "\t";
-			std::cerr << countHist[i].second*100.0<< "\t";
-			//assert(countHist[i].first == countHistW[i].first);
-			std::cerr << countHistW[i].second *100.0<< "\t|\t";
-
-			std::cerr << weightedCountHist[i].first << "\t";
-			std::cerr << weightedCountHist[i].second*100.0 << "\t";
-			//assert(weightedCountHist[i].first == weightedCountHistW[i].first);
-			std::cerr << weightedCountHistW[i].second*100.0 << "\t";
-
-			std::cerr << directionHist[i].first << "\t";
-			std::cerr << directionHist[i].second *100.0<< "\t";
-			//assert(directionHist[i].first == directionHistW[i].first);
-			std::cerr << directionHistW[i].second *100.0<< "\t";
-
-			std::cerr << std::endl;
+	}
+	void setSingletonGCHM(GCCoverageHeatMap &hm) {
+		for(SingletonIterator it(singleton.begin()), itEnd(singleton.end()); it != itEnd; it++) {
+			SingletonDataType &data = it->value();
+			hm.addRecord( it->key(), data.getCount(), data.getWeightedCount() );
 		}
 	}
 
@@ -707,7 +692,7 @@ public:
 					//&& dirBias < maximumDirBias && dirBias > minimumDirBias
 					//&& dirBias < 0.8 && dirBias > 0.2
 			) {
-				SolidWeakWeightType scores = getPermutedScores( it->key(), Options::getFirstOrderWeight(), Options::getSecondOrderWeight() );
+				SolidWeakWeightType scores = getPermutedScores( it->key(), 1.0, 0.01 );
 				double permuteScore = (scores.first+scores.second);
 				if ( (double)data.getCount() / permuteScore > 1.0 ) {
 					getSolid( it->key() ) = it->value();
@@ -728,13 +713,13 @@ public:
 			std::vector< double > errorRatios = getErrorRatios(it->key(), useWeighted);
 			if (accumulators.size() < errorRatios.size())
 			accumulators.resize( errorRatios.size() );
-			for(unsigned int i = 0; i< errorRatios.size(); i++)
+			for(size_t i = 0; i< errorRatios.size(); i++)
 			accumulators[i](errorRatios[i]);
 			//std::cerr << "Error Ratio for " << it->key().toFasta() << " "  << std::fixed << std::setprecision(6) << errorRatio << std::endl;
 		}
 
 		MeanVectorType rates;
-		for(unsigned int i = 0; i< accumulators.size(); i++) {
+		for(size_t i = 0; i< accumulators.size(); i++) {
 			rates.push_back( MeanType(mean(accumulators[i]), sqrt( variance(accumulators[i]) ) ) );
 			std::cerr << "Error Rate for pos " << i << ", " << std::fixed << std::setprecision(6) << rates[i].first << " +/- " << std::fixed << std::setprecision(6) << rates[i].second << std::endl;
 		}
@@ -758,7 +743,7 @@ public:
 		Kmers permutations = Kmers::permuteBases(kmer,true);
 		std::vector<double> previouslyObservedSolids;
 		std::vector< std::vector<double> > weakCounts;
-		for(unsigned int i=0; i<permutations.size(); i++) {
+		for(Kmer::IndexType i=0; i<permutations.size(); i++) {
 			pointers.set( permutations[i] );
 			if ( pointers.solidElem.isValid() ) {
 				previouslyObservedSolids.push_back( useWeighted ? pointers.solidElem.value().getWeightedCount() : pointers.solidElem.value().getCount() );
@@ -773,7 +758,7 @@ public:
 					positionSums.resize(pos + 1ul);
 					positionSums[pos] += useWeighted ? it->weight : 1.0;
 				}
-				for(unsigned int i=0; i< positionSums.size(); i++) {
+				for(size_t i=0; i< positionSums.size(); i++) {
 					if(positionSums[i] > 0) {
 						if (weakCounts.size() < i+1ul)
 						weakCounts.resize(i+1ul);
@@ -792,7 +777,7 @@ public:
 			median.resize( weakCounts.size() );
 			nonZeroCount.resize( weakCounts.size() );
 			errorRatios.resize( weakCounts.size() );
-			for(unsigned int pos = 0; pos < weakCounts.size(); pos++) {
+			for(size_t pos = 0; pos < weakCounts.size(); pos++) {
 				if (weakCounts[pos].size() > 0) {
 					std::vector< double > &tmp = weakCounts[pos];
 					sort(tmp.begin(), tmp.end());
@@ -805,7 +790,7 @@ public:
 			return errorRatios;
 
 			// some code to correct for previously Observed Solids
-			for(unsigned int pos = 0; pos < weakCounts.size(); pos++) {
+			for(size_t pos = 0; pos < weakCounts.size(); pos++) {
 				double rawErrorRatio = 0.0;
 				double sum = baseValue;
 				for(std::vector<double>::iterator it = previouslyObservedSolids.begin(); it!=previouslyObservedSolids.end(); it++) {
@@ -841,7 +826,7 @@ public:
 			base = pointers.singletonElem.value().getCount();
 		}
 		KmerWeights permutations = KmerWeights::permuteBases(kmer, true);
-		for(unsigned int i=0; i<permutations.size(); i++) {
+		for(KmerWeights::IndexType i=0; i<permutations.size(); i++) {
 			pointers.set( permutations[i] );
 			//std::cerr << "Looking at " << permutations[i].toFasta() << std::endl;
 			if( pointers.solidElem.isValid() ) {
@@ -864,11 +849,12 @@ public:
 		return score;
 	}
 
-	int countGC(std::string fasta) {
-		unsigned int count=0;
-		for(unsigned int i=0; i<fasta.length(); i++)
-		if (fasta[i] == 'G' || fasta[i] == 'C')
-		count++;
+	SequenceLengthType countGC(std::string fasta) {
+		SequenceLengthType count=0;
+		for(size_t i=0; i<fasta.length(); i++)
+		if (fasta[i] == 'G' || fasta[i] == 'C') {
+			count++;
+		}
 		return count;
 	}
 	std::string pretty( const Kmer &kmer, std::string note ) {
@@ -1193,9 +1179,12 @@ public:
 	void _buildKmerSpectrumSerial(ReadSet &store, bool isSolid, NumberType partIdx, NumberType partBitMask, long batch, long purgeEvery, long &purgeCount) {
 		for (long batchIdx=0; batchIdx < (long) store.getSize(); batchIdx++)
 		{
-			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead( batchIdx ), true, true);
+			const Read &read = store.getRead( batchIdx );
+			if ( !read.isDiscarded() ) {
+				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
 
-			append(kmers, batchIdx, isSolid, partIdx, partBitMask);
+				append(kmers, batchIdx, isSolid, partIdx, partBitMask);
+			}
 
 			if (batchIdx % batch == 0) {
 				_evaluateBatch(isSolid, batchIdx, purgeEvery, purgeCount);
@@ -1205,16 +1194,21 @@ public:
 	}
 	void _buildKmerSpectrumParallel(ReadSet &store, bool isSolid, NumberType partIdx, NumberType partBitMask, long batch, long purgeEvery, long &purgeCount) {
 
-		int numThreads = omp_get_max_threads();
+		long numThreads = omp_get_max_threads();
 		long batchIdx = 0;
 
 		// allocate a square matrix of buffers: KmerWeights[writingThread][readingThread]
 		KmerWeights kmerBuffers[ numThreads ][ numThreads ];
-		typedef std::pair< long, long > ReadPosType;
+		typedef std::pair< ReadSet::ReadSetSizeType, Sequence::SequenceLengthType > ReadPosType;
 		std::vector< ReadPosType > startReadIdx[ numThreads ][ numThreads ];
 
-		if (store.getSize() < batch)
-		batch = store.getSize() / 10 + 1;
+		long size = store.getSize();
+		if (size < batch) {
+		    batch = store.getSize() / 10 + 1;
+		}
+		long reservation = batch * (store.getMaxSequenceLength() - KmerSizer::getSequenceLength() + 1);
+		if (numThreads > 1)
+			reservation /= numThreads;
 
 		#pragma omp parallel num_threads(numThreads)
 		{
@@ -1229,13 +1223,13 @@ public:
 
 		while (batchIdx < (long) store.getSize())
 		{
-			printStats(batchIdx, isSolid);
 			for(int tmpThread1=0; tmpThread1 < numThreads; tmpThread1++)
 			{
 				for(int tmpThread2 = 0; tmpThread2 < numThreads; tmpThread2++) {
 					kmerBuffers [ tmpThread1 ][ tmpThread2 ].reset(false);
+					kmerBuffers [ tmpThread1 ][ tmpThread2 ].reserve(reservation);
 					startReadIdx[ tmpThread1 ][ tmpThread2 ].resize(0);
-					startReadIdx[ tmpThread1 ][ tmpThread2 ].reserve(batch);
+					startReadIdx[ tmpThread1 ][ tmpThread2 ].reserve(reservation);
 				}
 			}
 
@@ -1244,9 +1238,15 @@ public:
 			for (long i=0; i < batch; i++)
 			{
 				long readIdx = batchIdx + i;
-				if (readIdx >= store.getSize() )
-				continue;
-				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(store.getRead( readIdx ), true, true);
+
+				if (readIdx >= size ) {
+					continue;
+				}
+				const Read &read = store.getRead( readIdx );
+				if (read.isDiscarded())
+					continue;
+
+				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
 				for (long j = 0; j < numThreads; j++)
 				startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 				for (IndexType j = 0; j < kmers.size(); j++) {
@@ -1309,11 +1309,13 @@ public:
 		long purgeCount = 0;
 		long batch = 1000000;
 
+		if (omp_get_max_threads() > 1) {
 #ifdef _USE_OPENMP
-		_buildKmerSpectrumParallel(store, isSolid, partIdx, partBitMask, batch, purgeEvery, purgeCount);
-#else // not using OpenMP
-		_buildKmerSpectrumSerial  (store, isSolid, partIdx, partBitMask, batch, purgeEvery, purgeCount);
+			_buildKmerSpectrumParallel(store, isSolid, partIdx, partBitMask, batch, purgeEvery, purgeCount);
 #endif
+		} else {
+			_buildKmerSpectrumSerial  (store, isSolid, partIdx, partBitMask, batch, purgeEvery, purgeCount);
+		}
 
 		printStats(store.getSize(), isSolid, true);
 		if (!isSolid) {
@@ -1623,17 +1625,17 @@ public:
 		if (vec.size() <= 1)
 			return;
 		if (vec[0].hasSolids) {
-		  for (unsigned int i = 1; i < vec.size(); i++) {
+		  for (size_t i = 1; i < vec.size(); i++) {
 			vec[0].solid.mergeAdd(vec[i].solid);
 		  }
 		}
 		// weak
-		for (unsigned int i = 1; i < vec.size(); i++) {
+		for (size_t i = 1; i < vec.size(); i++) {
 			vec[0].weak.mergeAdd(vec[i].weak);
 		}
 		if (vec[0].hasSingletons) {
 		  // singleton
-		  for (unsigned int i = 1; i < vec.size(); i++) {
+		  for (size_t i = 1; i < vec.size(); i++) {
 			vec[0].singleton.mergePromote(vec[i].singleton, vec[0].weak);
 		  }
 		  if (minimumCount > 1)
@@ -1648,6 +1650,35 @@ public:
 
 
 // $Log: KmerSpectrum.h,v $
+// Revision 1.36  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.35.2.8  2010-05-18 16:43:47  regan
+// added GC heatmap output .. still refining
+//
+// Revision 1.35.2.7  2010-05-17 17:52:43  regan
+// working through some optimizations
+//
+// Revision 1.35.2.6  2010-05-13 22:37:10  regan
+// minor performance opt to skip discarded reads when building spectrum
+//
+// Revision 1.35.2.5  2010-05-13 20:29:30  regan
+// new methods to support changes to CompareSpectrum
+//
+// Revision 1.35.2.4  2010-05-12 22:44:00  regan
+// bugfix
+//
+// Revision 1.35.2.3  2010-05-12 19:52:23  regan
+// refactored options
+// removed obsolete parameters
+// added new ones
+//
+// Revision 1.35.2.2  2010-05-10 17:58:08  regan
+// fixing types
+//
+// Revision 1.35.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.35  2010-05-06 22:55:05  regan
 // merged changes from CodeCleanup-20100506
 //

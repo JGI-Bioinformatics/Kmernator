@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.20 2010-05-06 22:55:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.21 2010-05-18 20:50:24 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -91,6 +91,16 @@ public:
 		scoreAndTrimReads(minimumKmerScore);
 	}
 
+	void clear() {
+		_trims.clear();
+		_picks.clear();
+		_counts.clear();
+		needCounts = false;
+		_duplicateSet.clear();
+		needDuplicateCheck = false;
+		_lastSortedPick = 0;
+	}
+
 	class ScoreCompare : public std::binary_function<ReadSetSizeType,ReadSetSizeType,bool>
 	{
 	private:
@@ -155,7 +165,7 @@ protected:
 		if (!_reads.isValidRead(readIdx))
 			return;
 		KmerArray<char> kmers = getKmersForTrimmedRead(readIdx);
-		for(unsigned long j = 0; j < kmers.size(); j++) {
+		for(Kmer::IndexType j = 0; j < kmers.size(); j++) {
 			_counts[ kmers[j] ]++;
 		}
 	}
@@ -238,7 +248,7 @@ public:
 
 	int pickAllPassingReads(ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
 		int picked = 0;
-		for(long i = 0; i < (long) _reads.getSize(); i++) {
+		for(ReadSetSizeType i = 0; i < _reads.getSize(); i++) {
 			isPassingRead(i, minimumScore, minimumLength) && pickIfNew(i) && picked++;
 		}
 		optimizePickOrder();
@@ -247,7 +257,7 @@ public:
 
 	ReadSetSizeType pickAllPassingPairs(ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength(), bool bothPass = false) {
 		ReadSetSizeType picked = 0;
-		for(long i = 0; i < (long) _reads.getPairSize(); i++) {
+		for(ReadSetSizeType i = 0; i < _reads.getPairSize(); i++) {
 			const ReadSet::Pair &pair = _reads.getPair(i);
 			if (isPassingPair(pair, minimumScore, minimumLength, bothPass)) {
 				pickIfNew(pair.read1) && picked++;
@@ -262,7 +272,7 @@ public:
 		ReadTrimType &trim = _trims[readIdx];
 		KmerArray<char> kmers = getKmersForTrimmedRead(readIdx);
 		ScoreType score = 0.0;
-		for(unsigned long j = 0; j < kmers.size(); j++) {
+		for(SequenceLengthType j = 0; j < kmers.size(); j++) {
 			const ElementType elem = _map.getElementIfExists(kmers[j]);
 			if (elem.isValid()) {
 				ScoreType contribution = elem.value().getCount();
@@ -388,8 +398,9 @@ public:
 		_trims.resize(_reads.getSize());
 		bool useKmers = Options::getKmerSize() != 0;
 
+		long readsSize = _reads.getSize();
 		#pragma omp parallel for schedule(dynamic)
-		for(long i = 0; i < (long) _reads.getSize(); i++) {
+		for(long i = 0; i < readsSize; i++) {
 			ReadTrimType &trim = _trims[i];
 			const Read read = _reads.getRead(i);
 			Sequence::BaseLocationVectorType markups = read.getMarkups();
@@ -408,7 +419,7 @@ public:
 				}
 			  }
 
-			  for(unsigned long j = 0; j < numKmers; j++) {
+			  for(SequenceLengthType j = 0; j < numKmers; j++) {
 				const ElementType elem = _map.getElementIfExists(kmers[j]);
 				if (elem.isValid()) {
 					ScoreType score = elem.value().getCount();
@@ -440,7 +451,7 @@ public:
 				trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( trim.score );
 			} else {
 				trim.score = -1.0;
-				trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score: 0";
+				trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score: 0";
 				// keep available so that pairs will be selected together
 			}
 
@@ -463,7 +474,7 @@ public:
 	    if (offset == ReadSet::MAX_READ_IDX) {
 	        offset = _lastSortedPick;
 	    }
-		if (offset >= _picks.size())
+		if (offset >= (ReadSetSizeType) _picks.size())
 			return;
 
 		std::sort(_picks.begin() + offset, _picks.end());
@@ -511,7 +522,7 @@ public:
 		const ReadTrimType &trim = _trims[ readIdx ];
 		std::string key;
 		if (byInputFile) {
-			key += _reads.getReadFileNamePrefix(readIdx);
+			key += "-" + _reads.getReadFileNamePrefix(readIdx);
 		}
 		if (Options::getDebug() > 1)
 			std::cerr << "Writing to " << key << " " << readIdx << std::endl;
@@ -523,6 +534,21 @@ public:
 
 
 // $Log: ReadSelector.h,v $
+// Revision 1.21  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.20.2.4  2010-05-12 20:46:50  regan
+// bugfix in names of output files
+//
+// Revision 1.20.2.3  2010-05-12 18:25:10  regan
+// help destructor ordering
+//
+// Revision 1.20.2.2  2010-05-10 17:57:41  regan
+// fixing types
+//
+// Revision 1.20.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.20  2010-05-06 22:55:05  regan
 // merged changes from CodeCleanup-20100506
 //

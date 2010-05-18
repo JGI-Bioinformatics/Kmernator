@@ -1,8 +1,53 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.24 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.25 2010-05-18 20:50:24 regan Exp $
 //
 
 #include "TwoBitSequence.h"
 
+// _TwoBitEncodingPtr static methods
+TwoBitSequenceBase::_TwoBitEncodingPtr *TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(unsigned long size) {
+	C *counterPtr = (C*) malloc( size+sizeof(C) );
+	if (counterPtr == NULL)
+		throw;
+	// construct / initialize count
+	*counterPtr = 0;
+
+	// return address one C into the allocation
+	_TwoBitEncodingPtr *ptr = ((_TwoBitEncodingPtr*) (counterPtr+1));
+
+	return ptr;
+}
+
+void TwoBitSequenceBase::_TwoBitEncodingPtr::release(TwoBitSequenceBase::_TwoBitEncodingPtr *ptr) {
+	C *counterPtr = (C*) ptr;
+	// free the original allocation, one C before this reference
+	free( counterPtr-1 );
+}
+
+// _TwoBitEncodingPtr instance methods
+void TwoBitSequenceBase::_TwoBitEncodingPtr::increment() const {
+	C &counter = count();
+	if (counter == MAX_COUNTER)
+		return;
+
+	#pragma omp atomic
+	++counter;
+
+	if (counter == 0)
+		counter = MAX_COUNTER;
+}
+
+bool TwoBitSequenceBase::_TwoBitEncodingPtr::decrement() const {
+	C &counter = count();
+	if (counter == MAX_COUNTER)
+		return false;
+
+	#pragma omp atomic
+	--counter;
+
+	return counter == 0;
+}
+
+// intrusive pointer methods for _TwoBitEncodingPtr / TwoBitEncodingPtr
 void boost::intrusive_ptr_add_ref(TwoBitSequenceBase::_TwoBitEncodingPtr* r)
 {
     r->increment();
@@ -31,11 +76,14 @@ static unsigned char compressBase(char base) {
 	}
 }
 
+// TwoBitSequence static methods
+
 // initialize the singleton
 TwoBitSequence TwoBitSequence::singleton = TwoBitSequence();
 TwoBitSequence::TwoBitSequence() {
 	TwoBitSequence::initReverseComplementTable();
 	TwoBitSequence::initPermutationsTable();
+	TwoBitSequence::initGCTable();
 }
 
 /* initialize reverse complement table
@@ -82,6 +130,44 @@ void TwoBitSequence::initPermutationsTable() {
 	}
 }
 
+/*
+ * initialize GC count table
+ */
+SequenceLengthType TwoBitSequence::gcCount[256];
+// C is 01, G is 10 (1,2 in decimal)
+void TwoBitSequence::initGCTable() {
+	for (int i = 0; i < 256; i++) {
+		TwoBitEncoding tb = i;
+		TwoBitEncoding test;
+		test = tb & 0x03;
+		gcCount[i] = (test == 0x01 || test == 0x02 ? 1 : 0);
+		test = tb & 0x0c;
+		gcCount[i] += (test == 0x04 || test == 0x08 ? 1 : 0);
+		test = tb & 0x30;
+		gcCount[i] += (test == 0x10 || test == 0x20 ? 1 : 0);
+		test = tb & 0xC0;
+		gcCount[i] += (test == 0x40 || test == 0x80 ? 1 : 0);
+	}
+}
+
+SequenceLengthType TwoBitSequence::getGC(const TwoBitEncoding *in, SequenceLengthType length) {
+	SequenceLengthType count = 0;
+	SequenceLengthType twoBitLen = fastaLengthToTwoBitLength(length);
+	SequenceLengthType len = twoBitLen - 1;
+	for(SequenceLengthType i = 0 ; i < len; i++) {
+		count += gcCount[ *(in+i) ];
+	}
+	SequenceLengthType remainder = length & 0x03;
+	TwoBitEncoding mask = 0xff;
+	switch(remainder) {
+	    case 1 : mask = 0xc0; break;
+	    case 2 : mask = 0xf0; break;
+	    case 3 : mask = 0xfc; break;
+	}
+	count += gcCount [ *(in+len) & mask ];
+	return count;
+}
+
 // NULL for out is okay to just get markups
 BaseLocationVectorType TwoBitSequence::compressSequence(const char *bases,
 		TwoBitEncoding *out) {
@@ -126,25 +212,43 @@ void TwoBitSequence::uncompressSequence(const TwoBitEncoding *in,
 	*bases = '\0';
 }
 
+void TwoBitSequence::uncompressSequence(const TwoBitEncoding *in , int num_bases, std::string &bases) {
+        if (num_bases < 1024) {
+            char tmp[num_bases];
+            uncompressSequence(in, num_bases, tmp);
+            bases = std::string(tmp,num_bases);
+        } else {
+            char *tmp = (char*) malloc(num_bases);
+            if (tmp == NULL) throw std::bad_alloc();
+            uncompressSequence(in, num_bases, tmp);
+            bases = std::string(tmp,num_bases);
+            free(tmp);
+       }
+    }
+
 void TwoBitSequence::applyMarkup(std::string &bases,
 	const BaseLocationVectorType &markupBases) {
-	for (BaseLocationVectorType::const_iterator ptr = markupBases.begin(); ptr
-			!= markupBases.end(); ptr++) {
-                if (ptr->second >= bases.length())
-                   break;
+	SequenceLengthType len = (SequenceLengthType) bases.length();
+	for (BaseLocationVectorType::const_iterator ptr = markupBases.begin();
+			ptr != markupBases.end();
+			ptr++) {
+        if (ptr->second >= len)
+            break;
 		bases[ptr->second] = ptr->first;
-        }
+    }
 }
 
 void TwoBitSequence::applyMarkup(std::string &bases,
 	SequenceLengthType markupBasesSize, const BaseLocationType *markupBases) {
 	if (markupBasesSize > 0) {
-		for (const BaseLocationType *ptr = markupBases; ptr < markupBases
-				+ markupBasesSize && ptr->second < bases.length(); ptr++) {
-                  if (ptr->second >= bases.length())
-                      break;
+		SequenceLengthType len = (SequenceLengthType) bases.length();
+		for (const BaseLocationType *ptr = markupBases;
+		        ptr < markupBases + markupBasesSize && ptr->second < len;
+		        ptr++) {
+            if (ptr->second >= len)
+                break;
 			bases[ptr->second] = ptr->first;
-                }
+        }
 	}
 }
 
@@ -189,10 +293,20 @@ SequenceLengthType TwoBitSequence::firstMarkupNorX(const BaseLocationVectorType 
 std::string TwoBitSequence::getFasta(const TwoBitEncoding *in,
 		SequenceLengthType length) {
 
-	char buffer[length + 1];
+	bool needMalloc = length < MAX_STACK_SIZE - 1;
+
+	char _buffer[needMalloc ? 0 : length+1];
+	char *buffer = _buffer;
+	if (needMalloc) {
+		buffer = new char[length+1];
+	}
 	uncompressSequence(in, length, buffer);
 
-	return std::string(buffer);
+	std::string str(buffer, length);
+	if (needMalloc)
+		delete [] buffer;
+
+	return str;
 }
 
 void TwoBitSequence::reverseComplement(const TwoBitEncoding *in,
@@ -229,10 +343,11 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut,
 	out += twoBitLength;
 
 	unsigned short buffer;
-	if (hasExtraByte)
-	buffer = *((unsigned short *)--in);
-	else
-	buffer = *(--in);
+	if (hasExtraByte) {
+		buffer = *((unsigned short *)--in);
+	} else {
+		buffer = *(--in);
+	}
 
 	const int shift = (8-shiftAmountInBases*2);
 	for (SequenceLengthType i = 0; i < twoBitLength; i++) {
@@ -302,6 +417,18 @@ void TwoBitSequence::permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1,
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.25  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.24.2.3  2010-05-18 16:43:31  regan
+// added count gc methods and lookup tables
+//
+// Revision 1.24.2.2  2010-05-10 19:41:33  regan
+// minor refactor moved code into cpp
+//
+// Revision 1.24.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.24  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //

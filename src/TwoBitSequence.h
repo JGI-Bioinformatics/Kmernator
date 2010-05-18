@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.24 2010-05-06 21:46:53 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.25 2010-05-18 20:50:24 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -15,11 +15,12 @@
 #include "config.h"
 
 namespace TwoBitSequenceBase {
-typedef unsigned int SequenceLengthType;
-typedef unsigned short SequenceLengthType2;
-typedef unsigned char SequenceLengthType1;
 
 typedef unsigned char TwoBitEncoding;
+
+typedef KoMer::SequenceLengthType SequenceLengthType;
+typedef KoMer::SequenceLengthType2 SequenceLengthType2;
+typedef KoMer::SequenceLengthType1 SequenceLengthType1;
 
 typedef std::pair<char, SequenceLengthType> BaseLocationType;
 typedef std::vector<BaseLocationType> BaseLocationVectorType;
@@ -31,68 +32,36 @@ typedef std::pair<SequenceLengthType1, SequenceLengthType1> MarkupElementSizeTyp
 class _TwoBitEncodingPtr {
 public:
 	typedef TwoBitEncoding T;
-	typedef unsigned char C;
+	typedef KoMer::UI8 C;
 
 public:
-    static const T MAX_COUNTER = -1;
+    static const T MAX_COUNTER = MAX_UI8;
 
     _TwoBitEncodingPtr(); // never explicitly construct
     ~_TwoBitEncodingPtr(); // never explicitly destruct
 
-    static _TwoBitEncodingPtr *allocate(unsigned long size) {
-    	C *counterPtr = (C*) malloc( size+sizeof(C) );
-    	if (counterPtr == NULL)
-    		throw;
-    	// construct / initialize count
-        *counterPtr = 0;
+    static _TwoBitEncodingPtr *allocate(unsigned long size);
+    static void release(_TwoBitEncodingPtr *ptr);
 
-        // return address one C into the allocation
-    	_TwoBitEncodingPtr *ptr = ((_TwoBitEncodingPtr*) (counterPtr+1));
+    inline C *getCounter() const { return ((C*) this) - 1; }
+    inline C &count() const { return *getCounter(); }
 
-    	return ptr;
-    }
-    static void release(_TwoBitEncodingPtr *ptr) {
-    	C *counterPtr = (C*) ptr;
-    	// free the original allocation, one C before this reference
-    	free( counterPtr-1 );
-    }
+    void increment() const;
 
-    C *getCounter() const { return ((C*) this) - 1; }
-    C &count() const { return *getCounter(); }
+    bool decrement() const;
 
-    void increment() const {
-    	C &counter = count();
-    	if (counter == MAX_COUNTER)
-    		return;
-#pragma omp atomic
-        ++counter;
-    	if (counter == 0)
-    		counter = MAX_COUNTER;
-    }
-
-    bool decrement() const {
-    	C &counter = count();
-    	if (counter == MAX_COUNTER)
-    		return false;
-#pragma omp atomic
-    	--counter;
-        return counter == 0;
-    }
-
-    T *get() const {
+    inline T *get() const {
       return (T*) (( (C*)this ) + 1);
     }
-    T &operator*() const {
+    inline T &operator*() const {
       return *get();
     }
-    T *operator->() const {
+    inline T *operator->() const {
       return get();
     }
-    T *operator&() const {
+    inline T *operator&() const {
       return get();
     }
-
-
 };
 
 
@@ -114,11 +83,13 @@ private:
 	static TwoBitSequence singleton;
 	static void initReverseComplementTable();
 	static void initPermutationsTable();
+	static void initGCTable();
 
 public:
 	static TwoBitEncoding bitMasks[8];
 	static TwoBitEncoding reverseComplementTable[256];
-	static TwoBitEncoding permutations[256* 12 ];
+	static TwoBitEncoding permutations[256 * 12];
+	static SequenceLengthType  gcCount[256];
 
 public:
 	// NULL for out is okay to just get markups
@@ -127,19 +98,8 @@ public:
 		return compressSequence(bases.c_str(), out);
 	}
     static void uncompressSequence(const TwoBitEncoding *in , int num_bases, char *bases);
-    static void uncompressSequence(const TwoBitEncoding *in , int num_bases, std::string &bases) {
-        if (num_bases < 1024) {
-            char tmp[num_bases];
-            uncompressSequence(in, num_bases, tmp);
-            bases = std::string(tmp,num_bases);
-        } else {
-            char *tmp = (char*) malloc(num_bases);
-            if (tmp == NULL) throw std::bad_alloc();
-            uncompressSequence(in, num_bases, tmp);
-            bases = std::string(tmp,num_bases);
-            free(tmp);
-       }
-    }
+    static void uncompressSequence(const TwoBitEncoding *in , int num_bases, std::string &bases);
+
     static void applyMarkup(std::string &bases, const BaseLocationVectorType &markupBases);
     static void applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, const BaseLocationType *markupBases);
 
@@ -158,7 +118,9 @@ public:
 	static void permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1, TwoBitEncoding *out2, TwoBitEncoding *out3,
 			SequenceLengthType sequenceLength, SequenceLengthType permuteBaseIdx);
 
-    static SequenceLengthType fastaLengthToTwoBitLength(SequenceLengthType fastaLength)
+	static SequenceLengthType getGC(const TwoBitEncoding *in, SequenceLengthType length);
+
+    static inline SequenceLengthType fastaLengthToTwoBitLength(SequenceLengthType fastaLength)
     {
        return (fastaLength + 3)/4;
     }
@@ -168,6 +130,21 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.25  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.24.2.4  2010-05-18 16:43:31  regan
+// added count gc methods and lookup tables
+//
+// Revision 1.24.2.3  2010-05-13 00:19:49  regan
+// bugfix in types that affected some reference markups
+//
+// Revision 1.24.2.2  2010-05-10 19:41:33  regan
+// minor refactor moved code into cpp
+//
+// Revision 1.24.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.24  2010-05-06 21:46:53  regan
 // merged changes from PerformanceTuning-20100501
 //

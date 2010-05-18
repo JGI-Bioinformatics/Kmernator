@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.21 2010-05-01 21:57:51 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/test/CMakeLists.txt,v 1.22 2010-05-18 20:50:21 regan Exp $
 #
 # KoMer/test/CmakeLists.txt
 #
@@ -81,14 +81,37 @@ target_link_libraries( HashTester
                               boost_thread-mt-static
                               )
 
+add_executable( MmapTempFileTest MmapTempFileTest )
+target_link_libraries( MmapTempFileTest
+                                   boost_program_options-mt-static 
+                                   boost_test_exec_monitor-mt 
+                                   boost_unit_test_framework-mt 
+                                   boost_iostreams-mt-static
+                                   boost_thread-mt-static
+                                   )
+add_test( MmapTempFileTest MmapTempFileTest )
+
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 # v2.8: file(COPY test/500.fasta test/500.qual DESTINATION test)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fasta test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus1.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus2.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus2-diff.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus3.fastq test/ )
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.22  2010-05-18 20:50:21  regan
+# merged changes from PerformanceTuning-20100506
+#
+# Revision 1.21.12.2  2010-05-12 18:25:27  regan
+# added tests
+#
+# Revision 1.21.12.1  2010-05-07 22:59:41  regan
+# refactored base type declarations
+#
 # Revision 1.21  2010-05-01 21:57:51  regan
 # merged head with serial threaded build partitioning
 #

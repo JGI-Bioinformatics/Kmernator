@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/HashTester.cpp,v 1.3 2010-05-06 21:46:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/HashTester.cpp,v 1.4 2010-05-18 20:50:21 regan Exp $
 //
 
 #include <iostream>
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 
 
-	  for(Kmer::NumberType i = 0; i < spectrumSolid.solid.getNumBuckets(); i++) {
+	  for(Kmer::IndexType i = 0; i < spectrumSolid.solid.getNumBuckets(); i++) {
 		  cerr << i << ": " << spectrumSolid.solid.getBucket(i).size() << endl;
 	  }
 
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
 	  spectrumNormal = KS(numBuckets);
 	  spectrumNormal.buildKmerSpectrum(reads);
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
-	  for(Kmer::NumberType i = 0; i < spectrumNormal.weak.getNumBuckets(); i++) {
+	  for(Kmer::IndexType i = 0; i < spectrumNormal.weak.getNumBuckets(); i++) {
 		  cerr << i << ": " << spectrumNormal.weak.getBucket(i).size() << endl;
 	  }
 
@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
 	  spectrumParts = KS(numBuckets);
 	  KoMer::MmapFileVector mmaps = spectrumParts.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
-	  for(Kmer::NumberType i = 0; i < spectrumParts.weak.getNumBuckets(); i++) {
+	  for(Kmer::IndexType i = 0; i < spectrumParts.weak.getNumBuckets(); i++) {
 		  cerr << i << ": " << spectrumParts.weak.getBucket(i).size() << endl;
 	  }
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
@@ -101,6 +101,12 @@ int main(int argc, char *argv[]) {
 }
 
 // $Log: HashTester.cpp,v $
+// Revision 1.4  2010-05-18 20:50:21  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.3.2.1  2010-05-07 22:59:41  regan
+// refactored base type declarations
+//
 // Revision 1.3  2010-05-06 21:46:51  regan
 // merged changes from PerformanceTuning-20100501
 //

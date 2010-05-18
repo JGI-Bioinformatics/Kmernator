@@ -1,7 +1,6 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.33 2010-05-06 22:55:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.34 2010-05-18 20:50:24 regan Exp $
 //
 
-#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
@@ -14,23 +13,64 @@ using namespace std;
 
 /*----------------------------- SEQUENCE -------------------------------------------*/
 
+// thread safe caches
 Sequence::CachedSequencesVector Sequence::threadCacheSequences(OMP_MAX_THREADS, Sequence::CachedSequences(Sequence::maxCachePerThread));
 
-// dangling pointer
+// dangling pointer!!
 Sequence::DataPtrListVector *Sequence::preAllocatedDataPtrs = new Sequence::DataPtrListVector();
+
+// static methods of Sequence
+void Sequence::clearCaches() {
+	threadCacheSequences = CachedSequencesVector(OMP_MAX_THREADS, CachedSequences(Sequence::maxCachePerThread));
+	preAllocatedDataPtrs->reset();
+}
+
+Sequence::CachedSequences &Sequence::getCachedSequencesForThread() {
+	int threadNum = omp_get_thread_num();
+	return threadCacheSequences[threadNum];
+}
+
+void Sequence::setThreadCache(Sequence::Sequence &mmapedSequence, Sequence::SequencePtr &expandedSequence) {
+	mmapedSequence.setCache(expandedSequence);
+}
+
+// instance based cache methods
+Sequence::SequencePtr Sequence::getCache() const {
+	assert(isMmaped());
+
+	CachedSequences &cache = getCachedSequencesForThread();
+	SequencePtr cachedSequence = cache.fetch( getRecord() );
+	if ( cachedSequence.get() == NULL ) {
+		return setCache();
+	} else {
+		return cachedSequence;
+	}
+}
+Sequence::SequencePtr Sequence::setCache() const {
+	SequencePtr ptr;
+	return setCache(ptr);
+}
+Sequence::SequencePtr &Sequence::setCache(Sequence::SequencePtr &expandedSequence) const {
+	assert(isMmaped());
+
+	if (expandedSequence.get() == NULL)
+		expandedSequence = readMmaped(true);
+	CachedSequences &cache = getCachedSequencesForThread();
+	cache.insert( getRecord(), expandedSequence);
+	return expandedSequence;
+}
+
+
+// Sequence::DataPtrListVector methods
+
 Sequence::DataPtr Sequence::DataPtrListVector::retrieveDataPtr() {
 	DataPtrList &list = getList();
 	DataPtr ptr;
-//#pragma omp critical
-	{
 	if (!list.empty()) {
 		ptr = list.front();
 		list.pop_back();
-		//std::cerr << "Retrieved " << ptr << " " << (int) ptr.get()->count() << " " << omp_get_thread_num() << std::endl;
 	} else {
 		ptr = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
-		//std::cerr << "Allocated " << ptr << " " << (int) ptr.get()->count() << " " << omp_get_thread_num()  << std::endl;
-	}
 	}
 	assert(ptr.get()->count() == 1);
 	return ptr;
@@ -45,18 +85,27 @@ void Sequence::DataPtrListVector::returnDataPtr(DataPtr &dataPtr) {
 		return;
 
 	DataPtrList &list = getList();
-//#pragma omp critical
-	{
 	list.push_back( newPtr );
-	//std::cerr << "Returned " << newPtr << " " << (int) newPtr.get()->count() << " " << omp_get_thread_num() << std::endl;
-	}
+
 	assert(newPtr.get()->count() == 2);
 }
 
-Sequence::Sequence() {
-	reset(INVALID);
+void Sequence::DataPtrListVector::reset() {
+	_isValid = false;
+	_vec = _DataPtrListVector(OMP_MAX_THREADS, DataPtrList());
+	_isValid = true;
 }
 
+
+// constructors and operators
+
+Sequence::Sequence() : _flags(0) {
+	reset(0);
+}
+
+Sequence::Sequence(const Sequence::Sequence &copy)  {
+	*this = copy;
+}
 Sequence::Sequence(std::string fasta, bool usePreAllocation) :
 	_flags(0) {
 	setSequence(fasta, usePreAllocation);
@@ -67,8 +116,20 @@ Sequence::Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart) :
 	setSequence(mmapRecordStart, mmapQualRecordStart);
 }
 
+Sequence::Sequence &Sequence::operator=(const Sequence::Sequence &other) {
+	if (this == &other)
+		return *this;
+	_flags = other._flags;
+	_data = other._data;
+	return *this;
+}
+
+Sequence::Sequence Sequence::clone() const {
+	return Sequence(getFasta());
+}
+
 Sequence::~Sequence() {
-	reset(INVALID);
+	reset(0);
 }
 
 void Sequence::setSequence(std::string fasta, bool usePreAllocation) {
@@ -76,19 +137,15 @@ void Sequence::setSequence(std::string fasta, bool usePreAllocation) {
 }
 
 void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAllocation) {
-	reset(INVALID);
+	reset(0);
 	SequenceLengthType length = fasta.length();
-	bool freeBuffer = false;
-	const unsigned long STACK_SIZE = 1024;
-	TwoBitEncoding _stackBuffer[STACK_SIZE];
-
 	unsigned long buffSize = TwoBitSequence::fastaLengthToTwoBitLength(length);
-	TwoBitEncoding *buffer;
-	if (buffSize > STACK_SIZE) {
-	    buffer = (TwoBitEncoding*) malloc(buffSize);
-	    freeBuffer = true;
-	} else {
-	    buffer = _stackBuffer;
+
+	bool needMalloc = buffSize > MAX_STACK_SIZE;
+	TwoBitEncoding _stackBuffer[ needMalloc ? 0 : buffSize ];
+	TwoBitEncoding *buffer = _stackBuffer;
+	if (needMalloc) {
+	    buffer = new TwoBitEncoding[ buffSize ];
 	}
 
 	if (buffer == NULL)
@@ -119,11 +176,10 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 	memcpy(_getTwoBitSequence(), buffer, buffSize);
 
     // free the buffer
-	if (freeBuffer)
-	    free(buffer);
+	if (needMalloc)
+	    delete [] buffer;
 
 	setMarkups(markupSizes, markupBases);
-	unsetFlag(INVALID);
 
 }
 
@@ -138,7 +194,7 @@ void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, const BaseLocati
 	setMarkups(markupElementSize, markups);
 }
 void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes, Sequence::RecordPtr mmapQualRecordStart) {
-	reset(MMAPED|INVALID);
+	reset(MMAPED);
 	long size = sizeof(Sequence::RecordPtr)+extraBytes;
 	if (mmapQualRecordStart != NULL)
 		size += sizeof(Sequence::RecordPtr);
@@ -147,7 +203,7 @@ void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes,
 	} catch (...) {
 		throw std::runtime_error("Can not allocate memory for Sequence::setSequence(mmap)");
 	}
-	unsetFlag(INVALID);
+
 	*_getRecord() = mmapRecordStart;
 	if (mmapQualRecordStart != NULL) {
 		setFlag(HASQUALS);
@@ -220,7 +276,7 @@ void Sequence::setMarkups(MarkupElementSizeType markupElementSize, const BaseLoc
 }
 
 string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset) const {
-	if (_data.get() == NULL)
+	if ( !isValid() )
 	    return string("");
 
 	if (isMmaped()) {
@@ -239,7 +295,7 @@ string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset) const {
 	}
 }
 string Sequence::getFasta(SequenceLengthType trimOffset) const {
-	if (_data.get() == NULL)
+	if ( !isValid() )
 		return string("");
 	if (isDiscarded() || trimOffset <= 1) {
 		// to support printing paired reads where 1 read is trimmed to 0
@@ -265,9 +321,25 @@ string Sequence::getFasta(SequenceLengthType trimOffset) const {
 	return fasta;
 }
 
+const Sequence::RecordPtr Sequence::getRecord() const {
+	assert(isMmaped());
+	return *_getRecord();
+}
+const Sequence::RecordPtr Sequence::getQualRecord() const {
+	assert(isMmaped() && hasQuals());
+	return *_getQualRecord();
+}
+
+const void *Sequence::_getData() const {
+	return _data.get();
+}
+void *Sequence::_getData() {
+	return const_cast<void*>(constThis()._getData());
+}
+
 const Sequence::RecordPtr *Sequence::_getRecord() const {
 	assert(isValid() && isMmaped());
-	return (RecordPtr *) _data.get();
+	return (RecordPtr *) _getData();
 }
 Sequence::RecordPtr *Sequence::_getRecord() {
 	return const_cast<RecordPtr *> (constThis()._getRecord());
@@ -285,7 +357,7 @@ const SequenceLengthType *Sequence::_getLength() const {
 		SequencePtr sequencePtr = getCache();
 		return sequencePtr->_getLength();
 	} else {
-		return (SequenceLengthType *) _data.get();
+		return (SequenceLengthType *) _getData();
 	}
 }
 
@@ -356,7 +428,7 @@ BaseLocationType2 *Sequence::_getMarkupBases2() {
 }
 
 SequenceLengthType Sequence::getLength() const {
-	if (_data.get() == NULL)
+	if ( !isValid() )
 		return 0;
 	if (isMmaped()) {
 		assert(isValid());
@@ -368,7 +440,7 @@ SequenceLengthType Sequence::getLength() const {
 
 SequenceLengthType Sequence::getTwoBitEncodingSequenceLength() const {
 	// does not need to be valid, yet, but at least _getLength() needs to be initialized
-	if (_data.get() == NULL)
+	if ( !isValid() )
 		return 0;
 
 	return TwoBitSequence::fastaLengthToTwoBitLength( getLength() );;
@@ -402,18 +474,18 @@ BaseLocationVectorType Sequence::_getMarkups() const {
 
         if (isMarkups4()) {
             const BaseLocationType *ptr = _getMarkupBases();
-		    for (unsigned int i = 0; i < size; i++) {
+		    for (SequenceLengthType i = 0; i < size; i++) {
 			    markups.push_back(*(ptr++));
 		    }
 		} else if (isMarkups1()) {
 			const BaseLocationType1 *ptr = _getMarkupBases1();
-			for (unsigned int i = 0; i < size; i++) {
+			for (SequenceLengthType i = 0; i < size; i++) {
 			    markups.push_back(BaseLocationType( ptr->first, ptr->second) );
 			    ptr++;
 			}
 		} else {
 			const BaseLocationType2 *ptr = _getMarkupBases2();
-		    for (unsigned int i = 0; i < size; i++) {
+		    for (SequenceLengthType i = 0; i < size; i++) {
 			    markups.push_back(BaseLocationType( ptr->first, ptr->second));
 				ptr++;
 		    }
@@ -424,7 +496,7 @@ BaseLocationVectorType Sequence::_getMarkups() const {
 	if (isDiscarded() || (size>0 && markups[0].first == 'X' && markups[0].second == 0)) {
 	    markups.clear();
 		markups.reserve(getLength());
-		for(unsigned int i = 0 ; i < getLength(); i++)
+		for(SequenceLengthType i = 0 ; i < getLength(); i++)
 		    markups.push_back(BaseLocationType('X', i));
 	}
 	return markups;
@@ -439,6 +511,22 @@ BaseLocationVectorType Sequence::getMarkups() const {
 		markups = TwoBitSequence::compressSequence(fasta, NULL);
 	}
 	return markups;
+}
+
+void Sequence::readMmaped(std::string &name, std::string &bases, std::string &quals) const {
+	assert(isMmaped());
+	// TODO fix hack on NULL lastPtr.  Presently only works for single-lined fastas
+	RecordPtr record(getRecord()), lastRecord(NULL), qualRecord(NULL), lastQualRecord(NULL);
+	if (hasQuals()) {
+	    qualRecord = getQualRecord();
+		lastQualRecord = NULL;
+	}
+	SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord);
+}
+Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
+	std::string name, bases, quals;
+	readMmaped(name, bases, quals);
+	return SequencePtr(new Sequence(bases, usePreAllocation));
 }
 
 /*------------------------------------ READ ----------------------------------------*/
@@ -464,6 +552,8 @@ void Read::setMinQualityScore(unsigned char minQualityScore) {
 	Read::initializeQualityToProbability(minQualityScore);
 }
 
+// Read constructors and operators
+
 Read::Read(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation) {
 	setRead(name, fasta, qualBytes, usePreAllocation);
 }
@@ -473,6 +563,53 @@ Read::Read(Sequence::RecordPtr mmapRecordStart, Sequence::RecordPtr mmapQualReco
 
 Read::Read(Sequence::RecordPtr mmapRecordStart, std::string markupFasta, Sequence::RecordPtr mmapQualRecordStart) {
 	setRead(mmapRecordStart, markupFasta, mmapQualRecordStart);
+}
+Read &Read::operator=(const Read &other) {
+	Sequence::operator=(other);
+    // there are no extra data members
+    return *this;
+}
+Read Read::clone() const {
+	return Read(getName(), getFasta(), getQuals());
+}
+
+
+Read::ReadPtr Read::readMmaped(bool usePreAllocation) const {
+	BaseLocationVectorType markups = _getMarkups();
+	std::string name, bases, quals;
+	Sequence::readMmaped(name, bases, quals);
+	TwoBitSequence::applyMarkup(bases, markups);
+	return ReadPtr(new Read(name, bases, quals, usePreAllocation));
+}
+
+bool Read::recordHasQuals() const {
+	assert(isMmaped());
+	if (hasQuals())
+		return true;
+	else
+		// TODO make this more general
+	    return *getRecord() == '@'; // FASTQ
+}
+
+ProbabilityBases Read::getProbabilityBases() const {
+	std::string fasta = getFasta();
+	std::string quals = getQuals();
+	ProbabilityBases probs(fasta.length());
+	for(int i = 0; i < (int) fasta.length(); i++) {
+		double prob = qualityToProbability[ (unsigned char) quals[i] ];
+		if (prob < 0.2501) {
+			prob = 0.2501; // slightly better than random...
+		}
+		ProbabilityBase &base = probs[i];
+		base.observe(fasta[i], prob);
+	}
+
+	return probs;
+}
+double Read::scoreProbabilityBases(const ProbabilityBases &probs) const {
+	ProbabilityBases myprobs = getProbabilityBases();
+	myprobs *= probs;
+	return myprobs.sum();
 }
 
 const char * Read::_getQual() const {
@@ -585,7 +722,7 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
 }
 
 string Read::getName() const {
-	if (_data.get() == NULL) {
+	if ( !isValid() ) {
 		return string("");
 	} else if (isMmaped()) {
 		string name, bases, quals;
@@ -635,7 +772,7 @@ string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting, bool unma
 	  } else {
 		return string(qualPtr, len);
 	  }
-	} else if (_data.get() == NULL) {
+	} else if (_getData() == NULL) {
 		// This is an invalid / empty sequence...
 	    return string("");
     } else {
@@ -676,13 +813,283 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
 	SequenceLengthType len = quals.length();
 	if (trimOffset < len)
 		len = trimOffset;
-	for (unsigned int i = 0; i < len; i++) {
+	for (SequenceLengthType i = 0; i < len; i++) {
 		ss << (int) quals[i] - 64 << ' ';
+	}
+	return ss.str();
+}
+
+std::string Read::toString() const {
+	return getFastaNoMarkup() + "\t" + getQuals(MAX_SEQUENCE_LENGTH, true, true) + "\t" + getName();
+}
+
+
+/*------------------------------------ BaseQual ----------------------------------------*/
+
+char BaseQual::getQualChar(double prob, bool ignoreLow) {
+	if (prob > 0.999) {
+		return Sequence::FASTQ_START_CHAR + 30;
+	} else if (prob > 0.99) {
+		return Sequence::FASTQ_START_CHAR + 20;
+	} else if (prob > 0.9) {
+		return Sequence::FASTQ_START_CHAR + 10;
+	} else if (!ignoreLow) {
+		return Sequence::FASTQ_START_CHAR + 1;
+	} else {
+		if (prob>=.7)
+			return '7';
+		else if (prob>=.6)
+			return '6';
+		else if (prob>=.5)
+			return '5';
+		else if (prob >= .4)
+			return '4';
+		else if (prob >= .3)
+			return '3';
+		else if (prob >= .2)
+			return '2';
+		else if (prob >= .1)
+			return '1';
+		else
+			return ' ';
+	}
+}
+
+/*------------------------------------ ProbabilityBase ----------------------------------------*/
+
+ProbabilityBase &ProbabilityBase::operator=(const ProbabilityBase &copy) {
+	a = copy.a;
+	c = copy.c;
+	g = copy.g;
+	t = copy.t;
+	top = copy.top;
+	best = copy.best;
+	count = copy.count;
+	return *this;
+}
+ProbabilityBase ProbabilityBase::operator+(const ProbabilityBase &other) {
+	ProbabilityBase tmp(*this);
+	tmp.a += other.a;
+	tmp.c += other.c;
+	tmp.g += other.g;
+	tmp.t += other.t;
+	tmp.count += other.count;
+	tmp.setTop(other);
+	return tmp;
+}
+ProbabilityBase &ProbabilityBase::operator+=(const ProbabilityBase &other) {
+	*this = *this + other;
+	// setTop already called
+	return *this;
+}
+ProbabilityBase ProbabilityBase::operator*(const ProbabilityBase &other) {
+	ProbabilityBase tmp(*this);
+	tmp.a *= other.a;
+	tmp.c *= other.c;
+	tmp.g *= other.g;
+	tmp.t *= other.t;
+	tmp.setTop(other);
+	return tmp;
+}
+ProbabilityBase &ProbabilityBase::operator*=(const ProbabilityBase &other) {
+	*this = *this * other;
+	// setTop already called
+	return *this;
+}
+ProbabilityBase &ProbabilityBase::operator*=(double factor) {
+	a *= factor;
+	c *= factor;
+	g *= factor;
+	t *= factor;
+	return *this;
+}
+
+void ProbabilityBase::observe(char nuc, double prob) {
+	double otherProb = (1.0 - prob) / 3.0;
+	ProbabilityBase &base = *this;
+	switch (nuc) {
+	case 'A':
+	case 'a': base.a += prob; base.c += otherProb; base.g += otherProb; base.t += otherProb; break;
+	case 'C':
+	case 'c': base.c += prob; base.a += otherProb; base.g += otherProb; base.t += otherProb; break;
+	case 'G':
+	case 'g': base.g += prob; base.a += otherProb; base.c += otherProb; base.t += otherProb; break;
+	case 'T':
+	case 't': base.t += prob; base.a += otherProb; base.c += otherProb; base.g += otherProb; break;
+	}
+	base.count++;
+}
+
+void ProbabilityBase::setTop(double _a, double _c, double _g, double _t) {
+	if (top < _a) {
+		top = _a;
+		best = 'A';
+	}
+	if (top < _c) {
+		top = _c;
+		best = 'C';
+	}
+	if (top < _g) {
+		top = _g;
+		best = 'G';
+	}
+	if (top < _t) {
+		top = _t;
+		best = 'T';
+	}
+}
+
+double ProbabilityBase::getA() const {
+	if (best == 'A' && top < a * count)
+		return top;
+	else
+		return a;
+}
+double ProbabilityBase::getC() const {
+	if (best == 'C' && top < c * count)
+		return top;
+	else
+		return c;
+}
+double ProbabilityBase::getG() const {
+	if (best == 'G' && top < g * count)
+		return top;
+	else
+		return g;
+}
+double ProbabilityBase::getT() const {
+	if (best == 'T' && top < t * count)
+		return top;
+	else
+		return t;
+}
+
+BaseQual ProbabilityBase::getBaseQual() const {
+	if (a > c) {
+		// A/G/T
+		if (a > g) {
+			// A/T
+			if (a > t) {
+				return BaseQual('A', getA());// A
+			} else {
+				return BaseQual('T', getT());// T
+			}
+		} else {
+			// G/T
+			if (g > t) {
+				return BaseQual('G', getG());// G
+			} else {
+				return BaseQual('T', getT());// T
+			}
+		}
+	} else {
+		// C/G/T
+		if (c > g) {
+			// C/T
+			if (c > t) {
+				return BaseQual('C', getC());// C
+			} else {
+				return BaseQual('T', getT());// T
+			}
+		} else {
+			// G/T
+			if (g > t) {
+				return BaseQual('G', getG());// G
+			} else {
+				return BaseQual('T', getT());// T
+			}
+		}
+	}
+	throw;
+}
+
+
+/*------------------------------------ ProbabilityBases ----------------------------------------*/
+
+double ProbabilityBases::sum() const {
+	double sum = 0.0;
+	for(int i = 0; i < (int) _bases.size(); i++)
+		sum += _bases[i].sum();
+	return sum;
+}
+
+ProbabilityBase &ProbabilityBases::operator[](size_t idx) {
+	return _bases[idx];
+}
+const ProbabilityBase &ProbabilityBases::operator[](size_t idx) const {
+	return _bases[idx];
+}
+
+ProbabilityBases &ProbabilityBases::operator+=(const ProbabilityBases &other) {
+	if (_bases.size() < other._bases.size()) {
+		resize(other._bases.size());
+	}
+
+	for(size_t i = 0 ; i < other._bases.size(); i++) {
+		_bases[i] += other._bases[i];
+	}
+	return *this;
+}
+ProbabilityBases &ProbabilityBases::operator*=(const ProbabilityBases &other) {
+	if (_bases.size() < other._bases.size() ) {
+		resize(other._bases.size());
+	}
+	for(size_t i = 0; i < other._bases.size(); i++) {
+		_bases[i] *= other._bases[i];
+	}
+	return *this;
+}
+ProbabilityBases &ProbabilityBases::operator*=(double factor) {
+	for(size_t i = 0; i <  _bases.size(); i++) {
+	    _bases[i] *= factor;
+	}
+	return *this;
+}
+std::string ProbabilityBases::toString() const {
+	std::stringstream ss;
+	for(size_t i = 0; i < _bases.size(); i++) {
+		ss << _bases[i].getBaseQual().base;
+	}
+	ss << std::endl;
+	for(size_t i = 0; i < _bases.size(); i++) {
+		ss << _bases[i].best;
+	}
+	ss << std::endl;
+	for(size_t i = 0; i < _bases.size(); i++) {
+		ss << _bases[i].getBaseQual().qual;
+	}
+	ss << std::endl;
+	for(size_t i = 0; i < _bases.size(); i++) {
+		ss << BaseQual::getQualChar( _bases[i].getA(), true );
+	}
+	ss << std::endl;
+	for(size_t i = 0; i < _bases.size(); i++) {
+		ss << BaseQual::getQualChar( _bases[i].getC(), true );
+	}
+	ss << std::endl;
+	for(size_t i = 0; i < _bases.size(); i++) {
+		ss << BaseQual::getQualChar( _bases[i].getG(), true );
+	}
+	ss << std::endl;
+	for(size_t i = 0; i < _bases.size(); i++) {
+		ss << BaseQual::getQualChar( _bases[i].getT(), true );
 	}
 	return ss.str();
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.34  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.33.2.3  2010-05-10 22:40:20  regan
+// minor refactor -- replaced invalid flag
+//
+// Revision 1.33.2.2  2010-05-10 20:44:35  regan
+// minor refactor moved code into cpp
+//
+// Revision 1.33.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.33  2010-05-06 22:55:05  regan
 // merged changes from CodeCleanup-20100506
 //

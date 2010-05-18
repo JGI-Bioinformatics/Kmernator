@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FixPair.cpp,v 1.3 2010-05-06 21:46:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FixPair.cpp,v 1.4 2010-05-18 20:50:18 regan Exp $
 //
 
 #include <iostream>
@@ -76,12 +76,18 @@ int main(int argc, char *argv[]) {
 			    read2Label.erase( 0, pos +1);
 		}
 
-		reads.write(ofmap, pair, Sequence::MAX_SEQUENCE_LENGTH, read1Label, Sequence::MAX_SEQUENCE_LENGTH, read2Label, 2, true);
+		reads.write(ofmap, pair, MAX_SEQUENCE_LENGTH, read1Label, MAX_SEQUENCE_LENGTH, read2Label, 2, true);
 	}
 
 }
 
 // $Log: FixPair.cpp,v $
+// Revision 1.4  2010-05-18 20:50:18  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.3.2.1  2010-05-07 22:59:29  regan
+// refactored base type declarations
+//
 // Revision 1.3  2010-05-06 21:46:57  regan
 // merged changes from PerformanceTuning-20100501
 //

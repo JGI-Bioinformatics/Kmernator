@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.22 2010-05-01 21:57:57 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/CMakeLists.txt,v 1.23 2010-05-18 20:50:29 regan Exp $
 #
 # KoMer/CmakeLists.txt
 #
@@ -14,11 +14,15 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_SINGLETHREADED OFF)
 
 find_package( OpenMP )
-if(OPENMP_FOUND)
-  set(OpenMP_CXX_FLAGS "${OpenMP_CXX_FLAGS} -DENABLE_OPENMP")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_CXX_FLAGS}") 
-else()
+if(DISABLE_OPENMP)
   set(OpenMP_CXX_FLAGS "-DDISABLE_OPENMP")
+else()
+  if(OPENMP_FOUND)
+     set(OpenMP_CXX_FLAGS "${OpenMP_CXX_FLAGS} -DENABLE_OPENMP")
+     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_CXX_FLAGS}") 
+  else()
+     set(OpenMP_CXX_FLAGS "-DDISABLE_OPENMP")
+  endif()
 endif()
 
 find_package ( Boost 1.41.0 COMPONENTS regex mpi)
@@ -55,6 +59,12 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 add_subdirectory( apps )
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.23  2010-05-18 20:50:29  regan
+# merged changes from PerformanceTuning-20100506
+#
+# Revision 1.22.12.1  2010-05-07 22:59:37  regan
+# refactored base type declarations
+#
 # Revision 1.22  2010-05-01 21:57:57  regan
 # merged head with serial threaded build partitioning
 #

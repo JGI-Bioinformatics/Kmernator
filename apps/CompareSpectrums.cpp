@@ -1,7 +1,9 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.9 2010-03-04 06:36:36 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.10 2010-05-18 20:50:18 regan Exp $
 //
 
 #include <iostream>
+#include <boost/foreach.hpp>
+#define foreach BOOST_FOREACH
 
 #include "config.h"
 #include "ReadSet.h"
@@ -9,134 +11,43 @@
 #include "KmerSpectrum.h"
 #include "KmerReadUtils.h"
 
-//#include "Options.h"
-#include <boost/program_options.hpp>
-namespace po = boost::program_options;
-
 typedef TrackingDataMinimal4 DataType;
 typedef KmerMap<DataType> KmerSolidMap;
 typedef KmerSpectrum<DataType, DataType> KS;
 
-class CS_Options {
-public:
-	typedef std::vector<std::string> FileListType;
+using namespace std;
 
-private:
-	static inline CS_Options &getOptions() {
-		static CS_Options singleton;
-		return singleton;
-	}
 
-	po::options_description desc;
-	po::positional_options_description p;
-	po::variables_map vm;
+class CS_Options : public Options {
 
 	// cache of variables (for inline lookup and defaults)
-	FileListType referenceFiles;
-	FileListType inputFiles;
-	unsigned int kmerSize;
-	bool perRead1;
 
 public:
 
-	static inline FileListType &getFileSet1() {
-		return getOptions().referenceFiles;
-	}
-	static inline FileListType &getFileSet2() {
-		return getOptions().inputFiles;
-	}
-	static inline unsigned int &getKmerSize() {
-		return getOptions().kmerSize;
-	}
-	static inline bool &getPerRead1() {
-		return getOptions().perRead1;
-	}
+	static bool getCircularReference() { return  getVarMap()["circular-reference"].as<unsigned int>() != 0; }
+	static bool getPerRead() { return getVarMap()["per-read"].as<unsigned int>() != 0; }
 
 	static bool parseOpts(int argc, char *argv[]) {
-		try {
-			po::options_description & desc = getOptions().desc;
+		// set options specific to this program
+		getPosDesc().add("kmer-size", 1);
+		getPosDesc().add("reference-file", 1);
+		getPosDesc().add("input-file", -1);
 
-			desc.add_options()("help", "produce help message")
+		getDesc().add_options()
+		 ("circular-reference", po::value<unsigned int>()->default_value(0),
+				 "reference file should be treated as circular")
+		 ("per-read", po::value<unsigned int>()->default_value(0),
+				 "if set, each read in readset1 will be compared to the entire readset2 separately")
+	    ;
 
-			("file-set-1", po::value<FileListType>(), "1st file(s)")(
-					"kmer-size", po::value<unsigned int>(), "kmer size")(
-					"file-set-2", po::value<FileListType>(), "2nd file(s)")(
-					"per-read1", po::value<bool>(),
-					"compare for each read in set 1");
+		bool ret = Options::parseOpts(argc, argv);
 
-			po::positional_options_description & p = getOptions().p;
-			p.add("kmer-size", 1);
-			p.add("file-set-1", 1);
-			p.add("file-set-2", -1);
-
-			po::variables_map & vm = getOptions().vm;
-			po::store(
-					po::command_line_parser(argc, argv). options(desc).positional(
-							p).run(), vm);
-			po::notify(vm);
-
-			if (vm.count("help")) {
-				std::cerr << desc << std::endl;
-				return false;
-			}
-
-			if (vm.count("file-set-1")) {
-				std::cerr << "1st file set: ";
-				FileListType & referenceFiles = getFileSet1()
-						= vm["file-set-1"].as<FileListType> ();
-				for (FileListType::iterator it = referenceFiles.begin(); it
-						!= referenceFiles.end(); it++)
-					std::cerr << *it << ", ";
-				std::cerr << std::endl;
-			} else {
-				std::cerr << "file set 1 not specified" << std::endl;
-				return false;
-			}
-
-			if (vm.count("file-set-2")) {
-				std::cerr << "2nd file set: ";
-				FileListType inputs = getFileSet2() = vm["file-set-2"].as<
-						FileListType> ();
-				for (FileListType::iterator it = inputs.begin(); it
-						!= inputs.end(); it++)
-					std::cerr << *it << ", ";
-				std::cerr << std::endl;
-			} else {
-				std::cerr << desc << "file set 2 not specified!" << std::endl;
-				return false;
-			}
-
-			if (vm.count("kmer-size")) {
-				getKmerSize() = vm["kmer-size"].as<unsigned int> ();
-				std::cerr << "Kmer size is: " << getKmerSize() << std::endl;
-			} else {
-				std::cerr << desc << "There was no kmer size specified!"
-						<< std::endl;
-				return false;
-			}
-
-			if (vm.count("per-read1")) {
-				getPerRead1() = vm["per-read1"].as<bool> ();
-				std::cerr << "per-read1: " << getPerRead1() << std::endl;
-			} else {
-				getPerRead1() = false;
-			}
-		} catch (std::exception& e) {
-			std::cerr << "error: " << e.what() << std::endl;
-			return false;
-		} catch (...) {
-			std::cerr << "Exception of unknown type!" << std::endl;
-			return false;
+		if (ret) {
 		}
-
-		return true;
+		return ret;
 	}
+
 };
-
-#include <boost/foreach.hpp>
-#define foreach BOOST_FOREACH
-
-using namespace std;
 
 typedef std::vector<unsigned long> NumbersVector;
 
@@ -164,22 +75,29 @@ static NumbersVector countCommonKmers(KmerSolidMap &m1, KmerSolidMap &m2) {
 	return ret;
 }
 
+void evaluate(KS &ks1, KS &ks2, std::string label = "");
+void evaluatePerRead(KS &ks1, KS &ks2, ReadSet &readSet1);
+
 int main(int argc, char *argv[]) {
 
 	if (!CS_Options::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
+	MemoryUtils::getMemoryUsage();
 	ReadSet readSet1, readSet2;
 
 	KmerSizer::set(CS_Options::getKmerSize());
-	CS_Options::FileListType fileList1 = CS_Options::getFileSet1();
-	CS_Options::FileListType fileList2 = CS_Options::getFileSet2();
+	CS_Options::FileListType fileList1 = CS_Options::getReferenceFiles();
+	CS_Options::FileListType fileList2 = CS_Options::getInputFiles();
 
 	cerr << "Reading 1st file set:";
 	readSet1.appendAllFiles(fileList1);
 
 	cerr << " loaded " << readSet1.getSize() << " Reads, "
 			<< readSet1.getBaseCount() << " Bases " << endl;
+
+	if (CS_Options::getCircularReference())
+		readSet1.circularize(KmerSizer::getSequenceLength());
 
 	cerr << "Reading 2nd file set:";
 	readSet2.appendAllFiles(fileList2);
@@ -189,8 +107,12 @@ int main(int argc, char *argv[]) {
 	long buckets = std::max(KS::estimateWeakKmerBucketSize(readSet1),
 			KS::estimateWeakKmerBucketSize(readSet2));
 
-	KS ks1(buckets);
-	KS ks2(buckets);
+	cerr << "Estimated bucket size: " << buckets << std::endl;
+
+	KS ks1;
+	KS ks2;
+	ks1.setSolidOnly(buckets);
+	ks2.setSolidOnly(buckets);
 
 	cerr << "Building map 2\n";
 	ks2.buildKmerSpectrum(readSet2, true);
@@ -198,57 +120,65 @@ int main(int argc, char *argv[]) {
 	cout << endl;
 	cout << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
 
-	if (CS_Options::getPerRead1()) {
-#ifdef _USE_OPENMP
-#pragma omp parallel for schedule(dynamic)
-#endif
-		for (long i = 0; i < readSet1.getSize(); i++) {
-			ReadSet tmpSet;
-			Read &read = readSet1.getRead(i);
-			tmpSet.append(read);
-			KS tmpKs1(buckets);
-			tmpKs1.buildKmerSpectrum(tmpSet, true);
-			KmerSolidMap &m1 = tmpKs1.solid;
-			KmerSolidMap &m2 = ks2.solid;
-			NumbersVector common = countCommonKmers(m1, m2);
-			if (common[0] > 0) {
-#ifdef _USE_OPENMP
-#pragma omp critical
-#endif
-				{
-					cout << m1.size() << '\t' << m2.size() << '\t' << common[0]
-							<< '\t' << setprecision(4) << (common[0] * 100.0)
-							/ m1.size() << '\t' << (common[1] * 100.0
-							/ common[3]) << "\t" << (common[0] * 100.0)
-							/ m2.size() << "\t" << (common[2] * 100.0
-							/ common[4]) << "\t" << read.getName() << endl;
-				}
-			}
-		}
+
+	if (CS_Options::getPerRead()) {
+		evaluatePerRead(ks1, ks2, readSet1);
 	} else {
 		cerr << "Building map 1\n";
 		ks1.buildKmerSpectrum(readSet1, true);
-		TrackingData::resetGlobalCounters();
-
-		KmerSolidMap &m1 = ks1.solid;
-		KmerSolidMap &m2 = ks2.solid;
-
-		cerr << "Counting common Kmers\n";
-		NumbersVector common = countCommonKmers(m1, m2);
-
-		// TODO fix check common to iterater through same-bucketed KmerMaps in sorted order (fast)
-		// TODO if perRead1, iterate through common matches and output non-zero % matches
-
-		cout << m1.size() << '\t' << m2.size() << '\t' << common[0] << '\t'
-				<< setprecision(4) << (common[0] * 100.0) / m1.size() << '\t'
-				<< (common[1] * 100.0 / common[3]) << "\t" << (common[0]
-				* 100.0) / m2.size() << "\t" << (common[2] * 100.0 / common[4])
-				<< endl;
+		evaluate(ks1, ks2);
 	}
 }
 
+void evaluate(KS &ks1, KS &ks2, std::string label) {
+	cerr << "Counting common Kmers\n";
+	KmerSolidMap &m1 = ks1.solid;
+	KmerSolidMap &m2 = ks2.solid;
+
+	NumbersVector common = countCommonKmers(m1, m2);
+
+	// TODO fix check common to iterater through same-bucketed KmerMaps in sorted order (fast)
+	// TODO if perRead1, iterate through common matches and output non-zero % matches
+
+	cout << m1.size() << '\t' << m2.size() << '\t' << common[0] << '\t'
+			<< setprecision(4) << (common[0] * 100.0) / m1.size() << '\t'
+			<< (common[1] * 100.0 / common[3]) << "\t" << (common[0]
+			* 100.0) / m2.size() << "\t" << (common[2] * 100.0 / common[4])
+			<< '\t' << label
+			<< endl;
+
+}
+void evaluatePerRead(KS &ks1, KS &ks2, ReadSet &readSet1) {
+	for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < readSet1.getSize(); readIdx++ ) {
+
+		TrackingData::resetGlobalCounters();
+		ks1.reset(false);
+
+		ReadSet a;
+		Read &read = readSet1.getRead(readIdx);
+		a.append(read);
+		ks1.buildKmerSpectrum(a, true);
+
+		evaluate(ks1,ks2,read.getName());
+	}
+}
 //
 // $Log: CompareSpectrums.cpp,v $
+// Revision 1.10  2010-05-18 20:50:18  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.9.20.4  2010-05-13 20:29:13  regan
+// minor refactor
+//
+// Revision 1.9.20.3  2010-05-12 22:44:36  regan
+// reworked option handling
+//
+// Revision 1.9.20.2  2010-05-10 17:57:11  regan
+// fixing types
+//
+// Revision 1.9.20.1  2010-05-07 22:59:29  regan
+// refactored base type declarations
+//
 // Revision 1.9  2010-03-04 06:36:36  regan
 // fixed compiler warnings for non-openmp compilers
 //

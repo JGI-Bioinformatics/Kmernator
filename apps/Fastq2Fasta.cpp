@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/Fastq2Fasta.cpp,v 1.5 2010-05-06 21:46:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/Fastq2Fasta.cpp,v 1.6 2010-05-18 20:50:18 regan Exp $
 //
 
 #include <iostream>
@@ -78,12 +78,18 @@ int main(int argc, char *argv[]) {
 		if (hasOfMap)
 			 out = &( ofmap.getOfstream(filekey) );
 
-		read.write(*out, Sequence::MAX_SEQUENCE_LENGTH, "", 3);
+		read.write(*out, MAX_SEQUENCE_LENGTH, "", 3);
 	}
 
 }
 
 // $Log: Fastq2Fasta.cpp,v $
+// Revision 1.6  2010-05-18 20:50:18  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.5.2.1  2010-05-07 22:59:29  regan
+// refactored base type declarations
+//
 // Revision 1.5  2010-05-06 21:46:57  regan
 // merged changes from PerformanceTuning-20100501
 //

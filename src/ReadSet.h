@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.28 2010-05-06 22:55:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.29 2010-05-18 20:50:24 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -15,7 +15,7 @@
 
 class ReadSet {
 public:
-	typedef unsigned int ReadSetSizeType;
+	typedef KoMer::ReadSetSizeType ReadSetSizeType;
 	typedef std::vector< ReadSetSizeType > ReadIdxVector;
 	typedef ReadFileReader::MmapSource MmapSource;
 	typedef std::pair<MmapSource,MmapSource> MmapSourcePair;
@@ -26,17 +26,10 @@ public:
 	typedef Sequence::RecordPtr RecordPtr;
 	typedef std::vector<Read> ReadVector;
 
-	static MmapSourceVector mmapSources;
-    static void madviseMmaps(int advise) {
+	static const ReadSetSizeType MAX_READ_IDX = MAX_READ_SET_SIZE;
 
-		#pragma omp critical
-		for(MmapSourceVector::iterator it = mmapSources.begin(); it != mmapSources.end(); it++) {
-			if (it->first.is_open())
-				madvise(const_cast<char*>(it->first.data()), it->first.size(), advise);
-			if (it->second.is_open())
-				madvise(const_cast<char*>(it->second.data()), it->second.size(), advise);
-		}
-    }
+	static MmapSourceVector mmapSources;
+    static void madviseMmaps(int advise);
 	static void madviseMmapsRandom() {
 		madviseMmaps(MADV_RANDOM);
 	}
@@ -47,7 +40,6 @@ public:
 		madviseMmaps(MADV_DONTNEED);
 	}
 
-	static const ReadSetSizeType MAX_READ_IDX = (unsigned int) -1;
 	class Pair {
 	public:
 		ReadSetSizeType read1;
@@ -65,10 +57,10 @@ public:
 		Pair(const Pair &copy) :
 			read1(copy.read1), read2(copy.read2) {
 		}
-		bool operator==(const Pair &other) const {
+		inline bool operator==(const Pair &other) const {
 			return (read1 == other.read1) && (read2 == other.read2);
 		}
-		bool operator<(const Pair &other) const {
+		inline bool operator<(const Pair &other) const {
 			return lesser() < other.lesser();
 		}
 		inline ReadSetSizeType lesser() const {
@@ -94,9 +86,10 @@ protected:
 	std::string previousReadName; // for fast pairing
 
 private:
-	void addRead(Read &read);
-	void addRead(Read &read, SequenceLengthType readLength);
-	inline bool setMaxSequenceLength(SequenceLengthType len) {
+	void addRead(const Read &read);
+	void addRead(const Read &read, SequenceLengthType readLength);
+	void _trackSequentialPair(const Read &read);
+	inline bool _setMaxSequenceLength(SequenceLengthType len) {
 		if (len > _maxSequenceLength) {
 			_maxSequenceLength = len;
 			return true;
@@ -104,23 +97,12 @@ private:
 		return false;
 	}
 
-	void incrementFile(ReadFileReader &reader) {
-		incrementFile(reader.getParser());
-	}
-	void incrementFile(SequenceStreamParserPtr parser) {
-		_filePartitions.addPartition( _reads.size() );
-		addMmaps( MmapSourcePair( parser->getMmap(), parser->getQualMmap() ));
-	}
+	void incrementFile(ReadFileReader &reader);
+	void incrementFile(SequenceStreamParserPtr parser);
 
 	MmapSource mmapFile(string filePath);
 
-	static void addMmaps(MmapSourcePair mmaps) {
-
-		#pragma omp critical
-		mmapSources.push_back(mmaps);
-
-		madviseMmapsSequential();
-	}
+	static void addMmaps(MmapSourcePair mmaps);
 
 public:
 	ReadSet() :
@@ -132,20 +114,19 @@ public:
 	inline SequenceLengthType getMaxSequenceLength() const {
 		return _maxSequenceLength;
 	}
+	void circularize(long extraLength);
 
 	void appendAllFiles(Options::FileListType &files);
 	SequenceStreamParserPtr appendAnyFile(std::string filePath, std::string filePath2 = "");
 	SequenceStreamParserPtr appendFastaFile(std::string &is);
 
 	void append(const ReadSet &reads);
-	void append(const Read &read) {
-		_reads.push_back(read);
-	}
+	void append(const Read &read);
 
 	inline ReadSetSizeType getSize() const {
 		return _reads.size();
 	}
-	unsigned long getBaseCount() const {
+	inline unsigned long getBaseCount() const {
 		return _baseCount;
 	}
 
@@ -157,11 +138,7 @@ public:
 		return index < getSize();
 	}
 
-	ReadPtr parseMmapedRead(ReadSetSizeType index) const {
-		const Read &read = _reads[index];
-		ReadPtr readPtr = read.readMmaped();
-		return readPtr;
-	}
+	ReadPtr parseMmapedRead(ReadSetSizeType index) const;
 	inline const Read &getRead(ReadSetSizeType index) const {
 		const Read &read = _reads[index];
         return read;
@@ -173,31 +150,14 @@ public:
 	inline int getReadFileNum(ReadSetSizeType index) const {
 		return _filePartitions.getPartitionIdx(index)+1;
 	}
-	string _getReadFileNamePrefix(unsigned int filenum) const {
-		if (filenum > Options::getInputFiles().size()) {
-			return std::string("consensus-") + boost::lexical_cast<std::string>(filenum);
-		} else {
-			return Options::getInputFileSubstring(filenum-1);
-		}
-	}
-	string getReadFileNamePrefix(ReadSetSizeType index) const {
-		unsigned int filenum = getReadFileNum(index);
-		return _getReadFileNamePrefix(filenum);
-	}
+	string _getReadFileNamePrefix(unsigned int filenum) const;
+	string getReadFileNamePrefix(ReadSetSizeType index) const;
 	// returns the first file to match either read from the pair
-	string getReadFileNamePrefix(const Pair &pair) const {
-		unsigned int filenum1 = -1;
-		unsigned int filenum2 = -1;
-		if (isValidRead(pair.read1))
-			filenum1 = getReadFileNum(pair.read1);
-		if (isValidRead(pair.read2))
-			filenum2 = getReadFileNum(pair.read2);
-		return _getReadFileNamePrefix( filenum1 < filenum2 ? filenum1 : filenum2);
-	}
+	string getReadFileNamePrefix(const Pair &pair) const;
 
 	// by default no pairs are identified
 	ReadSetSizeType identifyPairs();
-	bool hasPairs() {
+	inline bool hasPairs() {
 		return getPairSize() != 0 && getPairSize() < getSize();
 	}
 	static bool isPair(const Read &readA, const Read &readB);
@@ -211,14 +171,7 @@ public:
 		return _pairs[pairIndex];
 	}
 
-	const ReadIdxVector getReadIdxVector() const {
-		ReadIdxVector readIdxs;
-		readIdxs.reserve(_reads.size());
-		for(ReadSetSizeType i = 0 ; i < _reads.size(); i++) {
-			readIdxs.push_back(i);
-		}
-		return readIdxs;
-	}
+	const ReadIdxVector getReadIdxVector() const;
 
 	ProbabilityBases getProbabilityBases() const;
 	ReadSetSizeType getCentroidRead() const;
@@ -227,16 +180,16 @@ public:
 	static Read getConsensusRead(const ProbabilityBases &probs, std::string name);
 
 	inline std::ostream &write(std::ostream &os, ReadSetSizeType readIdx,
-			SequenceLengthType trimOffset = Sequence::MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
+			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
 		return getRead(readIdx).write(os, trimOffset, label, format);
 	}
 	inline std::ostream &write(OfstreamMap &om, ReadSetSizeType readIdx,
-			SequenceLengthType trimOffset = Sequence::MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
+			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
 		return write(om.getOfstream( getReadFileNamePrefix(readIdx) ), readIdx, trimOffset, label, format);
 	}
 	inline std::ostream &write(OfstreamMap &om, const Pair &pair,
-			SequenceLengthType trimOffset1 = Sequence::MAX_SEQUENCE_LENGTH, std::string label1 = "",
-			SequenceLengthType trimOffset2 = Sequence::MAX_SEQUENCE_LENGTH, std::string label2 = "",
+			SequenceLengthType trimOffset1 = MAX_SEQUENCE_LENGTH, std::string label1 = "",
+			SequenceLengthType trimOffset2 = MAX_SEQUENCE_LENGTH, std::string label2 = "",
 			int format = 0, bool forcePair = false) const {
 		std::ostream &os = om.getOfstream(getReadFileNamePrefix(pair));
 		if (isValidRead(pair.read1))
@@ -283,6 +236,21 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.29  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.28.2.4  2010-05-12 22:45:00  regan
+// added readset circularize method
+//
+// Revision 1.28.2.3  2010-05-12 18:25:48  regan
+// minor refactor
+//
+// Revision 1.28.2.2  2010-05-10 21:24:29  regan
+// minor refactor moved code into cpp
+//
+// Revision 1.28.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.28  2010-05-06 22:55:05  regan
 // merged changes from CodeCleanup-20100506
 //

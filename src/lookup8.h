@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/lookup8.h,v 1.3 2010-05-06 21:46:54 regan Exp $:
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/lookup8.h,v 1.4 2010-05-18 20:50:24 regan Exp $:
 
 
 #ifndef _LOOKUP8_H
@@ -18,10 +18,11 @@ at producing 64-bit results.
 
 #include <cstdio>
 #include <cstddef>
-#include <cstdlib>
-typedef  unsigned long  long ub8;   /* unsigned 8-byte quantities */
-typedef  unsigned long  int  ub4;   /* unsigned 4-byte quantities */
-typedef  unsigned       char ub1;
+
+#include <config.h>
+typedef  KoMer::UI64 ub8;   /* unsigned 8-byte quantities */
+typedef  KoMer::UI32 ub4;   /* unsigned 4-byte quantities */
+typedef  KoMer::UI8  ub1;
 
 #define hashsize(n) ((ub8)1<<(n))
 #define hashmask(n) (hashsize(n)-1)
@@ -281,6 +282,12 @@ static ub8 hash3( register ub1 *k, register ub8  length, register ub8  level)
 #endif // lookup8.h
 
 // $Log: lookup8.h,v $
+// Revision 1.4  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.3.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.3  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //

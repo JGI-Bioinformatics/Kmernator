@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.14 2010-05-04 23:49:21 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.15 2010-05-18 20:50:24 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -11,6 +11,8 @@
 
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
+
+#include "config.h"
 
 // put common, universal options in this class
 // extend the class for specific options for each application
@@ -36,14 +38,12 @@ private:
 	std::string outputFile;
 	std::string tmpDir;
 	unsigned int kmerSize;
-	double solidQuantile;
 	double minKmerQuality;
 	unsigned int verbosity;
 	unsigned int debug;
-	double firstOrderWeight;
-	double secondOrderWeight;
 	unsigned int minQuality;
 	unsigned int minDepth;
+	unsigned int depthRange;
 	unsigned int minReadLength;
 	unsigned int ignoreQual;
 	unsigned int periodicSingletonPurge;
@@ -56,11 +56,12 @@ private:
 	unsigned int deDupEditDistance;
 	unsigned int mmapInput;
 	unsigned int buildPartitions;
+	unsigned int gcHeatMap;
 
-	Options() : tmpDir("/tmp"), kmerSize(31), minKmerQuality(0.10), verbosity(1), debug(0),
-	minQuality(10), minDepth(10), minReadLength(20), ignoreQual(0),
+	Options() : tmpDir("/tmp"), kmerSize(21), minKmerQuality(0.10), verbosity(1), debug(0),
+	minQuality(10), minDepth(2), depthRange(2), minReadLength(22), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
-	deDupMode(1), deDupSingle(0), deDupEditDistance(0), mmapInput(1), buildPartitions(0) {
+	deDupMode(1), deDupSingle(0), deDupEditDistance(0), mmapInput(1), buildPartitions(0), gcHeatMap(1) {
 		setOptions();
 	}
 
@@ -81,9 +82,6 @@ public:
 	static inline unsigned int &getKmerSize() {
 		return getOptions().kmerSize;
 	}
-	static inline double &getSolidQuantile() {
-		return getOptions().solidQuantile;
-	}
 	static inline double &getMinKmerQuality() {
 		return getOptions().minKmerQuality;
 	}
@@ -93,17 +91,14 @@ public:
 	static inline unsigned int &getDebug() {
 		return getOptions().debug;
 	}
-	static inline double &getFirstOrderWeight() {
-		return getOptions().firstOrderWeight;
-	}
-	static inline double &getSecondOrderWeight() {
-		return getOptions().secondOrderWeight;
-	}
 	static inline unsigned int &getMinQuality() {
 		return getOptions().minQuality;
 	}
 	static inline unsigned int &getMinDepth() {
 		return getOptions().minDepth;
+	}
+	static inline unsigned int &getDepthRange() {
+		return getOptions().depthRange;
 	}
 	static inline unsigned int &getMinReadLength() {
 		return getOptions().minReadLength;
@@ -140,6 +135,9 @@ public:
 	}
 	static inline unsigned int &getBuildPartitions() {
 		return getOptions().buildPartitions;
+	}
+	static inline unsigned int &getGCHeatMap() {
+		return getOptions().gcHeatMap;
 	}
 	const static unsigned int MAX_INT = (unsigned int) -1;
 
@@ -193,7 +191,7 @@ private:
 		("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to deposit mmap file")
 
 		("min-read-length",
-				po::value<int>()->default_value(minReadLength),
+				po::value<unsigned int>()->default_value(minReadLength),
 				"minimum (trimmed) read length of selected reads.  0: (default) no minimum, -1: full read length")
 
 		("min-kmer-quality", po::value<double>()->default_value(minKmerQuality),
@@ -205,14 +203,8 @@ private:
 		("min-depth", po::value<unsigned int>()->default_value(minDepth),
 				"minimum depth for a solid kmer")
 
-		("solid-quantile", po::value<double>()->default_value(0.05),
-				"quantile threshold for solid kmers (0-1)")
-
-		("first-order-weight", po::value<double>()->default_value(0.10),
-				"first order permuted bases weight")
-
-		("second-order-weight", po::value<double>()->default_value(0.00),
-				"second order permuted bases weight")
+		("depth-range", po::value<unsigned int>()->default_value(depthRange),
+				"if > min-depth, then output will be created in cycles of files ranging from min-depth to depth-range")
 
 		("ignore-quality", po::value<unsigned int>()->default_value(ignoreQual),
 				"ignore the quality score, to save memory or if they are untrusted")
@@ -239,11 +231,29 @@ private:
 				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
 
 		("build-partitions", po::value<unsigned int>()->default_value(buildPartitions),
-				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.  Must be a power of 2");
+				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.  Must be a power of 2")
+
+		("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap),
+		"If set, a GC Heat map will be output (requires --output)")					;
 
 	}
 
 public:
+
+
+	template<typename T>
+	static void setOpt(std::string key, T &val, bool print = false) {
+		po::variables_map &vm = getOptions().vm;
+		if (vm.count(key.c_str())) {
+			val = vm[key.c_str()].as<T>();
+			if (print) {
+				std::cerr << key << " is: " << val << std::endl;
+			}
+		} else if (print) {
+			std::cerr << key << " was not specified." << std::endl;
+		}
+
+	}
 
 	static po::options_description &getDesc() {
 		return getOptions().desc;
@@ -271,8 +281,10 @@ public:
 				std::cerr << desc << std::endl;
 				return false;
 			}
-			getVerbosity() = vm["verbose"].as<unsigned int> ();
-			getDebug() = vm["debug"].as<unsigned int> ();
+			setOpt<unsigned int>("verbose", getVerbosity());
+
+			setOpt<unsigned int>("debug", getDebug());
+			bool print = (getVerbosity() > 0 || getDebug() > 0);
 
 			if (vm.count("reference-file")) {
 				std::cerr << "Reference files are: ";
@@ -287,8 +299,7 @@ public:
 			}
 
 			if (vm.count("kmer-size")) {
-				getKmerSize() = vm["kmer-size"].as<unsigned int> ();
-				std::cerr << "Kmer size is: " << getKmerSize() << std::endl;
+				setOpt<unsigned int>("kmer-size", getKmerSize(), print);
 			} else {
 				std::cerr << desc << "There was no kmer size specified!"
 						<< std::endl;
@@ -296,8 +307,7 @@ public:
 			}
 			if (vm.count("input-file")) {
 				std::cerr << "Input files are: ";
-				FileListType inputs = getInputFiles() = vm["input-file"].as<
-						FileListType> ();
+				FileListType inputs = getInputFiles() = vm["input-file"].as<FileListType> ();
 				for (FileListType::iterator it = inputs.begin(); it
 						!= inputs.end(); it++)
 					std::cerr << *it << ", ";
@@ -307,81 +317,66 @@ public:
 						<< std::endl;
 				return false;
 			}
-			if (vm.count("output-file")) {
-				getOutputFile() = vm["output-file"].as<std::string> ();
-				std::cerr << "Output file pattern: " << getOutputFile()
-						<< std::endl;
-			}
+			setOpt<std::string>("output-file", getOutputFile(), print);
 
-			if (vm.count("temp-dir")) {
-				getTmpDir() = vm["temp-dir"].as<std::string> ();
-				std::cerr << "Tmp dir is: " << getTmpDir() << std::endl;
-			}
+			setOpt<std::string>("temp-dir", getTmpDir(), print);
 
 			// set kmer quality
-			getMinKmerQuality() = vm["min-kmer-quality"].as<double> ();
-
-			std::cerr << "min-kmer-quality is: " << getMinKmerQuality()
-					<< std::endl;
+			setOpt<double>("min-kmer-quality", getMinKmerQuality(), print);
 
 			// set minimum quality score
-			getMinQuality() = vm["min-quality-score"].as<unsigned int> ();
-			std::cerr << "min-quality-score is: " << getMinQuality()
-					<< std::endl;
+			setOpt<unsigned int>("min-quality-score", getMinQuality(), print);
 
 			// set minimum depth
-			getMinDepth() = vm["min-depth"].as<unsigned int> ();
-			std::cerr << "min-depth is: " << getMinDepth() << std::endl;
+			setOpt<unsigned int>("min-depth", getMinDepth(), print);
 
-			getMinReadLength() = vm["min-read-length"].as<int> ();
-			std::cerr << "min-read-length is: " << getMinReadLength()
-					<< std::endl;
+			setOpt<unsigned int>("depth-range", getDepthRange(), print);
 
-			// set solid-quantile
-			getSolidQuantile() = vm["solid-quantile"].as<double> ();
-			std::cerr << "solid-quantile is: " << getSolidQuantile()
-					<< std::endl;
-
-			// set permuted weights
-			getFirstOrderWeight() = vm["first-order-weight"].as<double> ();
-			getSecondOrderWeight() = vm["second-order-weight"].as<double> ();
+			// set read length
+			setOpt<unsigned int>("min-read-length", getMinReadLength(), print);
 
 			// set the ignore quality value
-			getIgnoreQual() = vm["ignore-quality"].as<unsigned int> ();
+			setOpt<unsigned int>("ignore-quality", getIgnoreQual(), print);
 
 			// set periodic singleton purge value
-			getPeriodicSingletonPurge() = vm["periodic-singleton-purge"].as<unsigned int> ();
+			setOpt<unsigned int>("periodic-singleton-purge", getPeriodicSingletonPurge(), print);
 
 			// set skipArtifactFiltering
-			getSkipArtifactFilter() = vm["skip-artifact-filter"].as<unsigned int> ();
+			setOpt<unsigned int>("skip-artifact-filter", getSkipArtifactFilter(), print);
 
 			// set simple repeat masking
-			getMaskSimpleRepeats() = vm["mask-simple-repeats"].as<unsigned int> ();
+			setOpt<unsigned int>("mask-simple-repeats", getMaskSimpleRepeats() , print);
+
 			// set phix masking
-			getPhiXOutput() = vm["phix-output"].as<unsigned int> ();
+			setOpt<unsigned int>("phix-output", getPhiXOutput() , print);
+
 			// set simple repeat masking
-			getFilterOutput() = vm["filter-output"].as<unsigned int> ();
+			setOpt<unsigned int>("filter-output", getFilterOutput() , print);
 
 			// set dedup mode
-			getDeDupMode() = vm["dedup-mode"].as<unsigned int>();
+			setOpt<unsigned int>("dedup-mode", getDeDupMode() , print);
+
 			// set dedup single
-			getDeDupSingle() = vm["dedup-single"].as<unsigned int>();
+			setOpt<unsigned int>("dedup-single", getDeDupSingle() , print);
 			if (getDeDupSingle() > 0) {
 			    std::cerr << "Unsupported options dedup-single (unimplemented)" << std::endl;
 			    return false;
 			}
+
 			// set dedup edit distance
-			getDeDupEditDistance() = vm["dedup-edit-distance"].as<unsigned int>();
+			setOpt<unsigned int>("dedup-edit-distance", getDeDupEditDistance() , print);
 			if (getDeDupEditDistance() > 1) {
 				std::cerr <<"Unsupported option dedup-edit-distance > 1" << std::endl;
 			    return false;
 			}
 
 			// set mmapInput
-			getMmapInput() = vm["mmap-input"].as<unsigned int>();
+			setOpt<unsigned int>("mmap-input", getMmapInput() , print);
 
 			// set buildPartitions
-			getBuildPartitions() = vm["build-partitions"].as<unsigned int>();
+			setOpt<unsigned int>("build-partitions", getBuildPartitions(), print);
+
+			setOpt<unsigned int>("gc-heat-map", getGCHeatMap(), print);
 
 		} catch (std::exception& e) {
 			std::cerr << "error: " << e.what() << std::endl;
@@ -399,6 +394,23 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.15  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.14.6.4  2010-05-18 16:43:47  regan
+// added GC heatmap output .. still refining
+//
+// Revision 1.14.6.3  2010-05-12 20:47:06  regan
+// minor refactor.  adjusted defaults
+//
+// Revision 1.14.6.2  2010-05-12 19:52:10  regan
+// refactored options
+// removed obsolete parameters
+// added new ones
+//
+// Revision 1.14.6.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.14  2010-05-04 23:49:21  regan
 // merged changes for FixConsensusOutput-201000504
 //

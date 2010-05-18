@@ -17,6 +17,7 @@
 #include <map>
 #include <list>
 #include <vector>
+
 #ifdef _REENTRANT
 #include <boost/thread/mutex.hpp>
 /// If we are reentrant then use a BOOST scoped mutex where neccessary.
@@ -75,7 +76,9 @@ template<class Key,class Data> class LRUCache {
 		 */
 		LRUCache(const LRUCache &other)
 		{
+#ifdef _REENTRANT
 			boost::mutex::scoped_lock scoped_lock(other._mutex);
+#endif
 			_list = other._list;
 			_index = other._index;
 			_max_size = other._max_size;
@@ -88,9 +91,10 @@ template<class Key,class Data> class LRUCache {
 		{
 			if (this == &other)
 				return *this;
-
+#ifdef _REENTRANT
 			boost::mutex::scoped_lock lock1(&_mutex < &other._mutex ? _mutex : other._mutex);
 			boost::mutex::scoped_lock lock2(&_mutex > &other._mutex ? _mutex : other._mutex);
+#endif
 			_list = other._list;
 			_index = other._index;
 			_max_size = other._max_size;
@@ -258,6 +262,12 @@ template<class Key,class Data> class LRUCache {
 
 
 // $Log: LRUCache.h,v $
+// Revision 1.4  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.3.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.3  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //

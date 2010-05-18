@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.10 2010-05-01 21:57:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/TwoBitSequenceTest.cpp,v 1.11 2010-05-18 20:50:21 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -261,6 +261,37 @@ void testMarkup() {
 
 }
 
+#define TEST_GC(inFasta,count)\
+  sequenceLength = std::strlen(inFasta);\
+  TwoBitSequence::compressSequence(inFasta, in);\
+  BOOST_CHECK_EQUAL(TwoBitSequence::getGC(in,sequenceLength),count);
+
+
+void testGC()
+{
+	TEST_GC("A", 0);
+	TEST_GC("C", 1);
+	TEST_GC("G", 1);
+	TEST_GC("T", 0);
+	TEST_GC("AC", 1);
+	TEST_GC("CG", 2);
+	TEST_GC("GT", 1);
+	TEST_GC("TA", 0);
+	TEST_GC("ACG", 2);
+	TEST_GC("CGT", 2);
+	TEST_GC("GTA", 1);
+	TEST_GC("TAC", 1);
+	TEST_GC("ACGT", 2);
+	TEST_GC("CGTA", 2);
+	TEST_GC("GTAC", 2);
+	TEST_GC("TACG", 2);
+	TEST_GC("ACGTA", 2);
+	TEST_GC("CGTAC", 3);
+	TEST_GC("GTACG", 3);
+	TEST_GC("TACGT", 2);
+
+}
+
 BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 {
 	testLeftShift();
@@ -268,10 +299,17 @@ BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 	testMarkup();
 	testReverseComplement();
 	testPermuteBase();
+	testGC();
 }
 
 //
 // $Log: TwoBitSequenceTest.cpp,v $
+// Revision 1.11  2010-05-18 20:50:21  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.10.12.1  2010-05-18 16:43:30  regan
+// added count gc methods and lookup tables
+//
 // Revision 1.10  2010-05-01 21:57:51  regan
 // merged head with serial threaded build partitioning
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.30 2010-05-06 22:55:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.31 2010-05-18 20:50:24 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -30,12 +30,11 @@ public:
 	typedef TwoBitSequenceBase::BaseLocationVectorType BaseLocationVectorType;
 	typedef TwoBitSequenceBase::MarkupElementSizeType MarkupElementSizeType;
 
-	const static SequenceLengthType MAX_SEQUENCE_LENGTH = (SequenceLengthType) -1;
 	typedef KoMer::RecordPtr RecordPtr;
 	typedef TwoBitSequenceBase::TwoBitEncodingPtr DataPtr;
 
 	typedef boost::shared_ptr< Sequence > SequencePtr;
-	typedef std::pair< void*, SequencePtr > _CachedSequenceElement;
+	typedef std::pair< const void*, SequencePtr > _CachedSequenceElement;
 	typedef LRUCache< _CachedSequenceElement::first_type, _CachedSequenceElement::second_type > CachedSequences;
 	typedef std::vector< CachedSequences > CachedSequencesVector;
 	const static long maxCachePerThread = 31;
@@ -47,7 +46,7 @@ private:
 		typedef std::vector< DataPtrList > _DataPtrListVector;
 		_DataPtrListVector _vec;
 		bool _isValid;
-		DataPtrList &getList() {
+		inline DataPtrList &getList() {
 			return _vec[omp_get_thread_num()];
 		}
 	public:
@@ -60,11 +59,7 @@ private:
 			_isValid = false;
 		}
 		inline bool isValid() const { return _isValid; }
-		void reset() {
-			_isValid = false;
-			_vec = _DataPtrListVector(OMP_MAX_THREADS, DataPtrList());
-			_isValid = true;
-		}
+		void reset();
 		DataPtr retrieveDataPtr();
 		void returnDataPtr(DataPtr &ptr);
 	};
@@ -74,10 +69,7 @@ private:
 	static DataPtrListVector *preAllocatedDataPtrs;
 
 public:
-	static void clearCaches() {
-		threadCacheSequences = CachedSequencesVector(OMP_MAX_THREADS, CachedSequences(Sequence::maxCachePerThread));
-		preAllocatedDataPtrs->reset();
-	}
+	static void clearCaches();
 
 
 private:
@@ -89,7 +81,12 @@ protected:
 	static CachedSequencesVector threadCacheSequences;
 
 protected:
+	// TODO if mmaped w/o markups, can this be a regular pointer with no allocation?
+	DataPtr _data;
+	// TODO can _flags be embedded into _data -- save in memory alignment padding
+	// -- move flags into ReadSet? as second parallel vector?
 	char _flags;
+
 	static const char MMAPED       = 0x80;
 	static const char MARKUPS1     = 0x40;
 	static const char MARKUPS2     = 0x20;
@@ -98,7 +95,7 @@ protected:
 	static const char PAIRED       = 0x08;
 	static const char DISCARDED    = 0x04;
 	static const char PREALLOCATED = 0x02;
-	static const char INVALID      = 0x01;
+	static const char UNUSED       = 0x01;
 	// 0x80 - mmaped data
 	// 0x40 - markups in unsigned char
 	// 0x20 - markups in unsigned short
@@ -106,9 +103,8 @@ protected:
 	// 0x10 - hasQuals
 	// 0x08 - mmaped quals
 	// 0x04 - isDiscarded
-	// 0x01 - invalid state
+	// 0x01 - unused
 
-	DataPtr _data;
 	// if mmaped, _data consists of:
 	//   +0 : char * = pointerToMmapedFileRecordStart
 	//   if mmaped && hasquals
@@ -133,6 +129,9 @@ protected:
 
 	void setFlag(char f);
 	void unsetFlag(char f);
+
+	void *_getData();
+	const void *_getData() const;
 
 	RecordPtr *_getRecord();
 	const RecordPtr *_getRecord() const;
@@ -176,58 +175,23 @@ protected:
 
 	void setMarkups(MarkupElementSizeType markupElementSize, const BaseLocationVectorType &markups);
 
-	static CachedSequences &getCachedSequencesForThread() {
-		int threadNum = omp_get_thread_num();
-		return threadCacheSequences[threadNum];
-	}
-	SequencePtr getCache() const {
-		assert(isMmaped());
+	static CachedSequences &getCachedSequencesForThread();
 
-		CachedSequences &cache = getCachedSequencesForThread();
-		SequencePtr cachedSequence = cache.fetch( (void*)_data.get()->get() );
-		if ( cachedSequence.get() == NULL ) {
-			return setCache();
-		} else {
-			return cachedSequence;
-		}
-	}
-	SequencePtr setCache() const {
-		SequencePtr ptr;
-		return setCache(ptr);
-	}
-	SequencePtr &setCache(SequencePtr &expandedSequence) const {
-		assert(isMmaped());
-
-		if (expandedSequence.get() == NULL)
-			expandedSequence = readMmaped(true);
-		CachedSequences &cache = getCachedSequencesForThread();
-		cache.insert( (void*)_data.get()->get(), expandedSequence);
-		return expandedSequence;
-	}
+	SequencePtr getCache() const;
+	SequencePtr setCache() const;
+	SequencePtr &setCache(SequencePtr &expandedSequence) const;
 
 public:
-	static void setThreadCache(Sequence &mmapedSequence, SequencePtr &expandedSequence) {
-		mmapedSequence.setCache(expandedSequence);
-	}
+	static void setThreadCache(Sequence &mmapedSequence, SequencePtr &expandedSequence);
 
 public:
 
 	Sequence();
-	Sequence(const Sequence &copy) {
-		*this = copy;
-	}
+	Sequence(const Sequence &copy);
 	Sequence(std::string fasta, bool usePreAllocation = false);
 	Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
-	Sequence &operator=(const Sequence &other) {
-		if (this == &other)
-			return *this;
-		_flags = other._flags;
-		_data = other._data;
-		return *this;
-	}
-	Sequence clone() const {
-		return Sequence(getFasta());
-	}
+	Sequence &operator=(const Sequence &other);
+	Sequence clone() const;
 
 	~Sequence();
 
@@ -242,36 +206,25 @@ public:
 	inline bool isPaired()       const { return (_flags & PAIRED)        == PAIRED; }
 	inline bool isDiscarded()    const { return (_flags & DISCARDED)     == DISCARDED; }
 	inline bool isPreAllocated() const { return (_flags & PREALLOCATED)  == PREALLOCATED; }
-	inline bool isValid()        const { return (_flags & INVALID)       == 0; }
+	inline bool isValid()        const { return ( _getData() != NULL ); }
 
 	void setSequence(std::string fasta, bool usePreAllocation = false);
 	void setSequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	void setSequence(RecordPtr mmapRecordStart, const BaseLocationVectorType &markups, RecordPtr mmapQualRecordStart = NULL);
 
-	void discard() {
-		setFlag(DISCARDED);
-	}
-	void unDiscard() {
-		unsetFlag(DISCARDED);
-	}
-	void markPaired() {
-		setFlag(PAIRED);
-	}
+	inline void discard()        {  setFlag(DISCARDED); }
+	inline void unDiscard()      { unsetFlag(DISCARDED);}
+	inline void markPaired()     { setFlag(PAIRED);     }
 
 	SequenceLengthType getLength() const;
 
-	const RecordPtr getRecord() const {
-		assert(isMmaped());
-		return *_getRecord();
-	}
-	RecordPtr getRecord() {
+	const RecordPtr getRecord() const;
+	inline RecordPtr getRecord() {
 		return const_cast<RecordPtr> (constThis().getRecord());
 	}
-	const RecordPtr getQualRecord() const {
-		assert(isMmaped() && hasQuals());
-		return *_getQualRecord();
-	}
-	RecordPtr getQualRecord() {
+
+    const RecordPtr getQualRecord() const;
+	inline RecordPtr getQualRecord() {
 		return const_cast<RecordPtr> (constThis().getQualRecord());
 	}
 
@@ -282,24 +235,11 @@ public:
 	BaseLocationVectorType getMarkups() const;
 
 	SequenceLengthType getTwoBitEncodingSequenceLength() const;
-	TwoBitEncoding *getTwoBitSequence() { return _getTwoBitSequence(); }
-	const TwoBitEncoding *getTwoBitSequence() const { return _getTwoBitSequence(); }
+	inline TwoBitEncoding *getTwoBitSequence() { return _getTwoBitSequence(); }
+	inline const TwoBitEncoding *getTwoBitSequence() const { return _getTwoBitSequence(); }
 
-	void readMmaped(std::string &name, std::string &bases, std::string &quals) const {
-		assert(isMmaped());
-		// TODO fix hack on NULL lastPtr.  Presently only works for single-lined fastas
-		RecordPtr record(getRecord()), lastRecord(NULL), qualRecord(NULL), lastQualRecord(NULL);
-		if (hasQuals()) {
-		    qualRecord = getQualRecord();
-			lastQualRecord = NULL;
-		}
-		SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord);
-	}
-	SequencePtr readMmaped(bool usePreAllocation = false) const {
-		std::string name, bases, quals;
-		readMmaped(name, bases, quals);
-		return SequencePtr(new Sequence(bases, usePreAllocation));
-	}
+	void readMmaped(std::string &name, std::string &bases, std::string &quals) const;
+	SequencePtr readMmaped(bool usePreAllocation = false) const;
 
 };
 
@@ -311,197 +251,43 @@ public:
 	BaseQual(char _base, double prob) : base(_base), qual() {
 		qual = getQualChar(prob);
 	}
-	static char getQualChar(double prob, bool ignoreLow = false) {
-		if (prob > 0.999) {
-			return Sequence::FASTQ_START_CHAR + 30;
-		} else if (prob > 0.99) {
-			return Sequence::FASTQ_START_CHAR + 20;
-		} else if (prob > 0.9) {
-			return Sequence::FASTQ_START_CHAR + 10;
-		} else if (!ignoreLow) {
-			return Sequence::FASTQ_START_CHAR + 1;
-		} else {
-			if (prob>=.7)
-				return '7';
-			else if (prob>=.6)
-				return '6';
-			else if (prob>=.5)
-				return '5';
-			else if (prob >= .4)
-				return '4';
-			else if (prob >= .3)
-				return '3';
-			else if (prob >= .2)
-				return '2';
-			else if (prob >= .1)
-				return '1';
-			else
-			    return ' ';
-		}
-	}
+	static char getQualChar(double prob, bool ignoreLow = false);
 };
 
 class ProbabilityBase {
 public:
-
 	double a,c,g,t;
 	double top;
 	char best;
 	short count;
+
+public:
 	ProbabilityBase() : a(0.0), c(0.0), g(0.0), t(0.0), top(0.0), best(' '), count(0) {}
 	ProbabilityBase(const ProbabilityBase &copy) : a(copy.a), c(copy.c), g(copy.g), t(copy.t), top(copy.top), best(copy.best), count(copy.count) {
 		setTop(*this);
 	}
-	ProbabilityBase &operator=(const ProbabilityBase &copy) {
-		a = copy.a;
-		c = copy.c;
-		g = copy.g;
-		t = copy.t;
-		top = copy.top;
-		best = copy.best;
-		count = copy.count;
-		return *this;
-	}
+	ProbabilityBase &operator=(const ProbabilityBase &copy);
 
-	void observe(char nuc, double prob) {
-		double otherProb = (1.0 - prob) / 3.0;
-		ProbabilityBase &base = *this;
-		switch (nuc) {
-		case 'A':
-		case 'a': base.a += prob; base.c += otherProb; base.g += otherProb; base.t += otherProb; break;
-		case 'C':
-		case 'c': base.c += prob; base.a += otherProb; base.g += otherProb; base.t += otherProb; break;
-		case 'G':
-		case 'g': base.g += prob; base.a += otherProb; base.c += otherProb; base.t += otherProb; break;
-		case 'T':
-		case 't': base.t += prob; base.a += otherProb; base.c += otherProb; base.g += otherProb; break;
-		}
-		base.count++;
-	}
+	void observe(char nuc, double prob);
 
+	void setTop(double _a, double _c, double _g, double _t);
 	void setTop(const ProbabilityBase &base) {
 		setTop(base.a, base.c, base.g, base.t);
 	}
-	void setTop(double _a, double _c, double _g, double _t) {
-		if (top < _a) {
-			top = _a;
-			best = 'A';
-		}
-		if (top < _c) {
-			top = _c;
-			best = 'C';
-		}
-		if (top < _g) {
-			top = _g;
-			best = 'G';
-		}
-		if (top < _t) {
-			top = _t;
-			best = 'T';
-		}
-	}
-	ProbabilityBase operator+(const ProbabilityBase &other) {
-		ProbabilityBase tmp(*this);
-		tmp.a += other.a;
-		tmp.c += other.c;
-		tmp.g += other.g;
-		tmp.t += other.t;
-		tmp.count += other.count;
-		tmp.setTop(other);
-		return tmp;
-	}
-	ProbabilityBase &operator+=(const ProbabilityBase &other) {
-		*this = *this + other;
-		// setTop already called
-		return *this;
-	}
-	ProbabilityBase operator*(const ProbabilityBase &other) {
-		ProbabilityBase tmp(*this);
-		tmp.a *= other.a;
-		tmp.c *= other.c;
-		tmp.g *= other.g;
-		tmp.t *= other.t;
-		tmp.setTop(other);
-		return tmp;
-	}
-	ProbabilityBase &operator*=(const ProbabilityBase &other) {
-		*this = *this * other;
-		// setTop already called
-		return *this;
-	}
-	ProbabilityBase &operator*=(double factor) {
-		a *= factor;
-		c *= factor;
-		g *= factor;
-		t *= factor;
-		return *this;
-	}
-	double sum() const {
+	ProbabilityBase operator+(const ProbabilityBase &other);
+	ProbabilityBase &operator+=(const ProbabilityBase &other);
+	ProbabilityBase operator*(const ProbabilityBase &other);
+	ProbabilityBase &operator*=(const ProbabilityBase &other);
+	ProbabilityBase &operator*=(double factor);
+	inline double sum() const {
 		return a+c+g+t;
 	}
-	double getA() const {
-		if (best == 'A' && top < a * count)
-			return top;
-		else
-			return a;
-	}
-	double getC() const {
-		if (best == 'C' && top < c * count)
-			return top;
-		else
-			return c;
-	}
-	double getG() const {
-		if (best == 'G' && top < g * count)
-			return top;
-		else
-			return g;
-	}
-	double getT() const {
-		if (best == 'T' && top < t * count)
-			return top;
-		else
-			return t;
-	}
+	double getA() const;
+	double getC() const;
+	double getG() const;
+	double getT() const;
 
-	BaseQual getBaseQual() const {
-    	if (a > c) {
-    		// A/G/T
-    		if (a > g) {
-    			// A/T
-    			if (a > t) {
-    				return BaseQual('A', getA());// A
-    			} else {
-    				return BaseQual('T', getT());// T
-    			}
-    		} else {
-    			// G/T
-    			if (g > t) {
-    				return BaseQual('G', getG());// G
-    			} else {
-    				return BaseQual('T', getT());// T
-    			}
-    		}
-    	} else {
-    		// C/G/T
-    		if (c > g) {
-    			// C/T
-    			if (c > t) {
-    				return BaseQual('C', getC());// C
-    			} else {
-    				return BaseQual('T', getT());// T
-    			}
-    		} else {
-    			// G/T
-    			if (g > t) {
-    				return BaseQual('G', getG());// G
-    			} else {
-    				return BaseQual('T', getT());// T
-    			}
-    		}
-    	}
-    	throw;
-	}
+	BaseQual getBaseQual() const;
 };
 
 class ProbabilityBases {
@@ -510,77 +296,17 @@ private:
 public:
 	ProbabilityBases(size_t _size) : _bases(_size) {}
 	void resize(size_t _size) { _bases.resize(_size); }
-	size_t size() const {
+	inline size_t size() const {
 		return _bases.size();
 	}
-	double sum() const {
-		double sum = 0.0;
-		for(int i = 0; i < (int) _bases.size(); i++)
-			sum += _bases[i].sum();
-		return sum;
-	}
-	ProbabilityBase &operator[](size_t idx) {
-		return _bases[idx];
-	}
-	const ProbabilityBase &operator[](size_t idx) const {
-		return _bases[idx];
-	}
+	double sum() const;
+	ProbabilityBase &operator[](size_t idx);
+	const ProbabilityBase &operator[](size_t idx) const;
 
-	ProbabilityBases &operator+=(const ProbabilityBases &other) {
-		if (_bases.size() < other._bases.size()) {
-			resize(other._bases.size());
-		}
-		for(Sequence::SequenceLengthType i = 0 ; i < other._bases.size(); i++) {
-			_bases[i] += other._bases[i];
-		}
-		return *this;
-	}
-	ProbabilityBases &operator*=(const ProbabilityBases &other) {
-		if (_bases.size() < other._bases.size() ) {
-			resize(other._bases.size());
-		}
-		for(int i = 0; i < (int) other._bases.size(); i++) {
-			_bases[i] *= other._bases[i];
-		}
-		return *this;
-	}
-	ProbabilityBases &operator*=(double factor) {
-		for(int i = 0; i < (int) _bases.size(); i++) {
-		    _bases[i] *= factor;
-		}
-		return *this;
-	}
-	std::string toString() const {
-		std::stringstream ss;
-		for(unsigned int i = 0; i < _bases.size(); i++) {
-			ss << _bases[i].getBaseQual().base;
-		}
-		ss << std::endl;
-		for(unsigned int i = 0; i < _bases.size(); i++) {
-			ss << _bases[i].best;
-		}
-		ss << std::endl;
-		for(unsigned int i = 0; i < _bases.size(); i++) {
-			ss << _bases[i].getBaseQual().qual;
-		}
-		ss << std::endl;
-		for(unsigned int i = 0; i < _bases.size(); i++) {
-			ss << BaseQual::getQualChar( _bases[i].getA(), true );
-		}
-		ss << std::endl;
-		for(unsigned int i = 0; i < _bases.size(); i++) {
-			ss << BaseQual::getQualChar( _bases[i].getC(), true );
-		}
-		ss << std::endl;
-		for(unsigned int i = 0; i < _bases.size(); i++) {
-			ss << BaseQual::getQualChar( _bases[i].getG(), true );
-		}
-		ss << std::endl;
-		for(unsigned int i = 0; i < _bases.size(); i++) {
-			ss << BaseQual::getQualChar( _bases[i].getT(), true );
-		}
-		return ss.str();
-	}
+	ProbabilityBases &operator+=(const ProbabilityBases &other);
+	ProbabilityBases &operator*=(const ProbabilityBases &other);
+	ProbabilityBases &operator*=(double factor);
+	std::string toString() const;
 };
 
 class Read : public Sequence {
@@ -622,36 +348,15 @@ public:
 	Read(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false);
 	Read(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	Read(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart = NULL);
-	Read &operator=(const Read &other) {
-		Sequence::operator=(other);
-	    // there are no extra data members
-	    return *this;
-	}
-	Read clone() const {
-		return Read(getName(), getFasta(), getQuals());
-	}
+	Read &operator=(const Read &other);
+	Read clone() const;
 
 	void setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false);
 	void setRead(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	void setRead(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart);
 
-	ReadPtr readMmaped(bool usePreAllocation = false) const {
-		BaseLocationVectorType markups = _getMarkups();
-		std::string name, bases, quals;
-		Sequence::readMmaped(name, bases, quals);
-		TwoBitSequence::applyMarkup(bases, markups);
-		return ReadPtr(new Read(name, bases, quals, usePreAllocation));
-	}
-
-	bool recordHasQuals() const {
-		assert(isMmaped());
-		if (hasQuals())
-			return true;
-		else
-			// TODO make this more general
-		    return *getRecord() == '@'; // FASTQ
-	}
-
+	ReadPtr readMmaped(bool usePreAllocation = false) const;
+	bool recordHasQuals() const ;
 
 	std::string getName() const;
 	std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
@@ -667,26 +372,8 @@ public:
 	std::string getFormattedQuals(SequenceLengthType trimOffset =
 			MAX_SEQUENCE_LENGTH) const;
 
-	ProbabilityBases getProbabilityBases() const {
-		std::string fasta = getFasta();
-		std::string quals = getQuals();
-		ProbabilityBases probs(fasta.length());
-		for(int i = 0; i < (int) fasta.length(); i++) {
-			double prob = qualityToProbability[ (unsigned char) quals[i] ];
-			if (prob < 0.2501) {
-				prob = 0.2501; // slightly better than random...
-			}
-			ProbabilityBase &base = probs[i];
-			base.observe(fasta[i], prob);
-		}
-
-		return probs;
-	}
-	double scoreProbabilityBases(const ProbabilityBases &probs) const {
-		ProbabilityBases myprobs = getProbabilityBases();
-		myprobs *= probs;
-		return myprobs.sum();
-	}
+	ProbabilityBases getProbabilityBases() const;
+	double scoreProbabilityBases(const ProbabilityBases &probs) const;
 
 	static double qualityToProbability[256];
 	static void setMinQualityScore(unsigned char minQualityScore);
@@ -710,9 +397,7 @@ public:
 		return write(os, *this, trimOffset, label, format);
 	}
 
-	std::string toString() const {
-		return getFastaNoMarkup() + "\t" + getQuals(MAX_SEQUENCE_LENGTH, true, true) + "\t" + getName();
-	}
+	std::string toString() const;
 
 };
 
@@ -720,6 +405,18 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.31  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.30.2.3  2010-05-10 22:40:20  regan
+// minor refactor -- replaced invalid flag
+//
+// Revision 1.30.2.2  2010-05-10 20:44:35  regan
+// minor refactor moved code into cpp
+//
+// Revision 1.30.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.30  2010-05-06 22:55:05  regan
 // merged changes from CodeCleanup-20100506
 //

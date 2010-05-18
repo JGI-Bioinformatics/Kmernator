@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.37 2010-05-06 22:55:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.38 2010-05-18 20:50:24 regan Exp $
 //
 
 #include <exception>
@@ -15,15 +15,33 @@
 #include "ReadSet.h"
 
 ReadSet::MmapSourceVector ReadSet::mmapSources;
+void ReadSet::madviseMmaps(int advise) {
 
-void ReadSet::addRead(Read &read) {
-	SequenceLengthType readLength = read.getLength();
-	addRead(read, readLength);
+	#pragma omp critical
+	for(MmapSourceVector::iterator it = mmapSources.begin(); it != mmapSources.end(); it++) {
+		if (it->first.is_open())
+			madvise(const_cast<char*>(it->first.data()), it->first.size(), advise);
+		if (it->second.is_open())
+			madvise(const_cast<char*>(it->second.data()), it->second.size(), advise);
+	}
 }
-void ReadSet::addRead(Read &read, SequenceLengthType readLength) {
-	_reads.push_back(read);
-	_baseCount += readLength;
-	setMaxSequenceLength(readLength);
+void ReadSet::addMmaps(MmapSourcePair mmaps) {
+
+	#pragma omp critical
+	mmapSources.push_back(mmaps);
+
+	madviseMmapsSequential();
+}
+
+void ReadSet::incrementFile(ReadFileReader &reader) {
+	incrementFile(reader.getParser());
+}
+void ReadSet::incrementFile(SequenceStreamParserPtr parser) {
+	_filePartitions.addPartition( _reads.size() );
+	addMmaps( MmapSourcePair( parser->getMmap(), parser->getQualMmap() ));
+}
+
+void ReadSet::_trackSequentialPair(const Read &read) {
 	if (_reads.size() > 1 && !previousReadName.empty()) {
 		if (isPair(previousReadName, read)) {
 			// mark the previous read, but not this one
@@ -40,6 +58,29 @@ void ReadSet::addRead(Read &read, SequenceLengthType readLength) {
 	} else {
 	    previousReadName = read.getName();
 	}
+
+}
+
+void ReadSet::circularize(long extraLength) {
+	for(ReadSetSizeType idx = 0 ; idx < getSize() ; idx++) {
+		Read &read = getRead(idx);
+		std::string name, fasta, quals;
+		name = read.getName();
+		fasta = read.getFastaNoMarkup();
+		quals = read.getQuals(MAX_SEQUENCE_LENGTH, false, true);
+		read = Read(name, fasta + fasta.substr(0, extraLength), quals + quals.substr(0,extraLength));
+	}
+}
+
+void ReadSet::addRead(const Read &read) {
+	SequenceLengthType readLength = read.getLength();
+	addRead(read, readLength);
+}
+void ReadSet::addRead(const Read &read, SequenceLengthType readLength) {
+	_reads.push_back(read);
+	_baseCount += readLength;
+	_setMaxSequenceLength(readLength);
+	_trackSequentialPair(read);
 }
 ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 	MmapSource mmap(filePath, ReadFileReader::getFileSize(filePath));
@@ -83,8 +124,9 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 	}
 #endif
 
+	long filesSize = files.size();
 	#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
-	for (long i = 0; i < (long) files.size(); i++) {
+	for (long i = 0; i < filesSize; i++) {
 
 		#pragma omp critical
 		{
@@ -120,21 +162,27 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 		madviseMmapsSequential();
 }
 
+void ReadSet::append(const Read &read) {
+	addRead(read);
+}
+
 void ReadSet::append(const ReadSet &reads) {
 	unsigned long oldSize = _reads.size();
 	unsigned long newSize = oldSize + reads._reads.size();
 	_reads.resize(newSize);
 
+	long readSize = reads._reads.size();
 	#pragma omp parallel for
-	for (long i = 0; i < (long) reads._reads.size(); i++)
+	for (long i = 0; i < readSize; i++)
 		_reads[oldSize + i] = reads._reads[i];
 
 	unsigned long oldPairSize = _pairs.size();
 	unsigned long newPairSize = oldPairSize + reads._pairs.size();
 	_pairs.resize(newPairSize);
 
+	long pairsSize = reads._pairs.size();
 	#pragma omp parallel for
-	for (long i = 0; i < (long) reads._pairs.size(); i++) {
+	for (long i = 0; i < pairsSize; i++) {
 		const Pair &tmp = reads._pairs[i];
 		_pairs[oldPairSize + i]
 				= Pair((tmp.read1 == MAX_READ_IDX ? MAX_READ_IDX : tmp.read1
@@ -142,7 +190,7 @@ void ReadSet::append(const ReadSet &reads) {
 						: tmp.read2 + oldSize));
 	}
 	_baseCount += reads._baseCount;
-	setMaxSequenceLength(reads.getMaxSequenceLength());
+	_setMaxSequenceLength(reads.getMaxSequenceLength());
 
 }
 
@@ -289,16 +337,16 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		{
 			// set global counters
 			_baseCount += myReads._baseCount;
-			setMaxSequenceLength(myReads.getMaxSequenceLength());
+			_setMaxSequenceLength(myReads.getMaxSequenceLength());
 		}
 
 		#pragma omp barrier
 
 		#pragma omp single
 		{
-			unsigned long newReads = 0;
+			ReadSetSizeType newReads = 0;
 			for(int i=0; i < numThreads; i++) {
-				unsigned long tmp = newReads;
+				ReadSetSizeType tmp = newReads;
 				newReads += numReads[i];
 				numReads[i] = tmp;
 			}
@@ -306,7 +354,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 			_reads.resize(startIdx + newReads);
 		}
 
-		for(unsigned long j = 0; j < myReads.getSize(); j++)
+		for(ReadSetSizeType j = 0; j < myReads.getSize(); j++)
 		_reads[startIdx + numReads[ omp_get_thread_num() ] + j] = myReads.getRead(j);
 	}
 
@@ -324,6 +372,44 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastq(ReadSet::MmapSource &mmap)
 	return appendFasta(mmap);
 #endif
 }
+
+ReadSet::ReadPtr ReadSet::parseMmapedRead(ReadSetSizeType index) const {
+	const Read &read = _reads[index];
+	ReadPtr readPtr = read.readMmaped();
+	return readPtr;
+}
+
+string ReadSet::_getReadFileNamePrefix(unsigned int filenum) const {
+	if (filenum > Options::getInputFiles().size()) {
+		return std::string("consensus-") + boost::lexical_cast<std::string>(filenum);
+	} else {
+		return Options::getInputFileSubstring(filenum-1);
+	}
+}
+string ReadSet::getReadFileNamePrefix(ReadSetSizeType index) const {
+	unsigned int filenum = getReadFileNum(index);
+	return _getReadFileNamePrefix(filenum);
+}
+// returns the first file to match either read from the pair
+string ReadSet::getReadFileNamePrefix(const Pair &pair) const {
+	unsigned int filenum1 = -1;
+	unsigned int filenum2 = -1;
+	if (isValidRead(pair.read1))
+		filenum1 = getReadFileNum(pair.read1);
+	if (isValidRead(pair.read2))
+		filenum2 = getReadFileNum(pair.read2);
+	return _getReadFileNamePrefix( filenum1 < filenum2 ? filenum1 : filenum2);
+}
+
+const ReadSet::ReadIdxVector ReadSet::getReadIdxVector() const {
+	ReadIdxVector readIdxs;
+	readIdxs.reserve(_reads.size());
+	for(size_t i = 0 ; i < _reads.size(); i++) {
+		readIdxs.push_back(i);
+	}
+	return readIdxs;
+}
+
 
 std::string _commonName(const std::string &readName) {
 	return readName.substr(0, readName.length() - 1);
@@ -429,7 +515,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	boost::unordered_map<std::string, ReadSetSizeType>::iterator unmatchedIt;
 
 	// build the unmatchedNames map for existing identified pairs
-	for (ReadSetSizeType i = 0; i < _pairs.size(); i++) {
+	for (size_t i = 0; i < _pairs.size(); i++) {
 		Pair &pair = _pairs[i];
 		if ((pair.read1 == MAX_READ_IDX || pair.read2 == MAX_READ_IDX)
 				&& pair.read1 != pair.read2) {
@@ -546,7 +632,7 @@ Read ReadSet::getConsensusRead() const {
 	ProbabilityBases probs = getProbabilityBases();
     Read consensus = getConsensusRead(probs, string("C") + boost::lexical_cast<std::string>(getSize()) + string("-") + getRead(0).getName());
     if (Options::getDebug() > 2) {
-#pragma omp critical
+        #pragma omp critical
     	{
     		for(ReadVector::const_iterator it = _reads.begin(); it != _reads.end(); it++) {
     			std::cerr << it->toString() << std::endl;
@@ -570,6 +656,21 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.38  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.37.2.4  2010-05-12 22:45:00  regan
+// added readset circularize method
+//
+// Revision 1.37.2.3  2010-05-12 18:25:48  regan
+// minor refactor
+//
+// Revision 1.37.2.2  2010-05-10 21:24:29  regan
+// minor refactor moved code into cpp
+//
+// Revision 1.37.2.1  2010-05-07 22:59:33  regan
+// refactored base type declarations
+//
 // Revision 1.37  2010-05-06 22:55:05  regan
 // merged changes from CodeCleanup-20100506
 //

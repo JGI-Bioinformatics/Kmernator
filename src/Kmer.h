@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.84 2010-05-06 22:55:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.85 2010-05-18 20:50:24 regan Exp $
 //
 
 
@@ -23,8 +23,8 @@
 #include "TwoBitSequence.h"
 #include "MemoryUtils.h"
 #include "KmerTrackingData.h"
-#include "Utils.h"
 #include "lookup8.h"
+#include "MmapTempFile.h"
 
 using namespace TwoBitSequenceBase;
 
@@ -33,30 +33,49 @@ using namespace TwoBitSequenceBase;
 #endif
 
 typedef boost::shared_ptr<TwoBitEncoding> KmerSharedPtr;
-typedef unsigned long IndexType;
 
 class KmerSizer {
+public:
+	typedef KoMer::KmerIndexType  IndexType;
+
 private:
-	KmerSizer() :
-		_sequenceLength(21) {
-	}
-	static KmerSizer singleton;
-
 	SequenceLengthType _sequenceLength;
-
 	SequenceLengthType _twoBitLength;
 	IndexType _totalSize;
+
+	static KmerSizer singleton;
+
+	KmerSizer() :
+		_sequenceLength(21) {
+		_set(_sequenceLength);
+	}
+
+	void _set(SequenceLengthType sequenceLength) {
+		_verifyThreads();
+		_sequenceLength = sequenceLength;
+		_twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(_sequenceLength);
+		_totalSize = _twoBitLength;
+	}
+
+	static void _verifyThreads() {
+		int maxThreads = omp_get_max_threads();
+		if ((maxThreads & (maxThreads-1)) != 0) {
+			throw std::invalid_argument(
+					(std::string("The maximum number of threads must be a power-of-two.\nPlease adjust the OMP_NUM_THREADS environmental variable. ")
+					 + boost::lexical_cast<std::string>(maxThreads)).c_str());
+		}
+	}
+
+
 public:
 
 	static inline KmerSizer &getSingleton() {
 		return singleton;
 	}
+
 	static void set(SequenceLengthType sequenceLength) {
 		KmerSizer & singleton = getSingleton();
-		singleton._sequenceLength = sequenceLength;
-		singleton._twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(
-				singleton._sequenceLength);
-		singleton._totalSize = singleton._twoBitLength;
+		singleton._set(sequenceLength);
 	}
 
 	static inline SequenceLengthType getSequenceLength() {
@@ -68,13 +87,16 @@ public:
 	static inline IndexType getByteSize() {
 		return getSingleton()._totalSize;
 	}
+
 };
 
 #define TEMP_KMER(name)  TwoBitEncoding _stack_##name[KmerSizer::getByteSize()]; Kmer &name = (Kmer &)(_stack_##name);
 
 class Kmer {
 public:
-	typedef unsigned long long NumberType;
+	typedef KoMer::KmerNumberType NumberType;
+	typedef KoMer::KmerIndexType  IndexType;
+	typedef KoMer::KmerSizeType   SizeType;
 
 private:
 	inline static boost::hash<NumberType> &getHasher() {
@@ -208,6 +230,9 @@ public:
 	inline SequenceLengthType getLength() const {
 		return KmerSizer::getSequenceLength();
 	}
+	inline SequenceLengthType getGC() const {
+		return TwoBitSequence::getGC(getTwoBitSequence(), getLength());
+	}
 
 	void buildReverseComplement(Kmer &output) const {
 		TwoBitSequence::reverseComplement(getTwoBitSequence(),
@@ -236,82 +261,12 @@ public:
 		return Kmer::toNumber(*this);
 	}
 
-	uint32_t jenkins_one_at_a_time_hash(unsigned char *key, size_t key_len) const {
-		uint32_t hash = 0;
-		size_t i;
-
-		for (i = 0; i < key_len; i++) {
-			hash += key[i];
-			hash += (hash << 10);
-			hash ^= (hash >> 6);
-		}
-		hash += (hash << 3);
-		hash ^= (hash >> 11);
-		hash += (hash << 15);
-		return hash;
-	}
-
-	uint64_t MurmurHash64A(const void * key, int len, unsigned int seed) const {
-		const uint64_t m = 0xc6a4a7935bd1e995;
-		const int r = 47;
-
-		uint64_t h = seed ^ (len * m);
-
-		const uint64_t * data = (const uint64_t *) key;
-		const uint64_t * end = data + (len / 8);
-
-		while (data != end) {
-			uint64_t k = *data++;
-
-			k *= m;
-			k ^= k >> r;
-			k *= m;
-
-			h ^= k;
-			h *= m;
-		}
-
-		const unsigned char * data2 = (const unsigned char*) data;
-
-		switch (len & 7) {
-		case 7:
-			h ^= uint64_t(data2[6]) << 48;
-		case 6:
-			h ^= uint64_t(data2[5]) << 40;
-		case 5:
-			h ^= uint64_t(data2[4]) << 32;
-		case 4:
-			h ^= uint64_t(data2[3]) << 24;
-		case 3:
-			h ^= uint64_t(data2[2]) << 16;
-		case 2:
-			h ^= uint64_t(data2[1]) << 8;
-		case 1:
-			h ^= uint64_t(data2[0]);
-			h *= m;
-		};
-
-		h ^= h >> r;
-		h *= m;
-		h ^= h >> r;
-
-		return h;
-	}
 
 	inline NumberType hash() const {
-		//  boost::hash<long long > hasher; return  (toNumber());
-
-		// return getHasher()(toNumber());
-
-		// boost::hash<std::string> hasher ; return hasher((toFasta( )));
-
 
 		NumberType number = toNumber();
 		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
 
-		//return jenkins_one_at_a_time_hash(
-		//		(unsigned char *) getTwoBitSequence(), getTwoBitLength());
-		// return MurmurHash64A(getTwoBitSequence(),getTwoBitLength(),0xDEADBEEF);
 	}
 
 };
@@ -321,27 +276,30 @@ template<typename Value>
 class KmerArray {
 
 public:
+	typedef Kmer::NumberType    NumberType;
+	typedef Kmer::IndexType     IndexType;
+	typedef Kmer::SizeType      SizeType;
 
 	typedef Value ValueType;
-	static const IndexType MAX_INDEX = (IndexType) -1;
+	static const IndexType MAX_INDEX = MAX_KMER_INDEX;
 	typedef std::vector< KmerArray > Vector;
 
 	class ElementType {
 	private:
-		IndexType _idx;
 		const KmerArray *_array;
+		IndexType _idx;
 		inline const ElementType &_constThis() const {return *this;}
 	public:
 		ElementType() :
-			_idx(MAX_INDEX), _array(NULL) {
+			_array(NULL), _idx(MAX_INDEX) {
 		}
 		ElementType(IndexType idx,
 				const KmerArray &array) :
-			_idx(idx), _array(&array) {
+			_array(&array), _idx(idx) {
 			setLock();
 		}
 		ElementType(const ElementType &copy) :
-			_idx(MAX_INDEX), _array(NULL) {
+			_array(NULL), _idx(MAX_INDEX)  {
 			*this = copy;
 		}
 		~ElementType() {
@@ -413,6 +371,7 @@ public:
 
 private:
 	void *_begin; // safer than Kmer *: prevents incorrect ptr arithmetic: _begin+1 , use _add instead
+	// TODO embed size & capacity into allocation -- save some memory because of padding
 	IndexType _size;
 	IndexType _capacity;
 
@@ -435,11 +394,11 @@ private:
 	void initSharedLocks() const {
 		_sharedLocks.clear();
 		_sharedLocks.resize( omp_get_num_procs() );
-		for(unsigned int i=0; i < _sharedLocks.size(); i++)
+		for(size_t i=0; i < _sharedLocks.size(); i++)
 		omp_init_nest_lock( &(_sharedLocks[i]) );
 	}
 	void destroySharedLocks() const {
-		for(unsigned int i=0; i < _sharedLocks.size(); i++)
+		for(size_t i=0; i < _sharedLocks.size(); i++)
 		omp_destroy_nest_lock( &(_sharedLocks[i]) );
 		_sharedLocks.clear();
 	}
@@ -506,7 +465,7 @@ public:
 
 			gotExclusive = true;
 			if (testLock()) {
-				unsigned int i = 0;
+				size_t i = 0;
 				for(; i < _sharedLocks.size(); i++) {
 					if (! omp_test_nest_lock( &( _sharedLocks[i] ) )) {
 						gotExclusive = false;
@@ -516,7 +475,7 @@ public:
 				if (! gotExclusive) {
 					// unset acquired locks
 					unsetLock();
-					for(unsigned int j = 0; j<i; j++)
+					for(size_t j = 0; j<i; j++)
 					omp_unset_nest_lock( &( _sharedLocks[j] ) );
 					//std::stringstream ss2;
 					//ss2 << "Waiting for exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() << " failed to get shared " << i << std::endl;
@@ -541,7 +500,7 @@ public:
 
 		unsetLock();
 		// unset acquired shared locks
-		for(unsigned int j = 0; j < _sharedLocks.size(); j++)
+		for(size_t j = 0; j < _sharedLocks.size(); j++)
 		omp_unset_nest_lock( &( _sharedLocks[j] ) );
 
 		//std::stringstream ss;
@@ -849,12 +808,21 @@ public:
 
 		//assignment copy Values
 		if (isOverlapped) {// && dstValue + idx > srcValue + srcIdx) {
-			Value *tmp = new Value[count];
+			bool needNew = count > 1024;
+			Value _tmp[ needNew ? 0 : count];
+			Value *tmp = _tmp;
+			if (needNew) {
+				tmp = new Value[count];
+			}
+
 			for (IndexType i = 0; i < count; i++)
 				tmp[i] = *(srcValue + srcIdx + i);
 			for (IndexType i = 0; i < count; i++)
 				*(dstValue + idx + i) = tmp[i];
-			delete[] tmp;
+
+			if (needNew)
+				delete [] tmp;
+
 		} else {
 			// copy forward, without a temp buffer, is safe
 			for (IndexType i = 0; i < count; i++)
@@ -993,8 +961,9 @@ public:
 			TEMP_KMER(least);
 			bool isLeast;
 
-			#pragma omp parallel for if(numKmers >= 10000)
-			for (long i = 0; i < (long) numKmers; i++) {
+			long longNumKmers = numKmers;
+			#pragma omp parallel for if(longNumKmers >= 10000)
+			for (long i = 0; i < longNumKmers; i++) {
 				isLeast = kmers[i].buildLeastComplement(least);
 				if (!isLeast)
 					kmers[i] = least;
@@ -1308,9 +1277,12 @@ template<typename Value>
 class KmerMap {
 
 public:
+	typedef Kmer::NumberType    NumberType;
+	typedef Kmer::IndexType     IndexType;
+	typedef Kmer::SizeType      SizeType;
+
 	typedef Kmer KeyType;
 	typedef Value ValueType;
-	typedef Kmer::NumberType NumberType;
 	typedef NumberType * NumberTypePtr;
 	typedef KmerArray<Value> BucketType;
     typedef	typename BucketType::Iterator BucketTypeIterator;
@@ -1337,7 +1309,7 @@ public:
 			// argument is a power of 2
 		} else {
 			powerOf2--;
-			for (unsigned int i = 1; i < sizeof(NumberType)*8; i<<=1)
+			for (size_t i = 1; i < sizeof(NumberType)*8; i<<=1)
 			powerOf2 |= powerOf2 >> i;
 			powerOf2++;
 		}
@@ -1363,7 +1335,7 @@ public:
 	}
 	const KoMer::MmapFile store() const {
 		long size = getSizeToStore();
-		KoMer::MmapFile mmap = TempFile::buildNewMmap(size);
+		KoMer::MmapFile mmap = MmapTempFile::buildNewMmap(size);
 		store(mmap.data());
 		return mmap;
 	}
@@ -1411,15 +1383,16 @@ public:
 		mask = *(numbers++);
 		offsetArray = numbers;
 	}
-	long getSizeToStore() const {
+	SizeType getSizeToStore() const {
 		return sizeof(NumberType)*(2+_buckets.size())
 		    + _buckets.size()*sizeof(IndexType)
 		    + size()*BucketType::getElementByteSize();
 	}
 
 	void reset(bool releaseMemory = true) {
-		for(IndexType i=0; i< _buckets.size(); i++)
-		_buckets[i].reset(releaseMemory);
+		for(size_t i=0; i< _buckets.size(); i++) {
+			_buckets[i].reset(releaseMemory);
+		}
 	}
 	void clear(bool releaseMemory = true) {
 		reset(releaseMemory);
@@ -1428,12 +1401,14 @@ public:
 	}
 
 	void setReadOnlyOptimization() {
-		for(unsigned int i = 0; i<_buckets.size(); i++)
-		_buckets[i].setReadOnlyOptimization();
+		for(size_t i = 0; i<_buckets.size(); i++) {
+			_buckets[i].setReadOnlyOptimization();
+		}
 	}
 	void unsetReadOnlyOptimization() {
-		for(unsigned int i = 0; i<_buckets.size(); i++)
-		_buckets[i].unsetReadOnlyOptimization();
+		for(size_t i = 0; i<_buckets.size(); i++) {
+			_buckets[i].unsetReadOnlyOptimization();
+		}
 	}
 
 	inline unsigned short getLocalThreadId(NumberType hash, unsigned short numThreads) const {
@@ -1475,7 +1450,7 @@ public:
 	void rotateDMPBuffers(unsigned short numThreads) {
 		BucketType tmp;
 		tmp.swap(_buckets[ 0 ]);
-		for(unsigned int i = 0 ; i < _buckets.size() - 1; i++) {
+		for(size_t i = 0 ; i < _buckets.size() - 1; i++) {
 			_buckets[i].swap(_buckets[i+1]);
 		}
 		tmp.swap(_buckets[ _buckets.size() - 1]);
@@ -1503,7 +1478,11 @@ public:
 		return const_cast<BucketType &>( _constThis().getBucket(key) );
 	}
 
-	inline unsigned long getNumBuckets() const {
+	inline void setNumBuckets(IndexType numBuckets) {
+		_buckets.clear();
+		_buckets.resize(numBuckets);
+	}
+	inline IndexType getNumBuckets() const {
 		return _buckets.size();
 	}
 
@@ -1610,12 +1589,14 @@ public:
 		return insert(key, Value(), bucket).value();
 	}
 
-	IndexType size() const {
-		IndexType size = 0;
+	SizeType size() const {
+		SizeType size = 0;
 
+		long bucketSize = _buckets.size();
 		#pragma omp parallel for reduction(+:size) if(_buckets.size()>1000000)
-		for(long i = 0; i < (long) _buckets.size(); i++)
-		size += _buckets[i].size();
+		for(long i = 0; i < bucketSize; i++) {
+			size += _buckets[i].size();
+		}
 		return size;
 	}
 
@@ -1645,11 +1626,12 @@ public:
 		return biggest;
 	}
 
-	IndexType purgeMinCount(long minimumCount) {
-		long affected = 0;
+	SizeType purgeMinCount(long minimumCount) {
+		SizeType affected = 0;
 
-		#pragma omp parallel for reduction(+:affected)
-		for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
+		long bucketsSize = getNumBuckets();
+ 		#pragma omp parallel for reduction(+:affected)
+		for(long idx = 0 ; idx < bucketsSize; idx++) {
 			affected += _buckets[idx].purgeMinCount(minimumCount);
 		}
 		return affected;
@@ -1689,8 +1671,9 @@ public:
 	    	 throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
 	    }
 
+	    long bucketsSize = getNumBuckets();
 		#pragma omp parallel for
-	  	for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
+	  	for(long idx = 0 ; idx < bucketsSize; idx++) {
 	    	   BucketType &a = const_cast<BucketType&>(_buckets[idx]);
 	    	   BucketType &b = const_cast<BucketType&>(src._buckets[idx]);
 
@@ -1707,9 +1690,9 @@ public:
        }
        BucketType merged;
 
-
+       long bucketsSize = getNumBuckets();
        #pragma omp parallel for private(merged)
-       for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
+       for(long idx = 0 ; idx < bucketsSize; idx++) {
     	   // buckets are sorted so perform a sorted merge by bucket
     	   BucketType &a = _buckets[idx];
     	   BucketType &b = src._buckets[idx];
@@ -1762,8 +1745,9 @@ public:
 	    	   chunkSize = 2;
 	       BucketType merged;
 
+	       long bucketsSize = getNumBuckets();
            //#pragma omp parallel for private(merged) schedule(static, chunkSize)
-	       for(long idx = 0 ; idx < (long) getNumBuckets(); idx++) {
+	       for(long idx = 0 ; idx < bucketsSize; idx++) {
 	    	   // buckets are sorted so perform a sorted merge by bucket
 	    	   BucketType &a = _buckets[idx];
 	    	   BucketType &b = src._buckets[idx];
@@ -1930,28 +1914,42 @@ public:
 		}
 	}
 	Iterator beginThreaded() {
-		if (OMP_MAX_THREADS == 1)
-			return begin();
-		else
-		    return Iterator(this, _getThreadedBuckets().first);
+		return Iterator(this, _getThreadedBuckets().first);
 	}
 	Iterator endThreaded() {
-		if (OMP_MAX_THREADS == 1)
-			return end();
-		else
-			return Iterator(this, _getThreadedBuckets().second);
+		return Iterator(this, _getThreadedBuckets().second);
 	}
 
 };
 
 typedef KmerArray<char> Kmers;
 typedef KmerArray<double> KmerWeights;
-typedef KmerArray<unsigned long> KmerCounts;
+typedef KmerArray<KoMer::UI32> KmerCounts;
 
 #endif
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.85  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.84.2.5  2010-05-18 16:43:31  regan
+// added count gc methods and lookup tables
+//
+// Revision 1.84.2.4  2010-05-13 20:29:30  regan
+// new methods to support changes to CompareSpectrum
+//
+// Revision 1.84.2.3  2010-05-12 18:24:40  regan
+// minor refactor
+//
+// Revision 1.84.2.2  2010-05-10 17:41:18  regan
+// refactored kmer sizer.
+// reordered member variables for better padding and alignment
+// added test for # of threads divisable by 2
+//
+// Revision 1.84.2.1  2010-05-07 22:59:33  regan
+// refactored base type declarations
+//
 // Revision 1.84  2010-05-06 22:55:05  regan
 // merged changes from CodeCleanup-20100506
 //

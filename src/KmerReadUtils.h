@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.8 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.9 2010-05-18 20:50:24 regan Exp $
 //
 
 #ifndef _KMER_READ_UTILS_H
@@ -13,7 +13,7 @@ public:
 		bool bools[readLength];
 		KmerWeights kmers(read.getTwoBitSequence(), readLength, leastComplement, bools);
 		std::string quals = read.getQuals();
-		SequenceLengthType markupIdx = 0;
+		size_t markupIdx = 0;
 
 		BaseLocationVectorType markups = read.getMarkups();
 		double weight = 0.0;
@@ -22,7 +22,8 @@ public:
 		if (quals.length() > 0 && quals[0] == Read::REF_QUAL)
 			isRef = true;
 
-		for (SequenceLengthType i = 0; i < kmers.size(); i++) {
+		SequenceLengthType size = (SequenceLengthType) kmers.size();
+		for (SequenceLengthType i = 0; i < size; i++) {
 			if (isRef) {
 				weight = 1.0;
 			} else if (i % 1024 == 0 || weight == 0.0) {
@@ -52,7 +53,7 @@ public:
 		}
 		//  std::cerr << std::endl;
 		if (Options::getDebug() > 3) {
-		  for(unsigned int i = 0 ; i < kmers.size(); i++) {
+		  for(Kmer::IndexType i = 0 ; i < kmers.size(); i++) {
 			std::cerr << i << " " << kmers.valueAt(i) << " " << kmers[i].toFasta() << std::endl;
 		  }
 		}
@@ -64,6 +65,12 @@ public:
 
 
 // $Log: KmerReadUtils.h,v $
+// Revision 1.9  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.8.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.8  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //

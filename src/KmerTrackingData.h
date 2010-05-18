@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.3 2010-05-06 22:55:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.4 2010-05-18 20:50:24 regan Exp $
 //
 
 #ifndef _KMER_TRACKING_DATA_H
@@ -11,10 +11,14 @@ class TrackingDataWithAllReads;
 
 class TrackingData {
 public:
-	typedef unsigned short CountType;
+	typedef KoMer::UI16 CountType;
+	typedef KoMer::ReadSetSizeType ReadIdType;
+	typedef KoMer::SequenceLengthType PositionType;
 	typedef float WeightType;
-	typedef unsigned int ReadIdType;
-	typedef unsigned short PositionType;
+
+	static const CountType    MAX_COUNT    = MAX_UI16;
+	static const ReadIdType   MAX_READ_ID  = MAX_READ_SET_SIZE;
+	static const PositionType MAX_POSITION = MAX_SEQUENCE_LENGTH;
 
 	class ReadPosition {
 	public:
@@ -39,7 +43,6 @@ public:
 
 	static WeightType minimumWeight;
 	static CountType minimumDepth;
-	static const CountType MAX_COUNT = (CountType) -1;
 	static unsigned long discarded;
 
 	static CountType maxCount;
@@ -64,7 +67,8 @@ public:
 		if (weight < minimumWeight) {
 
 			#pragma omp atomic
-			discarded++;
+			    discarded++;
+
 			return true;
 		} else
 			return false;
@@ -624,6 +628,12 @@ std::ostream &operator<<(std::ostream &stream, TrackingDataMinimal<T> &ob) {
 #endif
 
 // $Log: KmerTrackingData.h,v $
+// Revision 1.4  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.3.2.1  2010-05-07 22:59:33  regan
+// refactored base type declarations
+//
 // Revision 1.3  2010-05-06 22:55:05  regan
 // merged changes from CodeCleanup-20100506
 //

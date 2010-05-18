@@ -1,13 +1,10 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.36 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.37 2010-05-18 20:50:24 regan Exp $
 //
 
 #ifndef _UTILS_H
 #define _UTILS_H
 
 #include <ostream>
-#include <iostream>
-#include <ios>
-#include <iomanip>
 #include <fstream>
 #include <cstdlib>
 #include <vector>
@@ -134,15 +131,9 @@ public:
 	}
 };
 
-typedef unsigned char OneByte;
-typedef unsigned short TwoByte;
-typedef unsigned int FourByte;
-typedef unsigned long EightByte;
 
-typedef BucketedData<double, OneByte> DoubleToOneByte;
-typedef BucketedData<double, TwoByte> DoubleToTwoByte;
-typedef BucketedData<double, FourByte> DoubleToFourByte;
-typedef BucketedData<double, EightByte> DoubleToEightByte;
+typedef BucketedData<double, KoMer::UI8> DoubleToOneByte;
+typedef BucketedData<double, KoMer::UI16> DoubleToTwoByte;
 
 class SequenceRecordParser
 {
@@ -239,31 +230,19 @@ public:
 	}
 };
 
-class TempFile {
-	static int getUnique() { static int id = 0; return id++; }
-public:
-	static std::string buildNew(long size) {
-		std::string filename = Options::getTmpDir() + "/Kmmap-";
-		filename += boost::lexical_cast<std::string>( getpid() );
-		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
-		filename += getenv("HOST") == NULL ? "unknown" : getenv("HOST");
-		std::cerr << "Creating new tmp file: " << filename << " " << size << std::endl;
-		std::ofstream os(filename.c_str());
-		os.seekp(size);
-		os << '\0';
-		return filename;
-	}
-	static KoMer::MmapFile buildNewMmap(long size) {
-		std::string filename = buildNew(size);
-		KoMer::MmapFile mmap(filename, std::ios_base::in | std::ios_base::out, size);
-		unlink(filename.c_str());
-		return mmap;
-	}
-};
 #endif
 
 //
 // $Log: Utils.h,v $
+// Revision 1.37  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.36.2.2  2010-05-12 18:25:20  regan
+// refactored
+//
+// Revision 1.36.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.36  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //

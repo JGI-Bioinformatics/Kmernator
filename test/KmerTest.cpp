@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.37 2010-05-01 21:57:51 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/test/KmerTest.cpp,v 1.38 2010-05-18 20:50:21 regan Exp $
 //
 
 #include "config.h"
@@ -239,45 +239,45 @@ void testKmerArray(SequenceLengthType size) {
 	KmerArray<char> kmersC(twoBit3, C.length());
 
 	if (size == 1) {
-		for (unsigned int i = 0; i < kmersC.size(); i++) {
+		for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
 			char *ch = (char*) kmersC[i].get();
 			BOOST_CHECK_EQUAL(*ch & 0x3f, 0x00);
 		}
 	}
 	if (size == 2) {
-		for (unsigned int i = 0; i < kmersC.size(); i++) {
+		for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
 			char *ch = (char*) kmersC[i].get();
 			BOOST_CHECK_EQUAL(*ch & 0x0f, 0x00);
 		}
 	}
 	if (size == 3) {
-		for (unsigned int i = 0; i < kmersC.size(); i++) {
+		for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
 			char *ch = (char*) kmersC[i].get();
 			BOOST_CHECK_EQUAL(*ch & 0x03, 0x00);
 		}
 	}
 	KmerArray<char> *kmersD = new KmerArray<char> (twoBit3, C.length());
 
-	for (unsigned int i = 0; i < A.length() - size + 1; i++) {
+	for (size_t i = 0; i < A.length() - size + 1; i++) {
 		BOOST_CHECK_EQUAL(kmersA[i].toFasta(), SS2(A,i,size));
 	}
-	for (unsigned int i = 0; i < B.length() - size + 1; i++) {
+	for (size_t i = 0; i < B.length() - size + 1; i++) {
 		BOOST_CHECK_EQUAL(kmersB[i].toFasta(), SS2(B,i,size));
 	}
-	for (unsigned int i = 0; i < C.length() - size + 1; i++) {
+	for (size_t i = 0; i < C.length() - size + 1; i++) {
 		BOOST_CHECK_EQUAL(kmersC[i].toFasta(), SS2(C,i,size));
 	}
-	for (unsigned int i = 0; i < C.length() - size + 1; i++) {
+	for (size_t i = 0; i < C.length() - size + 1; i++) {
 		BOOST_CHECK_EQUAL((*kmersD)[i].toFasta(), SS2(C,i,size));
 	}
 	delete kmersD;
 
 	KmerArray<float> kmersFloat(twoBit3, C.length());
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		float &valRef = kmersFloat.valueAt(i);
 		valRef = i * 2.0;
 	}
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		float &valRef = kmersFloat.valueAt(i);
 		float val = i * 2.0;
 		BOOST_CHECK_EQUAL(val, valRef);
@@ -294,7 +294,7 @@ void testKmerArray(SequenceLengthType size) {
 	mem2 = copy[0].get();
 	BOOST_CHECK(mem1 != mem2);
 
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		float &valRef = copy.valueAt(i);
 		float &valRef2 = kmersFloat.valueAt(i);
 		BOOST_CHECK_EQUAL(valRef2, valRef);
@@ -308,7 +308,7 @@ void testKmerArray(SequenceLengthType size) {
 	BOOST_CHECK(mem1 != mem2);
 
 	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size() + 1);
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		float &valRef = copy.valueAt(i);
 		float &valRef2 = kmersFloat.valueAt(i);
 		BOOST_CHECK_EQUAL(valRef2, valRef);
@@ -321,7 +321,7 @@ void testKmerArray(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(oldSize * 2.0, copy.valueAt(oldSize));
 	BOOST_CHECK(copy[oldSize].get() != kmersFloat[0].get());
 
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		float &valRef = copy.valueAt(i);
 		float &valRef2 = kmersFloat.valueAt(i);
 		BOOST_CHECK_EQUAL(valRef2, valRef);
@@ -335,7 +335,7 @@ void testKmerArray(SequenceLengthType size) {
 	mem2 = copy[0].get();
 
 	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		float &valRef = copy.valueAt(i);
 		float &valRef2 = kmersFloat.valueAt(i);
 		BOOST_CHECK_EQUAL(valRef2, valRef);
@@ -343,8 +343,8 @@ void testKmerArray(SequenceLengthType size) {
 	}
 
 	// test find
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
-		unsigned long idx = copy.find(kmersFloat[i]);
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
+		Kmer::IndexType idx = copy.find(kmersFloat[i]);
 		BOOST_REQUIRE(idx != KmerArray<float>::MAX_INDEX);
 		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[idx].toFasta());
 		// duplicates could be present and first one will be found
@@ -354,7 +354,7 @@ void testKmerArray(SequenceLengthType size) {
 
 	// test insert
 	BOOST_CHECK_EQUAL(kmersFloat.size(), copy.size());
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		//BOOST_MESSAGE( i );
 
 		BOOST_CHECK_EQUAL(kmersFloat.size() + i, copy.size());
@@ -369,7 +369,7 @@ void testKmerArray(SequenceLengthType size) {
 	}
 	BOOST_CHECK_EQUAL(kmersFloat.size() * 2, copy.size());
 
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		float &valRef = copy.valueAt(i * 2 + 1);
 		float &valRef2 = kmersFloat.valueAt(i);
 		BOOST_CHECK_EQUAL(valRef2, valRef);
@@ -380,19 +380,19 @@ void testKmerArray(SequenceLengthType size) {
 
 	// test remove
 	BOOST_CHECK_EQUAL(kmersFloat.size() * 2, copy.size());
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		BOOST_CHECK_EQUAL(kmersFloat.size() * 2 - i, copy.size());
 		copy.remove(i);
 		BOOST_CHECK_EQUAL(kmersFloat.size() * 2 - i - 1, copy.size());
 
-		for (unsigned int k = 0; k < i + 1; k++) {
+		for (Kmer::IndexType k = 0; k < i + 1; k++) {
 			BOOST_CHECK_EQUAL(kmersFloat[k].toFasta(), copy[k].toFasta());
 			BOOST_CHECK_EQUAL(kmersFloat.valueAt(k), copy.valueAt(k));
 		}
 	}
 
 	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		float &valRef = copy.valueAt(i);
 		float &valRef2 = kmersFloat.valueAt(i);
 		BOOST_CHECK_EQUAL(valRef2, valRef);
@@ -400,7 +400,7 @@ void testKmerArray(SequenceLengthType size) {
 	}
 
 	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
-	unsigned int count = 0;
+	Kmer::IndexType count = 0;
 	for (KmerArray<float>::Iterator it = kmersFloat.begin(); it
 			!= kmersFloat.end(); it++) {
 		BOOST_CHECK_EQUAL(kmersFloat.valueAt(count), it->value());
@@ -427,17 +427,17 @@ void testKmerArray(SequenceLengthType size) {
 	 return;
 	 */
 
-	for (unsigned int i = 0; i < kmersFloat.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		KmerArray<float> permutations = KmerArray<float>::permuteBases(
 				kmersFloat[i]);
 		BOOST_CHECK_EQUAL(KmerSizer::getSequenceLength() * 3,
 				permutations.size());
 		//BOOST_MESSAGE( "start" );
 		//BOOST_MESSAGE( kmersFloat[i].toFasta() );
-		for (unsigned int j = 0; j < permutations.size(); j++) {
+		for (Kmer::IndexType j = 0; j < permutations.size(); j++) {
 			BOOST_CHECK_NE(kmersFloat[i].toFasta(), permutations[j].toFasta());
 			//BOOST_MESSAGE( permutations[j].toFasta() );
-			for (unsigned int k = 0; k < j; k++) {
+			for (Kmer::IndexType k = 0; k < j; k++) {
 				BOOST_CHECK_NE(permutations[j].toFasta(),
 						permutations[k].toFasta());
 			}
@@ -477,7 +477,7 @@ void testKmerMap(SequenceLengthType size) {
 	typedef std::pair<unsigned short, float> Pair;
 	KmerMap<Pair> kmerP(8);
 
-	for (unsigned int i = 0; i < kmersC.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
 		kmerF[kmersC[i]] = i * 2.0;
 		kmerP[kmersC[i]] = Pair(i, i * 3.0);
 		//BOOST_MESSAGE(kmersC[i].toFasta());
@@ -488,7 +488,7 @@ void testKmerMap(SequenceLengthType size) {
 		//BOOST_MESSAGE ( kmerF.toString() );
 	}
 
-	unsigned int s = kmersC.size();
+	Kmer::IndexType s = kmersC.size();
 	BOOST_CHECK_EQUAL(s, kmersC.size());
 
       KoMer::MmapFile mmapF = kmerF.store();
@@ -506,7 +506,7 @@ void testKmerMap(SequenceLengthType size) {
 	  KmerMap<float> kcf(mmapF.data());
 	  KmerMap<Pair>  kcp(mmapP.data());
 
-	  for (unsigned int i = 0; i < kmersC.size(); i++) {
+	  for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
 	      Kmer &kmer = kmersC[i];
 	      BOOST_CHECK_EQUAL( kmerF[kmer], kmf[kmer] );
 	      BOOST_CHECK_EQUAL( kmerP[kmer].first,  kmp[kmer].first );
@@ -520,14 +520,14 @@ void testKmerMap(SequenceLengthType size) {
 	kmerF.clear();
 	kmerP.clear();
 	//BOOST_MESSAGE ("Testing exists()");
-	for (unsigned int i = 0; i < kmersC.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
 		BOOST_CHECK(!kmerF.exists(kmersC[i]));
 		BOOST_CHECK(!kmerF.exists(kmersC[i]));
 		BOOST_CHECK(!kmerP.exists(kmersC[i]));
 		BOOST_CHECK(!kmerP.exists(kmersC[i]));
 	}
 
-	for (unsigned int i = 0; i < kmersC.size(); i++) {
+	for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
 		if (!kmerF.exists(kmersC[i]))
 			kmerF[kmersC[i]] = i * 2.0;
 		if (!kmerP.exists(kmersC[i]))
@@ -540,7 +540,7 @@ void testKmerMap(SequenceLengthType size) {
 
 	std::for_each(kmerF.begin(), kmerF.end(), Tester(kmerF));
 
-	unsigned int count = 0;
+	Kmer::IndexType count = 0;
 	for (KmerMap<float>::Iterator it = kmerF.begin(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
@@ -549,40 +549,7 @@ void testKmerMap(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(kmerF.size(), count);
 }
 
-void testKmerNewDelete() {
-#if 0
-	// This should never compile!
-	Kmer *one = new Kmer;
-	delete one;
 
-	Kmer *many = new Kmer[100];
-	delete [] many;
-
-	Kmer bad;
-#endif
-}
-/*
- void testKmerInstance()
- {
- KmerInstance one;
- KmerInstance many[100];
- KmerSizer::set(8);
-
- std::string A("ACGTCGTAACGTCGTA"), B("TACGACGTTACGACGT"), C("AAAACCCCGGGGTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
- SET_KMERS(A.c_str(), B.c_str(), C.c_str());
- KmerSizer::set(8);
-
- one = *kmer1;
- many[0] = *kptr1;//kmer1ref;
- many[1] = *kptr2;
- many[2] = *kmer3;
-
- BOOST_CHECK_EQUAL( "ACGTCGTA", one.toFasta() );
- BOOST_CHECK_EQUAL( "ACGTCGTA", many[0].toFasta() );
- BOOST_CHECK_EQUAL( "TACGACGT", many[1].toFasta() );
- BOOST_CHECK_EQUAL( "AAAACCCC", many[2].toFasta() );
- }
- */
 
 BOOST_AUTO_TEST_CASE( KmerSetTest )
 {
@@ -608,8 +575,6 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 	testKmerArray(8);
 	testKmerArray(9);
 
-	testKmerNewDelete();
-
 	testKmerMap(1);
 	testKmerMap(2);
 	testKmerMap(3);
@@ -620,11 +585,16 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 	testKmerMap(8);
 	testKmerMap(9);
 
-	//testKmerInstance();
 }
 
 //
 // $Log: KmerTest.cpp,v $
+// Revision 1.38  2010-05-18 20:50:21  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.37.12.1  2010-05-07 22:59:41  regan
+// refactored base type declarations
+//
 // Revision 1.37  2010-05-01 21:57:51  regan
 // merged head with serial threaded build partitioning
 //

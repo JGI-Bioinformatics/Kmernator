@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.20 2010-05-06 21:46:57 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.21 2010-05-18 20:50:18 regan Exp $
 //
 
 #include <iostream>
@@ -25,7 +25,7 @@ typedef ReadSelector<DataType> RS;
 class FilterReadsOptions : Options {
 public:
 	static int getMaxKmerDepth() {
-		return getVarMap()["max-kmer-depth"].as<int> ();
+		return getVarMap()["max-kmer-output-depth"].as<int> ();
 	}
 	static int getPartitionByDepth() {
 		return getVarMap()["partition-by-depth"].as<int> ();
@@ -40,8 +40,8 @@ public:
 
 		getDesc().add_options()
 
-		("max-kmer-depth", po::value<int>()->default_value(-1),
-				"maximum number of times a kmer will be represented among the selected reads (mutually exclusive with partition-by-depth)")
+		("max-kmer-output-depth", po::value<int>()->default_value(-1),
+				"maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output")
 
 		("partition-by-depth", po::value<int>()->default_value(-1),
 				"partition filtered reads by powers-of-two coverage depth (mutually exclusive with max-kmer-depth)")
@@ -57,16 +57,23 @@ public:
 			{
 				throw std::invalid_argument("You can not specify both max-kmer-depth and partition-by-depth");
 			}
+			if (Options::getOutputFile().empty())
+			{
+				std::cerr << "WARNING: no output file specified... This is a dry run!" << std::endl;
+			}
 		}
 		return ret;
 	}
 };
+
+long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::string outputFileName);
 
 int main(int argc, char *argv[]) {
 	if (!FilterReadsOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
 	MemoryUtils::getMemoryUsage();
+    std::string outputFilename = Options::getOutputFile();
 
 	ReadSet reads;
 	KmerSizer::set(Options::getKmerSize());
@@ -117,6 +124,12 @@ int main(int argc, char *argv[]) {
 	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 
+	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {
+		  cerr << "Creating GC Heat Map " <<  MemoryUtils::getMemoryUsage() << endl;
+		  OfstreamMap ofmap(outputFilename + "-GC", ".txt");
+		  spectrum.printGC(ofmap.getOfstream(""));
+	  }
+
 	  if (Options::getMinDepth() > 1) {
         cerr << "Clearing singletons from memory" << endl;
         spectrum.singleton.clear();
@@ -124,8 +137,27 @@ int main(int argc, char *argv[]) {
 	  }
 	}
 
+
+	unsigned int minDepth = Options::getMinDepth();
+	unsigned int depthRange = Options::getDepthRange();
+	unsigned int depthStep = 2;
+	if (depthRange < minDepth) {
+		depthRange = minDepth;
+	}
+
+	for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
+		std::string pickOutputFilename = outputFilename;
+		pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
+		selectReads(thisDepth, reads, spectrum, pickOutputFilename);
+	}
+
+	spectrum.reset();
+}
+
+long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::string outputFilename)
+{
 	cerr << "Trimming reads: ";
-	RS selector(reads, spectrum.weak, Options::getMinDepth());
+	RS selector(reads, spectrum.weak, minDepth);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 	cerr << "Picking reads: " << endl;
 
@@ -134,7 +166,6 @@ int main(int argc, char *argv[]) {
 
 	int maximumKmerDepth = FilterReadsOptions::getMaxKmerDepth();
 
-	std::string outputFilename = Options::getOutputFile();
 	OfstreamMap ofmap(outputFilename, ".fastq");
 
 	if (maximumKmerDepth > 0) {
@@ -142,18 +173,19 @@ int main(int argc, char *argv[]) {
 			cerr << "Picking depth " << depth << " layer of reads" << endl;
 			if (reads.hasPairs())
 				picked += selector.pickBestCoveringSubsetPairs(depth,
-						Options::getMinDepth(), Options::getMinReadLength(), FilterReadsOptions::getBothPairs());
+						minDepth, Options::getMinReadLength(), FilterReadsOptions::getBothPairs());
 			else
 				picked += selector.pickBestCoveringSubsetReads(depth,
-						Options::getMinDepth(), Options::getMinReadLength());
-            cerr << MemoryUtils::getMemoryUsage() << endl;
+						minDepth, Options::getMinReadLength());
+			cerr << MemoryUtils::getMemoryUsage() << endl;
 		}
 
 		if (picked > 0 && !outputFilename.empty()) {
 			cerr << "Writing " << picked << " reads to output file(s)" << endl;
 			selector.writePicks(ofmap, oldPicked);
 		}
-        cerr << MemoryUtils::getMemoryUsage() << endl;
+		cerr << MemoryUtils::getMemoryUsage() << endl;
+		oldPicked += picked;
 
 
 	} else {
@@ -165,29 +197,29 @@ int main(int argc, char *argv[]) {
 
 		for (unsigned int depth = maxDepth; depth >= 1; depth /= 2) {
 
-			string ofname = outputFilename + '-';
+			string ofname = outputFilename;
 			if (maxDepth > 1) {
-				ofname += "-MinDepth" + boost::lexical_cast< string >( depth );
+				ofname += "-PartitionDepth" + boost::lexical_cast< string >( depth );
 			}
 			ofmap = OfstreamMap(ofname, ".fastq");
-			float minDepth = std::max(Options::getMinDepth(), depth);
+			float tmpMinDepth = std::max(minDepth, depth);
 			if (Options::getKmerSize() == 0) {
-				minDepth = 0;
+				tmpMinDepth = 0;
 				depth = 0;
 			}
-			cerr << "Selecting reads over depth: " << depth << " (" << minDepth << ") " << endl;
+			cerr << "Selecting reads over depth: " << depth << " (" << tmpMinDepth << ") " << endl;
 
 			if (reads.hasPairs()) {
-				picked = selector.pickAllPassingPairs(minDepth,
+				picked = selector.pickAllPassingPairs(tmpMinDepth,
 						Options::getMinReadLength(),
 						FilterReadsOptions::getBothPairs());
 			} else {
-				picked = selector.pickAllPassingReads(minDepth,
+				picked = selector.pickAllPassingReads(tmpMinDepth,
 						Options::getMinReadLength());
 			}
 			cerr << "At or above coverage: " << depth << " Picked " << picked
-					<< " / " << reads.getSize() << " reads" << endl;
-            cerr << MemoryUtils::getMemoryUsage() << endl;
+			<< " / " << reads.getSize() << " reads" << endl;
+			cerr << MemoryUtils::getMemoryUsage() << endl;
 
 			if (picked > 0 && !outputFilename.empty()) {
 				cerr << "Writing " << picked << " reads  to output files" << endl;
@@ -195,14 +227,36 @@ int main(int argc, char *argv[]) {
 			}
 			oldPicked += picked;
 
-			if (Options::getMinDepth() > depth) {
+			if (minDepth > depth) {
 				break;
 			}
 		}
 	}
+	ofmap.clear();
+	cerr << "Done.  Cleaning up" << MemoryUtils::getMemoryUsage() << endl;
+	selector.clear();
+
+	return oldPicked;
 }
 
 // $Log: FilterReads.cpp,v $
+// Revision 1.21  2010-05-18 20:50:18  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.20.2.4  2010-05-18 16:43:49  regan
+// added GC heatmap output .. still refining
+//
+// Revision 1.20.2.3  2010-05-12 20:47:42  regan
+// minor refactor.
+// adjusted output file names
+// support of option to output a range of min-depths
+//
+// Revision 1.20.2.2  2010-05-12 18:24:25  regan
+// bugfix
+//
+// Revision 1.20.2.1  2010-05-12 17:57:11  regan
+// help destructor ordering
+//
 // Revision 1.20  2010-05-06 21:46:57  regan
 // merged changes from PerformanceTuning-20100501
 //

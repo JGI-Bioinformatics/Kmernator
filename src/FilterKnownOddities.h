@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.23 2010-05-06 22:55:05 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.24 2010-05-18 20:50:24 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -21,7 +21,6 @@
 class FilterKnownOddities {
 public:
 	typedef Kmer::NumberType NumberType;
-	typedef std::vector<unsigned long> PatternVector;
 	typedef std::vector< ReadSet::ReadSetSizeType > ReadIdxVector;
 	typedef KmerMap<unsigned short> KM;
 
@@ -70,10 +69,12 @@ public:
 		assert(length % 4 == 0);
 		KmerSizer::set(length);
 
+		sequences.circularize(length);
+
 		for (unsigned short i = 0; i < sequences.getSize(); i++) {
 			const Read read = sequences.getRead(i);
 			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true);
-			for (unsigned int j = 0; j < kmers.size(); j++) {
+			for (Kmer::IndexType j = 0; j < kmers.size(); j++) {
 				filter.getOrSetElement( kmers[j] , i );
 			}
 		}
@@ -88,7 +89,7 @@ public:
 			}
 			for(std::vector< KM::BucketType >::iterator it = tmpKmers.begin(); it != tmpKmers.end(); it++) {
 				KM::BucketType &kmers = *it;
-				for (unsigned int j = 0; j < kmers.size(); j++) {
+				for (Kmer::IndexType j = 0; j < kmers.size(); j++) {
 					filter.getOrSetElement( kmers[j] , kmers.valueAt(j) );
 				}
 			}
@@ -106,8 +107,9 @@ public:
 
 		unsigned long affectedCount = 0;
 
+		long readsSize = reads.getSize();
 		#pragma omp parallel for schedule(dynamic) reduction(+:affectedCount)
-		for (long readIdx = 0; readIdx < (long) reads.getSize(); readIdx++) {
+		for (long readIdx = 0; readIdx < readsSize; readIdx++) {
 			Read &read = reads.getRead(readIdx);
 
 			if (Options::getDebug() > 2) {
@@ -197,7 +199,7 @@ public:
 	void _writeFilter(ReadSet &reads, ReadIdxVector &vector, OfstreamMap &om) {
 		for(ReadIdxVector::iterator it = vector.begin(); it != vector.end(); it++) {
 		    Read &read = reads.getRead(*it);
-		    read.write( om.getOfstream( reads.getReadFileNamePrefix(*it) ), read.getLength(), "", 2 );
+		    read.write( om.getOfstream( std::string("-") + reads.getReadFileNamePrefix(*it) ), read.getLength(), "", 2 );
 			read.discard();
  	    }
 	}
@@ -261,7 +263,7 @@ public:
 		  tmpKmerv[i].resize(1);
 		  tmpKmerv[i].valueAt(0) = 1.0;
 		}
-		ReadSetSizeType pairSize =  reads.getPairSize();
+		long pairSize =  reads.getPairSize();
 
 		ReadSet::madviseMmapsSequential();
 
@@ -395,7 +397,7 @@ public:
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
 		    		// iterator readId is actually the pairIdx built above
-		    		ReadSetSizeType pairIdx = rpwit->readId;
+		    		long pairIdx = rpwit->readId;
 
 		    		// correct orientation
 		    		bool isCorrectOrientation = true;
@@ -424,7 +426,7 @@ public:
 
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
-		    	    ReadSetSizeType pairIdx = rpwit->readId;
+		    	    long pairIdx = rpwit->readId;
 
 		    	    // orientation does not matter here, but correcting the index is important!
 		    	    if (pairIdx >= pairSize) {
@@ -1050,8 +1052,7 @@ public:
 		ss << "TCCCAAGAAGCTGTTCAGAATCAGAATGAGCCGCAACTTCGGGATGAAAATGCTCACAATGACAAATCTG" << std::endl;
 		ss << "TCCACGGAGTGCTTAATCCAACTTACCAAGCTGGGTTACGACGCGACGCCGTTCAACCAGATATTGAAGC" << std::endl;
 		ss << "AGAACGCAAAAAGAGAGATGAGATTGAGGCTGGGAAAAGTTACTGTAGCCGACGTTTTGGCGGCGCAACC" << std::endl;
-		ss << "TGTGACGACAAATCTGCTCAAATTTATGCGCGCTTCGATAAAAATGATTGGCGTATCCAACCTGCA"
-		   << "GAGTTTTATCGCTTCCATGACGCAGAAGTTAA" << std::endl;
+		ss << "TGTGACGACAAATCTGCTCAAATTTATGCGCGCTTCGATAAAAATGATTGGCGTATCCAACCTGCA"     << std::endl;
 		return ss.str();
 	}
 
@@ -1060,6 +1061,21 @@ public:
 #endif
 
 // $Log: FilterKnownOddities.h,v $
+// Revision 1.24  2010-05-18 20:50:24  regan
+// merged changes from PerformanceTuning-20100506
+//
+// Revision 1.23.2.4  2010-05-12 22:45:00  regan
+// added readset circularize method
+//
+// Revision 1.23.2.3  2010-05-12 20:47:12  regan
+// bugfix in names of output files
+//
+// Revision 1.23.2.2  2010-05-10 17:57:24  regan
+// fixing types
+//
+// Revision 1.23.2.1  2010-05-07 22:59:32  regan
+// refactored base type declarations
+//
 // Revision 1.23  2010-05-06 22:55:05  regan
 // merged changes from CodeCleanup-20100506
 //
