@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.29 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.30 2010-05-24 21:48:46 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -65,6 +65,12 @@ public:
 		}
 		inline ReadSetSizeType lesser() const {
 			return (read1 < read2 ? read1 : read2);
+		}
+		inline bool isSingle() const {
+			return (read1 != MAX_READ_IDX && read2 == MAX_READ_IDX) || (read1 == MAX_READ_IDX && read2 != MAX_READ_IDX);
+		}
+		inline bool isPaired() const {
+			return (read1 != MAX_READ_IDX && read2 != MAX_READ_IDX);
 		}
 	};
 
@@ -180,17 +186,17 @@ public:
 	static Read getConsensusRead(const ProbabilityBases &probs, std::string name);
 
 	inline std::ostream &write(std::ostream &os, ReadSetSizeType readIdx,
-			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
+			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
 		return getRead(readIdx).write(os, trimOffset, label, format);
 	}
 	inline std::ostream &write(OfstreamMap &om, ReadSetSizeType readIdx,
-			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
+			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
 		return write(om.getOfstream( getReadFileNamePrefix(readIdx) ), readIdx, trimOffset, label, format);
 	}
 	inline std::ostream &write(OfstreamMap &om, const Pair &pair,
 			SequenceLengthType trimOffset1 = MAX_SEQUENCE_LENGTH, std::string label1 = "",
 			SequenceLengthType trimOffset2 = MAX_SEQUENCE_LENGTH, std::string label2 = "",
-			int format = 0, bool forcePair = false) const {
+			FormatOutput format = FormatOutput::getDefault(), bool forcePair = false) const {
 		std::ostream &os = om.getOfstream(getReadFileNamePrefix(pair));
 		if (isValidRead(pair.read1))
 			write(os, pair.read1, trimOffset1, label1, format);
@@ -236,6 +242,20 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.30  2010-05-24 21:48:46  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.29.2.3  2010-05-19 21:53:20  regan
+// bugfixes
+//
+// Revision 1.29.2.2  2010-05-19 21:36:54  regan
+// refactored duplicate fragment filter code
+// added duplicate fragment on single ended reads
+//
+// Revision 1.29.2.1  2010-05-19 00:20:46  regan
+// refactored fomat output options
+// added options to fastq2fasta
+//
 // Revision 1.29  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

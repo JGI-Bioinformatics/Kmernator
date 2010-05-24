@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.21 2010-05-18 20:50:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/FilterReads.cpp,v 1.22 2010-05-24 21:48:50 regan Exp $
 //
 
 #include <iostream>
@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	  cerr << "Applying DuplicateFragmentPair Filter to Input Files" << endl;
-	  unsigned long duplicateFragments = filter.filterDuplicateFragmentPairs(reads);
+	  unsigned long duplicateFragments = filter.filterDuplicateFragments(reads);
 	  cerr << "filter affected  (removed) " << duplicateFragments << endl;
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 	}
@@ -145,13 +145,19 @@ int main(int argc, char *argv[]) {
 		depthRange = minDepth;
 	}
 
-	for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
-		std::string pickOutputFilename = outputFilename;
-		pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
-		selectReads(thisDepth, reads, spectrum, pickOutputFilename);
+	if (!outputFilename.empty()) {
+		for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
+			std::string pickOutputFilename = outputFilename;
+			if (Options::getKmerSize() > 0) {
+				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
+			}
+			selectReads(thisDepth, reads, spectrum, pickOutputFilename);
+		}
 	}
 
 	spectrum.reset();
+
+	return 0;
 }
 
 long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::string outputFilename)
@@ -240,6 +246,19 @@ long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::strin
 }
 
 // $Log: FilterReads.cpp,v $
+// Revision 1.22  2010-05-24 21:48:50  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.21.2.3  2010-05-20 18:35:25  regan
+// bugfix in output naming
+//
+// Revision 1.21.2.2  2010-05-20 18:25:58  regan
+// fixed to not output unless asked for
+//
+// Revision 1.21.2.1  2010-05-19 21:36:57  regan
+// refactored duplicate fragment filter code
+// added duplicate fragment on single ended reads
+//
 // Revision 1.21  2010-05-18 20:50:18  regan
 // merged changes from PerformanceTuning-20100506
 //

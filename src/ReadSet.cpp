@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.38 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.39 2010-05-24 21:48:46 regan Exp $
 //
 
 #include <exception>
@@ -546,20 +546,30 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			Pair &test = _pairs[unmatchedIt->second];
 			if (readNum == 2) {
 				if (test.read2 != MAX_READ_IDX) {
-					isPairable = false;
-					std::cerr
-							<< "Detected a conflicting read2. Aborting pair identification: "
+					if (isPairable) {
+					    std::cerr
+							<< "Detected a conflicting read2. Skipping pair identification: "
 							<< name << std::endl;
-					break;
+					}
+					isPairable = false;
+					unmatchedNames.erase(unmatchedIt);
+					_pairs.push_back(Pair(MAX_READ_IDX, readIdx));
+					readIdx++;
+					continue;
 				}
 				test.read2 = readIdx;
 			} else {
 				if (test.read1 != MAX_READ_IDX) {
-					isPairable = false;
-					std::cerr
-							<< "Detected a conflicting read1. Aborting pair identification: "
+					if (isPairable) {
+					    std::cerr
+							<< "Detected a conflicting read1. Skipping pair identification: "
 							<< name << std::endl;
-					break;
+					}
+					isPairable = false;
+					unmatchedNames.erase(unmatchedIt);
+					_pairs.push_back(Pair(readIdx, MAX_READ_IDX));
+					readIdx++;
+					continue;
 				}
 				test.read1 = readIdx;
 			}
@@ -585,16 +595,6 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 					<< std::endl;
 	}
 
-	if (!isPairable) {
-		// Pair identification was aborted, re-assigning all 'pairs' to be single reads
-		_pairs.clear();
-		_pairs.resize(size);
-		readIdx = 0;
-		while (readIdx < size) {
-			_pairs[readIdx] = Pair(readIdx);
-			readIdx++;
-		}
-	}
 	if (Options::getVerbosity())
 		std::cerr << "Identified new pairs: " << newPairs << std::endl;
 
@@ -656,6 +656,12 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.39  2010-05-24 21:48:46  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.38.2.1  2010-05-24 21:42:34  regan
+// adjusted pairing behavior when duplicated names are encountered
+//
 // Revision 1.38  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

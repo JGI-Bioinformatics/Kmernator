@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.24 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.25 2010-05-24 21:48:46 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -21,21 +21,19 @@
 class FilterKnownOddities {
 public:
 	typedef Kmer::NumberType NumberType;
-	typedef std::vector< ReadSet::ReadSetSizeType > ReadIdxVector;
 	typedef KmerMap<unsigned short> KM;
+	typedef std::vector< ReadSet::ReadSetSizeType > SequenceCounts;
 
 private:
 	ReadSet sequences;
 	unsigned short length;
 	unsigned short twoBitLength;
-	ReadIdxVector phiXReads;
-	ReadIdxVector filterReads;
 	KM filter;
-	std::vector< ReadSet::ReadSetSizeType > counts;
+	SequenceCounts counts;
 
 public:
 	FilterKnownOddities(int _length = 24, int numErrors = 2) :
-		length(_length), filter(16*1024*1024) {
+		length(_length), filter(32*1024*1024) {
 		if (length > 28) {
 			throw std::invalid_argument("FilterKnownOddities must use 7 bytes or less (<= 28 bases)");
 		}
@@ -59,8 +57,6 @@ public:
 	}
 	void clear() {
 		filter.clear();
-		phiXReads.clear();
-		filterReads.clear();
 		counts.clear();
 	}
 
@@ -101,11 +97,31 @@ public:
 		KmerSizer::set(oldKmerLength);
 	}
 
+	// TODO make applyFilter write when read is in memory -- not delayed
 	unsigned long applyFilter(ReadSet &reads) {
 		unsigned long oldKmerLength = KmerSizer::getSequenceLength();
 		KmerSizer::set(length);
 
 		unsigned long affectedCount = 0;
+		OfstreamMap _omPhiX(Options::getOutputFile(), "-PhiX.fastq");
+		OfstreamMap *omPhiX = NULL;
+		if (Options::getPhiXOutput()) {
+			omPhiX = &_omPhiX;
+		}
+		OfstreamMap _omArtifact(Options::getOutputFile(), "-Artifact.fastq");
+		OfstreamMap *omArtifact = NULL;
+		if (Options::getFilterOutput()) {
+			omArtifact = &_omArtifact;
+		}
+
+		int numThreads = omp_get_max_threads();
+		SequenceCounts     threadCounts[numThreads];
+
+        for (int i = 0; i < numThreads; i++) {
+            threadCounts[i].resize( sequences.getSize() );
+        }
+		// start with any existing state
+		counts.swap(threadCounts[0]);
 
 		long readsSize = reads.getSize();
 		#pragma omp parallel for schedule(dynamic) reduction(+:affectedCount)
@@ -131,6 +147,7 @@ public:
 			KM::ElementType elem;
 			bool wasAffected = false;
 			bool wasPhiX = false;
+			SequenceLengthType minAffected = MAX_SEQUENCE_LENGTH;
 			KM::ValueType value = 0;
 			for(long byteHop = 0; byteHop <= byteHops; byteHop++) {
 
@@ -140,21 +157,26 @@ public:
 
 				elem = filter.getElementIfExists( fwd );
 				if (elem.isValid()) {
-					read.markupBases(byteHop*4, length, 'X');
+					SequenceLengthType pos = byteHop*4;
+					read.markupBases(pos, length, 'X');
 					wasAffected = true;
 					value = elem.value();
 					wasPhiX |= isPhiX(value);
+					if (minAffected > pos)
+						minAffected = pos;
 				}
 
 				const Kmer &rev = (const Kmer&) *revPtr;
 
 				elem = filter.getElementIfExists( rev );
 				if (elem.isValid()) {
-					read.markupBases(seqLen - length - byteHop*4 , length, 'X');
+					SequenceLengthType pos = seqLen - length - byteHop*4;
+					read.markupBases(pos , length, 'X');
 					wasAffected = true;
 					value = elem.value();
 					wasPhiX |= isPhiX(value);
-					continue;
+					if (minAffected > pos)
+						minAffected = pos;
 				}
 
 				ptr++;
@@ -162,17 +184,39 @@ public:
 			}
 			if (wasAffected) {
 				affectedCount++;
-				// TODO optimize this section
+				int threadNum = omp_get_thread_num();
 
-				#pragma omp critical
-                {
-				    counts[ value ]++;
-				    if (wasPhiX) {
-					  phiXReads.push_back(readIdx);
-				    } else {
-					  filterReads.push_back(readIdx);
-				    }
-				    if (Options::getDebug()>1) {
+				threadCounts[threadNum][ value ]++;
+				if (wasPhiX && omPhiX != NULL) {
+
+					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx);
+					#pragma omp critical
+					{
+						_writeFilterRead(omPhiX->getOfstream( fileSuffix ), read, seqLen);
+					}
+					
+                    // always discard the read, as it contains some PhiX and was sorted
+					read.discard(); 
+
+				} else if ( (!wasPhiX) && omArtifact != NULL) {
+
+					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx);
+					std::string label = sequences.getRead(value).getName();
+					#pragma omp critical
+					{
+						_writeFilterRead(omArtifact->getOfstream( fileSuffix ), read, seqLen, label);
+					}
+				}
+
+				// if more than twoThirds of the read is masked, discard it completely regardless if it was output or not
+				if ( minAffected < seqLen / 3 ) {
+					read.discard();
+				}
+
+				if (Options::getDebug()>1) {
+
+					#pragma omp critical
+					{
 					  std::cerr << "FilterMatch to " << read.getName() << " "
 					  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
 					  << wasPhiX << " " << sequences.getRead(value).getName() << std::endl;
@@ -181,7 +225,18 @@ public:
 			}
 		}
 
-		writeFilter(reads);
+		// consolidate threaded instances of global variables
+		for(int i = 1 ; i < numThreads; i++) {
+			for(ReadSetSizeType j = 0 ; j < threadCounts[i].size(); j++) {
+				if (threadCounts[0].size() <= j)
+					threadCounts[0].resize(j+1);
+				threadCounts[0][j] += threadCounts[i][j];
+			}
+		}
+
+		// restore state
+		counts.swap(threadCounts[0]);
+
 		if (Options::getVerbosity()) {
 			std::cerr << "Final Filter Matches to reads: " << affectedCount << std::endl;
 			// TODO sort
@@ -196,27 +251,8 @@ public:
 		return affectedCount;
 	}
 
-	void _writeFilter(ReadSet &reads, ReadIdxVector &vector, OfstreamMap &om) {
-		for(ReadIdxVector::iterator it = vector.begin(); it != vector.end(); it++) {
-		    Read &read = reads.getRead(*it);
-		    read.write( om.getOfstream( std::string("-") + reads.getReadFileNamePrefix(*it) ), read.getLength(), "", 2 );
-			read.discard();
- 	    }
-	}
-	void writeFilter(ReadSet &reads) {
-		if (Options::getOutputFile().empty())
-			return;
-		if (phiXReads.empty() && filterReads.empty())
-			return;
-
-		if (Options::getPhiXOutput()) {
-		  OfstreamMap om(Options::getOutputFile(), "-PhiX.fastq");
-		  _writeFilter(reads, phiXReads, om);
-		}
-		if (Options::getFilterOutput()) {
-		  OfstreamMap om(Options::getOutputFile(), "-Artifact.fastq");
-		  _writeFilter(reads, filterReads, om);
-		}
+	static void _writeFilterRead(ostream &os, Read  &read, SequenceLengthType readLength, std::string readLabel = "") {
+	    read.write(os, readLength, readLabel, FormatOutput::FASTQ_UNMASKED);
 	}
 
 	const ReadSet &getSequences() const {
@@ -232,31 +268,13 @@ public:
 	typedef ReadSet::Pair Pair;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 
-	static unsigned long filterDuplicateFragmentPairs(ReadSet &reads, unsigned char sequenceLength = 16, unsigned int cutoffThreshold = 2, unsigned int editDistance = Options::getDeDupEditDistance()) {
-
-	  if ( Options::getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
-			std::cerr << "Skipping filter and merge of duplicate fragments" << std::endl;
-			return 0;
-	  }
-	  unsigned long affectedCount = 0;
-	  bool useReverseComplement = (Options::getDeDupMode() == 2);
-
-	  // select the number of bytes from each pair to scan
-	  unsigned char bytes = sequenceLength / 4;
-	  if (bytes == 0) {
-			bytes = 1;
-	  }
-	  SequenceLengthType oldKmerSize = KmerSizer::getSequenceLength();
-	  KmerSizer::set(bytes * 4 * 2);
-	  {
-
+	static void _buildDuplicateFragmentMap(KS::Vector &ksv, ReadSet &reads, unsigned char bytes, bool useReverseComplement, bool paired) {
 		// build one KS per thread, then merge, skipping singletons
         // no need to include quality scores
 
 		// build the kmer spectrum with the concatenated prefixes
 		// from each read in the pair
-		int numThreads = omp_get_max_threads();
-		KS::Vector ksv(numThreads);
+		int numThreads = ksv.size();
 		KmerWeights::Vector tmpKmerv(numThreads);
 		for(int i = 0; i < numThreads; i++) {
 		  ksv[i] = KS(reads.getPairSize() / 64 / numThreads, false);
@@ -266,6 +284,9 @@ public:
 		long pairSize =  reads.getPairSize();
 
 		ReadSet::madviseMmapsSequential();
+		if (!paired)
+			bytes *= 2;
+		SequenceLengthType sequenceLength = bytes * 4;
 
 	    #pragma omp parallel for
 		for(long pairIdx = 0; pairIdx < pairSize; pairIdx++) {
@@ -274,44 +295,57 @@ public:
 			KmerWeights &kmerWeights = tmpKmerv[threadNum];
 			Kmer &kmer = kmerWeights[0];
 
-			// TODO implement Options::getDeDupSingle() == 1
+			if (paired && pair.isPaired() ) {
+				if(reads.isValidRead(pair.read1) && reads.isValidRead(pair.read2)) {
+					const Read &read1 = reads.getRead(pair.read1);
+					const Read &read2 = reads.getRead(pair.read2);
+					if (read1.isDiscarded() || read2.isDiscarded())
+						continue;
 
+					// create read1 + the reverse complement of read2 (1:rev2)
+					// when useReverseComplement, it is represented as a kmer, and the leastcomplement of 1:rev2 and 2:rev1 will be stored
+					// and properly account for duplicate fragment pairs
 
-			if (reads.isValidRead(pair.read1) && reads.isValidRead(pair.read2)) {
-			  const Read &read1 = reads.getRead(pair.read1);
-			  const Read &read2 = reads.getRead(pair.read2);
-			  if (read1.isDiscarded() || read2.isDiscarded())
-				  continue;
+					Sequence::BaseLocationVectorType markups = read1.getMarkups();
+					if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
+						memcpy(kmer.getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
+					} else {
+						continue;
+					}
+					markups = read2.getMarkups();
+					if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
+						TwoBitSequence::reverseComplement( read2.getTwoBitSequence(), kmer.getTwoBitSequence() + bytes, sequenceLength);
+					} else {
+						continue;
+					}
 
-			  // create read1 + the reverse complement of read2 (1:rev2)
-			  // when useReverseComplement, it is represented as a kmer, and the leastcomplement of 1:rev2 and 2:rev1 will be stored
-			  // and properly account for duplicate fragment pairs
-
-			  Sequence::BaseLocationVectorType markups = read1.getMarkups();
-			  if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
-				  memcpy(kmer.getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
-			  } else {
-				  continue;
-			  }
-			  markups = read2.getMarkups();
-			  if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
-				  TwoBitSequence::reverseComplement( read2.getTwoBitSequence(), kmer.getTwoBitSequence() + bytes, bytes*4);
-			  } else {
-				  continue;
-			  }
-
-			  long myPairIdx = pairIdx;
-			  if (useReverseComplement) {
-				  // choose orientation and flag in pairIdx
-				  TEMP_KMER(tmpRevComp);
-				  if (! kmer.buildLeastComplement(tmpRevComp) ) {
-					  kmer = tmpRevComp;
-					  myPairIdx = pairIdx + pairSize;
-				  }
-			  }
-			  // store the pairIdx (not readIdx)
-			  ksv[threadNum].append(kmerWeights, myPairIdx);
-
+					long myPairIdx = pairIdx;
+					if (useReverseComplement) {
+						// choose orientation and flag in pairIdx
+						TEMP_KMER(tmpRevComp);
+						if (! kmer.buildLeastComplement(tmpRevComp) ) {
+							kmer = tmpRevComp;
+							myPairIdx = pairIdx + pairSize;
+						}
+					}
+					// store the pairIdx (not readIdx)
+					ksv[threadNum].append(kmerWeights, myPairIdx);
+				}
+			} else if ( pair.isSingle() && (!paired) ) {
+				ReadSetSizeType readIdx = pair.lesser();
+				if (reads.isValidRead(readIdx)) {
+					const Read &read1 = reads.getRead(readIdx);
+					if (read1.isDiscarded())
+						continue;
+					Sequence::BaseLocationVectorType markups = read1.getMarkups();
+					if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
+						memcpy(kmer.getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
+					} else {
+						continue;
+					}
+					// store the readIdx (not the pairIdx)
+					ksv[threadNum].append(kmerWeights, readIdx);
+				}
 			}
 		}
 		if (Options::getDebug() > 3) {
@@ -324,80 +358,136 @@ public:
 		}
 
 		KS::mergeVector(ksv, 1);
-		KS &ks = ksv[0];
+	}
 
-		// analyze the spectrum
+	// TODO make useWeights an Option::
+	static void _mergeNodesWithinEditDistance(KS &ks, unsigned int cutoffThreshold, unsigned int editDistance, bool useWeights = true) {
+		// TODO honor edit distance > 1
+		std::cerr << "Merging kmers within edit-distance of " << editDistance << " " << MemoryUtils::getMemoryUsage() << std::endl;
+
+		// create a sorted set of elements with > cutoffThreshold count
+		// (singletons will not be included in this round)
+		KSElementVector elems;
+
+		#pragma omp parallel private(elems)
+		{
+			for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
+				KSElementType &elem = *it;
+				if (elem.isValid() && elem.value().getCount() >= cutoffThreshold)
+					elems.push_back(elem);
+			}
+
+			#pragma omp single
+			{
+				std::cerr << "Sorting all nodes >= " << cutoffThreshold << " count: " << elems.size() << " " << MemoryUtils::getMemoryUsage() << std::endl;
+			}
+			std::sort(elems.begin(), elems.end());
+
+
+			#pragma omp single
+			{
+				std::cerr << "Merging elements. " << MemoryUtils::getMemoryUsage() << std::endl;
+			}
+			for(KSElementVector::reverse_iterator it = elems.rbegin(); it != elems.rend(); it++) {
+				KSElementType &elem = *it;
+				if (elem.isValid() && elem.value().getCount() >= cutoffThreshold) {
+					ks.consolidate(elem.key(), useWeights);
+				}
+			}
+
+			#pragma omp single
+			{
+				std::cerr << "Merging elements below cutoffThreshold. " << MemoryUtils::getMemoryUsage() << std::endl;
+			}
+
+			// do not clear elements until all merging has completed
+			elems.clear();
+
+			// now merge those less than cutoff (singletons by default)
+			for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
+				KSElementType &elem = *it;
+				if (elem.isValid()) {
+					TD &value = elem.value();
+					if (value > 0 && value.getCount() < cutoffThreshold) {
+						ks.consolidate(elem.key(), useWeights);
+					}
+				}
+			}
+		} // omp parallel
+
+		std::cerr << "Merged histogram. " << MemoryUtils::getMemoryUsage() << std::endl;
 		ks.printHistograms();
 
-		ReadSet newReads;
-		if (editDistance > 0) {
-
-			// TODO honor edit distance > 1
-			std::cerr << "Merging kmers within edit-distance of " << editDistance << " " << MemoryUtils::getMemoryUsage() << std::endl;
-
-			// create a sorted set of elements with > cutoffThreshold count
-			// (singletons will not be included in this round)
-			KSElementVector elems;
-
-			#pragma omp parallel private(elems)
-			{
-				for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
-					KSElementType &elem = *it;
-					if (elem.isValid() && elem.value().getCount() >= cutoffThreshold)
-						elems.push_back(elem);
-				}
-
-				#pragma omp critical
-				{
-					std::cerr << "Sorting all nodes > " << cutoffThreshold << " count: " << elems.size() << MemoryUtils::getMemoryUsage() << std::endl;
-				}
-				std::sort(elems.begin(), elems.end());
-
-
-				#pragma omp critical
-				{
-					std::cerr << "Merging elements." << MemoryUtils::getMemoryUsage() << std::endl;
-				}
-				for(KSElementVector::reverse_iterator it = elems.rbegin(); it != elems.rend(); it++) {
-					KSElementType &elem = *it;
-					if (elem.isValid() && elem.value().getCount() >= cutoffThreshold) {
-						ks.consolidate(elem.key(), false);
-					}
-				}
-				elems.clear();
-
-				// now merge those less than cutoff (singletons by default)
-				for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
-					KSElementType &elem = *it;
-					if (elem.isValid()) {
-						TD &value = elem.value();
-						if (value > 0 && value.getCount() < cutoffThreshold) {
-							ks.consolidate(elem.key(), false);
-						}
-					}
-				}
-			} // omp parallel
-
-			std::cerr << "Merged histogram. " << MemoryUtils::getMemoryUsage() << std::endl;
-			ks.printHistograms();
-
-		}
-
+	}
+	static ReadSetSizeType _buildConsensusUnPairedReads(KS &ks, ReadSet &reads, ReadSet &newReads, unsigned int cutoffThreshold) {
 		ReadSet::madviseMmapsRandom();
 		std::cerr << "Building consensus reads. " << MemoryUtils::getMemoryUsage() << std::endl;
 
-		#pragma omp parallel
+		ReadSetSizeType affectedCount = 0;
+
+		#pragma omp parallel reduction(+:affectedCount)
+		for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
+		    if (it->value().getCount() >= cutoffThreshold) {
+		    	RPW rpw = it->value().getEachInstance();
+
+		    	ReadSet tmpReadSet1;
+
+		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+
+		    		ReadSetSizeType readIdx = rpwit->readId;
+
+		    		const Read &read1 = reads.getRead(readIdx);
+		    		tmpReadSet1.append( read1 );
+
+		    	}
+
+		    	Read consensus1 = tmpReadSet1.getConsensusRead();
+
+		    	#pragma omp critical
+		    	{
+		    	   newReads.append(consensus1);
+		    	}
+		    	affectedCount += rpw.size();
+
+		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+
+		    		ReadSetSizeType readIdx = rpwit->readId;
+
+		    	    Read &read1 = reads.getRead(readIdx);
+		    		read1.discard();
+		    	}
+
+		    }
+		}
+		std::cerr << "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() << std::endl;
+		ks.reset();
+		std::cerr << "Built " << newReads.getSize() << " new consensus reads: " <<  MemoryUtils::getMemoryUsage() << std::endl;
+		newReads.identifyPairs();
+		return affectedCount;
+	}
+
+	static ReadSetSizeType _buildConsensusPairedReads(KS &ks, ReadSet &reads, ReadSet &newReads, unsigned int cutoffThreshold) {
+		ReadSet::madviseMmapsRandom();
+		std::cerr << "Building consensus reads. " << MemoryUtils::getMemoryUsage() << std::endl;
+
+		ReadSetSizeType affectedCount = 0;
+		ReadSetSizeType pairSize = reads.getPairSize();
+		int numThreads = omp_get_max_threads();
+		ReadSet _threadNewReads[numThreads];
+
+		#pragma omp parallel reduction(+:affectedCount)
 		for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
 		    if (it->value().getCount() >= cutoffThreshold) {
 		    	RPW rpw = it->value().getEachInstance();
 
 		    	ReadSet tmpReadSet1;
 		    	ReadSet tmpReadSet2;
+		    	ReadSet &threadNewReads = _threadNewReads[omp_get_thread_num()];
 
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
 		    		// iterator readId is actually the pairIdx built above
-		    		long pairIdx = rpwit->readId;
+		    		ReadSetSizeType pairIdx = rpwit->readId;
 
 		    		// correct orientation
 		    		bool isCorrectOrientation = true;
@@ -417,16 +507,14 @@ public:
 		    	Read consensus1 = tmpReadSet1.getConsensusRead();
 		    	Read consensus2 = tmpReadSet2.getConsensusRead();
 
-		    	#pragma omp critical
-		    	{
-		    	   newReads.append(consensus1);
-		    	   newReads.append(consensus2);
-		    	   affectedCount += 2 * rpw.size();
-		        }
+		    	threadNewReads.append(consensus1);
+		    	threadNewReads.append(consensus2);
+
+		    	affectedCount += 2 * rpw.size();
 
 		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
-		    	    long pairIdx = rpwit->readId;
+		    	    ReadSetSizeType pairIdx = rpwit->readId;
 
 		    	    // orientation does not matter here, but correcting the index is important!
 		    	    if (pairIdx >= pairSize) {
@@ -441,12 +529,70 @@ public:
 
 		    }
 		}
+		for(int i = 0 ; i < numThreads; i++)
+			newReads.append(_threadNewReads[i]);
+
 		std::cerr << "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() << std::endl;
 		ks.reset();
 		std::cerr << "Built " << newReads.getSize() << " new consensus reads: " <<  MemoryUtils::getMemoryUsage() << std::endl;
 		newReads.identifyPairs();
+		return affectedCount;
+	}
+
+	static ReadSetSizeType _filterDuplicateFragments(ReadSet &reads, unsigned char bytes, unsigned int cutoffThreshold, unsigned int editDistance, bool paired) {
+
+		int numThreads = omp_get_max_threads();
+		KS::Vector ksv(numThreads);
+
+		cerr << "Building " << (paired?"Paired":"Un-Paired") << " Duplicate Fragment Spectrum" << endl;
+
+		SequenceLengthType affectedCount = 0;
+
+        bool useReverseComplement = (Options::getDeDupMode() == 2);
+
+		// build the paired duplicate fragment map
+		_buildDuplicateFragmentMap(ksv, reads, bytes, useReverseComplement, paired);
+
+		KS &ks = ksv[0];
+		// analyze the spectrum
+		ks.printHistograms();
+
+		if (editDistance > 0) {
+			_mergeNodesWithinEditDistance(ks, cutoffThreshold, editDistance);
+		}
+
+		ReadSet newReads;
+		if (paired) {
+			affectedCount += _buildConsensusPairedReads(ks, reads, newReads, cutoffThreshold);
+		} else {
+			affectedCount += _buildConsensusUnPairedReads(ks, reads, newReads, cutoffThreshold);
+		}
 		reads.append(newReads);
+
+		return affectedCount;
+	}
+
+	static ReadSetSizeType filterDuplicateFragments(ReadSet &reads, unsigned char sequenceLength = 16, unsigned int cutoffThreshold = 2, unsigned int editDistance = Options::getDeDupEditDistance()) {
+
+	  if ( Options::getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
+			std::cerr << "Skipping filter and merge of duplicate fragments" << std::endl;
+			return 0;
 	  }
+	  ReadSetSizeType affectedCount = 0;
+
+	  // select the number of bytes from each pair to scan
+	  unsigned char bytes = sequenceLength / 4;
+	  if (bytes == 0) {
+			bytes = 1;
+	  }
+	  SequenceLengthType oldKmerSize = KmerSizer::getSequenceLength();
+	  KmerSizer::set(bytes * 4 * 2);
+
+	  affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, true);
+
+	  if (Options::getDeDupSingle() == 1)
+		  affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, false);
+
       KmerSizer::set(oldKmerSize);
       ReadSet::madviseMmapsSequential();
 
@@ -456,14 +602,55 @@ public:
 	static std::string getArtifactFasta() {
 		std::stringstream ss;
 		ss << ">PrimerDimer" << std::endl;
-		// suffixed extra 32 bases to simulate circular
-
-	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGAGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTTG"
-		   << "AATGATACGGCGACCACCGAGATCTACACTCT" << std::endl;
+	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGAGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTTG" << std::endl;
+	    ss << ">RNA_Linker" << std::endl;
+	    ss << "ATCTCGTATGCCGTCTTCTGCTTGATCTCGTATGCCGTCTTCTGCTTG" << std::endl;
 		ss << ">Homopolymer-A" << std::endl;
 		ss << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
 		ss << ">Homopolymer-C" << std::endl;
 		ss << "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" << std::endl;
+
+	    // from TagDust Lassmann T., et al. (2009) TagDust - A program to eliminate artifacts from next generation sequencing data. Bioinformatics.
+	    ss << ">Solexa_5_prime_adapter" << std::endl;
+	    ss << "AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAG" << std::endl;
+	    ss << ">Solexa_3_prime_adapter" << std::endl;
+	    ss << "TTTTCGTATGCCGTCTTCTGCTTG" << std::endl;
+	    ss << ">Gex_Adapter_1             " << std::endl;
+	    ss << "GATCGTCGGACTGTAGAACTCTGAAC " << std::endl;
+	    ss << ">Gex_Adapter_1_2" << std::endl;
+	    ss << "ACAGGTTCAGAGTTCTACAGTCCGAC " << std::endl;
+	    ss << ">Gex_Adapter_2" << std::endl;
+	    ss << "CAAGCAGAAGACGGCATACGANN " << std::endl;
+	    ss << ">Gex_Adapter_2_2" << std::endl;
+	    ss << "TCGTATGCCGTCTTCTGCTTG " << std::endl;
+	    ss << ">Gex_PCR_Primer_1" << std::endl;
+	    ss << "CAAGCAGAAGACGGCATACGA " << std::endl;
+	    ss << ">Gex_PCR_Primer_2" << std::endl;
+	    ss << "AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA " << std::endl;
+	    ss << ">Gex_Sequencing_Primer" << std::endl;
+	    ss << "CGACAGGTTCAGAGTTCTACAGTCCGACGATC " << std::endl;
+	    ss << ">Adapters1" << std::endl;
+	    ss << "GATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG  " << std::endl;
+	    ss << ">Adapters1_1" << std::endl;
+	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT   " << std::endl;
+	    ss << ">PCR_Primers1" << std::endl;
+	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << ">PCR Primers1_1" << std::endl;
+	    ss << "CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT   " << std::endl;
+	    ss << ">Genomic_DNA_Sequencing_Primer" << std::endl;
+	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << ">PE_Adapters1" << std::endl;
+	    ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG " << std::endl;
+	    ss << ">PE_Adapters1_" << std::endl;
+	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << ">PE_PCR_Primers1" << std::endl;
+	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << ">PE_PCR_Primers1_1" << std::endl;
+	    ss << "CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT " << std::endl;
+	    ss << ">PE_Sequencing_Primer" << std::endl;
+	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << ">PE_Sequencing_Primer_1" << std::endl;
+	    ss << "CGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
 		return ss.str();
 	}
 
@@ -975,7 +1162,6 @@ public:
 	static std::string getPhiX() {
 		std::stringstream ss;
 		ss << ">gi|9626372|ref|NC_001422.1| Coliphage phiX174, complete genome" << std::endl;
-		// added 32 base suffix to get full circular DNA into spectrum
         ss << "GAGTTTTATCGCTTCCATGACGCAGAAGTTAACACTTTCGGATATTTCTGATGAGTCGAAAAATTATCTT" << std::endl;
 		ss << "GATAAAGCAGGAATTACTACTGCTTGTTTACGAATTAAATCGAAGTGGACTGCTGGCGGAAAATGAGAAA" << std::endl;
 		ss << "ATTCGACCTATCCTTGCGCAGCTCGAGAAGCTCTTACTTTGCGACCTTTCGCCATCAACTAACGATTCTG" << std::endl;
@@ -1061,6 +1247,29 @@ public:
 #endif
 
 // $Log: FilterKnownOddities.h,v $
+// Revision 1.25  2010-05-24 21:48:46  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.24.2.6  2010-05-24 21:44:44  regan
+// save memory and scanning time by outputting reads as they are filtered (if output is requested).
+//
+// Revision 1.24.2.5  2010-05-20 18:26:43  regan
+// attempt to fix a race condition when consolidating/merging edit-distance spectrums
+//
+// Revision 1.24.2.4  2010-05-20 03:42:24  regan
+// added RNA_Linker to filter sequences
+// optimized parallel performance in consensus generation
+//
+// Revision 1.24.2.3  2010-05-19 22:43:49  regan
+// bugfixes
+//
+// Revision 1.24.2.2  2010-05-19 21:53:20  regan
+// bugfixes
+//
+// Revision 1.24.2.1  2010-05-19 21:36:54  regan
+// refactored duplicate fragment filter code
+// added duplicate fragment on single ended reads
+//
 // Revision 1.24  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.15 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.16 2010-05-24 21:48:46 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -37,6 +37,7 @@ private:
 	FileListType inputFilePrefixes;
 	std::string outputFile;
 	std::string tmpDir;
+	unsigned int formatOutput;
 	unsigned int kmerSize;
 	double minKmerQuality;
 	unsigned int verbosity;
@@ -58,11 +59,10 @@ private:
 	unsigned int buildPartitions;
 	unsigned int gcHeatMap;
 
-	Options() : tmpDir("/tmp"), kmerSize(21), minKmerQuality(0.10), verbosity(1), debug(0),
+	Options() : tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10), verbosity(1), debug(0),
 	minQuality(10), minDepth(2), depthRange(2), minReadLength(22), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), mmapInput(1), buildPartitions(0), gcHeatMap(1) {
-		setOptions();
 	}
 
 public:
@@ -78,6 +78,9 @@ public:
 	}
 	static inline std::string &getTmpDir() {
 		return getOptions().tmpDir;
+	}
+	static inline unsigned int &getFormatOutput() {
+		return getOptions().formatOutput;
 	}
 	static inline unsigned int &getKmerSize() {
 		return getOptions().kmerSize;
@@ -163,7 +166,8 @@ public:
 		}
 		return getOptions().inputFilePrefixes[fileIdx];
 	}
-private:
+
+protected:
 	void setOptions() {
 
 		desc.add_options()("help", "produce help message")
@@ -181,6 +185,9 @@ private:
 		("input-file", po::value<FileListType>(), "input file(s)")
 
 		("output-file", po::value<std::string>(), "output file pattern")
+
+		("format-output", po::value<unsigned int>()->default_value(formatOutput),
+				"0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
 
         ("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
 		        "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
@@ -267,6 +274,7 @@ public:
 
 	static bool parseOpts(int argc, char *argv[]) {
 		try {
+			getOptions().setOptions();
 
 			po::options_description & desc = getDesc();
 			po::positional_options_description & p = getPosDesc();
@@ -321,6 +329,8 @@ public:
 
 			setOpt<std::string>("temp-dir", getTmpDir(), print);
 
+			setOpt<unsigned int>("format-output", getFormatOutput(), print);
+
 			// set kmer quality
 			setOpt<double>("min-kmer-quality", getMinKmerQuality(), print);
 
@@ -358,10 +368,6 @@ public:
 
 			// set dedup single
 			setOpt<unsigned int>("dedup-single", getDeDupSingle() , print);
-			if (getDeDupSingle() > 0) {
-			    std::cerr << "Unsupported options dedup-single (unimplemented)" << std::endl;
-			    return false;
-			}
 
 			// set dedup edit distance
 			setOpt<unsigned int>("dedup-edit-distance", getDeDupEditDistance() , print);
@@ -394,6 +400,16 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.16  2010-05-24 21:48:46  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.15.2.2  2010-05-19 22:43:49  regan
+// bugfixes
+//
+// Revision 1.15.2.1  2010-05-19 00:20:46  regan
+// refactored fomat output options
+// added options to fastq2fasta
+//
 // Revision 1.15  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

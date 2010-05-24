@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.21 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.22 2010-05-24 21:48:46 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -403,6 +403,9 @@ public:
 		for(long i = 0; i < readsSize; i++) {
 			ReadTrimType &trim = _trims[i];
 			const Read read = _reads.getRead(i);
+			if (read.isDiscarded()) {
+				continue;
+			}
 			Sequence::BaseLocationVectorType markups = read.getMarkups();
 			if (useKmers) {
 			  KmerArray<char> kmers = getKmersForRead(i);
@@ -534,6 +537,12 @@ public:
 
 
 // $Log: ReadSelector.h,v $
+// Revision 1.22  2010-05-24 21:48:46  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.21.2.1  2010-05-20 03:42:46  regan
+// optimized
+//
 // Revision 1.21  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

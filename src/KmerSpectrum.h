@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.36 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.37 2010-05-24 21:48:46 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -108,12 +108,11 @@ public:
 		this->purgedSingletons = other.purgedSingletons;
 		return *this;
 	}
-	void setSolidOnly(unsigned long buckets) {
-		solid.setNumBuckets(buckets);
-		weak.setNumBuckets(1);
-		singleton.setNumBuckets(1);
-		hasSolids=true;
-		hasSingletons = false;
+
+	void setSolidOnly() {
+		weak.clear(true);
+		singleton.clear(true);
+		hasSolids = true;
 	}
 	void reset(bool releaseMemory = true) {
 		solid.clear(releaseMemory);
@@ -234,6 +233,9 @@ public:
 	// returns the count for a single kmer
 	double getCount(const Kmer &kmer, bool useWeights = false) {
 		DataPointers pointer(*this, kmer);
+		return getCount(pointer, useWeights);
+	}
+	double getCount(DataPointers &pointer, bool useWeights = false) {
 		return pointer.getCount(useWeights);
 	}
 
@@ -249,8 +251,8 @@ public:
 	void consolidate(const Kmer &myKmer, bool useWeights = false) {
 		// find all matches to this spectrum
 		KmerWeights weights = KmerWeights::permuteBases(myKmer, useWeights);
-		double myCount = getCount(myKmer, useWeights);
 		getCounts(weights, useWeights);
+		double myCount = getCount(myKmer, useWeights);
 		consolidate(myKmer, myCount, weights);
 	}
 
@@ -260,18 +262,21 @@ public:
 		for(SequenceLengthType idx = 0; idx < size; idx++) {
 			double testCount = weights.valueAt(idx);
 			if (testCount > 0.0 && myCount >= testCount) {
-				if (myCount > testCount || myKmer > weights[idx]) {
+				#pragma omp critical
+				{
+				  // refresh myCount within critical block
+				  myCount = getCount(myKmer, useWeights);
+				  if (myCount >= testCount && ( myCount > testCount || myKmer > weights[idx]) ) {
 					migrateKmerData(weights[idx], myKmer);
+				  }
 				}
 			}
 		}
-
 	}
 
 	// adds/moves tracking from one kmer to another
 	void migrateKmerData(const Kmer &srcKmer, const Kmer &dstKmer) {
 		bool trans = false;
-		#pragma omp critical
 		{
 			if (Options::getDebug() >= 1) {
 			    std::cerr << "Merging kmers " << srcKmer.toFasta() << " to " << dstKmer.toFasta() << std::endl;
@@ -425,13 +430,13 @@ public:
 		}
 	};
 
-	void printHistograms(bool solidOnly = false) {
-		printHistograms(std::cerr, solidOnly);
+	void printHistograms(bool printSolidOnly = false) {
+		printHistograms(std::cerr, printSolidOnly);
 	}
-	void printHistograms(std::ostream &os, bool solidOnly = false) {
+	void printHistograms(std::ostream &os, bool printSolidOnly = false) {
 		Histogram histogram(63);
 
-		if (!solidOnly) {
+		if (!printSolidOnly) {
 			setWeakHistogram(histogram);
 			setSingletonHistogram(histogram);
 		}
@@ -500,13 +505,13 @@ public:
 		}
 	};
 
-	void printGC(bool solidOnly = false) {
-		printGC(std::cerr, solidOnly);
+	void printGC(bool printSolidOnly = false) {
+		printGC(std::cerr, printSolidOnly);
 	}
-	void printGC(std::ostream &os, bool solidOnly = false) {
+	void printGC(std::ostream &os, bool printSolidOnly = false) {
 		GCCoverageHeatMap hm;
 
-		if (!solidOnly) {
+		if (!printSolidOnly) {
 			setWeakGCHM(hm);
 			setSingletonGCHM(hm);
 		}
@@ -1023,8 +1028,8 @@ public:
 		}
 	}
 
-	void printStats(unsigned long pos, bool solidOnly = false, bool fullStats = false) {
-		//stats.printHistograms(solidOnly);
+	void printStats(unsigned long pos, bool printSolidOnly = false, bool fullStats = false) {
+		//stats.printHistograms(printSolidOnly);
 		std::cerr << pos << " reads" << "\t";
 		if (fullStats) {
 			std::cerr << ", " << solid.size() << " solid / " << weak.size() << " weak / "
@@ -1034,8 +1039,8 @@ public:
 		std::cerr << MemoryUtils::getMemoryUsage() << std::endl;
 	}
 
-	void printBucketStats(unsigned long pos, bool solidOnly = false, bool fullStats = false) {
-		//stats.printHistograms(solidOnly);
+	void printBucketStats(unsigned long pos, bool printSolidOnly = false, bool fullStats = false) {
+		//stats.printHistograms(printSolidOnly);
 		std::cerr << pos << ": ";
 
 		unsigned long ss = solid.size();
@@ -1650,6 +1655,21 @@ public:
 
 
 // $Log: KmerSpectrum.h,v $
+// Revision 1.37  2010-05-24 21:48:46  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.36.2.4  2010-05-20 18:26:43  regan
+// attempt to fix a race condition when consolidating/merging edit-distance spectrums
+//
+// Revision 1.36.2.3  2010-05-19 23:41:06  regan
+// re-added memory optimizations
+//
+// Revision 1.36.2.2  2010-05-19 23:38:18  regan
+// bug and performance fixes
+//
+// Revision 1.36.2.1  2010-05-19 21:53:20  regan
+// bugfixes
+//
 // Revision 1.36  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

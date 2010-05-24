@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.31 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.32 2010-05-24 21:48:46 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -383,17 +383,18 @@ public:
 	// format == 2 fastq unmasked
 	// format == 3 fasta unmasked
 	inline static std::ostream &write(std::ostream &os, const Read &read,
-			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) {
-		switch (format) {
-		case 0: os << read.toFastq(trimOffset, label); break;
-		case 1: os << read.toFasta(trimOffset, label); break;
-		case 2: os << read.toFastq(trimOffset, label, true) ; break;
-		case 3: os << read.toFasta(trimOffset, label, true); break;
+			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) {
+		switch (format.getType()) {
+		case FormatOutput::FASTQ: os << read.toFastq(trimOffset, label); break;
+		case FormatOutput::FASTA: os << read.toFasta(trimOffset, label); break;
+		case FormatOutput::FASTQ_UNMASKED: os << read.toFastq(trimOffset, label, true) ; break;
+		case FormatOutput::FASTA_UNMASKED: os << read.toFasta(trimOffset, label, true); break;
+		default: throw std::invalid_argument("Invalid format");
 		}
 		return os;
 	}
 	inline std::ostream &write(std::ostream &os,
-			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", int format = 0) const {
+			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
 		return write(os, *this, trimOffset, label, format);
 	}
 
@@ -405,6 +406,13 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.32  2010-05-24 21:48:46  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.31.2.1  2010-05-19 00:20:46  regan
+// refactored fomat output options
+// added options to fastq2fasta
+//
 // Revision 1.31  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

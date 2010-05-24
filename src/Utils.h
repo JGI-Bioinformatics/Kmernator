@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.37 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.38 2010-05-24 21:48:46 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -20,6 +20,55 @@
 #include "config.h"
 #include "Options.h"
 
+
+class FormatOutput
+{
+private:
+	int _type;
+
+public:
+	FormatOutput(int type) : _type(type) {
+		if (type < 0 || type > 3)
+			throw std::invalid_argument("Format can only be 0-3");
+	}
+	static const int FASTQ = 0;
+	static const int FASTA = 1;
+	static const int FASTQ_UNMASKED = 2;
+	static const int FASTA_UNMASKED = 3;
+
+	static inline FormatOutput getDefault() {
+		return FormatOutput(Options::getFormatOutput());
+	}
+	static std::string getDefaultSuffix() {
+		return getDefault().getSuffix();
+	}
+
+	inline int getType() const {
+		return _type;
+	}
+	bool inline operator==(const FormatOutput &other) const {
+		return _type == other._type;
+	}
+	inline std::string getSuffix() const {
+		return getSuffix(*this);
+	}
+	static inline std::string getSuffix(const FormatOutput &format) {
+		return getSuffix(format._type);
+	}
+	static inline std::string getSuffix(int type) {
+		std::string ret;
+		switch(type) {
+		case 0:
+		case 2: ret = std::string(".fastq"); break;
+		case 1:
+		case 3: ret = std::string(".fasta"); break;
+		default : ret = std::string(".txt");
+		}
+		return ret;
+	}
+};
+
+
 class OfstreamMap {
 public:
 	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
@@ -31,8 +80,7 @@ private:
     std::string _suffix;
 
 public:
-	OfstreamMap() {}
-	OfstreamMap(std::string outputFilePathPrefix, std::string suffix = "")
+	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
 	 : _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {}
 	~OfstreamMap() {
         clear();
@@ -234,6 +282,13 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.38  2010-05-24 21:48:46  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.37.2.1  2010-05-19 00:20:46  regan
+// refactored fomat output options
+// added options to fastq2fasta
+//
 // Revision 1.37  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

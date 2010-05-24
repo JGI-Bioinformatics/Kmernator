@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.25 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.h,v 1.26 2010-05-24 21:48:46 regan Exp $
 //
 
 #ifndef _TWO_BIT_SEQUENCE_H
@@ -109,7 +109,9 @@ public:
     static SequenceLengthType firstMarkupNorX(const BaseLocationVectorType &markups);
 
     static std::string getFasta(const TwoBitEncoding *in, SequenceLengthType length);
+    
     static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
+
     static void shiftLeft(const void *in, void *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases, bool hasExtraByte = false);
 
 	static MarkupElementSizeType getMarkupElementSize(const BaseLocationVectorType &markups);
@@ -130,6 +132,13 @@ public:
 
 //
 // $Log: TwoBitSequence.h,v $
+// Revision 1.26  2010-05-24 21:48:46  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.25.2.1  2010-05-19 21:36:54  regan
+// refactored duplicate fragment filter code
+// added duplicate fragment on single ended reads
+//
 // Revision 1.25  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

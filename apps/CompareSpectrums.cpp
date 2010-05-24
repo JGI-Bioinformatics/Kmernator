@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.10 2010-05-18 20:50:18 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/apps/CompareSpectrums.cpp,v 1.11 2010-05-24 21:48:49 regan Exp $
 //
 
 #include <iostream>
@@ -105,14 +105,14 @@ int main(int argc, char *argv[]) {
 			<< readSet2.getBaseCount() << " Bases " << endl;
 
 	long buckets = std::max(KS::estimateWeakKmerBucketSize(readSet1),
-			KS::estimateWeakKmerBucketSize(readSet2));
+			KS::estimateWeakKmerBucketSize(readSet2)) * 64;
 
 	cerr << "Estimated bucket size: " << buckets << std::endl;
 
-	KS ks1;
-	KS ks2;
-	ks1.setSolidOnly(buckets);
-	ks2.setSolidOnly(buckets);
+	KS ks1(buckets);
+	KS ks2(buckets);
+	ks1.setSolidOnly();
+	ks2.setSolidOnly();
 
 	cerr << "Building map 2\n";
 	ks2.buildKmerSpectrum(readSet2, true);
@@ -164,6 +164,15 @@ void evaluatePerRead(KS &ks1, KS &ks2, ReadSet &readSet1) {
 }
 //
 // $Log: CompareSpectrums.cpp,v $
+// Revision 1.11  2010-05-24 21:48:49  regan
+// merged changes from RNADedupMods-20100518
+//
+// Revision 1.10.2.2  2010-05-19 23:41:02  regan
+// re-added memory optimizations
+//
+// Revision 1.10.2.1  2010-05-19 23:38:15  regan
+// bug and performance fixes
+//
 // Revision 1.10  2010-05-18 20:50:18  regan
 // merged changes from PerformanceTuning-20100506
 //
