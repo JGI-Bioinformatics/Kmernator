@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.32 2010-05-24 21:48:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.33 2010-06-22 23:06:31 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -95,7 +95,7 @@ protected:
 	static const char PAIRED       = 0x08;
 	static const char DISCARDED    = 0x04;
 	static const char PREALLOCATED = 0x02;
-	static const char UNUSED       = 0x01;
+	static const char HASFASTAQUAL = 0x01;
 	// 0x80 - mmaped data
 	// 0x40 - markups in unsigned char
 	// 0x20 - markups in unsigned short
@@ -103,11 +103,11 @@ protected:
 	// 0x10 - hasQuals
 	// 0x08 - mmaped quals
 	// 0x04 - isDiscarded
-	// 0x01 - unused
+	// 0x01 - hasFastaQual
 
 	// if mmaped, _data consists of:
 	//   +0 : char * = pointerToMmapedFileRecordStart
-	//   if mmaped && hasquals
+	//   if mmaped && hasFastaQual
 	//     + sizeof(char*) : char * = pointerToMmapedQualRecordStart
 	//
 	//   if markups4
@@ -206,6 +206,7 @@ public:
 	inline bool isPaired()       const { return (_flags & PAIRED)        == PAIRED; }
 	inline bool isDiscarded()    const { return (_flags & DISCARDED)     == DISCARDED; }
 	inline bool isPreAllocated() const { return (_flags & PREALLOCATED)  == PREALLOCATED; }
+	inline bool hasFastaQual()   const { return (_flags & HASFASTAQUAL)  == HASFASTAQUAL; }
 	inline bool isValid()        const { return ( _getData() != NULL ); }
 
 	void setSequence(std::string fasta, bool usePreAllocation = false);
@@ -406,6 +407,12 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.33  2010-06-22 23:06:31  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.32.4.1  2010-06-22 22:58:38  regan
+// added has fasta qual flag to differentiate from has quals
+//
 // Revision 1.32  2010-05-24 21:48:46  regan
 // merged changes from RNADedupMods-20100518
 //

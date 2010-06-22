@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.4 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.5 2010-06-22 23:06:31 regan Exp $
 //
 
 #ifndef _KMER_TRACKING_DATA_H
@@ -104,7 +104,7 @@ public:
 
 		if (count < MAX_COUNT) {
 #ifdef _USE_THREADSAFE_KMER
-#pragma omp critical
+#pragma omp critical (TrackingData)
 #endif
 			{
 				count++;
@@ -360,7 +360,7 @@ public:
 		if (TrackingData::isDiscard(weight))
 			return false;
 #ifdef _USE_THREADSAFE_KMER
-#pragma omp critical
+#pragma omp critical (TrackingDataSingletonWithReadPosition)
 #endif
 		instance = ReadPositionWeight(readIdx, readPos, forward ? weight : -1.0
 				* weight);
@@ -450,7 +450,7 @@ public:
 		if (TrackingData::isDiscard(weight))
 			return false;
 #ifdef _USE_THREADSAFE_KMER
-#pragma omp critical
+#pragma omp critical (TrackingDataWithAllReads)
 #endif
 		{
 			if (forward)
@@ -628,6 +628,12 @@ std::ostream &operator<<(std::ostream &stream, TrackingDataMinimal<T> &ob) {
 #endif
 
 // $Log: KmerTrackingData.h,v $
+// Revision 1.5  2010-06-22 23:06:31  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.4.6.1  2010-06-22 23:01:55  regan
+// named all critical sections
+//
 // Revision 1.4  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

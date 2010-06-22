@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.5 2010-05-06 21:46:54 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.6 2010-06-22 23:06:30 regan Exp $
 //
 
 #ifndef _READ_FILE_READER_H
@@ -406,7 +406,7 @@ public:
 				seekg(0);
 			}
 			if (Options::getDebug()) {
-#pragma omp critical
+                #pragma omp critical (stderr)
 				{
 					std::cerr << omp_get_thread_num() << " seeked to " << tellg() << std::endl;
 				}
@@ -663,6 +663,12 @@ public:
 
 
 // $Log: ReadFileReader.h,v $
+// Revision 1.6  2010-06-22 23:06:30  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.5.8.1  2010-06-22 23:02:03  regan
+// named all critical sections
+//
 // Revision 1.5  2010-05-06 21:46:54  regan
 // merged changes from PerformanceTuning-20100501
 //

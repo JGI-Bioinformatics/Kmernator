@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.34 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.35 2010-06-22 23:06:31 regan Exp $
 //
 
 #include <iostream>
@@ -155,6 +155,11 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 	BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(fasta, buffer);
 	long totalMarkupSize = 0;
 	MarkupElementSizeType markupSizes = TwoBitSequence::getMarkupElementSize(markupBases, totalMarkupSize);
+	if (totalMarkupSize == 0 && markupBases.size() != 0) {
+	    // markups exist, but totalMarkupSize will not be stored.
+	    // signal for discarded record
+		setFlag(DISCARDED);
+	}
 	try {
 		unsigned int size =
 			    sizeof(SequenceLengthType)
@@ -179,7 +184,8 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 	if (needMalloc)
 	    delete [] buffer;
 
-	setMarkups(markupSizes, markupBases);
+    if (totalMarkupSize > 0)
+	   setMarkups(markupSizes, markupBases);
 
 }
 
@@ -191,12 +197,15 @@ void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, const BaseLocati
 	MarkupElementSizeType markupElementSize = TwoBitSequence::getMarkupElementSize(markups, markupBytes);
 	extraBytes += markupBytes;
 	setSequence(mmapRecordStart, extraBytes, mmapQualRecordStart);
-	setMarkups(markupElementSize, markups);
+	if (markupBytes > 0)
+	    setMarkups(markupElementSize, markups);
 }
 void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes, Sequence::RecordPtr mmapQualRecordStart) {
 	reset(MMAPED);
 	long size = sizeof(Sequence::RecordPtr)+extraBytes;
 	if (mmapQualRecordStart != NULL)
+		setFlag(HASFASTAQUAL);
+		setFlag(HASQUALS);
 		size += sizeof(Sequence::RecordPtr);
 	try {
 		_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
@@ -205,8 +214,7 @@ void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes,
 	}
 
 	*_getRecord() = mmapRecordStart;
-	if (mmapQualRecordStart != NULL) {
-		setFlag(HASQUALS);
+	if (hasFastaQual()) {
 		*_getQualRecord() = mmapQualRecordStart;
 	}
 
@@ -239,7 +247,9 @@ void Sequence::setMarkups(MarkupElementSizeType markupElementSize, const BaseLoc
 	}
 	// if the first base is masked, the entire sequence is masked
 	// so discard the read
-	if (size > 0 && markups[0].first == 'X' && markups[0].second == 0) {
+	if (markupElementSize.first == 0 || (size > 0 && markups[0].first == 'X' && markups[0].second == 0) ) {
+		// markups exist, yet no markups will be stored.
+		// signal for discarded record
 		size = 0;
 		unsetFlag(MARKUPS4);
 		setFlag(DISCARDED);
@@ -326,7 +336,7 @@ const Sequence::RecordPtr Sequence::getRecord() const {
 	return *_getRecord();
 }
 const Sequence::RecordPtr Sequence::getQualRecord() const {
-	assert(isMmaped() && hasQuals());
+	assert(isMmaped() && hasFastaQual());
 	return *_getQualRecord();
 }
 
@@ -345,7 +355,7 @@ Sequence::RecordPtr *Sequence::_getRecord() {
 	return const_cast<RecordPtr *> (constThis()._getRecord());
 }
 const Sequence::RecordPtr *Sequence::_getQualRecord() const {
-	assert(isMmaped() && hasQuals());
+	assert(isMmaped() && hasFastaQual());
 	return (_getRecord() + 1);
 }
 Sequence::RecordPtr *Sequence::_getQualRecord() {
@@ -379,7 +389,7 @@ TwoBitEncoding *Sequence::_getTwoBitSequence() {
 
 const SequenceLengthType *Sequence::_getMarkupBasesCount() const {
 	if (isMmaped()) {
-		if (hasQuals()) {
+		if (hasFastaQual()) {
 			return (SequenceLengthType *) (_getQualRecord() + 1);
 		} else {
 		    return (SequenceLengthType *) (_getRecord() + 1);
@@ -517,7 +527,7 @@ void Sequence::readMmaped(std::string &name, std::string &bases, std::string &qu
 	assert(isMmaped());
 	// TODO fix hack on NULL lastPtr.  Presently only works for single-lined fastas
 	RecordPtr record(getRecord()), lastRecord(NULL), qualRecord(NULL), lastQualRecord(NULL);
-	if (hasQuals()) {
+	if (hasFastaQual()) {
 	    qualRecord = getQualRecord();
 		lastQualRecord = NULL;
 	}
@@ -584,7 +594,7 @@ Read::ReadPtr Read::readMmaped(bool usePreAllocation) const {
 
 bool Read::recordHasQuals() const {
 	assert(isMmaped());
-	if (hasQuals())
+	if (hasQuals() || hasFastaQual())
 		return true;
 	else
 		// TODO make this more general
@@ -690,7 +700,11 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
 	  return;
 
   string fasta = getFasta();
+  string origFasta = fasta;
   SequenceLengthType len = getLength();
+  if (offset >= len) {
+	  throw std::invalid_argument("offset can not be greater than length of sequence");
+  }
   if (offset + length > len)
     length = len - offset;
 
@@ -706,7 +720,7 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
   if (isMmaped()) {
 	RecordPtr record = getRecord();
 	RecordPtr qualRecord = NULL;
-	if (hasQuals())
+	if (hasFastaQual())
 		qualRecord = getQualRecord();
 
 	reset();
@@ -1078,6 +1092,13 @@ std::string ProbabilityBases::toString() const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.35  2010-06-22 23:06:31  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.34.6.1  2010-06-22 22:58:55  regan
+// added has fasta qual flag to differentiate from has quals
+// modified markups to acutally save memory when discarded
+//
 // Revision 1.34  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

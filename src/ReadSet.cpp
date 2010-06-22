@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.39 2010-05-24 21:48:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.40 2010-06-22 23:06:31 regan Exp $
 //
 
 #include <exception>
@@ -17,7 +17,7 @@
 ReadSet::MmapSourceVector ReadSet::mmapSources;
 void ReadSet::madviseMmaps(int advise) {
 
-	#pragma omp critical
+	#pragma omp critical (readset_madvise_map)
 	for(MmapSourceVector::iterator it = mmapSources.begin(); it != mmapSources.end(); it++) {
 		if (it->first.is_open())
 			madvise(const_cast<char*>(it->first.data()), it->first.size(), advise);
@@ -27,7 +27,7 @@ void ReadSet::madviseMmaps(int advise) {
 }
 void ReadSet::addMmaps(MmapSourcePair mmaps) {
 
-	#pragma omp critical
+	#pragma omp critical (readset_madvise_map)
 	mmapSources.push_back(mmaps);
 
 	madviseMmapsSequential();
@@ -128,7 +128,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 	#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 	for (long i = 0; i < filesSize; i++) {
 
-		#pragma omp critical
+		#pragma omp critical (stderr)
 		{
 			std::cerr << "reading " << files[i] << std::endl;
 		}
@@ -141,7 +141,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 		incrementFile(parser);
 #endif
 
-		#pragma omp critical
+		#pragma omp critical  (stderr)
 		{
 			std::cerr << "finished reading " << files[i] << std::endl;
 		}
@@ -297,7 +297,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		if (hasNext && omp_get_thread_num() != 0 && seekPos[omp_get_thread_num()] == seekPos[omp_get_thread_num()-1])
 			hasNext = false;
 
-		//#pragma omp critical
+		//#pragma omp critical  (stderr)
 		//{ std::cerr << omp_get_thread_num() << " " << blockSize << " seeked to " << reader.getPos() << " will read: " << hasNext << std::endl; }
 
 		if (reader.isMmaped() && Options::getMmapInput() != 0) {
@@ -330,10 +330,10 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 
 		numReads[ omp_get_thread_num() ] = myReads.getSize();
 
-		//#pragma omp critical
+		//#pragma omp critical (stderr)
 		//{ std::cerr << omp_get_thread_num() << " " << blockSize << " finished at " << reader.getPos() << " with " << myReads.getSize() << " " << numReads[ omp_get_thread_num() ]<< std::endl; }
 
-		#pragma omp critical
+		#pragma omp critical (readsetGlobals)
 		{
 			// set global counters
 			_baseCount += myReads._baseCount;
@@ -632,13 +632,16 @@ Read ReadSet::getConsensusRead() const {
 	ProbabilityBases probs = getProbabilityBases();
     Read consensus = getConsensusRead(probs, string("C") + boost::lexical_cast<std::string>(getSize()) + string("-") + getRead(0).getName());
     if (Options::getDebug() > 2) {
-        #pragma omp critical
+
     	{
+    		std::stringstream ss;
     		for(ReadVector::const_iterator it = _reads.begin(); it != _reads.end(); it++) {
-    			std::cerr << it->toString() << std::endl;
+    			ss << it->toString() << std::endl;
     		}
-    		std::cerr << consensus.toString() << std::endl;
-    		std::cerr << probs.toString() << std::endl;
+    		ss << consensus.toString() << std::endl;
+    		ss << probs.toString() << std::endl;
+			#pragma omp critical (stderr)
+    		std::cerr << ss.str();
     	}
     }
     return consensus;
@@ -656,6 +659,12 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.40  2010-06-22 23:06:31  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.39.4.1  2010-06-22 22:59:30  regan
+// named all critical sections
+//
 // Revision 1.39  2010-05-24 21:48:46  regan
 // merged changes from RNADedupMods-20100518
 //

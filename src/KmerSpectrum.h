@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.37 2010-05-24 21:48:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.38 2010-06-22 23:06:31 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -262,7 +262,7 @@ public:
 		for(SequenceLengthType idx = 0; idx < size; idx++) {
 			double testCount = weights.valueAt(idx);
 			if (testCount > 0.0 && myCount >= testCount) {
-				#pragma omp critical
+				#pragma omp critical (KS_consolidate)
 				{
 				  // refresh myCount within critical block
 				  myCount = getCount(myKmer, useWeights);
@@ -1655,6 +1655,12 @@ public:
 
 
 // $Log: KmerSpectrum.h,v $
+// Revision 1.38  2010-06-22 23:06:31  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.37.4.1  2010-06-22 23:00:03  regan
+// named all critical sections
+//
 // Revision 1.37  2010-05-24 21:48:46  regan
 // merged changes from RNADedupMods-20100518
 //

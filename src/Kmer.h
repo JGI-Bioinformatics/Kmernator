@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.85 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.86 2010-06-22 23:06:31 regan Exp $
 //
 
 
@@ -427,7 +427,7 @@ public:
 
 				//std::stringstream ss;
 				//ss  << "Waiting for shared lock: " << this << " " << myThread << "/" << _sharedLocks.size() << " " << gotExclusive << std::endl;
-				//#pragma omp critical
+				//#pragma omp critical (stderr)
 				//{ std::cerr << ss.str(); }
 				usleep(1);
 
@@ -436,7 +436,7 @@ public:
 
 		//std::stringstream ss2;
 		//ss2 << "Got shared lock: " << this << " " << myThread << "/" << _sharedLocks.size() <<std::endl << StackTrace::getStackTrace();
-		//#pragma omp critical
+		//#pragma omp critical (stderr)
 		//{ std::cerr <<  ss2.str(); }
 
 	}
@@ -449,7 +449,7 @@ public:
 		//std::stringstream ss;
 		//ss  << "Rel shared lock: " << this << " " << myThread <<std::endl;
 
-		//#pragma omp critical
+		//#pragma omp critical (stderr)
 		//{ std::cerr << ss.str(); }
 	}
 
@@ -458,7 +458,7 @@ public:
 		return;
 		//std::stringstream ss;
 		//ss << "Trying exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() <<std::endl << StackTrace::getStackTrace();
-		//#pragma omp critical
+		//#pragma omp critical (stderr)
 		//{ std::cerr << ss.str(); }
 		bool gotExclusive = false;
 		while(!gotExclusive) {
@@ -479,7 +479,7 @@ public:
 					omp_unset_nest_lock( &( _sharedLocks[j] ) );
 					//std::stringstream ss2;
 					//ss2 << "Waiting for exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() << " failed to get shared " << i << std::endl;
-					//#pragma omp critical
+					//#pragma omp critical (stderr)
 					//{ std::cerr << ss2.str(); }
 					usleep(1);
 				}
@@ -490,7 +490,7 @@ public:
 		}
 		//std::stringstream ss3;
 		//ss3 <<"Got exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() <<std::endl;
-		//#pragma omp critical
+		//#pragma omp critical (stderr)
 		//{ std::cerr << ss3.str(); }
 	}
 	inline void unsetExclusiveLock() const {
@@ -505,7 +505,7 @@ public:
 
 		//std::stringstream ss;
 		//ss << "Rel exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() <<std::endl;
-		//#pragma omp critical
+		//#pragma omp critical (stderr)
 		//{ std::cerr << ss.str(); }
 	}
 
@@ -1930,6 +1930,12 @@ typedef KmerArray<KoMer::UI32> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.86  2010-06-22 23:06:31  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.85.6.1  2010-06-22 22:59:55  regan
+// named all critical sections
+//
 // Revision 1.85  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

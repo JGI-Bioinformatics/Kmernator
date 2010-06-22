@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.25 2010-05-24 21:48:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.26 2010-06-22 23:06:31 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -97,7 +97,6 @@ public:
 		KmerSizer::set(oldKmerLength);
 	}
 
-	// TODO make applyFilter write when read is in memory -- not delayed
 	unsigned long applyFilter(ReadSet &reads) {
 		unsigned long oldKmerLength = KmerSizer::getSequenceLength();
 		KmerSizer::set(length);
@@ -130,7 +129,7 @@ public:
 
 			if (Options::getDebug() > 2) {
 
-			  #pragma omp critical
+			  #pragma omp critical (stderr)
 			  std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
 			}
 			SequenceLengthType seqLen = read.getLength();
@@ -170,7 +169,11 @@ public:
 
 				elem = filter.getElementIfExists( rev );
 				if (elem.isValid()) {
-					SequenceLengthType pos = seqLen - length - byteHop*4;
+				    SequenceLengthType pos = 0;
+				    SequenceLengthType posMinus = length + byteHop*4;
+				    if (seqLen > posMinus) {
+				        pos = seqLen - posMinus;
+				    }
 					read.markupBases(pos , length, 'X');
 					wasAffected = true;
 					value = elem.value();
@@ -179,6 +182,9 @@ public:
 						minAffected = pos;
 				}
 
+                if (minAffected < seqLen / 3) {
+                    break;
+                }
 				ptr++;
 				revPtr++;
 			}
@@ -190,19 +196,19 @@ public:
 				if (wasPhiX && omPhiX != NULL) {
 
 					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx);
-					#pragma omp critical
+					#pragma omp critical (writePhix)
 					{
 						_writeFilterRead(omPhiX->getOfstream( fileSuffix ), read, seqLen);
 					}
-					
+
                     // always discard the read, as it contains some PhiX and was sorted
-					read.discard(); 
+					read.discard();
 
 				} else if ( (!wasPhiX) && omArtifact != NULL) {
 
 					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx);
 					std::string label = sequences.getRead(value).getName();
-					#pragma omp critical
+					#pragma omp critical (writeFilter)
 					{
 						_writeFilterRead(omArtifact->getOfstream( fileSuffix ), read, seqLen, label);
 					}
@@ -215,7 +221,7 @@ public:
 
 				if (Options::getDebug()>1) {
 
-					#pragma omp critical
+					#pragma omp critical (stderr)
 					{
 					  std::cerr << "FilterMatch to " << read.getName() << " "
 					  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
@@ -443,7 +449,7 @@ public:
 
 		    	Read consensus1 = tmpReadSet1.getConsensusRead();
 
-		    	#pragma omp critical
+		    	#pragma omp critical (BCUR_newReads)
 		    	{
 		    	   newReads.append(consensus1);
 		    	}
@@ -1247,6 +1253,13 @@ public:
 #endif
 
 // $Log: FilterKnownOddities.h,v $
+// Revision 1.26  2010-06-22 23:06:31  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.25.4.1  2010-06-22 23:02:51  regan
+// named all critical sections
+// made the code a bit clearer to follow
+//
 // Revision 1.25  2010-05-24 21:48:46  regan
 // merged changes from RNADedupMods-20100518
 //

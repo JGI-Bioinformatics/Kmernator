@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.25 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/TwoBitSequence.cpp,v 1.26 2010-06-22 23:06:31 regan Exp $
 //
 
 #include "TwoBitSequence.h"
@@ -367,7 +367,10 @@ TwoBitSequenceBase::MarkupElementSizeType TwoBitSequence::getMarkupElementSize(c
 	MarkupElementSizeType markupElementSize(0,0);
 	SequenceLengthType size = markups.size();
 	if (size > 0) {
-		if (size < 255 && markups[size-1].second < 255) {
+		if (markups[0].first == 'X' && markups[0].second == 0) {
+			// if the first base is masked, the entire read is discarded... no markups will be stored
+			// and size should be zero
+		} else if (size < 255 && markups[size-1].second < 255) {
 			markupElementSize.first = sizeof(SequenceLengthType1);
 			markupElementSize.second = sizeof(BaseLocationType1);
 		} else if (size < 65535 && markups[size-1].second < 65535) {
@@ -417,6 +420,12 @@ void TwoBitSequence::permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1,
 
 //
 // $Log: TwoBitSequence.cpp,v $
+// Revision 1.26  2010-06-22 23:06:31  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.25.6.1  2010-06-22 22:59:12  regan
+// modified markups to actually save memory when discarded
+//
 // Revision 1.25  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

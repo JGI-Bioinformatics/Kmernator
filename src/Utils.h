@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.38 2010-05-24 21:48:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.39 2010-06-22 23:06:30 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -99,12 +99,18 @@ public:
 		std::string filename = _outputFilePathPrefix + key + _suffix;
 		Iterator it = _map.find(filename);
 		if (it == _map.end()) {
-			if (Options::getVerbosity()) {
-			  std::cerr << "Writing to " << filename << std::endl;
-		    }
 
-			OStreamPtr osp(new std::ofstream(filename.c_str()));
-			it = _map.insert( it, Map::value_type(filename, osp) );
+			#pragma omp critical (ofStreamMap)
+			{
+				it = _map.find(filename);
+				if (it == _map.end()) {
+					if (Options::getVerbosity()) {
+					  std::cerr << "Writing to " << filename << std::endl;
+				    }
+					OStreamPtr osp(new std::ofstream(filename.c_str()));
+					it = _map.insert( it, Map::value_type(filename, osp) );
+				}
+			}
 		}
 		return *(it->second);
 	}
@@ -282,6 +288,13 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.39  2010-06-22 23:06:30  regan
+// merged changes in CorruptionBugfix-20100622 branch
+//
+// Revision 1.38.4.1  2010-06-22 23:02:20  regan
+// named all critical sections
+// added a critical section when modifying ostreamap data
+//
 // Revision 1.38  2010-05-24 21:48:46  regan
 // merged changes from RNADedupMods-20100518
 //
