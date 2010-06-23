@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.17 2010-06-23 20:58:02 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.18 2010-06-23 22:15:15 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -32,14 +32,15 @@ private:
 	po::variables_map vm;
 
 	// cache of variables (for inline lookup and defaults)
+    int          maxThreads;
 	FileListType referenceFiles;
 	FileListType inputFiles;
 	FileListType inputFilePrefixes;
-	std::string outputFile;
-	std::string tmpDir;
+	std::string  outputFile;
+	std::string  tmpDir;
 	unsigned int formatOutput;
 	unsigned int kmerSize;
-	double minKmerQuality;
+	double       minKmerQuality;
 	unsigned int verbosity;
 	unsigned int debug;
 	unsigned int minQuality;
@@ -59,7 +60,7 @@ private:
 	unsigned int buildPartitions;
 	unsigned int gcHeatMap;
 
-	Options() : tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10), verbosity(1), debug(0),
+	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10), verbosity(1), debug(0),
 	minQuality(10), minDepth(2), depthRange(2), minReadLength(22), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), mmapInput(1), buildPartitions(0), gcHeatMap(1) {
@@ -67,6 +68,9 @@ private:
 
 public:
 
+	static inline int &getMaxThreads() {
+		return getOptions().maxThreads;
+	}
 	static inline FileListType &getReferenceFiles() {
 		return getOptions().referenceFiles;
 	}
@@ -178,6 +182,10 @@ protected:
 		("debug", po::value<unsigned int>()->default_value(debug),
 				"level of debug verbosity (0+)")
 
+#ifdef _USE_OPENMP
+		("threads", po::value<int>()->default_value(maxThreads),
+				"maximum number of threads. This must be a power of 2")
+#endif
 		("reference-file", po::value<FileListType>(), "set reference file(s)")
 
 		("kmer-size", po::value<unsigned int>()->default_value(kmerSize), "kmer size.  A size of 0 will skip k-mer calculations")
@@ -294,6 +302,37 @@ public:
 			setOpt<unsigned int>("debug", getDebug());
 			bool print = (getVerbosity() > 0 || getDebug() > 0);
 
+#ifdef _USE_OPENMP
+
+			setOpt<int>("threads", getMaxThreads(), print);
+			if (getMaxThreads() > OMP_MAX_THREADS) {
+				std::cerr << "Reducing the number of threads from " << getMaxThreads() << " to " << OMP_MAX_THREADS;
+				getMaxThreads() = OMP_MAX_THREADS;
+			}
+			if ((getMaxThreads() & (getMaxThreads()-1)) != 0) {
+				std::cerr << "Reducing the number of threads from " << getMaxThreads();
+				int t = getMaxThreads();
+				if (t > 32) {
+					t=32;
+				} else if (t > 16) {
+					t=16;
+				} else if (t > 8) {
+					t=8;
+				} else if (t > 4) {
+					t=4;
+				} else if (t > 2) {
+					t=2;
+				} else {
+					t=1;
+				}
+				getMaxThreads() = t;
+				std::cerr << " to " << t << std::endl;
+			}
+			OMP_MAX_THREADS = getMaxThreads();
+			omp_set_num_threads(OMP_MAX_THREADS);
+
+#endif
+
 			if (vm.count("reference-file")) {
 				std::cerr << "Reference files are: ";
 				FileListType & referenceFiles = getReferenceFiles()
@@ -403,6 +442,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.18  2010-06-23 22:15:15  regan
+// added --threads option
+//
 // Revision 1.17  2010-06-23 20:58:02  regan
 // fixed minimum read length logic
 //
