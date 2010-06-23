@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.40 2010-06-22 23:06:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.41 2010-06-23 20:18:43 regan Exp $
 //
 
 #include <exception>
@@ -133,11 +133,21 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 			std::cerr << "reading " << files[i] << std::endl;
 		}
 
+		string qualFile;
+		if (!Options::getIgnoreQual()) {
+			// test for an implicit qual file
+			qualFile = files[i] + ".qual";
+			ifstream _qs;
+			_qs.open(qualFile.c_str());
+			if (! _qs.good()) {
+				qualFile.clear();
+			}
+		}
 #ifdef _USE_OPENMP
 		// append int this thread's ReadSet buffer (note: line continues)
-		parsers[i] = myReads[ i ].appendAnyFile(files[i]);
+		parsers[i] = myReads[ i ].appendAnyFile(files[i], qualFile);
 #else
-		SequenceStreamParserPtr parser = appendAnyFile(files[i]);
+		SequenceStreamParserPtr parser = appendAnyFile(files[i], qualFile);
 		incrementFile(parser);
 #endif
 
@@ -659,6 +669,9 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.41  2010-06-23 20:18:43  regan
+// bugfix to use implicit .qual files when the input is a fasta
+//
 // Revision 1.40  2010-06-22 23:06:31  regan
 // merged changes in CorruptionBugfix-20100622 branch
 //
