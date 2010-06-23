@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.16 2010-05-24 21:48:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.17 2010-06-23 20:58:02 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -199,7 +199,7 @@ protected:
 
 		("min-read-length",
 				po::value<unsigned int>()->default_value(minReadLength),
-				"minimum (trimmed) read length of selected reads.  0: (default) no minimum, -1: full read length")
+				"minimum (trimmed) read length of selected reads.  0: no minimum, 1: full read length")
 
 		("min-kmer-quality", po::value<double>()->default_value(minKmerQuality),
 				"minimum quality-adjusted kmer probability (0-1)")
@@ -344,6 +344,9 @@ public:
 
 			// set read length
 			setOpt<unsigned int>("min-read-length", getMinReadLength(), print);
+			if (getMinReadLength() == 1) {
+				getMinReadLength() = MAX_INT;
+			}
 
 			// set the ignore quality value
 			setOpt<unsigned int>("ignore-quality", getIgnoreQual(), print);
@@ -400,6 +403,9 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.17  2010-06-23 20:58:02  regan
+// fixed minimum read length logic
+//
 // Revision 1.16  2010-05-24 21:48:46  regan
 // merged changes from RNADedupMods-20100518
 //

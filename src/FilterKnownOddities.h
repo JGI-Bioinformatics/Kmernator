@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.26 2010-06-22 23:06:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.27 2010-06-23 20:58:02 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -113,6 +113,11 @@ public:
 			omArtifact = &_omArtifact;
 		}
 
+		SequenceLengthType minReadPos = Options::getMinReadLength();
+		if (minReadPos != 0 && minReadPos != MAX_SEQUENCE_LENGTH) {
+			minReadPos -= 1;
+		}
+
 		int numThreads = omp_get_max_threads();
 		SequenceCounts     threadCounts[numThreads];
 
@@ -182,9 +187,6 @@ public:
 						minAffected = pos;
 				}
 
-                if (minAffected < seqLen / 3) {
-                    break;
-                }
 				ptr++;
 				revPtr++;
 			}
@@ -214,8 +216,8 @@ public:
 					}
 				}
 
-				// if more than twoThirds of the read is masked, discard it completely regardless if it was output or not
-				if ( minAffected < seqLen / 3 ) {
+				// if the read length is less than the desired minimum, discard it completely regardless if it was output or not
+				if ( minAffected == 0 || minAffected < minReadPos) {
 					read.discard();
 				}
 
@@ -1253,6 +1255,9 @@ public:
 #endif
 
 // $Log: FilterKnownOddities.h,v $
+// Revision 1.27  2010-06-23 20:58:02  regan
+// fixed minimum read length logic
+//
 // Revision 1.26  2010-06-22 23:06:31  regan
 // merged changes in CorruptionBugfix-20100622 branch
 //
