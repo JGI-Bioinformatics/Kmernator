@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.86 2010-06-22 23:06:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.87 2010-06-23 17:10:12 regan Exp $
 //
 
 
@@ -1910,6 +1910,9 @@ public:
 			BucketsVectorIterator end = begin + step;
 			if (threadNum + 1 == threads || end > _buckets.end())
 				end = _buckets.end();
+			if (begin > _buckets.end()) {
+				begin = _buckets.end();
+			}
 			return ThreadedBuckets(begin,end);
 		}
 	}
@@ -1930,6 +1933,9 @@ typedef KmerArray<KoMer::UI32> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.87  2010-06-23 17:10:12  regan
+// bugfix in boundary conditions of threaded iterator
+//
 // Revision 1.86  2010-06-22 23:06:31  regan
 // merged changes in CorruptionBugfix-20100622 branch
 //
