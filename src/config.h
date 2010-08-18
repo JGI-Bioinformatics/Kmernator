@@ -45,7 +45,8 @@ static int OMP_MAX_THREADS = OMP_MAX_THREADS_DEFAULT;
 namespace KoMer {
    typedef const char * RecordPtr;
    static const char REF_QUAL = 0xff;
-   static const char FASTQ_START_CHAR = 64;
+   static const char FASTQ_START_CHAR_ILLUMINA = 64;
+   static const char FASTQ_START_CHAR_STD = 33;
    static const char PRINT_REF_QUAL = 126;
 
    typedef boost::uint8_t  UI8;
@@ -96,6 +97,12 @@ namespace KoMer {
 
 
 // $Log: config.h,v $
+// Revision 1.12  2010-08-18 17:50:40  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.11.4.1  2010-07-20 20:02:56  regan
+// autodetect fastq quality range
+//
 // Revision 1.11  2010-06-23 22:15:15  regan
 // added --threads option
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.6 2010-06-22 23:06:30 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadFileReader.h,v 1.7 2010-08-18 17:50:39 regan Exp $
 //
 
 #ifndef _READ_FILE_READER_H
@@ -645,7 +645,7 @@ public:
 			int threadNum = omp_get_thread_num();
 			// odd, but it works
 			string &qualInts = _qualParser.getBasesOrQuals();
-			_qualsBuffer[threadNum] = SequenceRecordParser::convertQualIntsToChars(qualInts);
+			_qualsBuffer[threadNum] = SequenceRecordParser::convertQualIntsToChars(qualInts, Read::FASTQ_START_CHAR);
 			return _qualsBuffer[threadNum];
 		}
 		int getType() const {
@@ -663,6 +663,12 @@ public:
 
 
 // $Log: ReadFileReader.h,v $
+// Revision 1.7  2010-08-18 17:50:39  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.6.4.1  2010-07-20 20:02:56  regan
+// autodetect fastq quality range
+//
 // Revision 1.6  2010-06-22 23:06:30  regan
 // merged changes in CorruptionBugfix-20100622 branch
 //

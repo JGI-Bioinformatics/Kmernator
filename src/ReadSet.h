@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.30 2010-05-24 21:48:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.h,v 1.31 2010-08-18 17:50:39 regan Exp $
 //
 
 #ifndef _READ_SET_H
@@ -101,6 +101,18 @@ private:
 			return true;
 		}
 		return false;
+	}
+	inline void _setFastqStart(const Read &read) {
+		if (read.hasQuals() && Read::FASTQ_START_CHAR != KoMer::FASTQ_START_CHAR_STD && omp_get_thread_num() == 0) {
+			std::string quals = read.getQuals();
+			std::string::iterator it = std::min_element(quals.begin(), quals.end());
+			if (it != quals.end() && *it < Read::FASTQ_START_CHAR) {
+				if (getSize() > 10000) {
+					cerr << "Warning: detected standard fastq only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
+				}
+				Read::setMinQualityScore(Options::getMinQuality(), KoMer::FASTQ_START_CHAR_STD);
+			}
+		}
 	}
 
 	void incrementFile(ReadFileReader &reader);
@@ -242,6 +254,12 @@ public:
 
 //
 // $Log: ReadSet.h,v $
+// Revision 1.31  2010-08-18 17:50:39  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.30.8.1  2010-07-20 20:02:56  regan
+// autodetect fastq quality range
+//
 // Revision 1.30  2010-05-24 21:48:46  regan
 // merged changes from RNADedupMods-20100518
 //

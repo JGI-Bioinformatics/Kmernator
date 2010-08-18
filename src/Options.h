@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.18 2010-06-23 22:15:15 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Options.h,v 1.19 2010-08-18 17:50:39 regan Exp $
 //
 
 #ifndef _OPTIONS_H
@@ -56,6 +56,8 @@ private:
 	unsigned int deDupMode;
 	unsigned int deDupSingle;
 	unsigned int deDupEditDistance;
+	unsigned int deDupStartOffset;
+	unsigned int deDupLength;
 	unsigned int mmapInput;
 	unsigned int buildPartitions;
 	unsigned int gcHeatMap;
@@ -63,7 +65,8 @@ private:
 	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10), verbosity(1), debug(0),
 	minQuality(10), minDepth(2), depthRange(2), minReadLength(22), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
-	deDupMode(1), deDupSingle(0), deDupEditDistance(0), mmapInput(1), buildPartitions(0), gcHeatMap(1) {
+	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
+	mmapInput(1), buildPartitions(0), gcHeatMap(1) {
 	}
 
 public:
@@ -136,6 +139,12 @@ public:
 	}
 	static inline unsigned int &getDeDupEditDistance() {
 		return getOptions().deDupEditDistance;
+	}
+	static inline unsigned int &getDeDupStartOffset() {
+		return getOptions().deDupStartOffset;
+	}
+	static inline unsigned int &getDeDupLength() {
+		return getOptions().deDupLength;
 	}
 	static inline unsigned int &getMmapInput() {
 		return getOptions().mmapInput;
@@ -241,6 +250,12 @@ protected:
 
 		("dedup-edit-distance", po::value<unsigned int>()->default_value(deDupEditDistance),
 				"if -1, no fragment de-duplication will occur, if 0, only exact match, ...")
+
+		("dedup-start-offset", po::value<unsigned int>()->default_value(deDupStartOffset),
+				"de-duplication start offset to find unique fragments, must be multiple of 4")
+
+		("dedup-length", po::value<unsigned int>()->default_value(deDupLength),
+				"de-duplication length to find unique fragments, must be multiple of 4 (doubled when in single-end mode)")
 
 		("mmap-input", po::value<unsigned int>()->default_value(mmapInput),
 				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
@@ -417,6 +432,12 @@ public:
 				std::cerr <<"Unsupported option dedup-edit-distance > 1" << std::endl;
 			    return false;
 			}
+			setOpt<unsigned int>("dedup-start-offset", getDeDupStartOffset(), print);
+			setOpt<unsigned int>("dedup-length", getDeDupLength(), print);
+			if (getDeDupStartOffset() % 4 != 0 || getDeDupLength() % 4 != 0) {
+				std::cerr << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl;
+				return false;
+			}
 
 			// set mmapInput
 			setOpt<unsigned int>("mmap-input", getMmapInput() , print);
@@ -442,6 +463,12 @@ public:
 
 //
 // $Log: Options.h,v $
+// Revision 1.19  2010-08-18 17:50:39  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.18.4.1  2010-07-21 18:06:11  regan
+// added options to change unique mask offset and length for de-duplication
+//
 // Revision 1.18  2010-06-23 22:15:15  regan
 // added --threads option
 //

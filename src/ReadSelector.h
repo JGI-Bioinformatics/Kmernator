@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.22 2010-05-24 21:48:46 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSelector.h,v 1.23 2010-08-18 17:50:40 regan Exp $
 //
 
 #ifndef _READ_SELECTOR_H
@@ -136,13 +136,17 @@ public:
 		needDuplicateCheck = true;
 	}
 
-	inline KmerArray<char> getKmersForRead(ReadSetSizeType readIdx) {
-		const Read &read = _reads.getRead(readIdx);
-		KmerArray<char> kmers(read.getTwoBitSequence(), read.getLength(), true);
+	typedef KmerArray<double> KA;
+	inline KA getKmersForRead(const Read &read) {
+		KA kmers(read.getTwoBitSequence(), read.getLength(), true);
 		return kmers;
 	}
-	inline KmerArray<char> getKmersForTrimmedRead(ReadSetSizeType readIdx) {
-		KmerArray<char> kmers(_reads.getRead(readIdx).getTwoBitSequence(), _trims[readIdx].trimLength, true);
+	inline KA getKmersForRead(ReadSetSizeType readIdx) {
+		const Read &read = _reads.getRead(readIdx);
+		return getKmersForRead(read);
+	}
+	inline KA getKmersForTrimmedRead(ReadSetSizeType readIdx) {
+		KA kmers(_reads.getRead(readIdx).getTwoBitSequence(), _trims[readIdx].trimLength, true);
 		return kmers;
 	}
 
@@ -164,7 +168,7 @@ protected:
 	void _storeCounts(ReadSetSizeType readIdx) {
 		if (!_reads.isValidRead(readIdx))
 			return;
-		KmerArray<char> kmers = getKmersForTrimmedRead(readIdx);
+		KA kmers = getKmersForTrimmedRead(readIdx);
 		for(Kmer::IndexType j = 0; j < kmers.size(); j++) {
 			_counts[ kmers[j] ]++;
 		}
@@ -270,7 +274,7 @@ public:
 
 	bool rescoreByBestCoveringSubset(ReadSetSizeType readIdx, unsigned char maxPickedKmerDepth) {
 		ReadTrimType &trim = _trims[readIdx];
-		KmerArray<char> kmers = getKmersForTrimmedRead(readIdx);
+		KA kmers = getKmersForTrimmedRead(readIdx);
 		ScoreType score = 0.0;
 		for(SequenceLengthType j = 0; j < kmers.size(); j++) {
 			const ElementType elem = _map.getElementIfExists(kmers[j]);
@@ -394,7 +398,43 @@ public:
 		return picked;
 	}
 
-	void scoreAndTrimReads(ScoreType minimumKmerScore) {
+	SequenceLengthType _detectTransition(KA &kmers) {
+
+		return kmers.size();
+	}
+
+	void _scoreReadByKmers(const Read &read, Sequence::BaseLocationVectorType &markups, ReadTrimType &trim, double minimumKmerScore, int correctionAttempts) {
+		  KA kmers = getKmersForRead(read);
+		  SequenceLengthType numKmers = kmers.size();
+
+		  SequenceLengthType transitionPoint = _detectTransition(kmers);
+
+		  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
+		  if ( markupLength != 0 ) {
+		    // find first N or X markup and that is the maximum trim point
+			SequenceLengthType maxTrimPoint = markupLength;
+			if (maxTrimPoint > KmerSizer::getSequenceLength()) {
+				numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
+			} else {
+				numKmers = 0;
+			}
+		  }
+
+		  for(SequenceLengthType j = 0; j < numKmers; j++) {
+			const ElementType elem = _map.getElementIfExists(kmers[j]);
+			if (elem.isValid()) {
+				ScoreType score = elem.value().getCount();
+				if (score >= minimumKmerScore) {
+					trim.trimLength++;
+					trim.score += score;
+				} else
+				break;
+			} else
+			break;
+		  }
+	}
+
+	void scoreAndTrimReads(ScoreType minimumKmerScore, int correctionAttempts = 0) {
 		_trims.resize(_reads.getSize());
 		bool useKmers = Options::getKmerSize() != 0;
 
@@ -402,38 +442,13 @@ public:
 		#pragma omp parallel for schedule(dynamic)
 		for(long i = 0; i < readsSize; i++) {
 			ReadTrimType &trim = _trims[i];
-			const Read read = _reads.getRead(i);
+			const Read &read = _reads.getRead(i);
 			if (read.isDiscarded()) {
 				continue;
 			}
 			Sequence::BaseLocationVectorType markups = read.getMarkups();
 			if (useKmers) {
-			  KmerArray<char> kmers = getKmersForRead(i);
-			  SequenceLengthType numKmers = kmers.size();
-
-			  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
-			  if ( markupLength != 0 ) {
-			    // find first N or X markup and that is the maximum trim point
-				SequenceLengthType maxTrimPoint = markupLength;
-				if (maxTrimPoint > KmerSizer::getSequenceLength()) {
-					numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
-				} else {
-					numKmers = 0;
-				}
-			  }
-
-			  for(SequenceLengthType j = 0; j < numKmers; j++) {
-				const ElementType elem = _map.getElementIfExists(kmers[j]);
-				if (elem.isValid()) {
-					ScoreType score = elem.value().getCount();
-					if (score >= minimumKmerScore) {
-						trim.trimLength++;
-						trim.score += score;
-					} else
-					break;
-				} else
-				break;
-			  }
+			  _scoreReadByKmers(read, markups, trim, minimumKmerScore, correctionAttempts);
 			} else { // !useKmers
 			  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 			  if ( markupLength == 0 ) {
@@ -445,20 +460,21 @@ public:
 			  trim.score = trim.trimLength;
 
 			}
+			double reportScore;
 			if (trim.trimLength > 0) {
 				// calculate average score (before adding kmer length)
-				trim.score /= (ScoreType) trim.trimLength;
+				reportScore= trim.score /= (ScoreType) trim.trimLength;
 				if (useKmers) {
 				  trim.trimLength += KmerSizer::getSequenceLength() - 1;
 				}
-				trim.label += " Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( trim.score );
 			} else {
-				trim.score = -1.0;
-				trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score: 0";
 				// keep available so that pairs will be selected together
+				trim.score = -1.0;
+				reportScore = 0.0;
 			}
-
-
+			if (!trim.label.empty())
+				trim.label += " ";
+			trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( reportScore );
 		}
 	}
 
@@ -537,6 +553,12 @@ public:
 
 
 // $Log: ReadSelector.h,v $
+// Revision 1.23  2010-08-18 17:50:40  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.22.8.1  2010-08-17 18:07:05  regan
+// minor refactor
+//
 // Revision 1.22  2010-05-24 21:48:46  regan
 // merged changes from RNADedupMods-20100518
 //

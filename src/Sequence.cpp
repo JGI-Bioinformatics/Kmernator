@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.35 2010-06-22 23:06:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.cpp,v 1.36 2010-08-18 17:50:39 regan Exp $
 //
 
 #include <iostream>
@@ -12,6 +12,7 @@
 using namespace std;
 
 /*----------------------------- SEQUENCE -------------------------------------------*/
+char Sequence::FASTQ_START_CHAR = KoMer::FASTQ_START_CHAR_ILLUMINA;
 
 // thread safe caches
 Sequence::CachedSequencesVector Sequence::threadCacheSequences(OMP_MAX_THREADS, Sequence::CachedSequences(Sequence::maxCachePerThread));
@@ -531,7 +532,7 @@ void Sequence::readMmaped(std::string &name, std::string &bases, std::string &qu
 	    qualRecord = getQualRecord();
 		lastQualRecord = NULL;
 	}
-	SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord);
+	SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord, FASTQ_START_CHAR);
 }
 Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
 	std::string name, bases, quals;
@@ -544,7 +545,11 @@ Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
 //Read::CachedReadVector Read::threadCacheRead(OMP_MAX_THREADS, CachedRead());
 double Read::qualityToProbability[256];
 
-int Read::initializeQualityToProbability(unsigned char minQualityScore) {
+int Read::initializeQualityToProbability(unsigned char minQualityScore, char startChar) {
+	if (startChar != FASTQ_START_CHAR) {
+		cerr << "Switching quality scale for FASTQ (std vs Illumina) to " << (int) startChar << endl;
+	}
+	FASTQ_START_CHAR = startChar;
 	for (int i = 0; i < 256; i++) {
 		qualityToProbability[i] = 0;
 	}
@@ -556,10 +561,11 @@ int Read::initializeQualityToProbability(unsigned char minQualityScore) {
 	return 1;
 }
 int Read::qualityToProbabilityInitialized =
-		Read::initializeQualityToProbability(0);
+		Read::initializeQualityToProbability(0, KoMer::FASTQ_START_CHAR_ILLUMINA);
 
-void Read::setMinQualityScore(unsigned char minQualityScore) {
-	Read::initializeQualityToProbability(minQualityScore);
+void Read::setMinQualityScore(unsigned char minQualityScore, char startChar) {
+	#pragma omp critical (FastqStartChar)
+	Read::initializeQualityToProbability(minQualityScore, startChar);
 }
 
 // Read constructors and operators
@@ -1092,6 +1098,12 @@ std::string ProbabilityBases::toString() const {
 }
 //
 // $Log: Sequence.cpp,v $
+// Revision 1.36  2010-08-18 17:50:39  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.35.4.1  2010-07-20 20:02:56  regan
+// autodetect fastq quality range
+//
 // Revision 1.35  2010-06-22 23:06:31  regan
 // merged changes in CorruptionBugfix-20100622 branch
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.41 2010-06-23 20:18:43 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/ReadSet.cpp,v 1.42 2010-08-18 17:50:40 regan Exp $
 //
 
 #include <exception>
@@ -81,6 +81,7 @@ void ReadSet::addRead(const Read &read, SequenceLengthType readLength) {
 	_baseCount += readLength;
 	_setMaxSequenceLength(readLength);
 	_trackSequentialPair(read);
+	_setFastqStart(read);
 }
 ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 	MmapSource mmap(filePath, ReadFileReader::getFileSize(filePath));
@@ -669,6 +670,12 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 //
 // $Log: ReadSet.cpp,v $
+// Revision 1.42  2010-08-18 17:50:40  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.41.4.1  2010-07-20 20:02:56  regan
+// autodetect fastq quality range
+//
 // Revision 1.41  2010-06-23 20:18:43  regan
 // bugfix to use implicit .qual files when the input is a fasta
 //

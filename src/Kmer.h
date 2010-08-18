@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.87 2010-06-23 17:10:12 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Kmer.h,v 1.88 2010-08-18 17:50:40 regan Exp $
 //
 
 
@@ -958,12 +958,12 @@ public:
 			}
 		}
 		if (leastComplement) {
-			TEMP_KMER(least);
 			bool isLeast;
 
 			long longNumKmers = numKmers;
 			#pragma omp parallel for if(longNumKmers >= 10000)
 			for (long i = 0; i < longNumKmers; i++) {
+				TEMP_KMER(least);
 				isLeast = kmers[i].buildLeastComplement(least);
 				if (!isLeast)
 					kmers[i] = least;
@@ -1933,6 +1933,12 @@ typedef KmerArray<KoMer::UI32> KmerCounts;
 
 //
 // $Log: Kmer.h,v $
+// Revision 1.88  2010-08-18 17:50:40  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.87.4.1  2010-07-19 18:43:51  regan
+// fixed core dump in parallel build of large sequences
+//
 // Revision 1.87  2010-06-23 17:10:12  regan
 // bugfix in boundary conditions of threaded iterator
 //

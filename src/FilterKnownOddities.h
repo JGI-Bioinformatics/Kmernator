@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.27 2010-06-23 20:58:02 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/FilterKnownOddities.h,v 1.28 2010-08-18 17:50:40 regan Exp $
 
 #ifndef _FILTER_H
 #define _FILTER_H
@@ -40,14 +40,23 @@ public:
 		twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(length);
 		// T is 11, A is 00, so mask is all T's surrounded by A's
 
+		// readIdx 0 is signal for no match!
+		Read empty;
+		sequences.append(empty);
+
 		std::string fasta = getArtifactFasta();
-		if (Options::getMaskSimpleRepeats())
-			fasta += getSimpleRepeatFasta();
-		if (Options::getPhiXOutput())
-			fasta += getPhiX();
 		sequences.appendFastaFile(fasta);
-		if (Options::getPhiXOutput())
-			phiXReadIdx() = sequences.getSize() - 1;
+		if (Options::getMaskSimpleRepeats()) {
+			fasta = getSimpleRepeatFasta();
+			getSimpleRepeatBegin() = sequences.getSize();
+			sequences.appendFastaFile(fasta);
+			getSimpleRepeatEnd() = sequences.getSize();
+		}
+		if (Options::getPhiXOutput()) {
+			fasta = getPhiX();
+			getPhiXReadIdx() = sequences.getSize();
+			sequences.appendFastaFile(fasta);
+		}
 		counts.resize( sequences.getSize() );
 
 		prepareMaps(numErrors);
@@ -97,29 +106,256 @@ public:
 		KmerSizer::set(oldKmerLength);
 	}
 
+	class FilterResults {
+	public:
+		KM::ValueType value;
+		SequenceLengthType minAffected;
+		SequenceLengthType maxAffected;
+		FilterResults() : value(0), minAffected(0), maxAffected(0) {}
+		FilterResults(KM::ValueType &_v, SequenceLengthType &_m, SequenceLengthType &_x) : value(_v), minAffected(_m), maxAffected(_x){}
+	};
+	class Recorder {
+	public:
+		OfstreamMap *omPhiX;
+		OfstreamMap *omArtifact;
+		SequenceCounts *threadCounts;
+		SequenceLengthType minReadPos;
+		Recorder() : omPhiX(NULL), omArtifact(NULL), threadCounts(NULL), minReadPos(0) {}
+	};
+
+	FilterResults applyFilterToPair(ReadSet &reads, long pairIdx, SequenceCounts *threadCounts, Recorder &recorder) {
+		ReadSet::Pair &pair = reads.getPair(pairIdx);
+		FilterResults results1, results2;
+
+		bool isRead1 = reads.isValidRead(pair.read1);
+		bool isRead2 = reads.isValidRead(pair.read2);
+		if (isRead1)
+			results1 = applyFilterToRead(reads, pair.read1, threadCounts, recorder);
+		if (isRead2)
+			results2 = applyFilterToRead(reads, pair.read2, threadCounts, recorder);
+
+		FilterResults results;
+		if (isRead1 && isRead2) {
+			recordAffectedRead(reads, recorder, results1, pair.read1, results2, pair.read2);
+			results.minAffected = std::min(results1.minAffected, results2.minAffected);
+			results.value = (isPhiX(results1.value) || isPhiX(results2.value)) ? getPhiXReadIdx() : std::max(results1.value, results2.value);
+		} else {
+			if (isRead1) {
+				recordAffectedRead(reads, recorder, results1, pair.read1);
+				results = results1;
+			} else {
+				recordAffectedRead(reads, recorder, results2, pair.read2);
+				results = results2;
+			}
+		}
+		return results;
+	}
+
+	FilterResults applyFilterToRead(ReadSet &reads, long readIdx, SequenceCounts *threadCounts, Recorder &recorder, bool recordEffects = false) {
+
+		Read &read = reads.getRead(readIdx);
+		FilterResults results;
+		KM::ValueType &value = results.value;
+		SequenceLengthType &minAffected = results.minAffected;
+		minAffected = MAX_SEQUENCE_LENGTH;
+		SequenceLengthType &maxAffected = results.maxAffected;
+		maxAffected = 0;
+
+		if (Options::getDebug() > 2) {
+		  #pragma omp critical (stderr)
+		  std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
+		}
+
+		SequenceLengthType seqLen = read.getLength();
+		TwoBitEncoding *ptr = read.getTwoBitSequence();
+		long bytes = read.getTwoBitEncodingSequenceLength();
+		TwoBitEncoding revcomp[bytes+1];
+		TwoBitEncoding *revPtr = revcomp;
+		SequenceLengthType seqLenByteBoundary = seqLen & ~((SequenceLengthType) 0x03);
+		TwoBitSequence::reverseComplement(ptr, revPtr, seqLenByteBoundary);
+		long byteHops = bytes - twoBitLength - ((seqLen & 0x03) == 0 ? 0 : 1);
+		if (byteHops < 0)
+			return results;
+
+		KM::ElementType elem;
+		bool wasPhiX = false;
+
+
+		for(long byteHop = 0; byteHop <= byteHops; byteHop++) {
+
+			// need to test both forward and reverse paths since only one is stored in filter
+
+			const Kmer &fwd = (const Kmer&) *ptr;
+
+			elem = filter.getElementIfExists( fwd );
+			if (elem.isValid()) {
+				SequenceLengthType pos = byteHop*4;
+				value = elem.value();
+				wasPhiX |= isPhiX(value);
+				if (minAffected > pos)
+					minAffected = pos;
+				if (maxAffected < pos+length)
+					maxAffected = pos+length;
+			}
+
+			const Kmer &rev = (const Kmer&) *revPtr;
+
+			elem = filter.getElementIfExists( rev );
+			if (elem.isValid()) {
+			    SequenceLengthType pos = 0;
+			    SequenceLengthType posMinus = length + byteHop*4;
+			    if (seqLen > posMinus) {
+			        pos = seqLen - posMinus;
+			    }
+				value = elem.value();
+				wasPhiX |= isPhiX(value);
+				if (minAffected > pos)
+					minAffected = pos;
+				if (maxAffected < pos+length)
+					maxAffected = pos+length;
+			}
+
+			ptr++;
+			revPtr++;
+		}
+
+		if (wasPhiX) {
+			value = getPhiXReadIdx();
+		} else if (isSimpleRepeat(value)) {
+			// allow simple repeats in the middle of a read with good edges
+			if (minAffected > recorder.minReadPos && seqLen - maxAffected >= length) {
+				value = 0;
+				minAffected = 0;
+				maxAffected = 0;
+			}
+		}
+		if (value > 0) {
+			read.markupBases(minAffected , maxAffected - minAffected, 'X');
+			if (recordEffects)
+				recordAffectedRead(reads, recorder, results, readIdx);
+		}
+		return results;
+	}
+
+	void recordAffectedRead(ReadSet &reads, Recorder &recorder, FilterResults results1, ReadSet::ReadSetSizeType readIdx1, FilterResults results2 = FilterResults(), ReadSet::ReadSetSizeType readIdx2 = ReadSet::MAX_READ_IDX) {
+		bool isRead1 = reads.isValidRead(readIdx1);
+		bool isRead2 = reads.isValidRead(readIdx2);
+
+		bool wasAffected = (results1.value != 0) | (results2.value != 0);
+		bool wasPhiX = isPhiX(results1.value) | isPhiX(results2.value);
+
+		if (wasAffected) {
+
+			if (wasPhiX) {
+				results1.value = results2.value = getPhiXReadIdx();
+			}
+
+			bool isRead1Affected = isRead1 && results1.value != 0;
+			bool isRead2Affected = isRead2 && results2.value != 0;
+
+			int threadNum = omp_get_thread_num();
+
+			if (isRead1Affected)
+				recorder.threadCounts[threadNum][ results1.value ]++;
+			if (isRead2Affected)
+				recorder.threadCounts[threadNum][ results2.value ]++;
+
+			if (wasPhiX && recorder.omPhiX != NULL) {
+
+				std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx1);
+				#pragma omp critical (writePhix)
+				{
+					ostream &os = recorder.omPhiX->getOfstream( fileSuffix );
+		            // always discard the read, as it contains some PhiX and was sorted
+					if (isRead1) {
+						Read &read = reads.getRead(readIdx1);
+						_writeFilterRead(os, read, read.getLength());
+						read.discard();
+					}
+					if (isRead2) {
+						Read &read = reads.getRead(readIdx2);
+						_writeFilterRead(os, read, read.getLength());
+						read.discard();
+					}
+				}
+			} else if ( (!wasPhiX) && recorder.omArtifact != NULL) {
+
+				std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix( isRead1 ? readIdx1 : readIdx2);
+				std::string label1, label2;
+				if (isRead1Affected)
+					label1 = sequences.getRead(results1.value).getName();
+				if (isRead2Affected)
+					label2 = sequences.getRead(results2.value).getName();
+
+				#pragma omp critical (writeFilter)
+				{
+					ostream &os = recorder.omArtifact->getOfstream( fileSuffix );
+					// if the read length is less than the desired minimum, discard it completely regardless if it was output or not
+					if (isRead1 && results1.value != 0) {
+						Read &read = reads.getRead(readIdx1);
+						_writeFilterRead(os, read, read.getLength(), label1);
+						if (results1.minAffected == 0 || results1.minAffected < recorder.minReadPos) {
+							read.discard();
+						}
+					}
+					if (isRead2 && results2.value != 0) {
+						Read &read = reads.getRead(readIdx2);
+						_writeFilterRead(os, read, read.getLength(), label2);
+						if (results2.minAffected == 0 || results2.minAffected < recorder.minReadPos) {
+							read.discard();
+						}
+					}
+				}
+			}
+
+			if (Options::getDebug()>1) {
+
+				#pragma omp critical (stderr)
+				{
+				  Read read;
+				  if (isRead1Affected) {
+					  read = reads.getRead(readIdx1);
+					  std::cerr << "FilterMatch1 to " << read.getName() << " "
+						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
+							  << wasPhiX << " " << sequences.getRead(results1.value).getName() << std::endl;
+				  }
+				  if (isRead2Affected) {
+					  read = reads.getRead(readIdx2);
+					  std::cerr << "FilterMatch2 to " << read.getName() << " "
+						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
+							  << wasPhiX << " " << sequences.getRead(results2.value).getName() << std::endl;
+
+				  }
+			    }
+			}
+		}
+	}
+
 	unsigned long applyFilter(ReadSet &reads) {
 		unsigned long oldKmerLength = KmerSizer::getSequenceLength();
 		KmerSizer::set(length);
 
+		Recorder recorder;
 		unsigned long affectedCount = 0;
+
 		OfstreamMap _omPhiX(Options::getOutputFile(), "-PhiX.fastq");
-		OfstreamMap *omPhiX = NULL;
 		if (Options::getPhiXOutput()) {
-			omPhiX = &_omPhiX;
+			recorder.omPhiX = &_omPhiX;
 		}
 		OfstreamMap _omArtifact(Options::getOutputFile(), "-Artifact.fastq");
-		OfstreamMap *omArtifact = NULL;
 		if (Options::getFilterOutput()) {
-			omArtifact = &_omArtifact;
+			recorder.omArtifact = &_omArtifact;
 		}
 
-		SequenceLengthType minReadPos = Options::getMinReadLength();
+		SequenceLengthType &minReadPos = recorder.minReadPos;
+		minReadPos = Options::getMinReadLength();
 		if (minReadPos != 0 && minReadPos != MAX_SEQUENCE_LENGTH) {
 			minReadPos -= 1;
 		}
 
 		int numThreads = omp_get_max_threads();
 		SequenceCounts     threadCounts[numThreads];
+		recorder.threadCounts = threadCounts;
 
         for (int i = 0; i < numThreads; i++) {
             threadCounts[i].resize( sequences.getSize() );
@@ -127,109 +363,18 @@ public:
 		// start with any existing state
 		counts.swap(threadCounts[0]);
 
-		long readsSize = reads.getSize();
-		#pragma omp parallel for schedule(dynamic) reduction(+:affectedCount)
-		for (long readIdx = 0; readIdx < readsSize; readIdx++) {
-			Read &read = reads.getRead(readIdx);
+		bool byPair = reads.hasPairs();
+		long size = reads.getSize();
+		if (byPair)
+			size = reads.getPairSize();
 
-			if (Options::getDebug() > 2) {
+		#pragma omp parallel for schedule(dynamic)
+		for (long idx = 0; idx < size; idx++) {
 
-			  #pragma omp critical (stderr)
-			  std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
-			}
-			SequenceLengthType seqLen = read.getLength();
-			TwoBitEncoding *ptr = read.getTwoBitSequence();
-			long bytes = read.getTwoBitEncodingSequenceLength();
-			TwoBitEncoding revcomp[bytes+1];
-			TwoBitEncoding *revPtr = revcomp;
-			SequenceLengthType seqLenByteBoundary = seqLen & ~((SequenceLengthType) 0x03);
-			TwoBitSequence::reverseComplement(ptr, revPtr, seqLenByteBoundary);
-			long byteHops = bytes - twoBitLength - ((seqLen & 0x03) == 0 ? 0 : 1);
-			if (byteHops < 0)
-				continue;
-
-			KM::ElementType elem;
-			bool wasAffected = false;
-			bool wasPhiX = false;
-			SequenceLengthType minAffected = MAX_SEQUENCE_LENGTH;
-			KM::ValueType value = 0;
-			for(long byteHop = 0; byteHop <= byteHops; byteHop++) {
-
-				// need to test both forward and reverse paths since only one is stored in filter
-
-				const Kmer &fwd = (const Kmer&) *ptr;
-
-				elem = filter.getElementIfExists( fwd );
-				if (elem.isValid()) {
-					SequenceLengthType pos = byteHop*4;
-					read.markupBases(pos, length, 'X');
-					wasAffected = true;
-					value = elem.value();
-					wasPhiX |= isPhiX(value);
-					if (minAffected > pos)
-						minAffected = pos;
-				}
-
-				const Kmer &rev = (const Kmer&) *revPtr;
-
-				elem = filter.getElementIfExists( rev );
-				if (elem.isValid()) {
-				    SequenceLengthType pos = 0;
-				    SequenceLengthType posMinus = length + byteHop*4;
-				    if (seqLen > posMinus) {
-				        pos = seqLen - posMinus;
-				    }
-					read.markupBases(pos , length, 'X');
-					wasAffected = true;
-					value = elem.value();
-					wasPhiX |= isPhiX(value);
-					if (minAffected > pos)
-						minAffected = pos;
-				}
-
-				ptr++;
-				revPtr++;
-			}
-			if (wasAffected) {
-				affectedCount++;
-				int threadNum = omp_get_thread_num();
-
-				threadCounts[threadNum][ value ]++;
-				if (wasPhiX && omPhiX != NULL) {
-
-					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx);
-					#pragma omp critical (writePhix)
-					{
-						_writeFilterRead(omPhiX->getOfstream( fileSuffix ), read, seqLen);
-					}
-
-                    // always discard the read, as it contains some PhiX and was sorted
-					read.discard();
-
-				} else if ( (!wasPhiX) && omArtifact != NULL) {
-
-					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx);
-					std::string label = sequences.getRead(value).getName();
-					#pragma omp critical (writeFilter)
-					{
-						_writeFilterRead(omArtifact->getOfstream( fileSuffix ), read, seqLen, label);
-					}
-				}
-
-				// if the read length is less than the desired minimum, discard it completely regardless if it was output or not
-				if ( minAffected == 0 || minAffected < minReadPos) {
-					read.discard();
-				}
-
-				if (Options::getDebug()>1) {
-
-					#pragma omp critical (stderr)
-					{
-					  std::cerr << "FilterMatch to " << read.getName() << " "
-					  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
-					  << wasPhiX << " " << sequences.getRead(value).getName() << std::endl;
-				    }
-				}
+			if (byPair)
+				applyFilterToPair(reads, idx, threadCounts, recorder);
+			else {
+				applyFilterToRead(reads, idx, threadCounts, recorder, true);
 			}
 		}
 
@@ -244,6 +389,8 @@ public:
 
 		// restore state
 		counts.swap(threadCounts[0]);
+		for(ReadSetSizeType j = 0 ; j < counts.size() ; j++)
+			affectedCount += counts[j];
 
 		if (Options::getVerbosity()) {
 			std::cerr << "Final Filter Matches to reads: " << affectedCount << std::endl;
@@ -276,7 +423,7 @@ public:
 	typedef ReadSet::Pair Pair;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 
-	static void _buildDuplicateFragmentMap(KS::Vector &ksv, ReadSet &reads, unsigned char bytes, bool useReverseComplement, bool paired) {
+	static void _buildDuplicateFragmentMap(KS::Vector &ksv, ReadSet &reads, unsigned char bytes, bool useReverseComplement, bool paired, unsigned int startOffset = Options::getDeDupStartOffset()) {
 		// build one KS per thread, then merge, skipping singletons
         // no need to include quality scores
 
@@ -315,14 +462,14 @@ public:
 					// and properly account for duplicate fragment pairs
 
 					Sequence::BaseLocationVectorType markups = read1.getMarkups();
-					if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
-						memcpy(kmer.getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
+					if (TwoBitSequence::firstMarkupX(markups) + startOffset < sequenceLength) {
+						memcpy(kmer.getTwoBitSequence()       , read1.getTwoBitSequence() + (startOffset/4), bytes);
 					} else {
 						continue;
 					}
 					markups = read2.getMarkups();
-					if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
-						TwoBitSequence::reverseComplement( read2.getTwoBitSequence(), kmer.getTwoBitSequence() + bytes, sequenceLength);
+					if (TwoBitSequence::firstMarkupX(markups) + startOffset < sequenceLength) {
+						TwoBitSequence::reverseComplement( read2.getTwoBitSequence() + (startOffset/4), kmer.getTwoBitSequence() + bytes, sequenceLength);
 					} else {
 						continue;
 					}
@@ -346,8 +493,8 @@ public:
 					if (read1.isDiscarded())
 						continue;
 					Sequence::BaseLocationVectorType markups = read1.getMarkups();
-					if (TwoBitSequence::firstMarkupX(markups) < sequenceLength) {
-						memcpy(kmer.getTwoBitSequence()        , read1.getTwoBitSequence(), bytes);
+					if (TwoBitSequence::firstMarkupX(markups) + startOffset < sequenceLength) {
+						memcpy(kmer.getTwoBitSequence()        , read1.getTwoBitSequence() + (startOffset/4), bytes);
 					} else {
 						continue;
 					}
@@ -580,7 +727,7 @@ public:
 		return affectedCount;
 	}
 
-	static ReadSetSizeType filterDuplicateFragments(ReadSet &reads, unsigned char sequenceLength = 16, unsigned int cutoffThreshold = 2, unsigned int editDistance = Options::getDeDupEditDistance()) {
+	static ReadSetSizeType filterDuplicateFragments(ReadSet &reads, unsigned char sequenceLength = Options::getDeDupLength(), unsigned int cutoffThreshold = 2, unsigned int editDistance = Options::getDeDupEditDistance()) {
 
 	  if ( Options::getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
 			std::cerr << "Skipping filter and merge of duplicate fragments" << std::endl;
@@ -660,6 +807,20 @@ public:
 	    ss << ">PE_Sequencing_Primer_1" << std::endl;
 	    ss << "CGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
 		return ss.str();
+	}
+
+
+	static inline unsigned short &getSimpleRepeatBegin() {
+		static unsigned short simpleRepeatBegin = -1;
+		return simpleRepeatBegin;
+	}
+	static inline unsigned short &getSimpleRepeatEnd() {
+		static unsigned short getSimpleRepeatEnd = -1;
+		return getSimpleRepeatEnd;
+	}
+
+	static inline bool isSimpleRepeat(unsigned short readIdx) {
+		return (readIdx >= getSimpleRepeatBegin() && readIdx < getSimpleRepeatEnd());
 	}
 
 	static std::string getSimpleRepeatFasta() {
@@ -1159,12 +1320,12 @@ public:
 		return ss.str();
 	}
 
-	static inline unsigned short &phiXReadIdx() {
+	static inline unsigned short &getPhiXReadIdx() {
 		static unsigned short phiXReadIdx = -1;
 		return phiXReadIdx;
 	}
 	static inline bool isPhiX(unsigned short readIdx) {
-		return phiXReadIdx() == readIdx;
+		return getPhiXReadIdx() == readIdx;
 	}
 
 	static std::string getPhiX() {
@@ -1255,6 +1416,18 @@ public:
 #endif
 
 // $Log: FilterKnownOddities.h,v $
+// Revision 1.28  2010-08-18 17:50:40  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.27.4.2  2010-07-21 18:06:11  regan
+// added options to change unique mask offset and length for de-duplication
+//
+// Revision 1.27.4.1  2010-07-21 17:27:48  regan
+// refactored
+// filter by pairs, if available
+// output PhiX by pairs
+// allow simple repeats if edge sequences are unmasked
+//
 // Revision 1.27  2010-06-23 20:58:02  regan
 // fixed minimum read length logic
 //

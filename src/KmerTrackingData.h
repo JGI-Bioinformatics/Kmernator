@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.5 2010-06-22 23:06:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerTrackingData.h,v 1.6 2010-08-18 17:50:40 regan Exp $
 //
 
 #ifndef _KMER_TRACKING_DATA_H
@@ -153,7 +153,7 @@ public:
 	}
 
 	// cast operator
-	operator CountType() const {
+	operator unsigned long() const {
 		return getCount();
 	}
 
@@ -309,7 +309,7 @@ public:
 	}
 
 	// cast operator
-	operator CountType() const {
+	operator unsigned long() const {
 		return getCount();
 	}
 
@@ -395,7 +395,7 @@ public:
 	}
 
 	// cast operator
-	operator CountType() const {
+	operator unsigned long() const {
 		return getCount();
 	}
 
@@ -491,7 +491,7 @@ public:
 	}
 
 	// cast operator
-	operator CountType() const {
+	operator unsigned long() const {
 		return getCount();
 	}
 
@@ -579,7 +579,7 @@ public:
 	}
 
 	// cast operator
-	operator CountType() const {
+	operator unsigned long() const {
 		return getCount();
 	}
 
@@ -628,6 +628,12 @@ std::ostream &operator<<(std::ostream &stream, TrackingDataMinimal<T> &ob) {
 #endif
 
 // $Log: KmerTrackingData.h,v $
+// Revision 1.6  2010-08-18 17:50:40  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.5.4.1  2010-07-13 19:45:51  regan
+// bugfix in casting TrackingData*
+//
 // Revision 1.5  2010-06-22 23:06:31  regan
 // merged changes in CorruptionBugfix-20100622 branch
 //

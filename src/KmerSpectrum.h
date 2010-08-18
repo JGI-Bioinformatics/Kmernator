@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.38 2010-06-22 23:06:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerSpectrum.h,v 1.39 2010-08-18 17:50:39 regan Exp $
 
 #ifndef _KMER_SPECTRUM_H
 #define _KMER_SPECTRUM_H
@@ -93,7 +93,7 @@ public:
 		TrackingData::minimumWeight = Options::getMinKmerQuality();
 		TrackingData::minimumDepth = Options::getMinDepth();
 		// apply the minimum quality automatically
-		Read::setMinQualityScore( Options::getMinQuality() );
+		Read::setMinQualityScore( Options::getMinQuality(), Read::FASTQ_START_CHAR );
 	}
 	~KmerSpectrum() {}
 	KmerSpectrum(const KmerSpectrum &copy) {
@@ -1655,6 +1655,12 @@ public:
 
 
 // $Log: KmerSpectrum.h,v $
+// Revision 1.39  2010-08-18 17:50:39  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.38.4.1  2010-07-20 20:02:56  regan
+// autodetect fastq quality range
+//
 // Revision 1.38  2010-06-22 23:06:31  regan
 // merged changes in CorruptionBugfix-20100622 branch
 //

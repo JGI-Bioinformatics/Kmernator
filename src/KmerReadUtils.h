@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.9 2010-05-18 20:50:24 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/KmerReadUtils.h,v 1.10 2010-08-18 17:50:40 regan Exp $
 //
 
 #ifndef _KMER_READ_UTILS_H
@@ -10,7 +10,12 @@ class KmerReadUtils {
 public:
 	static KmerWeights buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
 		SequenceLengthType readLength = read.getLength();
-		bool bools[readLength];
+		bool needMalloc = readLength > MAX_STACK_SIZE;
+		bool _bools[ needMalloc ? 0 : readLength ];
+		bool *bools = _bools;
+		if (needMalloc) {
+			bools = new bool[readLength];
+		}
 		KmerWeights kmers(read.getTwoBitSequence(), readLength, leastComplement, bools);
 		std::string quals = read.getQuals();
 		size_t markupIdx = 0;
@@ -57,6 +62,9 @@ public:
 			std::cerr << i << " " << kmers.valueAt(i) << " " << kmers[i].toFasta() << std::endl;
 		  }
 		}
+		if (needMalloc) {
+			delete [] bools;
+		}
 		return kmers;
 	}
 };
@@ -65,6 +73,12 @@ public:
 
 
 // $Log: KmerReadUtils.h,v $
+// Revision 1.10  2010-08-18 17:50:40  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.9.10.1  2010-07-19 18:43:41  regan
+// fixed stack vs malloc problem
+//
 // Revision 1.9  2010-05-18 20:50:24  regan
 // merged changes from PerformanceTuning-20100506
 //

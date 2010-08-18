@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.39 2010-06-22 23:06:30 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Utils.h,v 1.40 2010-08-18 17:50:40 regan Exp $
 //
 
 #ifndef _UTILS_H
@@ -224,7 +224,8 @@ public:
 	}
 	static void parse(KoMer::RecordPtr record, KoMer::RecordPtr lastRecord,
 			          std::string &name, std::string &bases, std::string &quals,
-			          KoMer::RecordPtr qualRecord = NULL, KoMer::RecordPtr lastQualRecord = NULL) {
+			          KoMer::RecordPtr qualRecord = NULL, KoMer::RecordPtr lastQualRecord = NULL,
+			          char fastqStartChar = KoMer::FASTQ_START_CHAR_ILLUMINA) {
 		std::string buf;
 		if (*record == '@') {
 			// FASTQ
@@ -261,7 +262,7 @@ public:
 				while (qualRecord < lastQualRecord && *qualRecord != '>') {
 					quals += nextLine(buf, qualRecord);
 				}
-				quals = convertQualIntsToChars(quals);
+				quals = convertQualIntsToChars(quals, fastqStartChar);
 			} else {
 				quals.assign(bases.length(), KoMer::REF_QUAL);
 			}
@@ -269,7 +270,7 @@ public:
 			throw "Do not know how to parse this file!";
 		}
 	}
-	static std::string convertQualIntsToChars(const std::string &qualInts) {
+	static std::string convertQualIntsToChars(const std::string &qualInts, char fastqStartChar) {
 		std::istringstream ss(qualInts);
 		std::ostringstream oss;
 		while (!ss.eof()) {
@@ -277,7 +278,7 @@ public:
 			ss >> qVal;
 			if (ss.fail())
 				break;
-			qVal += KoMer::FASTQ_START_CHAR;
+			qVal += fastqStartChar;
 			oss << (char) qVal;
 		}
         return oss.str();
@@ -288,6 +289,12 @@ public:
 
 //
 // $Log: Utils.h,v $
+// Revision 1.40  2010-08-18 17:50:40  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.39.4.1  2010-07-20 20:02:56  regan
+// autodetect fastq quality range
+//
 // Revision 1.39  2010-06-22 23:06:30  regan
 // merged changes in CorruptionBugfix-20100622 branch
 //

@@ -1,4 +1,4 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.33 2010-06-22 23:06:31 regan Exp $
+// $Header: /repository/PI_annex/robsandbox/KoMer/src/Sequence.h,v 1.34 2010-08-18 17:50:39 regan Exp $
 //
 #ifndef _SEQUENCE_H
 #define _SEQUENCE_H
@@ -17,8 +17,8 @@
 class Sequence {
 public:
 	static const char REF_QUAL = KoMer::REF_QUAL;
-	static const char FASTQ_START_CHAR = KoMer::FASTQ_START_CHAR;
 	static const char PRINT_REF_QUAL = KoMer::PRINT_REF_QUAL;
+	static char FASTQ_START_CHAR;
 
 public:
 	typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
@@ -338,7 +338,7 @@ private:
 
 	static int qualityToProbabilityInitialized;
 	static int
-			initializeQualityToProbability(unsigned char minQualityScore = 0);
+			initializeQualityToProbability(unsigned char minQualityScore = 0, char startChar = KoMer::FASTQ_START_CHAR_ILLUMINA);
 
 public:
 
@@ -377,7 +377,7 @@ public:
 	double scoreProbabilityBases(const ProbabilityBases &probs) const;
 
 	static double qualityToProbability[256];
-	static void setMinQualityScore(unsigned char minQualityScore);
+	static void setMinQualityScore(unsigned char minQualityScore, char startChar = KoMer::FASTQ_START_CHAR_ILLUMINA);
 
 	// format == 0 fastq
 	// format == 1 fasta
@@ -407,6 +407,12 @@ public:
 
 //
 // $Log: Sequence.h,v $
+// Revision 1.34  2010-08-18 17:50:39  regan
+// merged changes from branch FeaturesAndFixes-20100712
+//
+// Revision 1.33.4.1  2010-07-20 20:02:56  regan
+// autodetect fastq quality range
+//
 // Revision 1.33  2010-06-22 23:06:31  regan
 // merged changes in CorruptionBugfix-20100622 branch
 //
