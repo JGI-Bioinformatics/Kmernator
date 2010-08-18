@@ -1,4 +1,4 @@
-# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.8 2010-05-05 06:28:40 regan Exp $
+# $Header: /repository/PI_annex/robsandbox/KoMer/apps/CMakeLists.txt,v 1.9 2010-08-18 17:47:49 regan Exp $
 #
  
 cmake_minimum_required(VERSION 2.6)
@@ -38,7 +38,20 @@ target_link_libraries( FilterReads
                               boost_iostreams-mt-static
                               boost_thread-mt-static
                               )
-                              
+                           
+set_source_files_properties( TnfDistance
+                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
+add_executable( TnfDistance TnfDistance )
+target_link_libraries( TnfDistance 
+                              Sequence
+                              Kmer
+                              ReadSet
+                              boost_program_options-mt-static
+                              boost_iostreams-mt-static
+                              boost_thread-mt-static
+                              )
+   
 set_source_files_properties( Fastq2Fasta
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )
@@ -79,6 +92,12 @@ target_link_libraries( FixPair
 
 #
 # $Log: CMakeLists.txt,v $
+# Revision 1.9  2010-08-18 17:47:49  regan
+# added TNF distance application
+#
+# Revision 1.8.16.1  2010-07-13 17:39:12  regan
+# created TnfDistance application
+#
 # Revision 1.8  2010-05-05 06:28:40  regan
 # merged changes from FixPairOutput-20100504
 #
