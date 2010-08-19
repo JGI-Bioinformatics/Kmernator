@@ -1,4 +1,7 @@
-// $Header: /repository/PI_annex/robsandbox/KoMer/src/lookup8.h,v 1.4 2010-05-18 20:50:24 regan Exp $:
+//
+// Kmernator/src/lookup8.h
+//
+//
 
 
 #ifndef _LOOKUP8_H

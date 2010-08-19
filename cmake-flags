@@ -1,11 +1,16 @@
 # Default flags to build optimized version
-/jgi/tools/bin/cmake . -DCMAKE_CXX_FLAGS="-O3 -g -Wall"
-cmake ~/robsandbox/KoMer -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
+
+# for normal build
+cmake . -DCMAKE_CXX_FLAGS="-O3 -g -Wall"
+
+# for static build
+cmake . -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
+
 # for debug
 cmake . -DCMAKE_CXX_FLAGS="-O0 -g -Wall -static -DDEBUG"
+
 # for profile
 cmake . -DCMAKE_CXX_FLAGS="-O3 -g -pg -static -Wall"
 
-
 # no openmp
-cmake  ~/robsandbox/KoMer  -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static " -DDISABLE_OPENMP=1
+cmake . -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static " -DDISABLE_OPENMP=1
