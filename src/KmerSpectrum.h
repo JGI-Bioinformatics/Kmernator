@@ -1153,9 +1153,9 @@ public:
 			purgeMinDepth(Options::getMinDepth());
 
 			// store
-			mmaps[partIdx] = weak.store();
+			mmaps[partIdx] = weak.store("WeakKmer");
 			if (Options::getMinDepth() <= 1)
-				mmaps[partIdx + numParts] = singleton.store();
+				mmaps[partIdx + numParts] = singleton.store("SingletonKmer");
 			else if (Options::getVerbosity())
 				std::cerr << "Not storing singletons which would have been this size: " << singleton.getSizeToStore() << std::endl;
 

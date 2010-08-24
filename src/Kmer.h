@@ -1361,9 +1361,9 @@ public:
 			_buckets[idx] = BucketType(ptr);
 		}
 	}
-	const KoMer::MmapFile store() const {
+	const KoMer::MmapFile store(std::string permanentFile = "") const {
 		long size = getSizeToStore();
-		KoMer::MmapFile mmap = MmapTempFile::buildNewMmap(size);
+		KoMer::MmapFile mmap = MmapTempFile::buildNewMmap(size, permanentFile);
 		store(mmap.data());
 		return mmap;
 	}

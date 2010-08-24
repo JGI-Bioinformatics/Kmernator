@@ -87,7 +87,7 @@ public:
 		fh.getOS().seekp(size-1);
 		fh.getOS() << '\0';
 		if ( !permamentFile.empty() ) {
-			permamentFile = Options::getTmpDir() + "/" + permamentFile;
+			permamentFile = Options::getTmpDir() + "/" + permamentFile + "-" + filename;
 			link(filename.c_str(), permamentFile.c_str());
 		}
 		return fh;
