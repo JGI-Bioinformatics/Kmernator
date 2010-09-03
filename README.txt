@@ -33,5 +33,19 @@
 //    Author: regan
 //
 
+// Unpack the source into a directory
+// create a build directory
+// execute cmake
+// execute make
+
+mkdir Kmernator-src
+cd Kmernator-src
+git pull hit+ssh://git@codaset.com:rsegan/kmernator.git
+mkdir build
+cd build
+cmake .. -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
+make
+make test
+
 
 
