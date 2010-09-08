@@ -46,6 +46,7 @@
 #include "ReadSet.h"
 #include "KmerReadUtils.h"
 #include "KmerSpectrum.h"
+#include "Log.h"
 
 class FilterKnownOddities {
 public:
@@ -112,8 +113,7 @@ public:
 				filter.getOrSetElement( kmers[j] , i );
 			}
 		}
-		if (Options::getVerbosity())
-			std::cerr << std::endl << "Prepared exact match: " << filter.size() << " " << MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1,  "Prepared exact match: " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
 
 		for (int error = 0; error < numErrors; error++) {
 			std::vector< KM::BucketType > tmpKmers;
@@ -128,8 +128,7 @@ public:
 				}
 			}
 		    tmpKmers.clear();
-			if (Options::getVerbosity())
-				std::cerr << "Prepared order " << (error+1) << ": " << filter.size() << " " << MemoryUtils::getMemoryUsage() << std::endl;
+			LOG_VERBOSE(1, "Prepared order " << (error+1) << ": " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
 		}
 
 		KmerSizer::set(oldKmerLength);
@@ -190,10 +189,7 @@ public:
 		SequenceLengthType &maxAffected = results.maxAffected;
 		maxAffected = 0;
 
-		if (Options::getDebug() > 2) {
-		  #pragma omp critical (stderr)
-		  std::cerr << "Checking " << read.getName() << "\t" << read.getFasta() << std::endl;
-		}
+		LOG_DEBUG_MT(2, "Checking " << read.getName() << "\t" << read.getFasta() );
 
 		SequenceLengthType seqLen = read.getLength();
 		TwoBitEncoding *ptr = read.getTwoBitSequence();
@@ -337,20 +333,21 @@ public:
 				}
 			}
 
-			if (Options::getDebug()>1) {
+			if (Log::isDebug(1)) {
 
 				#pragma omp critical (stderr)
 				{
+				  ostream &debug = Log::Debug();
 				  Read read;
 				  if (isRead1Affected) {
 					  read = reads.getRead(readIdx1);
-					  std::cerr << "FilterMatch1 to " << read.getName() << " "
+					  debug << "FilterMatch1 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
 							  << wasPhiX << " " << sequences.getRead(results1.value).getName() << std::endl;
 				  }
 				  if (isRead2Affected) {
 					  read = reads.getRead(readIdx2);
-					  std::cerr << "FilterMatch2 to " << read.getName() << " "
+					  debug << "FilterMatch2 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
 							  << wasPhiX << " " << sequences.getRead(results2.value).getName() << std::endl;
 
@@ -421,12 +418,13 @@ public:
 		for(ReadSetSizeType j = 0 ; j < counts.size() ; j++)
 			affectedCount += counts[j];
 
-		if (Options::getVerbosity()) {
-			std::cerr << "Final Filter Matches to reads: " << affectedCount << std::endl;
+		if (Log::isVerbose(1)) {
+			ostream &log = Log::Verbose();
+			log << "Final Filter Matches to reads: " << affectedCount << std::endl;
 			// TODO sort
 			for(unsigned long idx = 0 ; idx < counts.size(); idx++) {
 				if (counts[idx] > 0) {
-				    std::cerr << "\t" << counts[idx] << "\t" << sequences.getRead(idx).getName() << std::endl;
+				    log << "\t" << counts[idx] << "\t" << sequences.getRead(idx).getName() << std::endl;
 				}
 			}
 		}
@@ -532,13 +530,13 @@ public:
 				}
 			}
 		}
-		if (Options::getDebug() > 3) {
+		if (Log::isDebug(3)) {
 		  for (int i = 0; i < numThreads; i++) {
-			  std::cerr << "spectrum " << i << std::endl;
+			  Log::Debug() << "spectrum " << i << std::endl;
 			  ksv[i].printHistograms();
 		  }
 		} else {
-			std::cerr << "merging duplicate fragment spectrums" << std::endl;
+			LOG_VERBOSE(1, "merging duplicate fragment spectrums" );
 		}
 
 		KS::mergeVector(ksv, 1);
@@ -547,7 +545,7 @@ public:
 	// TODO make useWeights an Option::
 	static void _mergeNodesWithinEditDistance(KS &ks, unsigned int cutoffThreshold, unsigned int editDistance, bool useWeights = true) {
 		// TODO honor edit distance > 1
-		std::cerr << "Merging kmers within edit-distance of " << editDistance << " " << MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1, "Merging kmers within edit-distance of " << editDistance << " " << MemoryUtils::getMemoryUsage());
 
 		// create a sorted set of elements with > cutoffThreshold count
 		// (singletons will not be included in this round)
@@ -563,14 +561,14 @@ public:
 
 			#pragma omp single
 			{
-				std::cerr << "Sorting all nodes >= " << cutoffThreshold << " count: " << elems.size() << " " << MemoryUtils::getMemoryUsage() << std::endl;
+				LOG_VERBOSE(1, "Sorting all nodes >= " << cutoffThreshold << " count: " << elems.size() << " " << MemoryUtils::getMemoryUsage());
 			}
 			std::sort(elems.begin(), elems.end());
 
 
 			#pragma omp single
 			{
-				std::cerr << "Merging elements. " << MemoryUtils::getMemoryUsage() << std::endl;
+				LOG_VERBOSE(1, "Merging elements. " << MemoryUtils::getMemoryUsage());
 			}
 			for(KSElementVector::reverse_iterator it = elems.rbegin(); it != elems.rend(); it++) {
 				KSElementType &elem = *it;
@@ -581,7 +579,7 @@ public:
 
 			#pragma omp single
 			{
-				std::cerr << "Merging elements below cutoffThreshold. " << MemoryUtils::getMemoryUsage() << std::endl;
+				LOG_VERBOSE(1, "Merging elements below cutoffThreshold. " << MemoryUtils::getMemoryUsage() );
 			}
 
 			// do not clear elements until all merging has completed
@@ -599,13 +597,13 @@ public:
 			}
 		} // omp parallel
 
-		std::cerr << "Merged histogram. " << MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1, "Merged histogram. " << MemoryUtils::getMemoryUsage() );
 		ks.printHistograms();
 
 	}
 	static ReadSetSizeType _buildConsensusUnPairedReads(KS &ks, ReadSet &reads, ReadSet &newReads, unsigned int cutoffThreshold) {
 		ReadSet::madviseMmapsRandom();
-		std::cerr << "Building consensus reads. " << MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1, "Building consensus reads. " << MemoryUtils::getMemoryUsage());
 
 		ReadSetSizeType affectedCount = 0;
 
@@ -643,16 +641,16 @@ public:
 
 		    }
 		}
-		std::cerr << "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1, "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() );
 		ks.reset();
-		std::cerr << "Built " << newReads.getSize() << " new consensus reads: " <<  MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1, "Built " << newReads.getSize() << " new consensus reads: " <<  MemoryUtils::getMemoryUsage() );
 		newReads.identifyPairs();
 		return affectedCount;
 	}
 
 	static ReadSetSizeType _buildConsensusPairedReads(KS &ks, ReadSet &reads, ReadSet &newReads, unsigned int cutoffThreshold) {
 		ReadSet::madviseMmapsRandom();
-		std::cerr << "Building consensus reads. " << MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1, "Building consensus reads. " << MemoryUtils::getMemoryUsage());
 
 		ReadSetSizeType affectedCount = 0;
 		ReadSetSizeType pairSize = reads.getPairSize();
@@ -716,9 +714,9 @@ public:
 		for(int i = 0 ; i < numThreads; i++)
 			newReads.append(_threadNewReads[i]);
 
-		std::cerr << "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1, "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() );
 		ks.reset();
-		std::cerr << "Built " << newReads.getSize() << " new consensus reads: " <<  MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1, "Built " << newReads.getSize() << " new consensus reads: " <<  MemoryUtils::getMemoryUsage() );
 		newReads.identifyPairs();
 		return affectedCount;
 	}
@@ -728,7 +726,7 @@ public:
 		int numThreads = omp_get_max_threads();
 		KS::Vector ksv(numThreads);
 
-		cerr << "Building " << (paired?"Paired":"Un-Paired") << " Duplicate Fragment Spectrum" << endl;
+		LOG_VERBOSE(1, "Building " << (paired?"Paired":"Un-Paired") << " Duplicate Fragment Spectrum" );
 
 		SequenceLengthType affectedCount = 0;
 
@@ -759,8 +757,8 @@ public:
 	static ReadSetSizeType filterDuplicateFragments(ReadSet &reads, unsigned char sequenceLength = Options::getDeDupLength(), unsigned int cutoffThreshold = 2, unsigned int editDistance = Options::getDeDupEditDistance()) {
 
 	  if ( Options::getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
-			std::cerr << "Skipping filter and merge of duplicate fragments" << std::endl;
-			return 0;
+		  LOG_VERBOSE(1, "Skipping filter and merge of duplicate fragments");
+		  return 0;
 	  }
 	  ReadSetSizeType affectedCount = 0;
 

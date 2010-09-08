@@ -41,6 +41,7 @@
 #include <boost/lexical_cast.hpp>
 
 #include "ReadSet.h"
+#include "Log.h"
 
 ReadSet::MmapSourceVector ReadSet::mmapSources;
 void ReadSet::madviseMmaps(int advise) {
@@ -159,7 +160,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 
 		#pragma omp critical (stderr)
 		{
-			std::cerr << "reading " << files[i] << std::endl;
+			LOG_DEBUG(1, "reading " << files[i]);
 		}
 
 		string qualFile;
@@ -182,12 +183,14 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 
 		#pragma omp critical  (stderr)
 		{
-			std::cerr << "finished reading " << files[i] << std::endl;
+			LOG_DEBUG(1, "finished reading " << files[i]);
 		}
 	}
 #ifdef _USE_OPENMP
 	omp_set_nested(OMP_NESTED_DEFAULT);
-	{	std::cerr << "concatenating ReadSet buffers" << std::endl;}
+	{
+		LOG_DEBUG(1,"concatenating ReadSet buffers");
+	}
 	for(int i = 0; i< (long) files.size(); i++) {
 	    append(myReads[i]);
 	    incrementFile(parsers[i]);
@@ -318,7 +321,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 			blockSize = reader.getBlockSize(numThreads);
 			if (blockSize < 100)
 			blockSize = 100;
-			std::cerr << "Reading " << mmap << " with " << numThreads << " threads" << std::endl;
+			LOG_DEBUG(1, "Reading " << mmap << " with " << numThreads << " threads" );
 		}
 		reader.seekToNextRecord( blockSize * omp_get_thread_num() );
 		seekPos[ omp_get_thread_num() ] = reader.getPos();
@@ -335,9 +338,6 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 
 		if (hasNext && omp_get_thread_num() != 0 && seekPos[omp_get_thread_num()] == seekPos[omp_get_thread_num()-1])
 			hasNext = false;
-
-		//#pragma omp critical  (stderr)
-		//{ std::cerr << omp_get_thread_num() << " " << blockSize << " seeked to " << reader.getPos() << " will read: " << hasNext << std::endl; }
 
 		if (reader.isMmaped() && Options::getMmapInput() != 0) {
 		    RecordPtr recordPtr = reader.getStreamRecordPtr();
@@ -368,9 +368,6 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		}
 
 		numReads[ omp_get_thread_num() ] = myReads.getSize();
-
-		//#pragma omp critical (stderr)
-		//{ std::cerr << omp_get_thread_num() << " " << blockSize << " finished at " << reader.getPos() << " with " << myReads.getSize() << " " << numReads[ omp_get_thread_num() ]<< std::endl; }
 
 		#pragma omp critical (readsetGlobals)
 		{
@@ -538,15 +535,12 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			_pairs.push_back( Pair(spIdx, spIdx+1) );
 			read2.markPaired();
 			spIdx++;
-			if (Options::getDebug() > 2) {
-			  std::cerr << "Paired sequential reads: " << read1.getName() << " " << read2.getName() << std::endl;
-			}
+			LOG_DEBUG(2, "Paired sequential reads: " << read1.getName() << " " << read2.getName());
 			sequentialPairs++;
 		}
 	}
 
-	if (Options::getVerbosity())
-		std::cerr << "Paired sequential reads (fast): " << sequentialPairs << std::endl;
+	LOG_VERBOSE(1, "Paired sequential reads (fast): " << sequentialPairs);
 
 	newPairs += sequentialPairs;
 
@@ -586,8 +580,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			if (readNum == 2) {
 				if (test.read2 != MAX_READ_IDX) {
 					if (isPairable) {
-					    std::cerr
-							<< "Detected a conflicting read2. Skipping pair identification: "
+					    Log::Warn() << "Detected a conflicting read2. Skipping pair identification: "
 							<< name << std::endl;
 					}
 					isPairable = false;
@@ -600,7 +593,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			} else {
 				if (test.read1 != MAX_READ_IDX) {
 					if (isPairable) {
-					    std::cerr
+					    Log::Warn()
 							<< "Detected a conflicting read1. Skipping pair identification: "
 							<< name << std::endl;
 					}
@@ -630,12 +623,10 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 
 		readIdx++;
 		if (++countNewPaired % 10000000 == 0)
-			std::cerr << "Processed " << countNewPaired << " pairs for pairing"
-					<< std::endl;
+			LOG_VERBOSE(2, "Processed " << countNewPaired << " pairs for pairing");
 	}
 
-	if (Options::getVerbosity())
-		std::cerr << "Identified new pairs: " << newPairs << std::endl;
+	LOG_VERBOSE(1, "Identified new pairs: " << newPairs);
 
 	return _pairs.size();
 }
@@ -670,7 +661,7 @@ ReadSet::ReadSetSizeType ReadSet::getCentroidRead(const ProbabilityBases &probs)
 Read ReadSet::getConsensusRead() const {
 	ProbabilityBases probs = getProbabilityBases();
     Read consensus = getConsensusRead(probs, string("C") + boost::lexical_cast<std::string>(getSize()) + string("-") + getRead(0).getName());
-    if (Options::getDebug() > 2) {
+    if (Log::isDebug(2)) {
 
     	{
     		std::stringstream ss;
@@ -680,7 +671,7 @@ Read ReadSet::getConsensusRead() const {
     		ss << consensus.toString() << std::endl;
     		ss << probs.toString() << std::endl;
 			#pragma omp critical (stderr)
-    		std::cerr << ss.str();
+    		Log::Debug() << ss.str();
     	}
     }
     return consensus;

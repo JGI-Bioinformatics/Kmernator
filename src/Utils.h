@@ -47,6 +47,7 @@
 
 #include "config.h"
 #include "Options.h"
+#include "Log.h"
 
 
 class FormatOutput
@@ -115,9 +116,7 @@ public:
 	}
 	void clear() {
 		for(Iterator it = _map.begin() ; it != _map.end(); it++) {
-			if (Options::getDebug()) {
-				std::cerr << "Closing " << it->first << std::endl;
-			}
+			LOG_VERBOSE(1, "Closing " << it->first);
 			it->second->close();
 		}
 		_map.clear();
@@ -132,9 +131,7 @@ public:
 			{
 				it = _map.find(filename);
 				if (it == _map.end()) {
-					if (Options::getVerbosity()) {
-					  std::cerr << "Writing to " << filename << std::endl;
-				    }
+					LOG_VERBOSE(1, "Writing to " << filename);
 					OStreamPtr osp(new std::ofstream(filename.c_str()));
 					it = _map.insert( it, Map::value_type(filename, osp) );
 				}

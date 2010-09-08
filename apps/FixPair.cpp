@@ -37,6 +37,7 @@
 #include "Sequence.h"
 #include "ReadSet.h"
 #include "Options.h"
+#include "Log.h"
 
 using namespace std;
 
@@ -65,10 +66,10 @@ int main(int argc, char *argv[]) {
 	if (outputFilename.empty())
 		throw std::invalid_argument("Please specify an --ouput-file");
 	ReadSet reads;
-	cerr << "Reading Input Files" << endl;
+	LOG_VERBOSE(1, "Reading Input Files");
 	reads.appendAllFiles(inputs);
-	cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
-		<< " Bases " << endl;
+	LOG_VERBOSE(1,"loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
+		<< " Bases ");
 	reads.identifyPairs();
 
 	OfstreamMap ofmap = OfstreamMap(outputFilename, ".fastq");

@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
 
 	if (refReads.getSize() > 0) {
 		cerr << "Contrasted to reference kmer-spectrum:" << endl;
-		cerr << spectrum.contrastSpectrums(refSpectrum) << endl;
+		cerr << spectrum.contrastSpectrums(cerr, refSpectrum) << endl;
 	} else if (Options::getVerbosity() > 0) {
 		cerr << "Dumping kmer spectrum" << endl;
 		cerr << "Solid:" << endl;

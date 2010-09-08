@@ -40,6 +40,7 @@
 #include "Sequence.h"
 #include "Utils.h"
 #include "ReadFileReader.h"
+#include "Log.h"
 
 class ReadSet {
 public:
@@ -136,7 +137,7 @@ private:
 			std::string::iterator it = std::min_element(quals.begin(), quals.end());
 			if (it != quals.end() && *it < Read::FASTQ_START_CHAR) {
 				if (getSize() > 10000) {
-					cerr << "Warning: detected standard fastq only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
+					Log::Warn() << "detected standard fastq only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
 				}
 				Read::setMinQualityScore(Options::getMinQuality(), KoMer::FASTQ_START_CHAR_STD);
 			}

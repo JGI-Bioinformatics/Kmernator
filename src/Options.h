@@ -33,6 +33,7 @@
 #define _OPTIONS_H
 
 #include <iostream>
+#include <fstream>
 #include <cstdlib>
 #include <cstring>
 #include <vector>
@@ -41,12 +42,14 @@
 namespace po = boost::program_options;
 
 #include "config.h"
+#include "Log.h"
 
 // put common, universal options in this class
 // extend the class for specific options for each application
 class Options {
 public:
 	typedef std::vector<std::string> FileListType;
+	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
 
 protected:
 	static inline Options &getOptions() {
@@ -65,12 +68,12 @@ private:
 	FileListType inputFiles;
 	FileListType inputFilePrefixes;
 	std::string  outputFile;
+	std::string  logFile;
+	OStreamPtr   logFileStream;
 	std::string  tmpDir;
 	unsigned int formatOutput;
 	unsigned int kmerSize;
 	double       minKmerQuality;
-	unsigned int verbosity;
-	unsigned int debug;
 	unsigned int minQuality;
 	unsigned int minDepth;
 	unsigned int depthRange;
@@ -90,7 +93,7 @@ private:
 	unsigned int buildPartitions;
 	unsigned int gcHeatMap;
 
-	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10), verbosity(1), debug(0),
+	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10),
 	minQuality(10), minDepth(2), depthRange(2), minReadLength(22), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
@@ -111,6 +114,9 @@ public:
 	static inline std::string &getOutputFile() {
 		return getOptions().outputFile;
 	}
+	static inline std::string &getLogFile() {
+		return getOptions().logFile;
+	}
 	static inline std::string &getTmpDir() {
 		return getOptions().tmpDir;
 	}
@@ -124,10 +130,10 @@ public:
 		return getOptions().minKmerQuality;
 	}
 	static inline unsigned int &getVerbosity() {
-		return getOptions().verbosity;
+		return Log::Verbose().getLevel();
 	}
 	static inline unsigned int &getDebug() {
-		return getOptions().debug;
+		return Log::Debug().getLevel();
 	}
 	static inline unsigned int &getMinQuality() {
 		return getOptions().minQuality;
@@ -199,9 +205,8 @@ public:
 					end = it->length() - 1;
 
 				std::string fileprefix = it->substr( start, end-start );
-				if (getDebug() > 0) {
-					std::cerr << "InputFilePrefix: " << fileprefix << std::endl;
-				}
+				LOG_DEBUG(1, "InputFilePrefix: " << fileprefix );
+				
 				getOptions().inputFilePrefixes.push_back( fileprefix );
 			}
 		}
@@ -213,10 +218,10 @@ protected:
 
 		desc.add_options()("help", "produce help message")
 
-		("verbose", po::value<unsigned int>()->default_value(verbosity),
+		("verbose", po::value<unsigned int>()->default_value(getVerbosity()),
 				"level of verbosity (0+)")
 
-		("debug", po::value<unsigned int>()->default_value(debug),
+		("debug", po::value<unsigned int>()->default_value(getDebug()),
 				"level of debug verbosity (0+)")
 
 #ifdef _USE_OPENMP
@@ -239,6 +244,9 @@ protected:
 
 		("filter-output", po::value<unsigned int>()->default_value(filterOutput),
 				"if set, artifact filter reads will be output into a separate file. If not set, then affected reads will be trimmed and then output normally.  (requires --output-file set)")
+
+		("log-file", po::value<std::string>()->default_value(logFile),
+				"If set all INFO and DEBUG messages will be logged here (default stderr)")
 
 		("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to deposit mmap file")
 
@@ -305,10 +313,10 @@ public:
 		if (vm.count(key.c_str())) {
 			val = vm[key.c_str()].as<T>();
 			if (print) {
-				std::cerr << key << " is: " << val << std::endl;
+				LOG_VERBOSE(1, key << " is: " << val );
 			}
 		} else if (print) {
-			std::cerr << key << " was not specified." << std::endl;
+			LOG_VERBOSE(1, key << " was not specified.");
 		}
 
 	}
@@ -340,20 +348,37 @@ public:
 				std::cerr << desc << std::endl;
 				return false;
 			}
+
+
 			setOpt<unsigned int>("verbose", getVerbosity());
 
 			setOpt<unsigned int>("debug", getDebug());
-			bool print = (getVerbosity() > 0 || getDebug() > 0);
+
+			setOpt<std::string>("log-file", getLogFile(), false);
+			if ( ! getLogFile().empty() ) {
+				getOptions().logFileStream.reset( new std::ofstream(getLogFile().c_str(), std::ios_base::out | std::ios_base::ate) );
+				Log::Verbose().setOstream( *getOptions().logFileStream );
+				Log::Debug().setOstream( *getOptions().logFileStream );
+				LOG_VERBOSE(1, "log-file is: " << getLogFile().c_str());
+			}
+
+			bool print = (Log::isVerbose(1) || Log::isDebug(1));
+			std::ostream *output = NULL;
+			if (print) {
+				output = Log::Verbose("Options Set").getOstreamPtr();
+			}
 
 #ifdef _USE_OPENMP
 
 			setOpt<int>("threads", getMaxThreads(), print);
 			if (getMaxThreads() > OMP_MAX_THREADS) {
-				std::cerr << "Reducing the number of threads from " << getMaxThreads() << " to " << OMP_MAX_THREADS;
+				if (print)
+					Log::Verbose() << "Reducing the number of threads from " << getMaxThreads() << " to " << OMP_MAX_THREADS;
 				getMaxThreads() = OMP_MAX_THREADS;
 			}
 			if ((getMaxThreads() & (getMaxThreads()-1)) != 0) {
-				std::cerr << "Reducing the number of threads from " << getMaxThreads();
+				if (print)
+					Log::Verbose()  << "Reducing the number of threads from " << getMaxThreads();
 				int t = getMaxThreads();
 				if (t > 32) {
 					t=32;
@@ -369,7 +394,8 @@ public:
 					t=1;
 				}
 				getMaxThreads() = t;
-				std::cerr << " to " << t << std::endl;
+				if (print)
+					*output << " to " << t << std::endl;
 			}
 			OMP_MAX_THREADS = getMaxThreads();
 			omp_set_num_threads(OMP_MAX_THREADS);
@@ -377,34 +403,39 @@ public:
 #endif
 
 			if (vm.count("reference-file")) {
-				std::cerr << "Reference files are: ";
+				if (print)
+					Log::Verbose() << "Reference files are: ";
 				FileListType & referenceFiles = getReferenceFiles()
 						= vm["reference-file"].as<FileListType> ();
-				for (FileListType::iterator it = referenceFiles.begin(); it
+				if (print) {
+					for (FileListType::iterator it = referenceFiles.begin(); it
 						!= referenceFiles.end(); it++)
-					std::cerr << *it << ", ";
-				std::cerr << std::endl;
-			} else {
-				std::cerr << "reference was not set." << std::endl;
+						*output << *it << ", ";
+					*output << std::endl;
+				}
+			} else if (print) {
+				Log::Verbose() << "reference was not set." << std::endl;
 			}
 
 			if (vm.count("kmer-size")) {
 				setOpt<unsigned int>("kmer-size", getKmerSize(), print);
 			} else {
-				std::cerr << desc << "There was no kmer size specified!"
-						<< std::endl;
+				LOG_ERROR(1, "There was no kmer size specified!");
 				return false;
 			}
 			if (vm.count("input-file")) {
-				std::cerr << "Input files are: ";
+				if (print) {
+					Log::Verbose() << "Input files are: ";
+				}
 				FileListType inputs = getInputFiles() = vm["input-file"].as<FileListType> ();
-				for (FileListType::iterator it = inputs.begin(); it
-						!= inputs.end(); it++)
-					std::cerr << *it << ", ";
-				std::cerr << std::endl;
-			} else {
-				std::cerr << desc << "There were no input files specified!"
-						<< std::endl;
+				if (print) {
+					for (FileListType::iterator it = inputs.begin(); it
+							!= inputs.end(); it++)
+						*output << *it << ", ";
+					*output << std::endl;
+				}
+			} else  {
+				LOG_ERROR(1, "There were no input files specified!" << std::endl << desc << std::endl << "There were no input files specified!");
 				return false;
 			}
 			setOpt<std::string>("output-file", getOutputFile(), print);
@@ -457,13 +488,13 @@ public:
 			// set dedup edit distance
 			setOpt<unsigned int>("dedup-edit-distance", getDeDupEditDistance() , print);
 			if (getDeDupEditDistance() > 1) {
-				std::cerr <<"Unsupported option dedup-edit-distance > 1" << std::endl;
+				LOG_ERROR(1, "Unsupported option dedup-edit-distance > 1!" << std::endl << desc << std::endl << "Unsupported option dedup-edit-distance > 1!");
 			    return false;
 			}
 			setOpt<unsigned int>("dedup-start-offset", getDeDupStartOffset(), print);
 			setOpt<unsigned int>("dedup-length", getDeDupLength(), print);
 			if (getDeDupStartOffset() % 4 != 0 || getDeDupLength() % 4 != 0) {
-				std::cerr << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl;
+				LOG_ERROR(1, "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl << desc << std::endl << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!");
 				return false;
 			}
 
@@ -476,10 +507,10 @@ public:
 			setOpt<unsigned int>("gc-heat-map", getGCHeatMap(), print);
 
 		} catch (std::exception& e) {
-			std::cerr << "error: " << e.what() << std::endl;
+			LOG_ERROR(1,"Exception processing options" << std::endl << getDesc() << std::endl << e.what() << std::endl << "Exception processing options!" );
 			return false;
 		} catch (...) {
-			std::cerr << "Exception of unknown type!" << std::endl;
+			LOG_ERROR(1, "Exception of unknown type!" << std::endl << getDesc() << std::endl );
 			return false;
 		}
 

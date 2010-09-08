@@ -38,6 +38,7 @@
 #include <boost/unordered_map.hpp>
 
 #include "config.h"
+#include "Log.h"
 
 using namespace std;
 
@@ -433,11 +434,8 @@ public:
 			} else {
 				seekg(0);
 			}
-			if (Options::getDebug()) {
-                #pragma omp critical (stderr)
-				{
-					std::cerr << omp_get_thread_num() << " seeked to " << tellg() << std::endl;
-				}
+			if (Log::isDebug(1)) {
+                LOG_DEBUG_MT(1, omp_get_thread_num() << " seeked to " << tellg() );
 			}
 			while ( (!endOfStream()) && _stream->peek() != _marker) {
 				nextLine();
@@ -452,20 +450,17 @@ public:
 					seekg(tmpPos);
 					_lineBuffer[threadNum] = current;
 
-					if (Options::getDebug()) {
-					  std::cerr << "Correctly picked record break point to read fastq in parallel: "
-					  << current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg() << std::endl;
-					}
+					LOG_DEBUG_MT(1, "Correctly picked record break point to read fastq in parallel: "
+							<< current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg());
+
 
 				} else {
-					if (Options::getDebug()) {
-					  std::cerr << "Needed to skip an extra line to read fastq in parallel: "
-					  << current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg() << std::endl;
-					}
+					LOG_DEBUG_MT(1, "Needed to skip an extra line to read fastq in parallel: "
+							<< current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg());
 				}
 			}
 
-		}
+		};
 
 	};
 

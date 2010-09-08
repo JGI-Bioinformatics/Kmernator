@@ -44,6 +44,7 @@
 
 #include "config.h"
 #include "Options.h"
+#include "Log.h"
 
 class MmapTempFile {
 	static int getUnique() { static int id = 0; return id++; }
@@ -82,7 +83,7 @@ public:
 		filename += boost::lexical_cast<std::string>( getpid() );
 		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
 		filename += getenv("HOST") == NULL ? "unknown" : getenv("HOST");
-		std::cerr << "Creating new tmp file: " << filename << " " << size << std::endl;
+		LOG_DEBUG(1, "Creating new tmp file: " << filename << " " << size);
 		FileHandle fh(filename);
 		fh.getOS().seekp(size-1);
 		fh.getOS() << '\0';

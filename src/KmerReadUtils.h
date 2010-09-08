@@ -78,17 +78,15 @@ public:
 			if (markupIdx < markups.size() && markups[markupIdx].second < i
 					+ KmerSizer::getSequenceLength()) {
 				weight = 0.0;
-				//  	    std::cerr << "markupAt " << markups[markupIdx].first << " " << markups[markupIdx].second << "\t";
 			}
 			kmers.valueAt(i) = leastComplementForNegativeWeight && bools[i] ? weight : (0.0-weight);
-			//  	std::cerr << i << ":" << std::fixed << std::setprecision(3) << quals[i+KmerSizer::getSequenceLength()-1] << "-" << change << "/" << weight << "\t";
 
 		}
-		//  std::cerr << std::endl;
-		if (Options::getDebug() > 3) {
-		  for(Kmer::IndexType i = 0 ; i < kmers.size(); i++) {
-			std::cerr << i << " " << kmers.valueAt(i) << " " << kmers[i].toFasta() << std::endl;
-		  }
+		if (Log::isDebug(3)) {
+			ostream &debug = Log::Debug() << "KmerWeights: idx valueAt toFasta" << std::endl;;
+		    for(Kmer::IndexType i = 0 ; i < kmers.size(); i++) {
+			  debug << i << " " << kmers.valueAt(i) << " " << kmers[i].toFasta() << std::endl;
+		    }
 		}
 		if (needMalloc) {
 			delete [] bools;

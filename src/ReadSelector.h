@@ -47,6 +47,7 @@
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "Utils.h"
+#include "Log.h"
 
 template<typename M>
 class ReadSelector {
@@ -120,13 +121,17 @@ public:
 	}
 
 	void clear() {
+		resetPicks();
 		_trims.clear();
-		_picks.clear();
 		_counts.clear();
 		needCounts = false;
-		_duplicateSet.clear();
 		needDuplicateCheck = false;
+	}
+
+	void resetPicks() {
+		_picks.clear();
 		_lastSortedPick = 0;
+		_duplicateSet.clear();
 	}
 
 	class ScoreCompare : public std::binary_function<ReadSetSizeType,ReadSetSizeType,bool>
@@ -321,7 +326,6 @@ public:
 		}
 
 		bool hasNotChanged = (score >= trim.score);
-		//std::cerr << readIdx << " " << score << " " << trim.score << " " << hasNotChanged << " " << kmers.size() << " " << trim.trimLength << std::endl;
 		trim.score = score;
 		return hasNotChanged;
 	}
@@ -362,10 +366,12 @@ public:
 			}
 		}
 
-		std::cerr << "building heap out of " << heapedPairs.size() << " pairs" << std::endl;
+		LOG_VERBOSE(1, "building heap out of " << heapedPairs.size() << " pairs" );
+
 		std::make_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
 
-		std::cerr << "picking pairs: ";
+		LOG_VERBOSE(1,  "picking pairs: ");
+
 		// pick pairs
 		while (heapedPairs.begin() != heapedPairs.end()) {
 			PairScore &pairScore = heapedPairs.front();
@@ -381,7 +387,7 @@ public:
 				}
 			}
 		}
-		std::cerr << picked << std::endl;
+		LOG_VERBOSE(1,  picked);
 		optimizePickOrder();
 		return picked;
 	}
@@ -390,7 +396,7 @@ public:
 		_initPickBestCoveringSubset();
 		ReadSetSizeType picked = 0;
 
-		std::cerr << "initializing reads into a heap" << std::endl;
+		LOG_VERBOSE(1, "initializing reads into a heap");
 		// initialize heap of reads
 		PicksVector heapedReads;
 		for(ReadSetSizeType readIdx = 0; readIdx < _reads.getSize(); readIdx++) {
@@ -402,10 +408,11 @@ public:
 				}
 			}
 		}
-		std::cerr << "building heap out of " << heapedReads.size() << " reads" << std::endl;
+		LOG_VERBOSE(1, "building heap out of " << heapedReads.size() << " reads");
 		std::make_heap( heapedReads.begin(), heapedReads.end(), ScoreCompare(this));
 
-		std::cerr << "picking reads: ";
+		LOG_VERBOSE(1, "picking reads: ");
+
 		// pick reads
 		while (heapedReads.begin() != heapedReads.end()) {
 			ReadSetSizeType readIdx = heapedReads.front();
@@ -421,7 +428,7 @@ public:
 				}
 			}
 		}
-		std::cerr << picked << std::endl;
+		LOG_VERBOSE(1,  picked );
 		optimizePickOrder();
 		return picked;
 	}
@@ -571,8 +578,7 @@ public:
 		if (byInputFile) {
 			key += "-" + _reads.getReadFileNamePrefix(readIdx);
 		}
-		if (Options::getDebug() > 1)
-			std::cerr << "Writing to " << key << " " << readIdx << std::endl;
+		LOG_DEBUG(1, "Writing to " << key << " " << readIdx );
 		_writePickRead(ofstreamMap.getOfstream(key), readIdx, trim, format);
 	}
 };

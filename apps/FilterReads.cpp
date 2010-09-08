@@ -40,6 +40,7 @@
 #include "KmerSpectrum.h"
 #include "ReadSelector.h"
 #include "Utils.h"
+#include "Log.h"
 
 #include <boost/lexical_cast.hpp>
 
@@ -87,7 +88,7 @@ public:
 			}
 			if (Options::getOutputFile().empty())
 			{
-				std::cerr << "WARNING: no output file specified... This is a dry run!" << std::endl;
+				LOG_WARN(1, "no output file specified... This is a dry run!");
 			}
 		}
 		return ret;
@@ -107,32 +108,32 @@ int main(int argc, char *argv[]) {
 	KmerSizer::set(Options::getKmerSize());
 
 	Options::FileListType inputs = Options::getInputFiles();
-	cerr << "Reading Input Files" << endl;
+	LOG_VERBOSE(1, "Reading Input Files");
 	reads.appendAllFiles(inputs);
-	cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
-			<< " Bases " << endl;
-	cerr << MemoryUtils::getMemoryUsage() << endl;
+	LOG_VERBOSE(1, "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
+			<< " Bases ");
+	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
-	cerr << "Identifying Pairs: ";
+	LOG_VERBOSE(1, "Identifying Pairs: ");
 	long numPairs = reads.identifyPairs();
-	cerr << "Pairs + single = " << numPairs << endl;
-	cerr << MemoryUtils::getMemoryUsage() << endl;
+	LOG_VERBOSE(1, "Pairs + single = " << numPairs);
+	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
 	if (Options::getSkipArtifactFilter() == 0) {
 
-	  cerr << "Preparing artifact filter: ";
+	  LOG_VERBOSE(1, "Preparing artifact filter: ");
       FilterKnownOddities filter;
-      cerr << MemoryUtils::getMemoryUsage() << endl;
+      LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
-	  cerr << "Applying sequence artifact filter to Input Files" << endl;
+	  LOG_VERBOSE(1, "Applying sequence artifact filter to Input Files");
 	  unsigned long filtered = filter.applyFilter(reads);
-	  cerr << "filter affected (trimmed/removed) " << filtered << " Reads " << endl;;
-	  cerr << MemoryUtils::getMemoryUsage() << endl;
+	  LOG_VERBOSE(1, "filter affected (trimmed/removed) " << filtered << " Reads ");;
+	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
-	  cerr << "Applying DuplicateFragmentPair Filter to Input Files" << endl;
+	  LOG_VERBOSE(1, "Applying DuplicateFragmentPair Filter to Input Files");
 	  unsigned long duplicateFragments = filter.filterDuplicateFragments(reads);
-	  cerr << "filter affected  (removed) " << duplicateFragments << endl;
-	  cerr << MemoryUtils::getMemoryUsage() << endl;
+	  LOG_VERBOSE(1, "filter affected  (removed) " << duplicateFragments);
+	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 	}
 
 	KS spectrum(0);
@@ -142,26 +143,26 @@ int main(int argc, char *argv[]) {
 	if (Options::getKmerSize() > 0) {
 
 	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
-	  cerr << "targeting " << numBuckets << " buckets for reads " << endl;
+	  LOG_VERBOSE(1, "targeting " << numBuckets << " buckets for reads ");
 
 	  spectrum = KS(numBuckets);
-	  cerr << MemoryUtils::getMemoryUsage() << endl;
+	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
-	  cerr << MemoryUtils::getMemoryUsage() << endl;
+	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
 	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {
-		  cerr << "Creating GC Heat Map " <<  MemoryUtils::getMemoryUsage() << endl;
+		  LOG_VERBOSE(1, "Creating GC Heat Map " <<  MemoryUtils::getMemoryUsage());
 		  OfstreamMap ofmap(outputFilename + "-GC", ".txt");
 		  spectrum.printGC(ofmap.getOfstream(""));
 	  }
 
 	  if (Options::getMinDepth() > 1) {
-        cerr << "Clearing singletons from memory" << endl;
+        LOG_VERBOSE(1, "Clearing singletons from memory");
         spectrum.singleton.clear();
-	    cerr << MemoryUtils::getMemoryUsage() << endl;
+	    LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 	  }
 	}
 
@@ -190,10 +191,10 @@ int main(int argc, char *argv[]) {
 
 long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::string outputFilename)
 {
-	cerr << "Trimming reads: ";
+	LOG_VERBOSE(1, "Trimming reads: ");
 	RS selector(reads, spectrum.weak, minDepth);
-	cerr << MemoryUtils::getMemoryUsage() << endl;
-	cerr << "Picking reads: " << endl;
+	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	LOG_VERBOSE(1, "Picking reads: ");
 
 	long oldPicked = 0;
 	long picked = 0;
@@ -204,21 +205,21 @@ long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::strin
 
 	if (maximumKmerDepth > 0) {
 		for (int depth = 1; depth < maximumKmerDepth; depth++) {
-			cerr << "Picking depth " << depth << " layer of reads" << endl;
+			LOG_VERBOSE(1, "Picking depth " << depth << " layer of reads");
 			if (reads.hasPairs())
 				picked += selector.pickBestCoveringSubsetPairs(depth,
 						minDepth, Options::getMinReadLength(), FilterReadsOptions::getBothPairs());
 			else
 				picked += selector.pickBestCoveringSubsetReads(depth,
 						minDepth, Options::getMinReadLength());
-			cerr << MemoryUtils::getMemoryUsage() << endl;
+			LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 		}
 
 		if (picked > 0 && !outputFilename.empty()) {
-			cerr << "Writing " << picked << " reads to output file(s)" << endl;
+			LOG_VERBOSE(1, "Writing " << picked << " reads to output file(s)");
 			selector.writePicks(ofmap, oldPicked);
 		}
-		cerr << MemoryUtils::getMemoryUsage() << endl;
+		LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 		oldPicked += picked;
 
 
@@ -241,7 +242,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::strin
 				tmpMinDepth = 0;
 				depth = 0;
 			}
-			cerr << "Selecting reads over depth: " << depth << " (" << tmpMinDepth << ") " << endl;
+			LOG_VERBOSE(1, "Selecting reads over depth: " << depth << " (" << tmpMinDepth << ") ");
 
 			if (reads.hasPairs()) {
 				picked = selector.pickAllPassingPairs(tmpMinDepth,
@@ -251,12 +252,12 @@ long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::strin
 				picked = selector.pickAllPassingReads(tmpMinDepth,
 						Options::getMinReadLength());
 			}
-			cerr << "At or above coverage: " << depth << " Picked " << picked
-			<< " / " << reads.getSize() << " reads" << endl;
-			cerr << MemoryUtils::getMemoryUsage() << endl;
+			LOG_VERBOSE(1, "At or above coverage: " << depth << " Picked " << picked
+			<< " / " << reads.getSize() << " reads");
+			LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
 			if (picked > 0 && !outputFilename.empty()) {
-				cerr << "Writing " << picked << " reads  to output files" << endl;
+				LOG_VERBOSE(1, "Writing " << picked << " reads  to output files");
 				selector.writePicks(ofmap, oldPicked);
 			}
 			oldPicked += picked;
@@ -267,7 +268,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::strin
 		}
 	}
 	ofmap.clear();
-	cerr << "Done.  Cleaning up" << MemoryUtils::getMemoryUsage() << endl;
+	LOG_VERBOSE(1, "Done.  Cleaning up. " << MemoryUtils::getMemoryUsage());
 	selector.clear();
 
 	return oldPicked;

@@ -36,6 +36,7 @@
 #include "config.h"
 #include "ReadSet.h"
 #include "Options.h"
+#include "Log.h"
 
 using namespace std;
 
@@ -76,11 +77,11 @@ int main(int argc, char *argv[]) {
 	long splitSizeBase = Fastq2FastaOptions::getSplitSizeMegaBase() * 1000000;
 
 	ReadSet reads;
-	cerr << "Reading Input Files" << endl;
+	LOG_VERBOSE(1, "Reading Input Files" );
 	reads.appendAllFiles(inputs);
 
-	cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
-		<< " Bases " << endl;
+	LOG_VERBOSE(1, "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
+		<< " Bases ");
 
 	reads.identifyPairs();
 

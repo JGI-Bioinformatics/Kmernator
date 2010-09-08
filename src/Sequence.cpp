@@ -34,6 +34,8 @@
 #include <sstream>
 
 #include "Sequence.h"
+#include "Log.h"
+
 #include <cstdlib>
 #include <cmath>
 
@@ -575,7 +577,7 @@ double Read::qualityToProbability[256];
 
 int Read::initializeQualityToProbability(unsigned char minQualityScore, char startChar) {
 	if (startChar != FASTQ_START_CHAR) {
-		cerr << "Switching quality scale for FASTQ (std vs Illumina) to " << (int) startChar << endl;
+		LOG_DEBUG(1, "Switching quality scale for FASTQ (std vs Illumina) to " << (int) startChar);
 	}
 	FASTQ_START_CHAR = startChar;
 	for (int i = 0; i < 256; i++) {

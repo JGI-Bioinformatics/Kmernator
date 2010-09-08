@@ -40,6 +40,7 @@
 #include "ReadSet.h"
 #include "KmerSpectrum.h"
 #include "Utils.h"
+#include "Log.h"
 
 
 using namespace std;
@@ -104,7 +105,7 @@ public:
 		TEMP_KMER(lc);
 		kmer.buildLeastComplement(lc);
 		if ( !stdMap.exists(lc) ) {
-			if (Options::getDebug() > 0) cerr << lc.toFasta() << "\t" << (int) i << std::endl;
+			LOG_DEBUG(1, lc.toFasta() << "\t" << (int) i);
 		    stdMap.insert(lc, DataType());
 		}
 	  }
@@ -177,16 +178,19 @@ public:
 	}
 	void buildLength() {
 		length = 0.0;
-	    bool debug = Options::getDebug() > 1;
-	    if (debug) cerr << "buildLength()\t";
+	    bool debug = Log::isDebug(1);
+	    ostream *debugPtr = NULL;
+	    if (debug) {
+	    	debugPtr = Log::Debug("buildLength()").getOstreamPtr();
+	    }
 	    for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
 	    	length += tnfValues[i] * tnfValues[i];
-	    	if (debug) cerr << tnfValues[i] << "\t";
+	    	if (debug) *debugPtr << tnfValues[i] << "\t";
 	    }
 	    length = sqrt(length);
 	    if (length == 0.0)
 	    	length = 1.0;
-	    if (debug) cerr << length << endl;
+	    if (debug) *debugPtr << length << endl;
 	}
 	void buildTnf(const KM & map) {
 		tnfValues.empty();
@@ -201,17 +205,19 @@ public:
 	    }
 	}
 	double getDistance(const TNF &other) const {
-		bool debug = Options::getDebug() > 1;
+		bool debug = Log::isDebug(1);
 		double dist = 0.0;
-
-		if (debug) cerr << "getDistance()\t";
+		ostream *debugPtr = NULL;
+		if (debug) {
+			debugPtr = Log::Debug("getDistance()\t").getOstreamPtr();
+		}
 		for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
 			double d = tnfValues[i] / length - other.tnfValues[i] / other.length;
 			dist += d*d;
-			if (debug) cerr << tnfValues[i] / length << "\t" << other.tnfValues[i] / other.length << "\t" << d*d << endl;
+			if (debug) *debugPtr << tnfValues[i] / length << "\t" << other.tnfValues[i] / other.length << "\t" << d*d << endl;
 		}
 		dist = sqrt(dist);
-		if (debug) cerr << dist << endl;
+		if (debug) *debugPtr << dist << endl;
 		return dist;
 	}
 	double getDistance(const KM &query) const {
@@ -227,30 +233,33 @@ public:
 
 	    double targetSum = 0.0;
 	    double querySum = 0.0;
-	    bool debug = Options::getDebug() > 1;
+	    bool debug = Log::isDebug(1);
 
-	    if (debug) cerr << "getDistance(...)" << endl;
+	    ostream *debugPtr = NULL;
+	    if (debug) {
+	    	debugPtr = Log::Debug("getDistance(...)").getOstreamPtr();
+	    }
 	    for(KM::Iterator it = kmers.begin(); it != kmers.end(); it++) {
 	    	double t = target[it->key()];
 	    	targetSum += t*t;
 	    	double q = query[it->key()];
 	    	querySum += q*q;
-			if (debug) cerr << t << "\t" << q << endl;
+			if (debug) *debugPtr << t << "\t" << q << endl;
 	    }
-	    if (debug) cerr << endl;
+	    if (debug) *debugPtr << endl;
 	    targetSum = sqrt(targetSum);
 	    querySum = sqrt(querySum);
-	    if (debug) cerr << targetSum << "\t" << querySum << endl;
+	    if (debug) *debugPtr << targetSum << "\t" << querySum << endl;
 
 	    for(KM::Iterator it = kmers.begin(); it != kmers.end(); it++) {
 	    	double t = target[it->key()] / targetSum;
 	    	double q = query[it->key()] / querySum;
 	    	double d = t-q;
 	    	distance += d*d;
-	    	if (debug) cerr << t << "\t" << q << "\t" << d*d << endl;
+	    	if (debug) *debugPtr << t << "\t" << q << "\t" << d*d << endl;
 	    }
 	    distance = sqrt(distance);
-	    if (debug) cerr << distance << endl;
+	    if (debug) *debugPtr << distance << endl;
 
 		return distance;
 	}
@@ -271,9 +280,7 @@ TNFS buildTnfs(const ReadSet &reads, bool normalize = false) {
 		ksReads.setSolidOnly();
 		ReadSet singleRead;
 		Read read = reads.getRead(readIdx);
-		if (Options::getDebug()) {
-			cerr << "buildTnfs() for: " << read.getName() << endl;
-		}
+		LOG_DEBUG(1, "buildTnfs() for: " << read.getName());
 		singleRead.append(read);
 
 		ksReads.buildKmerSpectrum(singleRead, true);
@@ -369,10 +376,9 @@ public:
 } mvo;
 
 int main(int argc, char *argv[]) {
+	Options::getVerbosity() = 0;
 	if (!TnfDistanceOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
-
-	MemoryUtils::getMemoryUsage();
 
 	ReadSet refs;
 	ReadSet reads;
@@ -387,6 +393,11 @@ int main(int argc, char *argv[]) {
 
 	TNFS readTnfs = buildTnfs(reads, true);
 
+	ostream *out = &cout;
+	OfstreamMap om(Options::getOutputFile(), "");
+	if (!Options::getOutputFile().empty()) {
+		out = &om.getOfstream("");
+	}
 	Options::FileListType referenceInputs = Options::getReferenceFiles();
 	if (!referenceInputs.empty()) {
 		// compare distances from reference to each read in the input
@@ -397,17 +408,17 @@ int main(int argc, char *argv[]) {
 		Results results = calculateDistances(refTnf, reads, readTnfs);
 		std::sort(results.begin(), results.end(), ResultCompare());
 		for(Results::iterator it = results.begin(); it != results.end(); it++) {
-			cout << it->distance << "\t" << it->label << endl;
+			*out << it->distance << "\t" << it->label << endl;
 		}
 	} else {
 		// output TNF matrix for each read in the input
 
-		cout << "Label\t" << TNF::toHeader() << endl;
+		*out << "Label\t" << TNF::toHeader() << endl;
 		for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < reads.getSize(); readIdx++) {
 
 			Read read = reads.getRead(readIdx);
 
-			cout << read.getName() << "\t" << readTnfs[readIdx].toString() << endl;
+			*out << read.getName() << "\t" << readTnfs[readIdx].toString() << endl;
 		}
 
 	}
@@ -448,10 +459,10 @@ int main(int argc, char *argv[]) {
 
 	string clusterFile = TnfDistanceOptions::getClusterFile();
 	if (!clusterFile.empty()) {
-		bool debug = Options::getDebug() > 0;
+		bool debug = Log::isDebug(1);
 		long size = readTnfs.size();
 
-		cerr << "Building clusters" << endl;
+		LOG_VERBOSE(1, "Building clusters");
 		OfstreamMap om(clusterFile, "");
 		ostream &os = om.getOfstream("");
 		DMatrix distMatrix;
@@ -479,13 +490,14 @@ int main(int argc, char *argv[]) {
 			minVec[i] = std::min_element( vect.begin(), vect.end() );
 		}
 
-		cerr << "Finished dist matrix" << endl;
+		LOG_VERBOSE(1, "Finished dist matrix");
 		if (debug) {
+			ostream &debugOut = Log::Debug("DistMatrix");
 			for(long i = 0 ; i < size ; i++) {
-				cerr << "distMatrix: " << i << "\t" << clusterNames[i][0];
+				debugOut << "distMatrix: " << i << "\t" << clusterNames[i][0];
 				for(long j = 0 ; j <= i ; j++)
-					cerr << "\t" << distMatrix[i][j];
-				cerr << "\n";
+					debugOut << "\t" << distMatrix[i][j];
+				debugOut << std::endl;
 			}
 		}
 
@@ -498,25 +510,24 @@ int main(int argc, char *argv[]) {
 			vector< vector<double>::iterator >::iterator minElem = std::min_element(minVec.begin(), minVec.end(), mvo);
 			if (**minElem > clusterThreshold)
 				break;
-			if (debug) cerr << **minElem << endl;
+			LOG_DEBUG(1, **minElem );
 
 			unsigned long tgtj = minElem - minVec.begin();
 			unsigned long tgti = *minElem - distMatrix[tgtj].begin();
 
 			unsigned long lastIdx = minVec.size() - 1;
 			if (debug) {
+				ostream &debugOut = Log::Debug("MinValue");
 				for(unsigned long i2 = 0 ; i2 < minVec.size(); i2++) {
 					unsigned long j = i2 <= tgti ? i2 : tgti;
 					unsigned long i = i2 <= tgti ? tgti : i2;
 
-					cerr << distMatrix[i][j] << "\t";
+					debugOut << distMatrix[i][j] << "\t";
 				}
-				cerr << endl;
+				debugOut << endl;
 			}
 			clusterNames[tgti].insert( clusterNames[tgti].end(), clusterNames[tgtj].begin(), clusterNames[tgtj].end() );
-			if (Options::getVerbosity()) {
-				cerr << "Cluster merged " << tgti << " with " << tgtj << " " << distMatrix[tgtj][tgti] << " " << **minElem << endl;
-			}
+			LOG_VERBOSE(1, "Cluster merged " << tgti << " with " << tgtj << " " << distMatrix[tgtj][tgti] << " " << **minElem);
 			readTnfs2[tgti] = readTnfs2[tgti] + readTnfs2[tgtj];
 
 			// remove tgtj from vectors and matrix (1 row and 1 column);

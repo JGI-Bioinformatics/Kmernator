@@ -62,6 +62,7 @@ using namespace boost::accumulators;
 #include "Kmer.h"
 #include "KmerReadUtils.h"
 #include "Options.h"
+#include "Log.h"
 
 template<typename So, typename We, typename Si = TrackingDataSingleton>
 class KmerSpectrum {
@@ -307,9 +308,7 @@ public:
 	void migrateKmerData(const Kmer &srcKmer, const Kmer &dstKmer) {
 		bool trans = false;
 		{
-			if (Options::getDebug() >= 1) {
-			    std::cerr << "Merging kmers " << srcKmer.toFasta() << " to " << dstKmer.toFasta() << std::endl;
-			}
+			LOG_DEBUG(2, "Merging kmers " << srcKmer.toFasta() << " to " << dstKmer.toFasta());
 
 			if (hasSolids) {
 			    SolidElementType src = getIfExistsSolid(srcKmer);
@@ -427,19 +426,10 @@ public:
 			<< "\t" << (totalCount/count)
 			<< "\t" << std::endl;
 
-			//std::cerr << mean(countAcc) << "/" << median(countAcc) << " +-";
-			//std::cerr << sqrt(variance(countAcc)) << "\t";
-			//std::cerr << mean(countWAcc) << " +-";
-			//std::cerr << sqrt(variance(countWAcc)) << "\t";
-
 			ss << "Weights:\t" << totalWeightedCount
 			<< "\t" << (totalWeightedCount/count)
 			<< "\t" << (totalWeightedCount/totalCount)
 			<< std::endl;
-			//std::cerr << mean(weightedCountAcc) << "/" << median(weightedCountAcc) << " +-";
-			//std::cerr << sqrt(variance(weightedCountAcc)) << "\t";
-			//std::cerr << weighted_mean(weightedCountWAcc) << " +-";
-			//std::cerr << sqrt(weighted_variance(weightedCountWAcc)) << "\t";
 
 			ss << std::endl;
 
@@ -460,7 +450,8 @@ public:
 	};
 
 	void printHistograms(bool printSolidOnly = false) {
-		printHistograms(std::cerr, printSolidOnly);
+		if (Log::isVerbose(1))
+			printHistograms(Log::Verbose(), printSolidOnly);
 	}
 	void printHistograms(std::ostream &os, bool printSolidOnly = false) {
 		Histogram histogram(63);
@@ -535,7 +526,8 @@ public:
 	};
 
 	void printGC(bool printSolidOnly = false) {
-		printGC(std::cerr, printSolidOnly);
+		if (Log::isVerbose(1))
+			printGC(Log::Verbose(), printSolidOnly);
 	}
 	void printGC(std::ostream &os, bool printSolidOnly = false) {
 		GCCoverageHeatMap hm;
@@ -589,18 +581,13 @@ public:
 		}
 
 		if (weakHeap.size() == 0) {
-			std::cerr << "There are no eligible kmers to promote" << std::endl;
+			LOG_DEBUG(1, "There are no eligible kmers to promote");
 			return 0;
 		}
-		std::cerr << "Heap: " << weakHeap.size() << " " << weakHeap[0].value() << std::endl;
-		//for(int i=0; i<weakHeap.size(); i++)
-		//  std::cerr << i << ": " << weakHeap[i].value() << std::endl;
+		LOG_DEBUG(1, "Heap: " << weakHeap.size() << " " << weakHeap[0].value());
 
 		//heapify kmer counts
 		std::make_heap( weakHeap.begin(), weakHeap.end() );
-		//std::cerr << "Heap: " <<  weakHeap.size() << " " << weakHeap.front().value() << std::endl;
-		//for(int i=0; i<weakHeap.size(); i++)
-		//  std::cerr << i << ": " << weakHeap[i].value() << std::endl;
 
 		// work in batches, stop when 0 new solids are added
 		unsigned long count = 0;
@@ -613,15 +600,12 @@ public:
 				SolidElementType solidElement = getSolid( element.key() );
 				solidElement.value() = element.value();
 
-				//	std::cerr << "Added " << prettyW(element.key(), element.value());
 				element.value().reset(); // to avoid double counting
 				promoted++;
 				promotedInBatch++;
-			} else {
-				// 	std::cerr << "Skipping " << prettyW(element.key(), element.value());
 			}
 			if (++count == 1000) {
-				std::cerr << "Added " << promotedInBatch << ", Heap size: " << weakHeap.size() << " lastCount: " << lastCount << std::endl;
+				LOG_DEBUG(1, "Added " << promotedInBatch << ", Heap size: " << weakHeap.size() << " lastCount: " << lastCount);
 				if (promotedInBatch == 0)
 				break;
 				promotedInBatch = count = 0;
@@ -705,14 +689,18 @@ public:
 			directionAcc[i]( data.getNormalizedDirectionBias(), weight = count);
 		}
 
-		std::cerr << "Quantiles: ";
-		for(int i=0; i< count; i++) {
-			std::cerr << std::fixed << std::setprecision(4) << probabilities[i] << ": ";
-			std::cerr << std::fixed << std::setprecision(4) << weighted_p_square_quantile(countAcc[i]) << "\t";
-			std::cerr << std::fixed << std::setprecision(4) << weighted_p_square_quantile(weightedCountAcc[i]) << "\t";
-			std::cerr << std::fixed << std::setprecision(4) << weighted_p_square_quantile(directionAcc[i]) << "\t";
-			std::cerr << std::fixed << std::setprecision(4) << weighted_p_square_quantile(directionAcc[i]) << "\t";
-			std::cerr << std::endl;
+
+		if (Log::isDebug(1)) {
+		  ostream &debug = Log::Debug() << "Quantiles: ";
+
+		  for(int i=0; i< count; i++) {
+			  debug << std::fixed << std::setprecision(4) << probabilities[i] << ": ";
+			  debug << std::fixed << std::setprecision(4) << weighted_p_square_quantile(countAcc[i]) << "\t";
+			  debug << std::fixed << std::setprecision(4) << weighted_p_square_quantile(weightedCountAcc[i]) << "\t";
+			  debug << std::fixed << std::setprecision(4) << weighted_p_square_quantile(directionAcc[i]) << "\t";
+			  debug << std::fixed << std::setprecision(4) << weighted_p_square_quantile(directionAcc[i]) << "\t";
+			  debug << std::endl;
+		  }
 		}
 		double minimumCount = weighted_p_square_quantile(countAcc[0]);
 		double minimumWeightedCount = weighted_p_square_quantile(weightedCountAcc[0]);
@@ -749,13 +737,12 @@ public:
 			accumulators.resize( errorRatios.size() );
 			for(size_t i = 0; i< errorRatios.size(); i++)
 			accumulators[i](errorRatios[i]);
-			//std::cerr << "Error Ratio for " << it->key().toFasta() << " "  << std::fixed << std::setprecision(6) << errorRatio << std::endl;
 		}
 
 		MeanVectorType rates;
 		for(size_t i = 0; i< accumulators.size(); i++) {
 			rates.push_back( MeanType(mean(accumulators[i]), sqrt( variance(accumulators[i]) ) ) );
-			std::cerr << "Error Rate for pos " << i << ", " << std::fixed << std::setprecision(6) << rates[i].first << " +/- " << std::fixed << std::setprecision(6) << rates[i].second << std::endl;
+			LOG_DEBUG(1, "Error Rate for pos " << i << ", " << std::fixed << std::setprecision(6) << rates[i].first << " +/- " << std::fixed << std::setprecision(6) << rates[i].second );
 		}
 		return rates;
 	}
@@ -848,7 +835,6 @@ public:
 		return score;
 		DataPointers pointers(*this, kmer);
 
-		//std::cerr << "Permuting " << kmer->toFasta() << std::endl;
 		bool isSolid = false;
 		double base = 0.0;
 		if ( pointers.solidElem.isValid() ) {
@@ -862,7 +848,7 @@ public:
 		KmerWeights permutations = KmerWeights::permuteBases(kmer, true);
 		for(KmerWeights::IndexType i=0; i<permutations.size(); i++) {
 			pointers.set( permutations[i] );
-			//std::cerr << "Looking at " << permutations[i].toFasta() << std::endl;
+
 			if( pointers.solidElem.isValid() ) {
 				score.first += pointers.solidElem.value().getCount() * permutationWeight;
 			} else if ( pointers.weakElem.isValid() ) {
@@ -922,7 +908,7 @@ public:
 
 		return pretty( kmer, ss.str() );
 	}
-	std::string contrastSpectrums(KmerSpectrum &reference, double minSolidDepth = -1.0) {
+	std::string contrastSpectrums(ostream &os, KmerSpectrum &reference, double minSolidDepth = -1.0, int verbosity = 0) {
 		// ignores reference.weak and everything in reference.solid passed criteria
 
 		unsigned long thisSolidSize(0), thisWeakSize(0), referenceSolidSize(0),
@@ -936,24 +922,24 @@ public:
 				if ( reference.solid.exists( it->key() ) ) {
 					// exists in reference but in this is weak: falseWeak
 					falseWeak++;
-					std::cerr << "FW " << prettyS( it->key(), it->value());
+					os << "FW " << prettyS( it->key(), it->value());
 				} else {
 					// Weak and not in reference: trueWeak
 					// count later
-					if (Options::getVerbosity() > 1)
-					std::cerr << "TW " << prettyS( it->key(), it->value());
+					if (verbosity > 1)
+						os << "TW " << prettyS( it->key(), it->value());
 				}
 			} else {
 				thisSolidSize++;
 				if ( reference.solid.exists( it->key() ) ) {
 					// correctly matches solid in reference: trueSolid
 					trueSolid++;
-					if (Options::getVerbosity() > 0)
-					std::cerr << "TS " << prettyS( it->key(), it->value());
+					if (verbosity > 0)
+						os << "TS " << prettyS( it->key(), it->value());
 				} else {
 					// exists in this but not reference: falseSolid
 					falseSolid++;
-					std::cerr << "FS " << prettyS( it->key(), it->value());
+					os << "FS " << prettyS( it->key(), it->value());
 				}
 			}
 		}
@@ -967,17 +953,17 @@ public:
 			} else if ( weak.exists ( it->key() )) {
 				// exists in reference but in this is weak: falseWeak
 				falseWeak++;
-				std::cerr << "FW " << prettyW( it->key(), weak[ it->key() ] );
+				os << "FW " << prettyW( it->key(), weak[ it->key() ] );
 			} else {
 				// exists in reference but not in either solid nor weak: missingSolid
-				std::cerr << "MS " << pretty( it->key(), "N/A");
+				os << "MS " << pretty( it->key(), "N/A");
 				missingSolid++;
 			}
 		}
 		if (Options::getVerbosity() > 2) {
 			for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
 				if (! reference.solid.exists( it->key() ))
-				std::cerr << "TW " << prettyW( it->key(), it->value());
+				os << "TW " << prettyW( it->key(), it->value());
 			}
 		}
 		trueWeak = thisWeakSize - falseWeak;
@@ -1010,8 +996,7 @@ public:
 				weight = 0.0-weight;
 			}
 			if ( TrackingData::isDiscard( weight ) )  {
-				if (Options::getDebug() > 2)
-					std::cerr << "discarded kmer " << readIdx << "@" << j << " " << weight << " " << least.toFasta() << std::endl;
+				LOG_DEBUG(2, "discarded kmer " << readIdx << "@" << j << " " << weight << " " << least.toFasta());
 				continue;
 			}
 
@@ -1057,28 +1042,28 @@ public:
 		}
 	}
 
-	void printStats(unsigned long pos, bool printSolidOnly = false, bool fullStats = false) {
+	ostream &printStats(ostream &os, unsigned long pos, bool printSolidOnly = false, bool fullStats = false) {
 		//stats.printHistograms(printSolidOnly);
-		std::cerr << pos << " reads" << "\t";
+		os << pos << " reads" << "\t";
 		if (fullStats) {
-			std::cerr << ", " << solid.size() << " solid / " << weak.size() << " weak / "
+			os << ", " << solid.size() << " solid / " << weak.size() << " weak / "
 			<< TrackingData::discarded << " discarded / "
 			<< singleton.size() + purgedSingletons << " singleton (" << purgedSingletons << " purged) - kmers so far " << std::endl;
 		}
-		std::cerr << MemoryUtils::getMemoryUsage() << std::endl;
+		os << MemoryUtils::getMemoryUsage() << std::endl;
+		return os;
 	}
 
-	void printBucketStats(unsigned long pos, bool printSolidOnly = false, bool fullStats = false) {
-		//stats.printHistograms(printSolidOnly);
-		std::cerr << pos << ": ";
+	ostream &printBucketStats(ostream &os, unsigned long pos, bool printSolidOnly = false, bool fullStats = false) {
+		os << pos << ": ";
 
 		unsigned long ss = solid.size();
 		unsigned long buckets = solid.getNumBuckets();
 		static unsigned long prev_ss = 0;
-		std::cerr << ss << " added : " << ss - prev_ss << ",  average:"
+		os << ss << " added : " << ss - prev_ss << ",  average:"
 		<< ss/buckets << " Max:" << solid.maxBucket() << " " << MemoryUtils::getMemoryUsage() << std::endl;
 		prev_ss = ss;
-
+		return os;
 	}
 
 	inline bool getSMPThread( Kmer &kmer, unsigned short &smpThreadId, unsigned short numSMPThreads, unsigned short dmpThreadId, unsigned short threadBitMask, bool isLeastComplement = false) {
@@ -1118,7 +1103,7 @@ public:
 		}
 		unsigned long singletonCount = singleton.size();
 		purgedSingletons += singletonCount;
-		std::cerr << "Purging Singletons: " << singletonCount << " (" << purgedSingletons << " total so far)" << std::endl;
+		LOG_VERBOSE(1, "Purging Singletons: " << singletonCount << " (" << purgedSingletons << " total so far)");
 		singleton.reset();
 		return singletonCount;
 	}
@@ -1144,7 +1129,7 @@ public:
 
 		// build each part of the spectrum
 		for (NumberType partIdx = 0; partIdx < numParts; partIdx++) {
-			std::cerr << "Building part of spectrum: " << (partIdx+1) << " of " << numParts << std::endl << MemoryUtils::getMemoryUsage() << std::endl;
+			LOG_VERBOSE(1, "Building part of spectrum: " << (partIdx+1) << " of " << numParts << std::endl << MemoryUtils::getMemoryUsage());
 
 			// build
 			buildKmerSpectrum(store, isSolid, partIdx, numParts);
@@ -1157,7 +1142,7 @@ public:
 			if (Options::getMinDepth() <= 1)
 				mmaps[partIdx + numParts] = singleton.store("SingletonKmer");
 			else if (Options::getVerbosity())
-				std::cerr << "Not storing singletons which would have been this size: " << singleton.getSizeToStore() << std::endl;
+				LOG_VERBOSE(1, "Not storing singletons which would have been this size: " << singleton.getSizeToStore() );
 
 			// optimize memory preallocations
 			weak.rotateDMPBuffers(numParts);
@@ -1167,11 +1152,11 @@ public:
 
 		// first free up memory
 		if (Options::getMinDepth() <= 1) {
-			std::cerr << "Clearing memory from singletons" << std::endl << MemoryUtils::getMemoryUsage() << std::endl;
+			LOG_VERBOSE(1, "Clearing memory from singletons" << std::endl << MemoryUtils::getMemoryUsage());
 		    singleton.clear();
 		}
 
-		std::cerr << "Merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() << std::endl;
+		LOG_VERBOSE(1, "Merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() );
 
 		const WeakMapType constWeak(weak.getNumBuckets());
 		const SingletonMapType constSingleton(singleton.getNumBuckets());
@@ -1189,10 +1174,13 @@ public:
 		if (Options::getMinDepth() <= 1)
 			singleton.swap( const_cast<SingletonMapType&>( constSingleton) );
 
-		std::cerr << "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() << std::endl;
-		printStats(store.getSize(), isSolid, true);
-		if (!isSolid) {
-			printHistograms();
+		LOG_VERBOSE(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
+
+		if (Log::isVerbose(1)) {
+			printStats(Log::Verbose("Final Stats"), store.getSize(), isSolid, true);
+			if (!isSolid) {
+				printHistograms(Log::Verbose("Final Histogram"));
+			}
 		}
 
 		for(KoMer::MmapFileVector::iterator it = mmaps.begin(); it != mmaps.end(); it++) {
@@ -1203,7 +1191,9 @@ public:
 	}
 
 	void _evaluateBatch(bool isSolid, long batchIdx, long purgeEvery, long purgeCount) {
-		printStats(batchIdx, isSolid);
+		if (Log::isVerbose(2)) {
+			printStats(Log::Verbose("Batch Stats"), batchIdx, isSolid);
+		}
 		if (purgeEvery > 0 && batchIdx >= (purgeCount+1)*purgeEvery) {
 			purgedSingletons += resetSingletons();
 			purgeCount++;
@@ -1251,7 +1241,7 @@ public:
 
 			#pragma omp single
 			{
-				std::cerr << "Executing parallel buildKmerSpectrum with " << numThreads << std::endl;
+				LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads);
 			}
 		}
 
@@ -1351,26 +1341,30 @@ public:
 			_buildKmerSpectrumSerial  (store, isSolid, partIdx, partBitMask, batch, purgeEvery, purgeCount);
 		}
 
-		printStats(store.getSize(), isSolid, true);
-		if (!isSolid) {
-			printHistograms();
+		if (Log::isVerbose(2)) {
+		    printStats(Log::Verbose("Stats"), store.getSize(), isSolid, true);
+		}
+		if (Log::isVerbose(1)) {
+		    if (!isSolid) {
+			    printHistograms(Log::Verbose("Histogram"));
+		    }
 		}
 	}
 
-	static void experimentOnSpectrum( KmerSpectrum &spectrum ) {
+	static void experimentOnSpectrum( ostream &os, KmerSpectrum &spectrum ) {
 		KmerSpectrum everything(spectrum);
 
 		unsigned long promoted = spectrum.promote(0.05);
-		std::cerr << "Promoted " << promoted << " kmers" << std::endl;
+		os << "Promoted " << promoted << " kmers" << std::endl;
 		spectrum.printHistograms(true);
 
 		for (double prob = 0.10; prob > 0.0; prob -= 0.005) {
 			KmerSpectrum copy(everything);
-			std::cerr << "Testing " << prob << std::endl;
+			os << "Testing " << prob << std::endl;
 			promoted = copy.promote(prob);
-			std::cerr << "Promoted " << promoted << " kmers" << std::endl;
+			os << "Promoted " << promoted << " kmers" << std::endl;
 			copy.printHistograms(true);
-			std::cerr << copy.contrastSpectrums(spectrum) << std::endl;;
+			copy.contrastSpectrums(os, spectrum);
 		}
 
 		for(WeakIterator it(everything.weak.begin()), itEnd(everything.weak.end()); it != itEnd; it++) {
@@ -1379,12 +1373,12 @@ public:
 		everything.weak.clear();
 
 		for (double minDepth = 1; minDepth < 10; minDepth++) {
-			std::cerr << "Comparing minDepth " << minDepth << std::endl;
-			std::cerr << everything.contrastSpectrums(spectrum, minDepth) << std::endl;
+			os << "Comparing minDepth " << minDepth << std::endl;
+			everything.contrastSpectrums(os, spectrum, minDepth);
 		}
 	}
 
-	void analyseSingletons()
+	void analyseSingletons(ostream &os)
 	{
 		int found = 0;
 		for(WeakIterator it( weak.begin()), itEnd( weak.end()); it != itEnd; it++) {
@@ -1398,10 +1392,10 @@ public:
 				}
 			}
 		}
-		std::cerr << "Singleton permutations found in weak : " << found << std::endl;
+		os << "Singleton permutations found in weak : " << found << std::endl;
 	}
 
-	void findSecondOrderPermutations(const Kmer &kmer)
+	void findSecondOrderPermutations(ostream &os, const Kmer &kmer)
 	{
 		Kmers permutations = Kmers::permuteBases(kmer, true);
 		for(int i=0; i<permutations.size(); i++) {
@@ -1411,11 +1405,11 @@ public:
 				if (permutations2[j] != kmer)
 				// if  (SolidDataType *s = solid.getIfExists(permutations2[j])  )
 				{
-					std::cerr << "   " << permutations2[j].toFasta() /*<< " : " << s->getCount() */<< std::endl;
+					os << "   " << permutations2[j].toFasta() /*<< " : " << s->getCount() */<< std::endl;
 				}
 			}
 		}
-		std::cerr << "\n";
+		os << "\n";
 	}
 
 	bool firstOrderMatch(const WeakElementType &element)
@@ -1506,7 +1500,7 @@ public:
 
 	}
 
-	unsigned long filter(KmerSpectrum &reference)
+	unsigned long filter(ostream &os, KmerSpectrum &reference)
 	{
 
 		typedef std::vector< WeakElementType > HeapType;
@@ -1538,7 +1532,7 @@ public:
 		double poorQualityCutoff = 0.779;// mean - 3 * deviation;
 		double goodQualityCutoff = mean + (1.00 - mean) * 0.9;
 
-		std::cerr << mean << " +-" << deviation << " => cutoffs: " << poorQualityCutoff << " " << goodQualityCutoff << "\n";
+		os << mean << " +-" << deviation << " => cutoffs: " << poorQualityCutoff << " " << goodQualityCutoff << "\n";
 
 		WeakIterator mapIt = weak.begin();
 		WeakIterator mapEnd = weak.end();
@@ -1551,37 +1545,12 @@ public:
 			if (lastCount < minKmerCount)
 			continue;
 
-			//         bool noBias = true;
-			//         if (lastCount > 20)
-			//         {
-			//            double dirBias  = element.value().getNormalizedDirectionBias();
-			//             noBias =  (dirBias > 0.02 && dirBias < 0.98);
-			// //             if (!noBias) {
-			// //
-			// //
-			// //                weakHeap.push_back( element);
-			// //             }
-			//         }
-
-
 			count++;
 			bool inRef = reference.solid.exists( element.key());
 
 			bool poorQuality = element.value().getAverageWeight() < poorQualityCutoff;
 			bool goodQuality = element.value().getAverageWeight() > goodQualityCutoff;
 
-			/*
-			 if (poorQuality)
-			 {
-			 pq_count++;
-			 if (!inRef)
-			 pq_correct++;
-			 else
-			 {
-			 pq_wrong++;
-			 //std::cerr << "FP "   << prettyS( element.key(), element.value());
-			 }
-			 }else*/
 			if (firstOrderMatch(element))
 			{
 				fo_count++;
@@ -1590,63 +1559,13 @@ public:
 				else
 				{
 					fo_wrong++;
-					//std::cerr << "FP "   << prettyS( element.key(), element.value());
 				}
 
 			}
-			/*
-			 if (goodQuality)
-			 {
-			 gq_count++;
-			 if (inRef)
-			 gq_correct++;
-			 else
-			 {
-			 gq_wrong++;
-			 //std::cerr << "FP "   << prettyS( element.key(), element.value());
-			 }
-			 }*/
-
-			//         if ( //   noBias &&
-			//         //      enoughWeight &&
-			//           //    noFirstOrderMatch(element)&&
-			//         //      noSecondOrderMatch(element)&&
-			//            1)
-			//         {
-			//           SolidElementType solidElement = getSolid( element.key() );
-			//             solidElement.value() = element.value();
-			//            if (!inRef) {
-			//                  // std::cerr << "FS " << prettyS( element.key(), element.value());
-			//                  falseSolids++;
-			//            }
-			//            promoted++;
-			//         }
-			//
-
-
-		}
-
-		std::cerr << "Poor Quality: " << pq_count << " (" << pq_count*100.0/count << "%) Correct:  " << pq_correct << " Wrong: " << pq_wrong << std::endl;
-		//    std::cerr << "Good Quality: " << gq_count <<  " ("  << gq_count*100.0/count <<  "%) Correct:  " << gq_correct << " Wrong: " << gq_wrong   << std::endl;
-		std::cerr << "1st Order  : " << fo_count << " (" << fo_count*100.0/count << "%) Correct:  " << fo_correct << " Wrong: " << fo_wrong << std::endl;
-
-		//     std::make_heap( weakHeap.begin(), weakHeap.end() );
-		//
-		//     std::cerr << " Heap size: " <<  weakHeap.size() << std::endl;
-		//
-		//     int i=0;
-		//     while ( weakHeap.begin() != weakHeap.end() ) {
-		//         WeakElementType &element = weakHeap.front();
-		//         bool inRef = reference.solid.exists( element.key());
-		//         const char * st =  (inRef) ? "*" : " ";
-		//          std::cerr << "DB " << st  << prettyS( element.key(), element.value());
-		//
-		//         std::cout << "> Kmer" << ++i << std::endl;
-		//         std::cout << element.key().toFasta() << std::endl;
-		//
-		//         std::pop_heap(weakHeap.begin(), weakHeap.end());
-		//         weakHeap.pop_back();
-		//     }
+        }
+        
+		os << "Poor Quality: " << pq_count << " (" << pq_count*100.0/count << "%) Correct:  " << pq_correct << " Wrong: " << pq_wrong << std::endl;
+		os << "1st Order  : " << fo_count << " (" << fo_count*100.0/count << "%) Correct:  " << fo_correct << " Wrong: " << fo_wrong << std::endl;
 
 		for(SolidIterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++)
 		weak.remove( it->key() );

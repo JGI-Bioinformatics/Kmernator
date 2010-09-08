@@ -38,6 +38,9 @@
 #include "Kmer.h"
 #include "KmerSpectrum.h"
 #include "KmerReadUtils.h"
+#include "Options.h"
+#include "Utils.h"
+#include "Log.h"
 
 typedef TrackingDataMinimal4 DataType;
 typedef KmerMap<DataType> KmerSolidMap;
@@ -103,8 +106,8 @@ static NumbersVector countCommonKmers(KmerSolidMap &m1, KmerSolidMap &m2) {
 	return ret;
 }
 
-void evaluate(KS &ks1, KS &ks2, std::string label = "");
-void evaluatePerRead(KS &ks1, KS &ks2, ReadSet &readSet1);
+void evaluate(std::ostream &os, KS &ks1, KS &ks2, std::string label = "");
+void evaluatePerRead(std::ostream &os, KS &ks1, KS &ks2, ReadSet &readSet1);
 
 int main(int argc, char *argv[]) {
 
@@ -114,52 +117,59 @@ int main(int argc, char *argv[]) {
 	MemoryUtils::getMemoryUsage();
 	ReadSet readSet1, readSet2;
 
+	OfstreamMap om(Options::getOutputFile(), "");
+	std::ostream *outPtr = &std::cout;
+	if (! Options::getOutputFile().empty() ) {
+		outPtr = &om.getOfstream("");
+	}
+
+
 	KmerSizer::set(CS_Options::getKmerSize());
 	CS_Options::FileListType fileList1 = CS_Options::getReferenceFiles();
 	CS_Options::FileListType fileList2 = CS_Options::getInputFiles();
 
-	cerr << "Reading 1st file set:";
+	LOG_VERBOSE(1, "Reading 1st file set:");
 	readSet1.appendAllFiles(fileList1);
 
-	cerr << " loaded " << readSet1.getSize() << " Reads, "
-			<< readSet1.getBaseCount() << " Bases " << endl;
+	LOG_VERBOSE(1, " loaded " << readSet1.getSize() << " Reads, "
+			<< readSet1.getBaseCount() << " Bases ");
 
 	if (CS_Options::getCircularReference())
 		readSet1.circularize(KmerSizer::getSequenceLength());
 
-	cerr << "Reading 2nd file set:";
+	LOG_VERBOSE(1, "Reading 2nd file set:");
 	readSet2.appendAllFiles(fileList2);
-	cerr << " loaded " << readSet2.getSize() << " Reads, "
-			<< readSet2.getBaseCount() << " Bases " << endl;
+	LOG_VERBOSE(1, " loaded " << readSet2.getSize() << " Reads, "
+			<< readSet2.getBaseCount() << " Bases ");
 
 	long buckets = std::max(KS::estimateWeakKmerBucketSize(readSet1),
 			KS::estimateWeakKmerBucketSize(readSet2)) * 64;
 
-	cerr << "Estimated bucket size: " << buckets << std::endl;
+	LOG_DEBUG(1, "Estimated bucket size: " << buckets );
 
 	KS ks1(buckets);
 	KS ks2(buckets);
 	ks1.setSolidOnly();
 	ks2.setSolidOnly();
 
-	cerr << "Building map 2\n";
+	LOG_VERBOSE(1, "Building map 2");
 	ks2.buildKmerSpectrum(readSet2, true);
 
-	cout << endl;
-	cout << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
+	*outPtr << endl;
+	*outPtr << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
 
 
 	if (CS_Options::getPerRead()) {
-		evaluatePerRead(ks1, ks2, readSet1);
+		evaluatePerRead(*outPtr, ks1, ks2, readSet1);
 	} else {
-		cerr << "Building map 1\n";
+		LOG_VERBOSE(1, "Building map 1");
 		ks1.buildKmerSpectrum(readSet1, true);
-		evaluate(ks1, ks2);
+		evaluate(*outPtr, ks1, ks2);
 	}
 }
 
-void evaluate(KS &ks1, KS &ks2, std::string label) {
-	cerr << "Counting common Kmers\n";
+void evaluate(std::ostream &os, KS &ks1, KS &ks2, std::string label) {
+	LOG_VERBOSE(1, "Counting common Kmers\n");
 	KmerSolidMap &m1 = ks1.solid;
 	KmerSolidMap &m2 = ks2.solid;
 
@@ -168,7 +178,7 @@ void evaluate(KS &ks1, KS &ks2, std::string label) {
 	// TODO fix check common to iterater through same-bucketed KmerMaps in sorted order (fast)
 	// TODO if perRead1, iterate through common matches and output non-zero % matches
 
-	cout << m1.size() << '\t' << m2.size() << '\t' << common[0] << '\t'
+	os << m1.size() << '\t' << m2.size() << '\t' << common[0] << '\t'
 			<< setprecision(4) << (common[0] * 100.0) / m1.size() << '\t'
 			<< (common[1] * 100.0 / common[3]) << "\t" << (common[0]
 			* 100.0) / m2.size() << "\t" << (common[2] * 100.0 / common[4])
@@ -176,7 +186,7 @@ void evaluate(KS &ks1, KS &ks2, std::string label) {
 			<< endl;
 
 }
-void evaluatePerRead(KS &ks1, KS &ks2, ReadSet &readSet1) {
+void evaluatePerRead(std::ostream &os, KS &ks1, KS &ks2, ReadSet &readSet1) {
 	for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < readSet1.getSize(); readIdx++ ) {
 
 		TrackingData::resetGlobalCounters();
@@ -187,7 +197,7 @@ void evaluatePerRead(KS &ks1, KS &ks2, ReadSet &readSet1) {
 		a.append(read);
 		ks1.buildKmerSpectrum(a, true);
 
-		evaluate(ks1,ks2,read.getName());
+		evaluate(os, ks1,ks2,read.getName());
 	}
 }
 //

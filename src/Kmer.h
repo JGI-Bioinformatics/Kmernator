@@ -53,6 +53,7 @@
 #include "KmerTrackingData.h"
 #include "lookup8.h"
 #include "MmapTempFile.h"
+#include "Log.h"
 
 using namespace TwoBitSequenceBase;
 
@@ -453,19 +454,10 @@ public:
 			}
 			if (! gotShared ) {
 
-				//std::stringstream ss;
-				//ss  << "Waiting for shared lock: " << this << " " << myThread << "/" << _sharedLocks.size() << " " << gotExclusive << std::endl;
-				//#pragma omp critical (stderr)
-				//{ std::cerr << ss.str(); }
 				usleep(1);
 
 			}
 		}
-
-		//std::stringstream ss2;
-		//ss2 << "Got shared lock: " << this << " " << myThread << "/" << _sharedLocks.size() <<std::endl << StackTrace::getStackTrace();
-		//#pragma omp critical (stderr)
-		//{ std::cerr <<  ss2.str(); }
 
 	}
 
@@ -474,20 +466,11 @@ public:
 		return;
 		unsigned int myThread = omp_get_thread_num();
 		omp_unset_nest_lock( &( _sharedLocks[ myThread ] ) );
-		//std::stringstream ss;
-		//ss  << "Rel shared lock: " << this << " " << myThread <<std::endl;
-
-		//#pragma omp critical (stderr)
-		//{ std::cerr << ss.str(); }
 	}
 
 	inline void setExclusiveLock() const {
 		if (_sharedLocks.empty())
 		return;
-		//std::stringstream ss;
-		//ss << "Trying exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() <<std::endl << StackTrace::getStackTrace();
-		//#pragma omp critical (stderr)
-		//{ std::cerr << ss.str(); }
 		bool gotExclusive = false;
 		while(!gotExclusive) {
 
@@ -505,10 +488,6 @@ public:
 					unsetLock();
 					for(size_t j = 0; j<i; j++)
 					omp_unset_nest_lock( &( _sharedLocks[j] ) );
-					//std::stringstream ss2;
-					//ss2 << "Waiting for exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() << " failed to get shared " << i << std::endl;
-					//#pragma omp critical (stderr)
-					//{ std::cerr << ss2.str(); }
 					usleep(1);
 				}
 			} else {
@@ -516,25 +495,16 @@ public:
 			}
 
 		}
-		//std::stringstream ss3;
-		//ss3 <<"Got exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() <<std::endl;
-		//#pragma omp critical (stderr)
-		//{ std::cerr << ss3.str(); }
 	}
 	inline void unsetExclusiveLock() const {
 		if (_sharedLocks.empty())
 		return;
-		//throw std::runtime_error("unsetExclusiveLock() called while under readOnlyOptimization mode");
 
 		unsetLock();
 		// unset acquired shared locks
 		for(size_t j = 0; j < _sharedLocks.size(); j++)
 		omp_unset_nest_lock( &( _sharedLocks[j] ) );
 
-		//std::stringstream ss;
-		//ss << "Rel exclusive lock: " << this << " " << omp_get_thread_num() << "/" << _sharedLocks.size() <<std::endl;
-		//#pragma omp critical (stderr)
-		//{ std::cerr << ss.str(); }
 	}
 
 #else // _USE_THREADSAFE_KMER
@@ -888,8 +858,8 @@ public:
 				_capacity = size;
 			void *memory = std::malloc(_capacity * getElementByteSize());
 			if (memory == NULL) {
-				std::cerr << "Attempt to malloc " << _capacity
-						* getElementByteSize() << std::endl;
+				LOG_ERROR(0, "Attempt to malloc " << _capacity
+						* getElementByteSize());
 				throw std::runtime_error(
 						"Could not allocate memory in KmerArray _setMemory()");
 			}
