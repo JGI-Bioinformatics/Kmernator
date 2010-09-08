@@ -527,7 +527,7 @@ int main(int argc, char *argv[]) {
 				debugOut << endl;
 			}
 			clusterNames[tgti].insert( clusterNames[tgti].end(), clusterNames[tgtj].begin(), clusterNames[tgtj].end() );
-			LOG_VERBOSE(1, "Cluster merged " << tgti << " with " << tgtj << " " << distMatrix[tgtj][tgti] << " " << **minElem);
+			LOG_VERBOSE(1, "Cluster merged " << tgti << " with " << tgtj << " " << **minElem);
 			readTnfs2[tgti] = readTnfs2[tgti] + readTnfs2[tgtj];
 
 			// remove tgtj from vectors and matrix (1 row and 1 column);
