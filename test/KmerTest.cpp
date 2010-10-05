@@ -519,10 +519,10 @@ void testKmerMap(SequenceLengthType size) {
 	Kmer::IndexType s = kmersC.size();
 	BOOST_CHECK_EQUAL(s, kmersC.size());
 
-      KoMer::MmapFile mmapF = kmerF.store();
+      Kmernator::MmapFile mmapF = kmerF.store();
 	  BOOST_CHECK(mmapF.is_open());
 	  BOOST_CHECK(mmapF.size() > 0);
-	  KoMer::MmapFile mmapP = kmerP.store();
+	  Kmernator::MmapFile mmapP = kmerP.store();
 	  BOOST_CHECK(mmapP.is_open());
 	  BOOST_CHECK(mmapP.size() > 0);
 

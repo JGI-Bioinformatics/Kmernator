@@ -73,7 +73,7 @@ static int OMP_MAX_THREADS = OMP_MAX_THREADS_DEFAULT;
 #endif
 #include <cassert>
 
-namespace KoMer {
+namespace Kmernator {
    typedef const char * RecordPtr;
    static const char REF_QUAL = 0xff;
    static const char FASTQ_START_CHAR_ILLUMINA = 64;

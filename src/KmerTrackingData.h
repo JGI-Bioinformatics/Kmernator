@@ -39,9 +39,9 @@ class TrackingDataWithAllReads;
 
 class TrackingData {
 public:
-	typedef KoMer::UI16 CountType;
-	typedef KoMer::ReadSetSizeType ReadIdType;
-	typedef KoMer::SequenceLengthType PositionType;
+	typedef Kmernator::UI16 CountType;
+	typedef Kmernator::ReadSetSizeType ReadIdType;
+	typedef Kmernator::SequenceLengthType PositionType;
 	typedef float WeightType;
 
 	static const CountType    MAX_COUNT    = MAX_UI16;

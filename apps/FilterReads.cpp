@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
 
 	KS spectrum(0);
 
-	KoMer::MmapFileVector spectrumMmaps;
+	Kmernator::MmapFileVector spectrumMmaps;
 
 	if (Options::getKmerSize() > 0) {
 

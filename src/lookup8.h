@@ -23,9 +23,9 @@ at producing 64-bit results.
 #include <cstddef>
 
 #include <config.h>
-typedef  KoMer::UI64 ub8;   /* unsigned 8-byte quantities */
-typedef  KoMer::UI32 ub4;   /* unsigned 4-byte quantities */
-typedef  KoMer::UI8  ub1;
+typedef  Kmernator::UI64 ub8;   /* unsigned 8-byte quantities */
+typedef  Kmernator::UI32 ub4;   /* unsigned 4-byte quantities */
+typedef  Kmernator::UI8  ub1;
 
 #define hashsize(n) ((ub8)1<<(n))
 #define hashmask(n) (hashsize(n)-1)

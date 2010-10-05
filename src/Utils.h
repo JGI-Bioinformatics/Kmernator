@@ -211,14 +211,14 @@ public:
 };
 
 
-typedef BucketedData<double, KoMer::UI8> DoubleToOneByte;
-typedef BucketedData<double, KoMer::UI16> DoubleToTwoByte;
+typedef BucketedData<double, Kmernator::UI8> DoubleToOneByte;
+typedef BucketedData<double, Kmernator::UI16> DoubleToTwoByte;
 
 class SequenceRecordParser
 {
 public:
-	static inline std::string &nextLine(std::string &buffer, KoMer::RecordPtr &recordPtr) {
-		KoMer::RecordPtr nextPtr = strchr(recordPtr, '\n');
+	static inline std::string &nextLine(std::string &buffer, Kmernator::RecordPtr &recordPtr) {
+		Kmernator::RecordPtr nextPtr = strchr(recordPtr, '\n');
 		long len = nextPtr - recordPtr;
 		if (len > 0) {
 		  buffer.assign(recordPtr, len);
@@ -247,10 +247,10 @@ public:
 		}
 		return nameLine;
 	}
-	static void parse(KoMer::RecordPtr record, KoMer::RecordPtr lastRecord,
+	static void parse(Kmernator::RecordPtr record, Kmernator::RecordPtr lastRecord,
 			          std::string &name, std::string &bases, std::string &quals,
-			          KoMer::RecordPtr qualRecord = NULL, KoMer::RecordPtr lastQualRecord = NULL,
-			          char fastqStartChar = KoMer::FASTQ_START_CHAR_ILLUMINA) {
+			          Kmernator::RecordPtr qualRecord = NULL, Kmernator::RecordPtr lastQualRecord = NULL,
+			          char fastqStartChar = Kmernator::FASTQ_START_CHAR_ILLUMINA) {
 		std::string buf;
 		if (*record == '@') {
 			// FASTQ
@@ -289,7 +289,7 @@ public:
 				}
 				quals = convertQualIntsToChars(quals, fastqStartChar);
 			} else {
-				quals.assign(bases.length(), KoMer::REF_QUAL);
+				quals.assign(bases.length(), Kmernator::REF_QUAL);
 			}
 		} else {
 			throw "Do not know how to parse this file!";

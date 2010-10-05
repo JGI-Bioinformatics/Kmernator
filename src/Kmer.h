@@ -65,7 +65,7 @@ typedef boost::shared_ptr<TwoBitEncoding> KmerSharedPtr;
 
 class KmerSizer {
 public:
-	typedef KoMer::KmerIndexType  IndexType;
+	typedef Kmernator::KmerIndexType  IndexType;
 
 private:
 	SequenceLengthType _sequenceLength;
@@ -123,9 +123,9 @@ public:
 
 class Kmer {
 public:
-	typedef KoMer::KmerNumberType NumberType;
-	typedef KoMer::KmerIndexType  IndexType;
-	typedef KoMer::KmerSizeType   SizeType;
+	typedef Kmernator::KmerNumberType NumberType;
+	typedef Kmernator::KmerIndexType  IndexType;
+	typedef Kmernator::KmerSizeType   SizeType;
 
 private:
 	inline static boost::hash<NumberType> &getHasher() {
@@ -1331,9 +1331,9 @@ public:
 			_buckets[idx] = BucketType(ptr);
 		}
 	}
-	const KoMer::MmapFile store(std::string permanentFile = "") const {
+	const Kmernator::MmapFile store(std::string permanentFile = "") const {
 		long size = getSizeToStore();
-		KoMer::MmapFile mmap = MmapTempFile::buildNewMmap(size, permanentFile);
+		Kmernator::MmapFile mmap = MmapTempFile::buildNewMmap(size, permanentFile);
 		store(mmap.data());
 		return mmap;
 	}
@@ -1925,7 +1925,7 @@ public:
 
 typedef KmerArray<char> Kmers;
 typedef KmerArray<double> KmerWeights;
-typedef KmerArray<KoMer::UI32> KmerCounts;
+typedef KmerArray<Kmernator::UI32> KmerCounts;
 
 #endif
 

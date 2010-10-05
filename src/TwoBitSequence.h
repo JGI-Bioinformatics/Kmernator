@@ -46,9 +46,9 @@ namespace TwoBitSequenceBase {
 
 typedef unsigned char TwoBitEncoding;
 
-typedef KoMer::SequenceLengthType SequenceLengthType;
-typedef KoMer::SequenceLengthType2 SequenceLengthType2;
-typedef KoMer::SequenceLengthType1 SequenceLengthType1;
+typedef Kmernator::SequenceLengthType SequenceLengthType;
+typedef Kmernator::SequenceLengthType2 SequenceLengthType2;
+typedef Kmernator::SequenceLengthType1 SequenceLengthType1;
 
 typedef std::pair<char, SequenceLengthType> BaseLocationType;
 typedef std::vector<BaseLocationType> BaseLocationVectorType;
@@ -60,7 +60,7 @@ typedef std::pair<SequenceLengthType1, SequenceLengthType1> MarkupElementSizeTyp
 class _TwoBitEncodingPtr {
 public:
 	typedef TwoBitEncoding T;
-	typedef KoMer::UI8 C;
+	typedef Kmernator::UI8 C;
 
 public:
     static const T MAX_COUNTER = MAX_UI8;

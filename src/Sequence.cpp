@@ -42,7 +42,7 @@
 using namespace std;
 
 /*----------------------------- SEQUENCE -------------------------------------------*/
-char Sequence::FASTQ_START_CHAR = KoMer::FASTQ_START_CHAR_ILLUMINA;
+char Sequence::FASTQ_START_CHAR = Kmernator::FASTQ_START_CHAR_ILLUMINA;
 
 // thread safe caches
 Sequence::CachedSequencesVector Sequence::threadCacheSequences(OMP_MAX_THREADS, Sequence::CachedSequences(Sequence::maxCachePerThread));
@@ -591,7 +591,7 @@ int Read::initializeQualityToProbability(unsigned char minQualityScore, char sta
 	return 1;
 }
 int Read::qualityToProbabilityInitialized =
-		Read::initializeQualityToProbability(0, KoMer::FASTQ_START_CHAR_ILLUMINA);
+		Read::initializeQualityToProbability(0, Kmernator::FASTQ_START_CHAR_ILLUMINA);
 
 void Read::setMinQualityScore(unsigned char minQualityScore, char startChar) {
 	#pragma omp critical (FastqStartChar)

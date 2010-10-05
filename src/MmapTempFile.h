@@ -49,7 +49,7 @@
 class MmapTempFile {
 	static int getUnique() { static int id = 0; return id++; }
 public:
-	typedef KoMer::MmapFile MmapFile;
+	typedef Kmernator::MmapFile MmapFile;
 	typedef unsigned long size_type;
 
 	class FileHandle {
@@ -95,7 +95,7 @@ public:
 	}
 	static MmapFile buildNewMmap(size_type size, std::string permamentFile = "") {
 		FileHandle fh = buildNew(size, permamentFile);
-		KoMer::MmapFile mmap(fh.filename, std::ios_base::in | std::ios_base::out, size);
+		Kmernator::MmapFile mmap(fh.filename, std::ios_base::in | std::ios_base::out, size);
 		unlink(fh.filename.c_str());
 		return mmap;
 	}
@@ -105,8 +105,8 @@ public:
 	private:
 
 		typedef T Type;
-		typedef KoMer::MmapFile MmapFile;
-		typedef KoMer::MmapFileVector MmapFileVector;
+		typedef Kmernator::MmapFile MmapFile;
+		typedef Kmernator::MmapFileVector MmapFileVector;
 		typedef char * CharPtr;
 		typedef MmapTempFile::size_type size_type;
 		typedef typename boost::simple_segregated_storage< size_type > SSS;

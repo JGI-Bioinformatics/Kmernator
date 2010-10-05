@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
 	  TrackingData::resetGlobalCounters();
 	  cerr << "building normal spectrum in parts" << endl << MemoryUtils::getMemoryUsage() << endl;
 	  spectrumParts = KS(numBuckets);
-	  KoMer::MmapFileVector mmaps = spectrumParts.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
+	  Kmernator::MmapFileVector mmaps = spectrumParts.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 	  for(Kmer::IndexType i = 0; i < spectrumParts.weak.getNumBuckets(); i++) {
 		  cerr << i << ": " << spectrumParts.weak.getBucket(i).size() << endl;

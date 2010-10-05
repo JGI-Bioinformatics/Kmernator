@@ -45,8 +45,8 @@
 
 class Sequence {
 public:
-	static const char REF_QUAL = KoMer::REF_QUAL;
-	static const char PRINT_REF_QUAL = KoMer::PRINT_REF_QUAL;
+	static const char REF_QUAL = Kmernator::REF_QUAL;
+	static const char PRINT_REF_QUAL = Kmernator::PRINT_REF_QUAL;
 	static char FASTQ_START_CHAR;
 
 public:
@@ -59,7 +59,7 @@ public:
 	typedef TwoBitSequenceBase::BaseLocationVectorType BaseLocationVectorType;
 	typedef TwoBitSequenceBase::MarkupElementSizeType MarkupElementSizeType;
 
-	typedef KoMer::RecordPtr RecordPtr;
+	typedef Kmernator::RecordPtr RecordPtr;
 	typedef TwoBitSequenceBase::TwoBitEncodingPtr DataPtr;
 
 	typedef boost::shared_ptr< Sequence > SequencePtr;
@@ -367,7 +367,7 @@ private:
 
 	static int qualityToProbabilityInitialized;
 	static int
-			initializeQualityToProbability(unsigned char minQualityScore = 0, char startChar = KoMer::FASTQ_START_CHAR_ILLUMINA);
+			initializeQualityToProbability(unsigned char minQualityScore = 0, char startChar = Kmernator::FASTQ_START_CHAR_ILLUMINA);
 
 public:
 
@@ -406,7 +406,7 @@ public:
 	double scoreProbabilityBases(const ProbabilityBases &probs) const;
 
 	static double qualityToProbability[256];
-	static void setMinQualityScore(unsigned char minQualityScore, char startChar = KoMer::FASTQ_START_CHAR_ILLUMINA);
+	static void setMinQualityScore(unsigned char minQualityScore, char startChar = Kmernator::FASTQ_START_CHAR_ILLUMINA);
 
 	// format == 0 fastq
 	// format == 1 fasta

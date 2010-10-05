@@ -44,7 +44,7 @@
 
 class ReadSet {
 public:
-	typedef KoMer::ReadSetSizeType ReadSetSizeType;
+	typedef Kmernator::ReadSetSizeType ReadSetSizeType;
 	typedef std::vector< ReadSetSizeType > ReadIdxVector;
 	typedef ReadFileReader::MmapSource MmapSource;
 	typedef std::pair<MmapSource,MmapSource> MmapSourcePair;
@@ -132,14 +132,14 @@ private:
 		return false;
 	}
 	inline void _setFastqStart(const Read &read) {
-		if (read.hasQuals() && Read::FASTQ_START_CHAR != KoMer::FASTQ_START_CHAR_STD && omp_get_thread_num() == 0) {
+		if (read.hasQuals() && Read::FASTQ_START_CHAR != Kmernator::FASTQ_START_CHAR_STD && omp_get_thread_num() == 0) {
 			std::string quals = read.getQuals();
 			std::string::iterator it = std::min_element(quals.begin(), quals.end());
 			if (it != quals.end() && *it < Read::FASTQ_START_CHAR) {
 				if (getSize() > 10000) {
 					Log::Warn() << "detected standard fastq only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
 				}
-				Read::setMinQualityScore(Options::getMinQuality(), KoMer::FASTQ_START_CHAR_STD);
+				Read::setMinQualityScore(Options::getMinQuality(), Kmernator::FASTQ_START_CHAR_STD);
 			}
 		}
 	}

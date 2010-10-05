@@ -159,8 +159,8 @@ void testConsensus(string filename)
 		reads1.append(store.getRead(i).clone());
 		reads2.append(store.getRead(i+1).clone());
 	}
-	BOOST_CHECK_EQUAL( reads1.getCentroidRead(), 0);
-	BOOST_CHECK_EQUAL( reads2.getCentroidRead(), 0);
+	BOOST_CHECK_EQUAL( reads1.getCentroidRead(), 0ul);
+	BOOST_CHECK_EQUAL( reads2.getCentroidRead(), 0ul);
 
 	Read consensus1 = reads1.getConsensusRead();
 	Read consensus2 = reads2.getConsensusRead();

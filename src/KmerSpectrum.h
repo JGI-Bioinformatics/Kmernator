@@ -68,7 +68,7 @@ template<typename So, typename We, typename Si = TrackingDataSingleton>
 class KmerSpectrum {
 public:
 
-	typedef KoMer::KmerIndexType IndexType;
+	typedef Kmernator::KmerIndexType IndexType;
 
 	typedef std::pair<double, double> DoublePairType;
 	typedef DoublePairType SolidWeakWeightType;
@@ -1117,15 +1117,15 @@ public:
 	}
 
 	// important! returned memory maps must remain in scope!
-	KoMer::MmapFileVector buildKmerSpectrumInParts(ReadSet &store, NumberType numParts) {
+	Kmernator::MmapFileVector buildKmerSpectrumInParts(ReadSet &store, NumberType numParts) {
 		bool isSolid = false; // not supported for references...
 		if (numParts == 0) {
 			buildKmerSpectrum(store);
-			return KoMer::MmapFileVector();
+			return Kmernator::MmapFileVector();
 		}
 
 		assert((numParts & (numParts-1)) == 0); // numParts must be a power of 2
-		KoMer::MmapFileVector mmaps(numParts*2);
+		Kmernator::MmapFileVector mmaps(numParts*2);
 
 		// build each part of the spectrum
 		for (NumberType partIdx = 0; partIdx < numParts; partIdx++) {
@@ -1183,7 +1183,7 @@ public:
 			}
 		}
 
-		for(KoMer::MmapFileVector::iterator it = mmaps.begin(); it != mmaps.end(); it++) {
+		for(Kmernator::MmapFileVector::iterator it = mmaps.begin(); it != mmaps.end(); it++) {
 			if (it->is_open())
 				madvise(const_cast<char*>(it->data()), it->size(), MADV_RANDOM);
 		}

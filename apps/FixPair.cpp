@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
 			const Read &read = reads.getRead(pair.read1);
 			if (! read.isMmaped() )
 				throw std::invalid_argument(read.getName());
-			KoMer::RecordPtr record = read.getRecord();
+			Kmernator::RecordPtr record = read.getRecord();
 			SequenceRecordParser::nextLine(read1Label, record);
 			size_t pos = read1Label.find_first_of(" \t");
 			if (pos == std::string::npos)
@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
 			const Read &read = reads.getRead(pair.read2);
 			if (! read.isMmaped() )
 				throw std::invalid_argument(read.getName());
-			KoMer::RecordPtr record = read.getRecord();
+			Kmernator::RecordPtr record = read.getRecord();
 			SequenceRecordParser::nextLine(read2Label, record);
 			size_t pos = read2Label.find_first_of(" \t");
 			if (pos == std::string::npos)

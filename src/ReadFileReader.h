@@ -44,9 +44,9 @@ using namespace std;
 
 class ReadFileReader {
 public:
-	typedef KoMer::RecordPtr RecordPtr;
-	typedef KoMer::MmapSource MmapSource;
-	typedef KoMer::MmapIStream MmapIStream;
+	typedef Kmernator::RecordPtr RecordPtr;
+	typedef Kmernator::MmapSource MmapSource;
+	typedef Kmernator::MmapIStream MmapIStream;
 
     class SequenceStreamParser;
 	typedef boost::shared_ptr< SequenceStreamParser > SequenceStreamParserPtr;

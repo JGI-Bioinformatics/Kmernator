@@ -297,7 +297,7 @@ TNFS buildIntraTNFs(const Read &read, long window, long step, bool normalize = f
 	ReadSet reads;
 	for(long i = 0 ; i < length - window; i+= step) {
 		string fasta = fullFasta.substr(i, window);
-		Read newRead(read.getName() + ":" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(i+fasta.length()), fasta, string(fasta.length(), KoMer::PRINT_REF_QUAL));
+		Read newRead(read.getName() + ":" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(i+fasta.length()), fasta, string(fasta.length(), Kmernator::PRINT_REF_QUAL));
 		reads.append(newRead);
 	}
 	return buildTnfs(reads, normalize);
