@@ -98,6 +98,7 @@ public:
 long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::string outputFileName);
 
 int main(int argc, char *argv[]) {
+
 	if (!FilterReadsOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 

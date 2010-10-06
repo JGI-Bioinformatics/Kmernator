@@ -37,6 +37,9 @@ set(Boost_USE_SHARED_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_SINGLETHREADED OFF)
 
+#
+# OpenMP
+#
 find_package( OpenMP )
 if(DISABLE_OPENMP)
   set(OpenMP_CXX_FLAGS "-DDISABLE_OPENMP")
@@ -46,6 +49,22 @@ else()
      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_CXX_FLAGS}") 
   else()
      set(OpenMP_CXX_FLAGS "-DDISABLE_OPENMP")
+  endif()
+endif()
+
+#
+# MPI
+#
+find_package( MPI )
+if (DISABLE_MPI)
+  set(KMERNATOR_MPI_CXX_FLAGS = "-DDISABLE_MPI")
+else()
+  if ( MPI_FOUND )
+    set(KMERNATOR_MPI_CXX_FLAGS "${MPI_COMPILE_FLAGS} -I${MPI_INCLUDE_PATH} -DENABLE_MPI")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${MPI_INCLUDE_PATH}/../lib")
+    set(KMERNATOR_EXTRA_LIBS ${KMERNATOR_EXTRA_LIBS} boost_mpi-mt-shared)
+  else()
+    set(KMERNATOR_MPI_CXX_FLAGS = "-DDISABLE_MPI")
   endif()
 endif()
 

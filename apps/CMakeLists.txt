@@ -49,11 +49,12 @@ target_link_libraries( CompareSpectrums
                               boost_program_options-mt-static 
                               boost_iostreams-mt-static
                               boost_thread-mt-static
+                              ${KMERNATOR_EXTRA_LIBS}
                               )
 
 
 set_source_files_properties( FilterReads
-                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
                              )
 add_executable( FilterReads FilterReads )
 target_link_libraries( FilterReads 
@@ -63,6 +64,20 @@ target_link_libraries( FilterReads
                               boost_program_options-mt-static
                               boost_iostreams-mt-static
                               boost_thread-mt-static
+                              )
+
+set_source_files_properties( FilterReads-P
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+add_executable( FilterReads-P FilterReads-P )
+target_link_libraries( FilterReads-P 
+                              Sequence
+                              Kmer
+                              ReadSet
+                              boost_program_options-mt-static
+                              boost_iostreams-mt-static
+                              boost_thread-mt-static
+                              ${KMERNATOR_EXTRA_LIBS}
                               )
                            
 set_source_files_properties( TnfDistance

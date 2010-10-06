@@ -38,6 +38,15 @@
 #include <boost/iostreams/device/mapped_file.hpp>
 #include <boost/iostreams/stream.hpp>
 
+#ifdef ENABLE_MPI
+
+#define _USE_MPI
+#include <mpi.h>
+#include <boost/mpi.hpp>
+namespace mpi = boost::mpi;
+
+#endif
+
 #ifdef ENABLE_OPENMP
 
 #define _USE_OPENMP
@@ -58,6 +67,8 @@ inline int omp_get_dynamic() { return 0; }
 const int MAX_FILE_PARALLELISM = 1;
 
 #endif
+
+
 
 const int OMP_NESTED_DEFAULT = omp_get_nested();
 const int OMP_DYNAMIC_DEFAULT = omp_get_dynamic();

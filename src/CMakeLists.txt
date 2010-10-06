@@ -41,17 +41,17 @@ IF(CXX_FLAGS)
 ENDIF(CXX_FLAGS)
 
 set_source_files_properties( TwoBitSequence
-                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                            PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
                           )
 set_source_files_properties( Sequence
-                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                            PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
                           )
 set_source_files_properties( ReadSet
-                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                            PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
                           )
 
 set_source_files_properties( Kmer
-                            PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                            PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
                           )
                           
 add_library( TwoBitSequence TwoBitSequence )

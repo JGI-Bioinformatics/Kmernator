@@ -95,7 +95,7 @@ target_link_libraries( ktest2 Sequence Kmer
 add_test(ktest2 ktest2 --mask-simple-repeats 0 21 10.fastq)
 
 set_source_files_properties( HashTester
-                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
                              )
 add_executable( HashTester HashTester)
 target_link_libraries( HashTester 
