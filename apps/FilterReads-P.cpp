@@ -42,6 +42,12 @@ int main(int argc, char *argv[]) {
 	if (world.size() == 1)
 		throw std::invalid_argument("Please execute from a multi-process MPI environment");
 
+	int numThreads = omp_get_max_threads();
+	#pragma omp single
+	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
+	omp_set_num_threads(numThreads);
+	LOG_VERBOSE_MT(1, "set OpenMP threads to " << numThreads);
+
 	MemoryUtils::getMemoryUsage();
     std::string outputFilename = Options::getOutputFile();
 
@@ -55,6 +61,7 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(1, world.rank() << ": loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
 			<< " Bases ");
 	LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
+
 
 	LOG_VERBOSE(1, "Identifying Pairs: ");
 	long numPairs = reads.identifyPairs();

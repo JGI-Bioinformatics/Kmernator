@@ -370,11 +370,12 @@ public:
 
 #ifdef _USE_OPENMP
 
+			int maxThreads = omp_get_max_threads();
 			setOpt<int>("threads", getMaxThreads(), print);
-			if (getMaxThreads() > OMP_MAX_THREADS) {
+			if (getMaxThreads() > maxThreads) {
 				if (print)
-					Log::Verbose() << "Reducing the number of threads from " << getMaxThreads() << " to " << OMP_MAX_THREADS;
-				getMaxThreads() = OMP_MAX_THREADS;
+					Log::Verbose() << "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads;
+				getMaxThreads() = maxThreads;
 			}
 			if ((getMaxThreads() & (getMaxThreads()-1)) != 0) {
 				if (print)
@@ -397,8 +398,7 @@ public:
 				if (print)
 					*output << " to " << t << std::endl;
 			}
-			OMP_MAX_THREADS = getMaxThreads();
-			omp_set_num_threads(OMP_MAX_THREADS);
+			omp_set_num_threads(getMaxThreads());
 
 #endif
 

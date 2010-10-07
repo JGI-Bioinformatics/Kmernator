@@ -45,14 +45,14 @@ using namespace std;
 char Sequence::FASTQ_START_CHAR = Kmernator::FASTQ_START_CHAR_ILLUMINA;
 
 // thread safe caches
-Sequence::CachedSequencesVector Sequence::threadCacheSequences(OMP_MAX_THREADS, Sequence::CachedSequences(Sequence::maxCachePerThread));
+Sequence::CachedSequencesVector Sequence::threadCacheSequences(OMP_MAX_THREADS_DEFAULT, Sequence::CachedSequences(Sequence::maxCachePerThread));
 
 // dangling pointer!!
 Sequence::DataPtrListVector *Sequence::preAllocatedDataPtrs = new Sequence::DataPtrListVector();
 
 // static methods of Sequence
 void Sequence::clearCaches() {
-	threadCacheSequences = CachedSequencesVector(OMP_MAX_THREADS, CachedSequences(Sequence::maxCachePerThread));
+	threadCacheSequences = CachedSequencesVector(OMP_MAX_THREADS_DEFAULT, CachedSequences(Sequence::maxCachePerThread));
 	preAllocatedDataPtrs->reset();
 }
 
@@ -123,7 +123,7 @@ void Sequence::DataPtrListVector::returnDataPtr(DataPtr &dataPtr) {
 
 void Sequence::DataPtrListVector::reset() {
 	_isValid = false;
-	_vec = _DataPtrListVector(OMP_MAX_THREADS, DataPtrList());
+	_vec = _DataPtrListVector(omp_get_max_threads(), DataPtrList());
 	_isValid = true;
 }
 
@@ -572,7 +572,6 @@ Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
 
 /*------------------------------------ READ ----------------------------------------*/
 
-//Read::CachedReadVector Read::threadCacheRead(OMP_MAX_THREADS, CachedRead());
 double Read::qualityToProbability[256];
 
 int Read::initializeQualityToProbability(unsigned char minQualityScore, char startChar) {

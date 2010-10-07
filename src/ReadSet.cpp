@@ -322,7 +322,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 
 	// set OMP variables
 	omp_set_nested(1);
-	int numThreads = std::min(omp_get_max_threads(), OMP_MAX_THREADS);
+	int numThreads = omp_get_max_threads();
 	if (numThreads > MAX_FILE_PARALLELISM)
 		numThreads = MAX_FILE_PARALLELISM;
 	unsigned long numReads[ numThreads ];

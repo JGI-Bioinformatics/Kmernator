@@ -325,11 +325,11 @@ public:
 			setBuffers();
 		}
 		void setBuffers() {
-			_nameBuffer.assign(OMP_MAX_THREADS, string());
-			_basesBuffer.assign(OMP_MAX_THREADS, string());
-			_qualsBuffer.assign(OMP_MAX_THREADS, string());
-			_lineBuffer.assign(OMP_MAX_THREADS, string());
-			_isMultiline.assign(OMP_MAX_THREADS, false);
+			_nameBuffer.assign(omp_get_max_threads(), string());
+			_basesBuffer.assign(omp_get_max_threads(), string());
+			_qualsBuffer.assign(omp_get_max_threads(), string());
+			_lineBuffer.assign(omp_get_max_threads(), string());
+			_isMultiline.assign(omp_get_max_threads(), false);
 		}
 
 		virtual ~SequenceStreamParser() {

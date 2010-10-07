@@ -657,7 +657,7 @@ public:
 		int numThreads = omp_get_max_threads();
 		ReadSet _threadNewReads[numThreads];
 
-		#pragma omp parallel reduction(+:affectedCount)
+		#pragma omp parallel num_threads(numThreads) reduction(+:affectedCount)
 		for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
 		    if (it->value().getCount() >= cutoffThreshold) {
 		    	RPW rpw = it->value().getEachInstance();

@@ -81,7 +81,7 @@ private:
 	public:
 		static const long size = 511;
 		DataPtrListVector() : _isValid(false) {
-			_vec = _DataPtrListVector(OMP_MAX_THREADS, DataPtrList());
+			_vec = _DataPtrListVector(omp_get_max_threads(), DataPtrList());
 			_isValid = true;
 		}
 		~DataPtrListVector() {

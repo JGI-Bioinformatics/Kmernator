@@ -118,7 +118,7 @@ public:
 			static MmapAllocator *singletons = NULL;
 			if (singletons == NULL) {
 				// dangling pointer!!!
-				singletons = new MmapAllocator[OMP_MAX_THREADS];
+				singletons = new MmapAllocator[omp_get_max_threads()];
 			}
 			return singletons;
 		}
@@ -200,7 +200,7 @@ public:
 			if (blockAllocation == NULL) {
 				// iterate through all thread allocations
 				MmapAllocator *singletons = getSingletons();
-				for(size_type thread = 0; thread < OMP_MAX_THREADS; thread++) {
+				for(size_type thread = 0; thread < omp_get_max_threads(); thread++) {
 					if (thread == omp_get_thread_num())
 						continue;
 					blockAllocation = (singletons + thread)->_getBlockAllocation(allocation);

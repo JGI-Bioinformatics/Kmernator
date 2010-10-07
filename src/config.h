@@ -76,7 +76,6 @@ const int MAX_FILE_PARALLELISM = 1;
 const int OMP_NESTED_DEFAULT = omp_get_nested();
 const int OMP_DYNAMIC_DEFAULT = omp_get_dynamic();
 const int OMP_MAX_THREADS_DEFAULT = omp_get_max_threads();
-static int OMP_MAX_THREADS = OMP_MAX_THREADS_DEFAULT;
 
 // Some processes need memory to make a two bit sequence.
 // if more than 128 bytes (512 sequence length) is needed, malloc will be called.
