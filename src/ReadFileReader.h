@@ -47,6 +47,7 @@ public:
 	typedef Kmernator::RecordPtr RecordPtr;
 	typedef Kmernator::MmapSource MmapSource;
 	typedef Kmernator::MmapIStream MmapIStream;
+	typedef Kmernator::FilteredIStream FilteredIStream;
 
     class SequenceStreamParser;
 	typedef boost::shared_ptr< SequenceStreamParser > SequenceStreamParserPtr;
@@ -57,6 +58,7 @@ private:
 	ifstream _ifs;
 	ifstream _qs;
 	istringstream _iss;
+	Kmernator::FilteredIStream _fis;
 
 public:
 	ReadFileReader(): _parser() {}
@@ -317,6 +319,11 @@ public:
 			_freeStream = true;
 			setBuffers();
 		}
+		SequenceStreamParser(ReadFileReader::FilteredIStream &stream, char marker) :
+			_line(0), _pos(0), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
+			_stream = (istream *) &stream;
+			setBuffers();
+		}
 		void setBuffers() {
 			_nameBuffer.assign(OMP_MAX_THREADS, string());
 			_basesBuffer.assign(OMP_MAX_THREADS, string());
@@ -433,6 +440,7 @@ public:
 					nextLine();
 			} else {
 				seekg(0);
+				return;
 			}
 			if (Log::isDebug(1)) {
                 LOG_DEBUG_MT(1, omp_get_thread_num() << " seeked to " << tellg() );
@@ -460,7 +468,47 @@ public:
 				}
 			}
 
-		};
+			if (endOfStream()) {
+				LOG_DEBUG_MT(1, "At endofstream already");
+				return;
+			}
+
+			// now verify that we have not split a sequential pair
+			unsigned long here1 = tellg();
+			readRecord();
+			string name1 = getName();
+			if (name1.empty() || endOfStream()) {
+				LOG_DEBUG_MT(1, "Found endofstream 0 records in leaving at eof to preserve pair");
+				return;
+			}
+
+			unsigned long here2 = tellg();
+			readRecord();
+			string name2 = getName();
+			if (name2.empty() || endOfStream()) {
+				LOG_DEBUG_MT(1, "Found endofstream 1 record in leaving at eof to preserve pair" << name1);
+				return;
+			}
+
+			readRecord();
+			string name3 = getName();
+			if (name3.empty() || endOfStream()) {
+				seekg(here1);
+				LOG_DEBUG_MT(1, "Found endofstream two records in, rewinding to initial boundary: " << name1 << " & " << name2);
+				return;
+			}
+
+			if (SequenceRecordParser::isPair(name1,name2)) {
+				seekg(here1);
+				LOG_DEBUG_MT(1, "Found natural pair at boundary, rewinding");
+			} else if (SequenceRecordParser::isPair(name2, name3)) {
+				seekg(here2);
+				LOG_DEBUG_MT(1, "Found split pair at boundary, incrementing one record");
+			} else {
+				LOG_DEBUG_MT(1, "Found no pairs at boundary, rewinding");
+				seekg(here1);
+			}
+		}
 
 	};
 

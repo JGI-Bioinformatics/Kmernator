@@ -37,6 +37,9 @@
 #include <boost/cstdint.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 #include <boost/iostreams/stream.hpp>
+#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/filter/zlib.hpp>
+
 
 #ifdef ENABLE_MPI
 
@@ -130,6 +133,7 @@ namespace Kmernator {
    typedef boost::iostreams::mapped_file MmapFile;
    typedef boost::iostreams::mapped_file_source MmapSource;
    typedef boost::iostreams::stream< MmapSource > MmapIStream;
+   typedef boost::iostreams::filtering_istreambuf FilteredIStream;
    typedef std::vector< MmapFile > MmapFileVector;
 
 
