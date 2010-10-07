@@ -1,5 +1,5 @@
 //
-// Kmernator/apps/FilterReads.cpp
+// Kmernator/apps/FilterReads-P.cpp
 //
 // Author: Rob Egan, Craig Furman
 //
