@@ -322,9 +322,9 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 
 	// set OMP variables
 	omp_set_nested(1);
-	int numThreads = omp_get_max_threads();
+	int numThreads = std::min(omp_get_max_threads(), OMP_MAX_THREADS);
 	if (numThreads > MAX_FILE_PARALLELISM)
-	numThreads = MAX_FILE_PARALLELISM;
+		numThreads = MAX_FILE_PARALLELISM;
 	unsigned long numReads[ numThreads ];
 	unsigned long seekPos[ numThreads ];
 	for(int i = 0; i < numThreads; i++)
@@ -335,7 +335,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 	{
 
 		if (omp_get_num_threads() != numThreads)
-		throw "OMP thread count discrepancy!";
+			throw "OMP thread count discrepancy!";
 
 		ReadSet myReads;
 		ReadFileReader reader(mmap);
@@ -346,8 +346,10 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		unsigned long lastPos = MAX_UI64;
 		#pragma omp single
 		{
-			lastPos = reader.getFileSize() - 1;
+			lastPos = reader.getFileSize();
 			blockSize = lastPos / numThreads;
+			if (lastPos > 0)
+				lastPos--;
 
 			if (blockSize < 100)
 				blockSize = 100;
@@ -355,19 +357,25 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		}
 
 
-		reader.seekToNextRecord( blockSize * omp_get_thread_num() );
-		seekPos[ omp_get_thread_num() ] = reader.getPos();
-
 		string name,bases,quals;
 		bool hasNext = omp_get_thread_num() < (long) numThreads;
 
+		if (hasNext) {
+			reader.seekToNextRecord( blockSize * omp_get_thread_num() );
+			seekPos[ omp_get_thread_num() ] = reader.getPos();
+		} else {
+			seekPos[ omp_get_thread_num() ] = lastPos;
+		}
+
 		#pragma omp barrier
 
-		if (omp_get_thread_num() != (numThreads - 1) )
+		if (hasNext && omp_get_thread_num() != (numThreads - 1) )
 			lastPos = seekPos[ omp_get_thread_num() + 1 ];
 
 		if (hasNext)
 			hasNext = (reader.getPos() < lastPos);
+
+		#pragma omp barrier
 
 		if (!hasNext)
 			seekPos[ omp_get_thread_num() ] = 0;
