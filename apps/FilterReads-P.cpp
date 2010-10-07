@@ -33,8 +33,14 @@
 
 int main(int argc, char *argv[]) {
 
+	mpi::environment env(argc, argv);
+	mpi::communicator world;
+
 	if (!FilterReadsOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
+
+	if (world.size() == 1)
+		throw std::invalid_argument("Please execute from a multi-process MPI environment");
 
 	MemoryUtils::getMemoryUsage();
     std::string outputFilename = Options::getOutputFile();
@@ -43,33 +49,17 @@ int main(int argc, char *argv[]) {
 	KmerSizer::set(Options::getKmerSize());
 
 	Options::FileListType inputs = Options::getInputFiles();
-	LOG_VERBOSE(1, "Reading Input Files");
-	reads.appendAllFiles(inputs);
-	LOG_VERBOSE(1, "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
+	LOG_VERBOSE(1, world.rank() << ": Reading Input Files");
+
+	reads.appendAllFiles(inputs, world.rank(), world.size());
+	LOG_VERBOSE(1, world.rank() << ": loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
 			<< " Bases ");
-	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
 
 	LOG_VERBOSE(1, "Identifying Pairs: ");
 	long numPairs = reads.identifyPairs();
 	LOG_VERBOSE(1, "Pairs + single = " << numPairs);
 	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
-
-	if (Options::getSkipArtifactFilter() == 0) {
-
-	  LOG_VERBOSE(1, "Preparing artifact filter: ");
-      FilterKnownOddities filter;
-      LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
-
-	  LOG_VERBOSE(1, "Applying sequence artifact filter to Input Files");
-	  unsigned long filtered = filter.applyFilter(reads);
-	  LOG_VERBOSE(1, "filter affected (trimmed/removed) " << filtered << " Reads ");;
-	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
-
-	  LOG_VERBOSE(1, "Applying DuplicateFragmentPair Filter to Input Files");
-	  unsigned long duplicateFragments = filter.filterDuplicateFragments(reads);
-	  LOG_VERBOSE(1, "filter affected  (removed) " << duplicateFragments);
-	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
-	}
 
 	KS spectrum(0);
 
@@ -123,7 +113,6 @@ int main(int argc, char *argv[]) {
 
 	return 0;
 }
-
 
 // $Log: FilterReads.cpp,v $
 // Revision 1.22  2010-05-24 21:48:50  regan
