@@ -31,22 +31,23 @@
 
 #include "FilterReads.h"
 
-int main(int argc, char *argv[]) {
+void reduceOMPThreads(mpi::communicator &world) {
+	int numThreads = omp_get_max_threads();
+	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
+	omp_set_num_threads(numThreads);
+	LOG_DEBUG_MT(1, world.rank() << ": set OpenMP threads to " << numThreads);
+}
 
-	mpi::environment env(argc, argv);
-	mpi::communicator world;
+int main(int argc, char *argv[]) {
 
 	if (!FilterReadsOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
-	if (world.size() == 1)
-		throw std::invalid_argument("Please execute from a multi-process MPI environment");
+	mpi::environment env(argc, argv);
+	mpi::communicator world;
 
-	int numThreads = omp_get_max_threads();
 	#pragma omp single
-	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
-	omp_set_num_threads(numThreads);
-	LOG_VERBOSE_MT(1, "set OpenMP threads to " << numThreads);
+	reduceOMPThreads(world);
 
 	MemoryUtils::getMemoryUsage();
     std::string outputFilename = Options::getOutputFile();

@@ -119,7 +119,7 @@ ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 }
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFile(string filePath, string filePath2, int rank, int size) {
-	if (Options::getMmapInput() > 0)
+	if (size == 1 && Options::getMmapInput() > 0)
 		return appendAnyFileMmap(filePath, filePath2);
 
 	ReadFileReader reader(filePath, filePath2);
@@ -280,8 +280,6 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	    std::string name, bases, quals;
 	    bool isMultiline;
 	    while (reader.nextRead(nextRecordPtr, name, bases, quals, isMultiline)) {
-            if (reader.getPos() >= lastPos)
-            	break;
 
 	    	if (isMultiline) {
             	// store the read in memory
@@ -293,13 +291,16 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
             }
             recordPtr = nextRecordPtr;
 	    	qualPtr = reader.getStreamQualRecordPtr();
+
+            if (reader.getPos() >= lastPos)
+            	break;
 	    }
 	} else {
 	    while (reader.nextRead(name, bases, quals)) {
-            if (reader.getPos() >= lastPos)
-            	break;
 	        Read read(name, bases, quals);
 	        addRead(read, bases.length());
+            if (reader.getPos() >= lastPos)
+            	break;
 	    }
 	}
 	return reader.getParser();
