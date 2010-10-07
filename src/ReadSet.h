@@ -163,9 +163,10 @@ public:
 	}
 	void circularize(long extraLength);
 
-	void appendAllFiles(Options::FileListType &files);
-	SequenceStreamParserPtr appendAnyFile(std::string filePath, std::string filePath2 = "");
-	SequenceStreamParserPtr appendFastaFile(std::string &is);
+	void appendAllFiles(Options::FileListType &files, int rank = 0, int size = 1);
+	SequenceStreamParserPtr appendAnyFile(std::string filePath, std::string filePath2 = "", int rank = 0, int size = 1);
+	SequenceStreamParserPtr appendAnyFileMmap(string fastaFilePath, string qualFilePath = "", int rank = 0, int size = 1);
+	SequenceStreamParserPtr appendFastaFile(std::string &is, int rank = 0, int size = 1);
 
 	void append(const ReadSet &reads);
 	void append(const Read &read);
@@ -255,9 +256,9 @@ public:
 
 
 protected:
-	SequenceStreamParserPtr appendFasta(std::string fastaFilePath, std::string qualFilePath = "");
-	SequenceStreamParserPtr appendFasta(MmapSource &mmap);
-	SequenceStreamParserPtr appendFasta(ReadFileReader &reader);
+	SequenceStreamParserPtr appendFasta(std::string fastaFilePath, std::string qualFilePath = "", int rank = 0, int size = 1);
+	SequenceStreamParserPtr appendFasta(MmapSource &mmap, int rank = 0, int size = 1);
+	SequenceStreamParserPtr appendFasta(ReadFileReader &reader, int rank = 0, int size = 1);
 
 	SequenceStreamParserPtr appendFastq(MmapSource &mmap);
 	//void appendFastq(ReadFileReader &reader);

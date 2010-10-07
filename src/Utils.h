@@ -308,6 +308,48 @@ public:
 		}
         return oss.str();
 	}
+
+	static std::string commonName(const std::string &readName) {
+		return readName.substr(0, readName.length() - 1);
+	}
+	static int readNum(const std::string &readName) {
+		int retVal = 0;
+		int len = readName.length();
+		char c = readName[len - 1];
+		switch (c) {
+		case '1':
+			if (readName[len - 2] != '/')
+				break;
+		case 'A':
+		case 'F':
+			retVal = 1;
+			break;
+		case '2':
+			if (readName[len - 2] != '/')
+				break;
+		case 'B':
+		case 'R':
+			retVal = 2;
+			break;
+		}
+		return retVal;
+	}
+
+	static bool isPair(const std::string &readNameA, const std::string readNameB) {
+		std::string commonA = commonName(readNameA);
+		std::string commonB = commonName(readNameB);
+		if (commonA == commonB) {
+			int readNumA = readNum(readNameA);
+			int readNumB = readNum(readNameB);
+			if (readNumA != 0 && readNumB != 0 && readNumA != readNumB) {
+				return true;
+			} else {
+				return false;
+			}
+		} else {
+			return false;
+		}
+	}
 };
 
 #endif

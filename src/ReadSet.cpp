@@ -118,7 +118,17 @@ ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 	return mmap;
 }
 
-ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFile(string fastaFilePath, string qualFilePath) {
+ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFile(string filePath, string filePath2, int rank, int size) {
+	if (Options::getMmapInput() > 0)
+		return appendAnyFileMmap(filePath, filePath2);
+
+	ReadFileReader reader(filePath, filePath2);
+	appendFasta(reader, rank, size);
+	incrementFile(reader);
+	return reader.getParser();
+}
+
+ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFileMmap(string fastaFilePath, string qualFilePath, int rank, int size) {
     MmapSource mmap = mmapFile(fastaFilePath);
 
     ReadFileReader reader;
@@ -131,16 +141,19 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFile(string fastaFilePath, st
 
 	switch (reader.getType()) {
 	case 0:
-		appendFastq(mmap);
+		if (size > 1)
+			appendFasta(reader, rank, size);
+		else
+			appendFastq(mmap);
 		break;
 	case 1:
-		appendFasta(reader);
+		appendFasta(reader, rank, size);
 	}
 	incrementFile(reader);
 	return reader.getParser();
 }
 
-void ReadSet::appendAllFiles(Options::FileListType &files) {
+void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 
 #ifdef _USE_OPENMP
 	ReadSet myReads[ files.size() ];
@@ -175,9 +188,9 @@ void ReadSet::appendAllFiles(Options::FileListType &files) {
 		}
 #ifdef _USE_OPENMP
 		// append int this thread's ReadSet buffer (note: line continues)
-		parsers[i] = myReads[ i ].appendAnyFile(files[i], qualFile);
+		parsers[i] = myReads[ i ].appendAnyFile(files[i], qualFile, rank, size);
 #else
-		SequenceStreamParserPtr parser = appendAnyFile(files[i], qualFile);
+		SequenceStreamParserPtr parser = appendAnyFile(files[i], qualFile, rank, size);
 		incrementFile(parser);
 #endif
 
@@ -236,21 +249,30 @@ void ReadSet::append(const ReadSet &reads) {
 
 }
 
-ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(string fastaFilePath, string qualFilePath) {
+ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(string fastaFilePath, string qualFilePath, int rank, int size) {
 	ReadFileReader reader(fastaFilePath, qualFilePath);
-	appendFasta(reader);
+	appendFasta(reader, rank, size);
 	incrementFile(reader);
 	return reader.getParser();
 }
-ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadSet::MmapSource &mmap) {
+ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadSet::MmapSource &mmap, int rank, int size) {
 	ReadFileReader reader(mmap);
-	appendFasta(reader);
+	appendFasta(reader, rank, size);
 	incrementFile(reader);
 	return reader.getParser();
 }
 
-ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader) {
+ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, int rank, int size) {
 	string name, bases, quals;
+	unsigned long lastPos = MAX_UI64;
+	if (size > 1) {
+		unsigned long blockSize = reader.getBlockSize(size);
+		if (rank != size -1 ) {
+			reader.seekToNextRecord( blockSize * (rank+1) );
+			lastPos = reader.getPos();
+		}
+		reader.seekToNextRecord( blockSize * rank );
+	}
 	if (reader.isMmaped() && Options::getMmapInput() != 0) {
 	    RecordPtr recordPtr = reader.getStreamRecordPtr();
 	    RecordPtr qualPtr = reader.getStreamQualRecordPtr();
@@ -258,7 +280,10 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader) {
 	    std::string name, bases, quals;
 	    bool isMultiline;
 	    while (reader.nextRead(nextRecordPtr, name, bases, quals, isMultiline)) {
-            if (isMultiline) {
+            if (reader.getPos() >= lastPos)
+            	break;
+
+	    	if (isMultiline) {
             	// store the read in memory
             	Read read(name,bases,quals);
             	addRead(read, bases.length());
@@ -271,6 +296,8 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader) {
 	    }
 	} else {
 	    while (reader.nextRead(name, bases, quals)) {
+            if (reader.getPos() >= lastPos)
+            	break;
 	        Read read(name, bases, quals);
 	        addRead(read, bases.length());
 	    }
@@ -278,9 +305,9 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader) {
 	return reader.getParser();
 }
 
-ReadSet::SequenceStreamParserPtr ReadSet::appendFastaFile(string &str) {
+ReadSet::SequenceStreamParserPtr ReadSet::appendFastaFile(string &str, int rank, int size) {
 	ReadFileReader reader(str);
-	appendFasta(reader);
+	appendFasta(reader, rank, size);
 	incrementFile(reader);
 	return reader.getParser();
 }
@@ -316,28 +343,42 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		if (omp_get_thread_num() == 0)
 			singleParser = reader.getParser();
 
+		unsigned long lastPos = MAX_UI64;
 		#pragma omp single
 		{
-			blockSize = reader.getBlockSize(numThreads);
+			lastPos = reader.getFileSize() - 1;
+			blockSize = lastPos / numThreads;
+
 			if (blockSize < 100)
-			blockSize = 100;
+				blockSize = 100;
 			LOG_DEBUG(1, "Reading " << mmap << " with " << numThreads << " threads" );
 		}
+
+
 		reader.seekToNextRecord( blockSize * omp_get_thread_num() );
 		seekPos[ omp_get_thread_num() ] = reader.getPos();
 
 		string name,bases,quals;
 		bool hasNext = omp_get_thread_num() < (long) numThreads;
+
+		#pragma omp barrier
+
+		if (omp_get_thread_num() != (numThreads - 1) )
+			lastPos = seekPos[ omp_get_thread_num() + 1 ];
+
 		if (hasNext)
-		hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
+			hasNext = (reader.getPos() < lastPos);
 
 		if (!hasNext)
-		seekPos[ omp_get_thread_num() ] = 0;
+			seekPos[ omp_get_thread_num() ] = 0;
 
 		#pragma omp barrier
 
 		if (hasNext && omp_get_thread_num() != 0 && seekPos[omp_get_thread_num()] == seekPos[omp_get_thread_num()-1])
 			hasNext = false;
+
+		if (!hasNext)
+			lastPos = 0;
 
 		if (reader.isMmaped() && Options::getMmapInput() != 0) {
 		    RecordPtr recordPtr = reader.getStreamRecordPtr();
@@ -357,13 +398,13 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 
 		    	recordPtr = nextRecordPtr;
 		    	qualPtr = reader.getStreamQualRecordPtr();
-		    	hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
+		    	hasNext = (reader.getPos() < lastPos);
 		    }
 		} else {
 		    while (hasNext && reader.nextRead(name, bases, quals)) {
 		        Read read(name, bases, quals);
 		        myReads.addRead(read, bases.length());
-		        hasNext = (reader.getPos() < blockSize * (omp_get_thread_num() +1));
+		        hasNext = (reader.getPos() < lastPos);
 		    }
 		}
 
@@ -447,47 +488,9 @@ const ReadSet::ReadIdxVector ReadSet::getReadIdxVector() const {
 }
 
 
-std::string _commonName(const std::string &readName) {
-	return readName.substr(0, readName.length() - 1);
-}
-int _readNum(const std::string &readName) {
-	int retVal = 0;
-	int len = readName.length();
-	char c = readName[len - 1];
-	switch (c) {
-	case '1':
-		if (readName[len - 2] != '/')
-			break;
-	case 'A':
-	case 'F':
-		retVal = 1;
-		break;
-	case '2':
-		if (readName[len - 2] != '/')
-			break;
-	case 'B':
-	case 'R':
-		retVal = 2;
-		break;
-	}
-	return retVal;
-}
-
 bool ReadSet::isPair(const std::string &readNameA, const Read &readB) {
-	std::string commonA = _commonName(readNameA);
 	std::string readNameB = readB.getName();
-	std::string commonB = _commonName(readB.getName());
-	if (commonA == commonB) {
-		int readNumA = _readNum(readNameA);
-		int readNumB = _readNum(readNameB);
-		if (readNumA != 0 && readNumB != 0 && readNumA != readNumB) {
-			return true;
-		} else {
-			return false;
-		}
-	} else {
-		return false;
-	}
+	return SequenceRecordParser::isPair(readNameA, readNameB);
 }
 bool ReadSet::isPair(const Read &readA, const Read &readB) {
 	std::string readNameA = readA.getName();
@@ -496,8 +499,8 @@ bool ReadSet::isPair(const Read &readA, const Read &readB) {
 
 Read ReadSet::fakePair(const Read &unPaired) {
 	std::string name = unPaired.getName();
-	int readNum = _readNum(name);
-	std::string newName = _commonName(name);
+	int readNum = SequenceRecordParser::readNum(name);
+	std::string newName = SequenceRecordParser::commonName(name);
 	if (readNum == 1) {
 		newName += '2';
 	} else if (readNum == 2) {
@@ -553,7 +556,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 		if ((pair.read1 == MAX_READ_IDX || pair.read2 == MAX_READ_IDX)
 				&& pair.read1 != pair.read2) {
 			ReadSetSizeType idx = pair.lesser();
-			unmatchedNames[_commonName(_reads[idx].getName())] = idx;
+			unmatchedNames[SequenceRecordParser::commonName(_reads[idx].getName())] = idx;
 		}
 	}
 
@@ -571,8 +574,8 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 		}
 
 		string name = read.getName();
-		readNum = _readNum(name);
-		common = _commonName(name);
+		readNum = SequenceRecordParser::readNum(name);
+		common =  SequenceRecordParser::commonName(name);
 
 		unmatchedIt = unmatchedNames.find(common);
 		if (unmatchedIt != unmatchedNames.end()) {
