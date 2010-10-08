@@ -78,25 +78,30 @@ public:
 		}
 	};
 
-	static FileHandle buildNew(size_type size, std::string permamentFile) {
-		std::string filename = Options::getTmpDir() + "/Kmmap-";
+	static std::string generateUniqueName() {
+		std::string filename = "Kmmap-";
 		filename += boost::lexical_cast<std::string>( getpid() );
 		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
 		filename += getenv("HOST") == NULL ? "unknown" : getenv("HOST");
-		LOG_DEBUG(1, "Creating new tmp file: " << filename << " " << size);
+		return filename;
+	}
+	static FileHandle buildNew(size_type size, std::string permanentFile) {
+		std::string filename;
+		if (permanentFile.empty())
+			filename = Options::getTmpDir() + "/.tmp-" + generateUniqueName();
+		else
+			filename = permanentFile;
+		LOG_DEBUG(1, "Creating new file: " << filename << " " << size);
 		FileHandle fh(filename);
 		fh.getOS().seekp(size-1);
 		fh.getOS() << '\0';
-		if ( !permamentFile.empty() ) {
-			permamentFile = Options::getTmpDir() + "/" + permamentFile + "-" + filename;
-			link(filename.c_str(), permamentFile.c_str());
-		}
 		return fh;
 	}
-	static MmapFile buildNewMmap(size_type size, std::string permamentFile = "") {
-		FileHandle fh = buildNew(size, permamentFile);
+	static MmapFile buildNewMmap(size_type size, std::string permanentFile = "") {
+		FileHandle fh = buildNew(size, permanentFile);
 		Kmernator::MmapFile mmap(fh.filename, std::ios_base::in | std::ios_base::out, size);
-		unlink(fh.filename.c_str());
+		if (permanentFile.empty())
+			unlink(fh.filename.c_str());
 		return mmap;
 	}
 

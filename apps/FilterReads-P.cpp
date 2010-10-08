@@ -85,12 +85,12 @@ int main(int argc, char *argv[]) {
 	  if (world.rank() == 0)
 		  LOG_VERBOSE(1, "targeting " << numBuckets << " buckets for reads ");
 
-	  spectrum = KS(numBuckets);
+	  spectrum = DKS(numBuckets);
 	  LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
 
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
-	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
+	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(world, reads);
 	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
 	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {

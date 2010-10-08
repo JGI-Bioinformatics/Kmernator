@@ -638,6 +638,12 @@ public:
 		_copyRange((void*)ptr, (Value*)(ptr+kmerSize), _begin, getValueStart(), 0, 0, _size, false);
 		return ptr + kmerSize + valueSize;
 	}
+	SizeType sizeToStore() const {
+		return sizeToStore(_size);
+	}
+	static SizeType sizeToStore(IndexType size) {
+		return sizeof(IndexType) + size * ( KmerSizer::getByteSize() + sizeof(Value) );
+	}
 	static const KmerArray restore(const void *src) {
 		const IndexType *size = (const IndexType *) src;
 		IndexType xsize = *(size++);
@@ -1382,11 +1388,19 @@ public:
 		offsetArray = numbers;
 	}
 	SizeType getSizeToStore() const {
-		return sizeof(NumberType)*(2+_buckets.size())
-		    + _buckets.size()*sizeof(IndexType)
-		    + size()*BucketType::getElementByteSize();
+		return getSizeToStoreCountsAndIndexes()
+		    + getSizeToStoreElements();
 	}
-
+	SizeType getSizeToStoreCountsAndIndexes() const {
+		return sizeof(NumberType)*(2+_buckets.size())
+			    + _buckets.size()*sizeof(IndexType);
+	}
+	SizeType getSizeToStoreElements() const {
+		return size()*BucketType::getElementByteSize();
+	}
+	NumberType getBucketMask() const {
+		return BUCKET_MASK;
+	}
 	void reset(bool releaseMemory = true) {
 		for(size_t i=0; i< _buckets.size(); i++) {
 			_buckets[i].reset(releaseMemory);
@@ -1431,7 +1445,7 @@ public:
 		return getDistributedThreadId(key.hash(), threadBitMask);
 	}
 
-	// optimized to look at both possible thead partitions
+	// optimized to look at both possible thread partitions
 	// if this is the correct distributed thread, return true and set the proper localThread
 	// otherwise return false
 	inline bool getLocalThreadId(const KeyType &key, unsigned short &localThreadId, unsigned short numLocalThreads, unsigned short distributedThreadId, NumberType distributedThreadBitMask) const {
@@ -1442,6 +1456,12 @@ public:
 		} else {
 			return false;
 		}
+	}
+
+	inline void getThreadIds(const KeyType &key, unsigned short &localThreadId, unsigned short numLocalThreads, unsigned short &distributedThreadId, NumberType distributedThreadBitMask) const {
+		NumberType hash = key.hash();
+		distributedThreadId = getDistributedThreadId(hash, distributedThreadBitMask);
+		localThreadId = getLocalThreadId(hash, numLocalThreads);
 	}
 
 	// optimization to move the buckets with pre-allocated memory to the next DMP thread
@@ -1474,6 +1494,9 @@ public:
 	}
 	inline BucketType &getBucket(const KeyType &key) {
 		return const_cast<BucketType &>( _constThis().getBucket(key) );
+	}
+	inline const BucketType &getBucketByIdx(IndexType idx) const {
+		return _buckets[idx];
 	}
 
 	inline void setNumBuckets(IndexType numBuckets) {

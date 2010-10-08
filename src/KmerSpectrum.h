@@ -351,6 +351,12 @@ public:
 			unsigned long visitedCount;
 			double visitedWeight;
 			HistogramElement() : visits(0), visitedCount(0), visitedWeight(0.0) {}
+			HistogramElement &operator+(const HistogramElement rh) {
+				visits += rh.visits;
+				visitedCount += rh.visitedCount;
+				visitedWeight += rh.visitedWeight;
+				return *this;
+			}
 		};
 
 		typedef std::vector< HistogramElement > BucketsType;
