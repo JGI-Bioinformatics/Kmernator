@@ -434,7 +434,7 @@ public:
 	}
 
 	SequenceLengthType _detectTransition(KA &kmers) {
-
+		//TODO implement
 		return kmers.size();
 	}
 
@@ -443,6 +443,8 @@ public:
 		  SequenceLengthType numKmers = kmers.size();
 
 		  SequenceLengthType transitionPoint = _detectTransition(kmers);
+		  if (transitionPoint < kmers.size())
+			  ; // TODO use transitionPoint
 
 		  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 		  if ( markupLength != 0 ) {

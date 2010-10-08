@@ -30,13 +30,9 @@
 //
 
 #include "FilterReads.h"
+#include "DistributedFunctions.h"
 
-void reduceOMPThreads(mpi::communicator &world) {
-	int numThreads = omp_get_max_threads();
-	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
-	omp_set_num_threads(numThreads);
-	LOG_DEBUG_MT(1, world.rank() << ": set OpenMP threads to " << numThreads);
-}
+typedef DistributedKmerSpectrum<DataType, DataType> DKS;
 
 int main(int argc, char *argv[]) {
 
@@ -59,27 +55,38 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(1, world.rank() << ": Reading Input Files");
 
 	reads.appendAllFiles(inputs, world.rank(), world.size());
-	LOG_VERBOSE(1, world.rank() << ": loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
-			<< " Bases ");
+
 	LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
 
 
 	LOG_VERBOSE(1, "Identifying Pairs: ");
-	long numPairs = reads.identifyPairs();
-	LOG_VERBOSE(1, "Pairs + single = " << numPairs);
-	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
-	KS spectrum(0);
+	unsigned long counts[3], totalCounts[3];
+	unsigned long &readCount = counts[0] = reads.getSize();
+	unsigned long &numPairs  = counts[1] = reads.identifyPairs();
+	unsigned long &baseCount = counts[2] = reads.getBaseCount();
+	LOG_VERBOSE(1, world.rank() << ": loaded " << readCount << " Reads, " << baseCount << " Bases ");
+	LOG_VERBOSE(1, world.rank() << ": Pairs + single = " << numPairs);
+	LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
+
+	all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
+	if (world.rank() == 0)
+		LOG_VERBOSE_MT(1, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
+
+	DKS spectrum(0);
 
 	Kmernator::MmapFileVector spectrumMmaps;
 
 	if (Options::getKmerSize() > 0) {
 
 	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
-	  LOG_VERBOSE(1, "targeting " << numBuckets << " buckets for reads ");
+
+	  numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
+	  if (world.rank() == 0)
+		  LOG_VERBOSE(1, "targeting " << numBuckets << " buckets for reads ");
 
 	  spectrum = KS(numBuckets);
-	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	  LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
 
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 

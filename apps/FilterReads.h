@@ -29,8 +29,8 @@
 // PURPOSE.
 //
 
-#ifndef FILTERREADS_H_
-#define FILTERREADS_H_
+#ifndef FILTER_READS_H_
+#define FILTER_READS_H_
 
 
 #include <iostream>
