@@ -1423,16 +1423,16 @@ public:
 		}
 	}
 
-	inline unsigned short getLocalThreadId(NumberType hash, unsigned short numThreads) const {
+	inline int getLocalThreadId(NumberType hash, int numThreads) const {
 		// use the bottom bits of hash (which are used to sort by bucket)
 		// partition by numThreads blocks
 		// splits into numThread contiguous blocks
 		return (hash & BUCKET_MASK) / (_buckets.size() / numThreads + 1);
 	}
-	inline unsigned short getLocalThreadId(const KeyType &key, unsigned short numThreads) const {
+	inline int getLocalThreadId(const KeyType &key, int numThreads) const {
 		return getLocalThreadId(key.hash(), numThreads);
 	}
-	inline unsigned short getDistributedThreadId(NumberType hash, NumberType threadBitMask) const {
+	inline int getDistributedThreadId(NumberType hash, NumberType threadBitMask) const {
 		assert( threadBitMask != 0 && ((threadBitMask+1) & threadBitMask) == 0); // number of threads must be a power of 2
 
 		// stripe within the contiguous blocks for the local thread
@@ -1441,14 +1441,14 @@ public:
 		// use top bits of hash (unused to sort by bucket)
 		//return (hash >> 32 & BUCKET_MASK) & threadBitMask;
 	}
-	inline unsigned short getDistributedThreadId(const KeyType &key, NumberType threadBitMask) const {
+	inline int getDistributedThreadId(const KeyType &key, NumberType threadBitMask) const {
 		return getDistributedThreadId(key.hash(), threadBitMask);
 	}
 
 	// optimized to look at both possible thread partitions
 	// if this is the correct distributed thread, return true and set the proper localThread
 	// otherwise return false
-	inline bool getLocalThreadId(const KeyType &key, unsigned short &localThreadId, unsigned short numLocalThreads, unsigned short distributedThreadId, NumberType distributedThreadBitMask) const {
+	inline bool getLocalThreadId(const KeyType &key, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType distributedThreadBitMask) const {
 		NumberType hash = key.hash();
 		if (distributedThreadBitMask == 0 || getDistributedThreadId(hash, distributedThreadBitMask) == distributedThreadId) {
 			localThreadId = getLocalThreadId(hash, numLocalThreads);
@@ -1458,14 +1458,14 @@ public:
 		}
 	}
 
-	inline void getThreadIds(const KeyType &key, unsigned short &localThreadId, unsigned short numLocalThreads, unsigned short &distributedThreadId, NumberType distributedThreadBitMask) const {
+	inline void getThreadIds(const KeyType &key, int &localThreadId, int numLocalThreads, int &distributedThreadId, NumberType distributedThreadBitMask) const {
 		NumberType hash = key.hash();
 		distributedThreadId = getDistributedThreadId(hash, distributedThreadBitMask);
 		localThreadId = getLocalThreadId(hash, numLocalThreads);
 	}
 
 	// optimization to move the buckets with pre-allocated memory to the next DMP thread
-	void rotateDMPBuffers(unsigned short numThreads) {
+	void rotateDMPBuffers(int numThreads) {
 		BucketType tmp;
 		tmp.swap(_buckets[ 0 ]);
 		for(size_t i = 0 ; i < _buckets.size() - 1; i++) {
