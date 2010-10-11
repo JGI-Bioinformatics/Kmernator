@@ -61,6 +61,7 @@ using namespace boost::accumulators;
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "KmerReadUtils.h"
+#include "KmerTrackingData.h"
 #include "Options.h"
 #include "Log.h"
 
@@ -87,6 +88,10 @@ public:
 	typedef KmerMap<SolidDataType> SolidMapType;
 	typedef KmerMap<WeakDataType> WeakMapType;
 	typedef KmerMap<SingletonDataType> SingletonMapType;
+
+	typedef TrackingData::WeightType WeightType;
+	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
+	typedef TrackingData::PositionType PositionType;
 
 	typedef typename SolidMapType::Iterator SolidIterator;
 	typedef typename SolidMapType::ElementType SolidElementType;
@@ -985,66 +990,69 @@ public:
 		return append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, partBitMask);
 	}
 
-	void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid, unsigned long kmerIdx, unsigned long kmerLen, NumberType partIdx, NumberType partBitMask ) {
+	inline void append(DataPointers &pointers, Kmer &least, WeightType &weight, ReadSetSizeType &readIdx, PositionType &readPos, bool isSolid = false) {
+		bool keepDirection = true;
+		if (weight < 0.0) {
+			keepDirection = false;
+			weight = 0.0-weight;
+		}
+		if ( TrackingData::isDiscard( weight ) )  {
+			LOG_DEBUG(2, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << least.toFasta());
+			return;
+		}
 
-		DataPointers pointers(*this);
+		if ( isSolid ) {
+			pointers.reset();
+			SolidElementType elem = getSolid( least );
+			elem.value().track( weight, keepDirection, readIdx, readPos );
+		} else {
+			pointers.set( least );
 
-		for(unsigned long j=0; j < kmerLen; j++)
-		{
-			Kmer &least = kmers[kmerIdx+j];
-			if (partBitMask > 1 && getDMPThread(least, partBitMask, true) != partIdx)
-				continue;
-
-			bool keepDirection = true;
-			double weight = kmers.valueAt(kmerIdx+j);
-			if (weight < 0.0) {
-				keepDirection = false;
-				weight = 0.0-weight;
-			}
-			if ( TrackingData::isDiscard( weight ) )  {
-				LOG_DEBUG(2, "discarded kmer " << readIdx << "@" << j << " " << weight << " " << least.toFasta());
-				continue;
-			}
-
-			if ( isSolid ) {
-				pointers.reset();
-				SolidElementType elem = getSolid( least );
-				elem.value().track( weight, keepDirection, readIdx, j );
+			if (pointers.solidElem.isValid()) {
+				// track solid stats
+				pointers.solidElem.value().track( weight, keepDirection, readIdx, readPos );
+			} else if (pointers.weakElem.isValid()) {
+				// track weak stats
+				pointers.weakElem.value().track( weight, keepDirection, readIdx, readPos );
 			} else {
-				pointers.set( least );
+				if ( pointers.singletonElem.isValid() ) {
 
-				if (pointers.solidElem.isValid()) {
-					// track solid stats
-					pointers.solidElem.value().track( weight, keepDirection, readIdx, j );
-				} else if (pointers.weakElem.isValid()) {
-					// track weak stats
-					pointers.weakElem.value().track( weight, keepDirection, readIdx, j );
+					// promote singleton to weak & track
+					SingletonDataType singleData = pointers.singletonElem.value();
+					pointers.reset();
+
+					WeakElementType weakElem = getWeak( least );
+					weakElem.value() = singleData;
+					weakElem.value().track( weight, keepDirection, readIdx, readPos);
+
+					singleton.remove( least );
+
 				} else {
-					if ( pointers.singletonElem.isValid() ) {
-
-						// promote singleton to weak & track
-						SingletonDataType singleData = pointers.singletonElem.value();
-						pointers.reset();
-
-						WeakElementType weakElem = getWeak( least );
-						weakElem.value() = singleData;
-						weakElem.value().track( weight, keepDirection, readIdx, j);
-
-						singleton.remove( least );
-
+					if (hasSingletons) {
+					    // record this new singleton
+					    SingletonElementType elem = getSingleton(least);
+					    elem.value().track( weight, keepDirection, readIdx, readPos);
 					} else {
-						if (hasSingletons) {
-						    // record this new singleton
-						    SingletonElementType elem = getSingleton(least);
-						    elem.value().track( weight, keepDirection, readIdx, j);
-						} else {
-							// record in the weak spectrum
-							WeakElementType weakElem = getWeak( least );
-							weakElem.value().track( weight, keepDirection, readIdx, j);
-						}
+						// record in the weak spectrum
+						WeakElementType weakElem = getWeak( least );
+						weakElem.value().track( weight, keepDirection, readIdx, readPos);
 					}
 				}
 			}
+		}
+
+	}
+	void append( KmerWeights &kmers, ReadSetSizeType readIdx, bool isSolid, ReadSetSizeType kmerIdx, PositionType kmerLen, int partIdx, NumberType partBitMask ) {
+
+		DataPointers pointers(*this);
+
+		for(PositionType readPos=0; readPos < kmerLen; readPos++)
+		{
+			Kmer &least = kmers[kmerIdx+readPos];
+			if (partBitMask > 1 && getDMPThread(least, partBitMask, true) != partIdx)
+				continue;
+			WeightType weight = kmers.valueAt(kmerIdx+readPos);
+			append(pointers, least, weight, readIdx, readPos, isSolid);
 		}
 	}
 
@@ -1072,7 +1080,7 @@ public:
 		return os;
 	}
 
-	inline bool getSMPThread( Kmer &kmer, unsigned short &smpThreadId, unsigned short numSMPThreads, unsigned short dmpThreadId, unsigned short threadBitMask, bool isLeastComplement = false) {
+	inline bool getSMPThread( Kmer &kmer, int &smpThreadId, int numSMPThreads, int dmpThreadId, int threadBitMask, bool isLeastComplement = false) {
 		// return the smallest KmerMap in the spectrum's getLocalThreadId()
 		if (isLeastComplement) {
 			return solid.getLocalThreadId(kmer, smpThreadId, numSMPThreads, dmpThreadId, threadBitMask);
@@ -1083,7 +1091,7 @@ public:
 		}
 	}
 
-	inline unsigned short getSMPThread( Kmer &kmer, unsigned short numThreads, bool isLeastComplement = false) {
+	inline int getSMPThread( Kmer &kmer, int numThreads, bool isLeastComplement = false) {
 		// return the smallest KmerMap in the spectrum's getLocalThreadId()
 		if (isLeastComplement) {
 			return solid.getLocalThreadId(kmer, numThreads);
@@ -1093,7 +1101,7 @@ public:
 		    return solid.getLocalThreadId(tmp, numThreads);
 		}
 	}
-	inline unsigned short getDMPThread( Kmer &kmer, NumberType threadBitMask, bool isLeastComplement = false ) {
+	inline int getDMPThread( Kmer &kmer, NumberType threadBitMask, bool isLeastComplement = false ) {
 		if (isLeastComplement) {
 			return solid.getDistributedThreadId(kmer, threadBitMask);
 		} else {
@@ -1280,7 +1288,7 @@ public:
 				for (long j = 0; j < numThreads; j++)
 				startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 				for (IndexType j = 0; j < kmers.size(); j++) {
-					unsigned short smpThreadId;
+					int smpThreadId;
 					if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, partBitMask, true) )
 					    kmerBuffers[ omp_get_thread_num() ][ smpThreadId ].append(kmers[j], kmers.valueAt(j));
 				}
