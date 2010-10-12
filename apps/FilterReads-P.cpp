@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
 
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
-	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(world, reads);
+	  spectrumMmaps = spectrum.buildKmerSpectrumMPI(world, reads);
 	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
 	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {

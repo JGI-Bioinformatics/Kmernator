@@ -79,7 +79,7 @@ public:
 	}
 
 	template<typename D>
-	MmapFile writeKmerMap(mpi::communicator &world, D &kmerMap, std::string filepath) {
+	MmapFile writeKmerMapMPI(mpi::communicator &world, D &kmerMap, std::string filepath) {
 		NumberType numBuckets = kmerMap.getNumBuckets();
 		NumberType *mySizeCounts = new NumberType[ numBuckets ];
 		for(IndexType i = 0 ; i < numBuckets; i++)
@@ -157,7 +157,8 @@ public:
 	class StoreKmerMessageBuffers {
 		static const int STORE_KMER_MESSAGE_BUFFER_SIZE = 1 * 1024;
 	public:
-
+		typedef boost::optional< mpi::request > OptionalRequest;
+		typedef boost::optional< mpi::status > OptionalStatus;
 		mpi::communicator &_world;
 		DistributedKmerSpectrum &_spectrum;
 		int _numCheckpoints;
@@ -167,7 +168,7 @@ public:
 		char **_messageInBuffers;
 		char **_messageOutBuffers;
 		int  **_offsets;
-		mpi::request **_requests;
+		OptionalRequest **_requests;
 		DataPointers **_pointers;
 		StoreKmerMessageBuffers(mpi::communicator &world, DistributedKmerSpectrum &spectrum) : _world(world), _spectrum(spectrum), _numCheckpoints(0) {
 			_messageSize = sizeof(StoreKmerMessageHeader) + KmerSizer::getTwoBitLength();
@@ -176,7 +177,7 @@ public:
 			_messageInBuffers = new char * [ _numThreads ];
 			_messageOutBuffers = new char * [ _numThreads ];
 			_offsets = new int * [ _numThreads ];
-			_requests = new mpi::request * [ _numThreads ];
+			_requests = new OptionalRequest * [ _numThreads ];
 			_pointers = new DataPointers * [ _numThreads ];
 
 			#pragma omp parallel num_threads(_numThreads)
@@ -186,9 +187,9 @@ public:
 				_messageOutBuffers[threadId] = new char[ STORE_KMER_MESSAGE_BUFFER_SIZE * _world.size() * _numThreads ];
 				_offsets[threadId] = new int[ _world.size() * _numThreads ];
 
-				LOG_DEBUG_MT(1, _world.rank() << ": " << threadId << ": allocated buffers " << (void*) _messageInBuffers[threadId] << " " << (void*) _messageOutBuffers[threadId] << " " << (void*) _offsets[threadId]);
+				LOG_DEBUG_MT(3, _world.rank() << ": " << threadId << ": allocated buffers " << (void*) _messageInBuffers[threadId] << " " << (void*) _messageOutBuffers[threadId] << " " << (void*) _offsets[threadId]);
 
-				_requests[threadId] = new mpi::request[ _world.size() ];
+				_requests[threadId] = new OptionalRequest[ _world.size() ];
 				for(int destRank = 0; destRank < _world.size(); destRank++) {
 					for(int destThreadId = 0; destThreadId < _numThreads; destThreadId++)
 						_offsets[threadId][destRank*_numThreads+destThreadId] = 0;
@@ -204,8 +205,6 @@ public:
 				delete [] _messageInBuffers[threadId];
 				delete [] _messageOutBuffers[threadId];
 				delete [] _offsets[threadId];
-				for(int destRank = 0; destRank < _world.size(); destRank++)
-					_requests[threadId][destRank].cancel();
 				delete [] _requests[threadId];
 				delete _pointers[threadId];
 			}
@@ -218,25 +217,34 @@ public:
 		inline DataPointers &getDataPointer(int threadId) {
 			return *_pointers[threadId];
 		}
+		int processStoreKmerMessages(char *start, int size) {
+			StoreKmerMessageHeader *msg, *end;
+			msg = (StoreKmerMessageHeader*) start;
+			end = (StoreKmerMessageHeader*) (start+size);
+			int count = 0;
+			while (msg != end) {
+				msg = _processStoreKmerMessage(msg);
+			}
+			return count;
+		}
 		StoreKmerMessageHeader *_processStoreKmerMessage(StoreKmerMessageHeader *msg) {
 			Kmer *kmer = (Kmer*) (((char*)msg)+sizeof(StoreKmerMessageHeader));
-			LOG_DEBUG(1, msg->readIdx << " " << msg->readPos << " " << msg->weight << " " << kmer->toFasta());
+			LOG_DEBUG(4, _world.rank() << ": " << omp_get_thread_num() << ": message: " << msg->readIdx << " " << msg->readPos << " " << msg->weight << " " << kmer->toFasta());
 			_spectrum.append(getDataPointer( omp_get_thread_num() ), *kmer, msg->weight, msg->readIdx, msg->readPos);
-			return (StoreKmerMessageHeader*) ((char*) msg) + _messageSize;
+			return (StoreKmerMessageHeader*) (((char*) msg) + _messageSize);
 		}
 		void bufferStoreKmerMessage(int rankDest, int threadDest, ReadSetSizeType &readIdx, PositionType &readPos, WeightType &weight, Kmer &kmer) {
 			int threadId = omp_get_thread_num();
 			int tDest = _numThreads*rankDest + threadDest;
 
 			char *buffStart = _messageOutBuffers[threadId] + STORE_KMER_MESSAGE_BUFFER_SIZE * tDest;
-			LOG_DEBUG(1, _world.rank() << ": " << threadId << ": buffering message to " << rankDest << ", " << threadDest << " @ " << tDest << " " << (void*) (buffStart));
+			LOG_DEBUG(4, _world.rank() << ": " << threadId << ": buffering message to " << rankDest << ", " << threadDest << " @ " << tDest << " " << (void*) (buffStart));
 			int &offset = _offsets[threadId][tDest];
-			LOG_DEBUG(1, _world.rank() << ": " << threadId << ": offset: " << offset);
 			if (offset + _messageSize > STORE_KMER_MESSAGE_BUFFER_SIZE)
 				flushStoreKmerMessageBuffer(rankDest, threadDest);
 
 			StoreKmerMessageHeader *msg = (StoreKmerMessageHeader*) (buffStart + offset);
-			LOG_DEBUG(1, _world.rank() << ": " << threadId << ": buffering message to " << rankDest << ", " << threadDest << " @ " << tDest << " " << (void*) msg
+			LOG_DEBUG(4, _world.rank() << ": " << threadId << ": buffering message to " << rankDest << ", " << threadDest << " @ " << tDest << " " << (void*) msg
 					<< " : " << readIdx << " " << readPos << " " << weight << " " << kmer.toFasta());
 
 			msg->readIdx = readIdx;
@@ -251,7 +259,7 @@ public:
 				receiveAllIncomingMessages(threadId);
 			int tDest = _numThreads*rankDest + threadDest;
 			int &offset = _offsets[threadId][tDest];
-			LOG_DEBUG(1, _world.rank() << ": " << threadId << ": flushing outgoing message buffer to " << rankDest << ", " << threadDest << " @ " << tDest << " size: " << offset);
+			LOG_DEBUG(3, _world.rank() << ": " << threadId << ": flushing outgoing message buffer to " << rankDest << ", " << threadDest << " @ " << tDest << " size: " << offset);
 
 			if (offset > 0 || sendZeroMessage) {
 				char *buffStart = _messageOutBuffers[threadId] + STORE_KMER_MESSAGE_BUFFER_SIZE * tDest;
@@ -272,44 +280,53 @@ public:
 			int messages = 0;
 			assert( threadDest == threadId );
 
-			boost::optional< mpi::status > status;
-			LOG_DEBUG_MT(1, _world.rank() << ": " << threadId << ": receiving all messages for thread " << threadDest);
+
+			LOG_DEBUG_MT(3, _world.rank() << ": " << threadId << ": receiving all messages for thread " << threadDest);
 			while (true) {
-				LOG_DEBUG_MT(1, _world.rank() << ": " << threadId << ": calling iprobe");
-				status = _world.iprobe(mpi::any_source, threadDest);
-				if (!status)
+				LOG_DEBUG_MT(4, _world.rank() << ": " << threadId << ": calling iprobe");
+
+				int source, tag, size;
+				OptionalStatus optionalStatus;
+				OptionalRequest *optionalRequestPtr;
+				for(int testSource = 0 ; testSource < _world.size(); testSource++) {
+					optionalRequestPtr = _requests[threadDest] + testSource;
+					if (!*optionalRequestPtr)
+						continue;
+					optionalStatus = (*optionalRequestPtr)->test();
+					if (!!optionalStatus) {
+						source = optionalStatus.get().source();
+						tag = optionalStatus.get().tag();
+						size = optionalStatus.get().count<char>().get();
+						LOG_DEBUG_MT(2,  _world.rank() << ": " << threadId << ": received message from " << source << ", " << tag << " size: " << size << " request " << testSource << ", " << threadId);
+						assert( testSource == source );
+						assert( threadId == tag );
+						break;
+					}
+				}
+				if (!optionalStatus)
 					break;
 
 				messages++;
-				int source = status.get().source();
-				int size = status.get().count<char>().get();
-				mpi::request &request = _requests[threadDest][source];
-				assert( !!request.test() );
-				LOG_DEBUG_MT(1, _world.rank() << ": " << threadId << ": receive source: " << source << " request source " << request.test().get().source());
-				//assert( request.test().get().source() == source );
-				//assert( request.test().get().tag() == status.get().tag() );
-				assert( threadId == status.get().tag() );
 
-				LOG_DEBUG_MT(1,_world.rank() << ": " << threadId << ": receiving message from " << source << " size " << size << " t=" << threadId);
+				LOG_DEBUG_MT(4, _world.rank() << ": " << threadId << ": receiving message from " << source << " size " << size << " t=" << threadId);
 
 				char *buffer = _messageInBuffers[ threadDest ] + ( source * STORE_KMER_MESSAGE_BUFFER_SIZE );
-				StoreKmerMessageHeader *msg = (StoreKmerMessageHeader*) buffer;
-				StoreKmerMessageHeader *last = (StoreKmerMessageHeader*) (buffer+size);
 				if (size == 0) {
 					checkpoint();
-					LOG_DEBUG_MT(1,_world.rank() << ": " << threadId << ": got checkpoint from " << source);
+					LOG_DEBUG_MT(2,_world.rank() << ": " << threadId << ": got checkpoint from " << source);
+					*optionalRequestPtr = OptionalRequest();
 				} else {
-					while (msg != last)
-						msg = _processStoreKmerMessage(msg);
-					request = _world.irecv(source, threadDest, buffer, STORE_KMER_MESSAGE_BUFFER_SIZE);
+					processStoreKmerMessages(buffer, size);
+					*optionalRequestPtr = _world.irecv(source, threadDest, buffer, STORE_KMER_MESSAGE_BUFFER_SIZE);
 				}
 			}
-			LOG_DEBUG_MT(1, _world.rank() << ": " << threadId << ": processed messages: " << messages);
+			LOG_DEBUG_MT(3, _world.rank() << ": " << threadId << ": processed messages: " << messages);
 			return messages;
 		}
 		void checkpoint() {
 			#pragma omp atomic
 			_numCheckpoints++;
+			LOG_DEBUG_MT(2, _world.rank() << ": " << omp_get_thread_num() << ": checkpoint received:" << _numCheckpoints);
 		}
 		inline int getNumCheckpoints() const {
 			return _numCheckpoints;
@@ -317,16 +334,16 @@ public:
 
 	};
 
-	void _buildKmerSpectrum( mpi::communicator &world, ReadSet &store, bool isSolid = false ) {
+	void _buildKmerSpectrumMPI( mpi::communicator &world, ReadSet &store, bool isSolid = false ) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
 
 		NumberType distributedThreadMask = world.size() - 1;
 
-		LOG_DEBUG_MT(1, world.rank() << ": starting _buildSpectrum");
+		LOG_VERBOSE_MT(1, world.rank() << ": starting _buildSpectrum");
 		StoreKmerMessageBuffers buffers(world, *this);
 
-		LOG_DEBUG_MT(1, world.rank() << ": allocated buffers");
+		LOG_DEBUG_MT(2, world.rank() << ": allocated buffers");
 
 		// share ReadSet sizes for globally unique readIdx calculations
 		long readSetSize = store.getSize();
@@ -338,7 +355,7 @@ public:
 		long globalReadSetOffset = 0;
 		for(int i = 0; i < world.rank(); i++)
 			globalReadSetOffset += readSetSizes[i];
-		LOG_DEBUG_MT(1, world.rank() << ": reduced readSetSizes " << globalReadSetOffset);
+		LOG_DEBUG_MT(2, world.rank() << ": reduced readSetSizes " << globalReadSetOffset);
 
 		long myCount = 0;
 		#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
@@ -361,7 +378,7 @@ public:
 				else
 					buffers.bufferStoreKmerMessage(rankDest, threadDest, globalReadIdx, readPos, weight, kmers[readPos]);
 			}
-			if (++myCount % 10 == 0)
+			if (++myCount & 1024*128 == 0)
 				LOG_DEBUG_MT(1, world.rank() << ": " << threadId << ": processed " << myCount << " reads");
 		}
 
@@ -374,10 +391,10 @@ public:
 			// send all pending buffers
 			buffers.flushAllStoreKmerMessageBuffers(true);
 			// send zero message buffer as checkpoint signal to stop
-			LOG_DEBUG_MT(1, world.rank() << ": " << threadId << ": sending stop message");
+			LOG_DEBUG_MT(2, world.rank() << ": " << threadId << ": sending stop message");
 			buffers.flushAllStoreKmerMessageBuffers(true, true);
 			buffers.checkpoint();
-			LOG_DEBUG_MT(1, world.rank() << ": " << threadId << ": sent checkpoints: " << buffers.getNumCheckpoints());
+			LOG_DEBUG_MT(2, world.rank() << ": " << threadId << ": sent checkpoints: " << buffers.getNumCheckpoints());
 			while (buffers.getNumCheckpoints() < numThreads * world.size() ) {
 				buffers.receiveAllIncomingMessages(omp_get_thread_num());
 				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
@@ -386,7 +403,7 @@ public:
 		LOG_DEBUG_MT(1, world.rank() << ": finished _buildKmerSpectrum");
 	}
 
-	void printHistograms(mpi::communicator &world, std::ostream &os, bool printSolidOnly = false) {
+	void printHistogramsMPI(mpi::communicator &world, std::ostream &os, bool printSolidOnly = false) {
 		Histogram histogram(127);
 
 		if (!printSolidOnly) {
@@ -402,7 +419,7 @@ public:
 			os << dest.toString();
 	}
 
-	Kmernator::MmapFileVector buildKmerSpectrumInParts(mpi::communicator &world, ReadSet &store ) {
+	Kmernator::MmapFileVector buildKmerSpectrumMPI(mpi::communicator &world, ReadSet &store ) {
 		bool isSolid = false; // not supported for references...
 		int numParts = world.size();
 		if (numParts == 1) {
@@ -412,7 +429,7 @@ public:
 
 		assert((numParts & (numParts-1)) == 0); // numParts must be a power of 2
 
-		_buildKmerSpectrum(world, store, isSolid);
+		_buildKmerSpectrumMPI(world, store, isSolid);
 
 		// purge low counts
 		if (Options::getMinDepth() > 1) {
@@ -427,10 +444,10 @@ public:
 		// communicate sizes and allocate permanent file
 		LOG_VERBOSE(1, "Merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() );
 		Kmernator::MmapFileVector ourSpectrum(2);
-		ourSpectrum[0] = writeKmerMap(world, this->weak, Options::getTmpDir() + "/weak-kmer-mmap");
+		ourSpectrum[0] = writeKmerMapMPI(world, this->weak, Options::getTmpDir() + "/weak-kmer-mmap");
 
 		if (Options::getMinDepth() <= 1) {
-			ourSpectrum[1] = writeKmerMap(world, this->singleton, Options::getTmpDir() + "/singleton-kmer-mmap");
+			ourSpectrum[1] = writeKmerMapMPI(world, this->singleton, Options::getTmpDir() + "/singleton-kmer-mmap");
 		}
 
 		LOG_VERBOSE(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
@@ -438,7 +455,7 @@ public:
 		if (Log::isVerbose(1)) {
 			this->printStats(Log::Verbose("Final Stats"), store.getSize(), isSolid, true);
 			if (!isSolid) {
-				// TODO printHistograms(world, Log::Verbose("Final Histogram"));
+				//printHistogramsMPI(world, Log::Verbose("Final Histogram"));
 			}
 		}
 

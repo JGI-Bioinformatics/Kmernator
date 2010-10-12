@@ -393,6 +393,10 @@ public:
 			maxIdx = (1<<maxLog2) + 1 + zoomMax;
 			buckets.resize(maxIdx+1);
 		}
+		Histogram operator+(const Histogram rh) {
+			for(int i = 0 ; i < buckets.size(); i++)
+				buckets[i] += rh.buckets[i];
+		}
 		inline unsigned long getCount() {return count;}
 		inline double getTotalCount() {return totalCount;}
 		inline double getTotalWeight() {return totalWeightedCount;}
