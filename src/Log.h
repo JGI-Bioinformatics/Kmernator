@@ -191,8 +191,14 @@ public:
 	}
 };
 
+#ifdef NDEBUG
+// Higher possible verbosity and debug levels with NDEBUG set, optimized out otherwise
 #define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { Log::Verbose() << log << std::endl; }
 #define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { Log::Debug()   << log << std::endl; }
+#else
+#define LOG_VERBOSE(level, log) if ( level <=2 && Log::isVerbose(level)) { Log::Verbose() << log << std::endl; }
+#define LOG_DEBUG(level,   log) if ( level <=2 && Log::isDebug(level)  ) { Log::Debug()   << log << std::endl; }
+#endif
 #define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { Log::Warn()    << log << std::endl; }
 #define LOG_ERROR(level,   log) if ( Log::isError(level)  ) { Log::Error()   << log << std::endl; }
 
