@@ -39,9 +39,11 @@
 #include "boost/optional.hpp"
 #include <boost/thread/thread.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
+#include <vector>
+
 
 template <typename C, int BufferSize = 16 * 1024>
-class MPIMessageBuffers {
+class MPIMessageBufferBase {
 public:
 	static const int MESSAGE_BUFFER_SIZE = BufferSize;
 	typedef C MessageClass;
@@ -50,36 +52,54 @@ public:
 
 protected:
 	mpi::communicator &_world;
-	int _tag;
 	int _messageSize;
-	int _numCheckpoints;
 	char *_message;
-	char *_recvBuffers;
-	char *_sendBuffers;
-	int  *_offsets;
-	OptionalRequest *_requests;
 
 public:
-	MPIMessageBuffers(mpi::communicator &world, int messageSize, int tag = 0) : _world(world), _messageSize(messageSize), _tag(tag), _numCheckpoints(0) {
-		_message = new char[ _messageSize ];
-		_recvBuffers = new char[ MESSAGE_BUFFER_SIZE * world.size() ];
-		_sendBuffers = new char[ MESSAGE_BUFFER_SIZE * world.size() ];
-		_offsets = new int[ _world.size() ];
-		_requests = new OptionalRequest[ _world.size() ];
-		for(int destRank = 0; destRank < _world.size(); destRank++) {
-			_offsets[destRank] = 0;
-			_requests[destRank] = _world.irecv(destRank, _tag, _recvBuffers + destRank*MESSAGE_BUFFER_SIZE, MESSAGE_BUFFER_SIZE);
-		}
+	MPIMessageBufferBase(mpi::communicator &world, int messageSize)
+	  : _world(world), _messageSize(messageSize) {
+		_message = new char[ getMessageSize() ];
+		assert(getMessageSize() >= (int) sizeof(MessageClass));
 	}
-	~MPIMessageBuffers() {
+	~MPIMessageBufferBase() {
 		delete [] _message;
-		delete [] _recvBuffers;
-		delete [] _sendBuffers;
-		delete [] _offsets;
-		delete [] _requests;
 	}
 	MessageClass *getTmpMessage() {
 		return (MessageClass*) _message;
+	}
+	inline mpi::communicator &getWorld() {
+		return _world;
+	}
+	inline int getMessageSize() {
+		return _messageSize;
+	}
+};
+
+template <typename C, int BufferSize = 16 * 1024>
+class MPIRecvMessageBuffer: public MPIMessageBufferBase<C, BufferSize> {
+public:
+	typedef MPIMessageBufferBase<C, BufferSize> BufferBase;
+	typedef typename BufferBase::OptionalRequest OptionalRequest;
+	typedef typename BufferBase::OptionalStatus OptionalStatus;
+	typedef C MessageClass;
+protected:
+	char *_recvBuffers;
+	OptionalRequest *_requests;
+	int _numCheckpoints;
+	int _tag;
+
+public:
+	MPIRecvMessageBuffer(mpi::communicator &world, int messageSize, int tag = mpi::any_tag) :
+		BufferBase(world, messageSize), _numCheckpoints(0), _tag(tag) {
+		_recvBuffers = new char[ BufferBase::MESSAGE_BUFFER_SIZE * this->getWorld().size() ];
+		_requests = new OptionalRequest[ this->getWorld().size() ];
+		for(int destRank = 0; destRank < this->getWorld().size(); destRank++) {
+			_requests[destRank] = this->getWorld().irecv(destRank, _tag, _recvBuffers + destRank*BufferBase::MESSAGE_BUFFER_SIZE, BufferBase::MESSAGE_BUFFER_SIZE);
+		}
+	}
+	~MPIRecvMessageBuffer() {
+		delete [] _recvBuffers;
+		delete [] _requests;
 	}
 	int processMessages(char *start, int size) {
 		char *msg, *end;
@@ -87,74 +107,36 @@ public:
 		end = (start+size);
 		int count = 0;
 		while (msg != end) {
-			_processMessage((MessageClass*) msg);
-			msg += _messageSize;
+			((MessageClass*) msg)->process(this);
+			msg += this->getMessageSize();
 		}
 		return count;
 	}
-	virtual void _processMessage(MessageClass *msg) = 0;
 
-	// returns a pointer to the next message.  User can use this to create message
-	MessageClass *bufferMessage(int rankDest, int tagDest) {
-		char *buffStart = _sendBuffers + MESSAGE_BUFFER_SIZE * rankDest;
-		int &offset = _offsets[rankDest];
-		if (offset + _messageSize > MESSAGE_BUFFER_SIZE)
-			flushMessageBuffer(rankDest, tagDest, buffStart, offset);
-		MessageClass *buf = (MessageClass *) (buffStart+offset);
-		offset += _messageSize;
-		return buf;
-	}
-	// copies msg as the next message in the buffer
-	void bufferMessage(int rankDest, int tagDest, MessageClass *msg) {
-		char *buf = (char*) bufferMessage(rankDest, tagDest);
-		memcpy(buf, (char*) msg, _messageSize);
-	}
-
-protected:
-	void flushMessageBuffer(int rankDest, int tagDest, char *buffer, int &offset, bool checkReceive = true, bool sendZeroMessage = false) {
-		if (checkReceive)
-			receiveAllIncomingMessages();
-		if (offset > 0 || sendZeroMessage) {
-			_world.send(rankDest, tagDest, buffer, offset);
-		}
-		offset = 0;
-	}
-public:
-	void flushMessageBuffer(int rankDest, int tagDest, bool checkReceive = true, bool sendZeroMessage = false) {
-		int &offset = _offsets[rankDest];
-		char *buffer = _sendBuffers + MESSAGE_BUFFER_SIZE * rankDest;
-		flushMessageBuffer(rankDest, tagDest, buffer, offset, checkReceive, sendZeroMessage);
-	}
-	void flushAllMessageBuffers(int tagDest, bool checkReceive = true, bool sendZeroMessage = false) {
-		if (checkReceive)
-			receiveAllIncomingMessages();
-		for(int i = 0 ; i < _world.size(); i++)
-			flushMessageBuffer(i, tagDest, checkReceive, sendZeroMessage);
-	}
 	bool receiveIncomingMessage(int rankSource) {
 		OptionalStatus optionalStatus;
 		OptionalRequest &optionalRequest = _requests[rankSource];
 		if (!!optionalRequest) {
 			optionalStatus = optionalRequest.get().test();
 			if (!!optionalStatus) {
-				int source = optionalStatus.get().source();
-				int tag = optionalStatus.get().tag();
-				int size = optionalStatus.get().count<char>().get();
+				mpi::status status = optionalStatus.get();
+				int source = status.source();
+				int tag =  status.tag();
+				int size = status.count<char>().get();
 
 				assert( rankSource == source );
 				assert( _tag == tag );
 
-				LOG_DEBUG_MT(4, _world.rank() << ": " << _tag << ": receiving message from " << source << " size " << size);
+				LOG_DEBUG_MT(4, this->getWorld().rank() << ": " << _tag << ": receiving message from " << source << " size " << size);
 
-				char *buffer = _recvBuffers + ( source * MESSAGE_BUFFER_SIZE );
+				char *buffer = _recvBuffers + ( source * BufferBase::MESSAGE_BUFFER_SIZE );
 				if (size == 0) {
 					checkpoint();
-					LOG_DEBUG_MT(2,_world.rank() << ": " << _tag << ": got checkpoint from " << source);
-					optionalRequest = OptionalRequest();
+					LOG_DEBUG_MT(2,this->getWorld().rank() << ": " << _tag << ": got checkpoint from " << source);
 				} else {
 					processMessages(buffer, size);
-					optionalRequest = _world.irecv(source, _tag, buffer, MESSAGE_BUFFER_SIZE);
 				}
+				optionalRequest = this->getWorld().irecv(source, _tag, buffer, BufferBase::MESSAGE_BUFFER_SIZE);
 				return true;
 			}
 		}
@@ -163,49 +145,131 @@ public:
 	int receiveAllIncomingMessages() {
 		int messages = 0;
 
-		LOG_DEBUG_MT(3, _world.rank() << ": " << _tag << ": receiving all messages for thread ");
+		LOG_DEBUG_MT(3, this->getWorld().rank() << ": " << _tag << ": receiving all messages for thread ");
 		bool mayHavePending = true;
 		while (mayHavePending) {
-			LOG_DEBUG_MT(4, _world.rank() << ": " << _tag << ": calling iprobe");
-
+			LOG_DEBUG_MT(4, this->getWorld().rank() << ": " << _tag << ": calling iprobe");
 			mayHavePending = false;
-			for(int rankSource = 0 ; rankSource < _world.size(); rankSource++) {
+			for(int rankSource = 0 ; rankSource < this->getWorld().size(); rankSource++) {
 				if (receiveIncomingMessage(rankSource)) {
 					messages++;
 					mayHavePending = true;
 				}
 			}
-
 		}
-		LOG_DEBUG_MT(3, _world.rank() << ": " << _tag << ": processed messages: " << messages);
+		LOG_DEBUG_MT(3, this->getWorld().rank() << ": " << _tag << ": processed messages: " << messages);
 		return messages;
 	}
+	void finalize(int checkpointFactor = 1) {
+		LOG_DEBUG_MT(2, this->getWorld().rank() << ": " << _tag << ": Entering recv checkpoint: " << getNumCheckpoints());
+		while ( ! reachedCheckpoint(checkpointFactor) ) {
+			receiveAllIncomingMessages();
+			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+		}
+	}
+
 	void checkpoint() {
 		#pragma omp atomic
 		_numCheckpoints++;
-		LOG_DEBUG_MT(2, _world.rank() << ": " << _tag << ": checkpoint received:" << _numCheckpoints);
+		LOG_DEBUG_MT(2, this->getWorld().rank() << ": " << _tag << ": checkpoint received:" << _numCheckpoints);
 	}
 	inline int getNumCheckpoints() const {
 		return _numCheckpoints;
 	}
-	bool reachedCheckpoint() const {
-		return _numCheckpoints == _world.rank();
+	bool reachedCheckpoint(int checkpointFactor = 1) {
+		return _numCheckpoints == this->getWorld().size() * checkpointFactor;
 	}
-	void finalize() {
-		flushAllMessageBuffers(true);
-		// send zero message buffer as checkpoint signal to stop
-		LOG_DEBUG_MT(2, _world.rank() << ": " << _tag << ": sending stop message");
-		flushAllMessageBuffers(true, true);
-		checkpoint();
-		LOG_DEBUG_MT(2, _world.rank() << ": " << _tag << ": sent checkpoints: " << getNumCheckpoints());
-		while ( ! reachedCheckpoint() ) {
-			receiveAllIncomingMessages();
-			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
-		}
 
-	}
 };
 
+
+template <typename C, int BufferSize = 16 * 1024>
+class MPISendMessageBuffer: public MPIMessageBufferBase<C, BufferSize> {
+public:
+	typedef MPIMessageBufferBase<C, BufferSize> BufferBase;
+	typedef MPIRecvMessageBuffer<C, BufferSize> RecvBuffer;
+	typedef C MessageClass;
+	typedef std::vector< RecvBuffer* > RecvBufferCallbackVector;
+protected:
+	char *_sendBuffers;
+	int  *_offsets;
+	RecvBufferCallbackVector _receivingBufferCallbacks;
+
+public:
+	MPISendMessageBuffer(mpi::communicator &world, int messageSize) :
+		BufferBase(world, messageSize) {
+		_sendBuffers = new char[ BufferBase::MESSAGE_BUFFER_SIZE * world.size() ];
+		_offsets = new int[ this->getWorld().size() ];
+		for(int destRank = 0; destRank < this->getWorld().size(); destRank++) {
+			_offsets[destRank] = 0;
+		}
+	}
+	~MPISendMessageBuffer() {
+		delete [] _sendBuffers;
+		delete [] _offsets;
+	}
+
+	void addCallback( RecvBuffer& receiveBuffer ) {
+		_receivingBufferCallbacks.push_back( &receiveBuffer );
+	}
+
+	MessageClass *bufferMessage(int rankDest, int tagDest) {
+		bool wasSent;
+		return bufferMessage(rankDest, tagDest, wasSent);
+	}
+	// returns a pointer to the next message.  User can use this to create message
+	MessageClass *bufferMessage(int rankDest, int tagDest, bool &wasSent) {
+		char *buffStart = _sendBuffers + BufferBase::MESSAGE_BUFFER_SIZE * rankDest;
+		int &offset = _offsets[rankDest];
+		if (offset + this->getMessageSize() > BufferBase::MESSAGE_BUFFER_SIZE) {
+			flushMessageBuffer(rankDest, tagDest, buffStart, offset);
+			wasSent = true;
+		} else {
+			wasSent = false;
+		}
+		MessageClass *buf = (MessageClass *) (buffStart+offset);
+		offset += this->getMessageSize();
+
+		return buf;
+	}
+	// copies msg as the next message in the buffer
+	void bufferMessage(int rankDest, int tagDest, MessageClass *msg) {
+		char *buf = (char*) bufferMessage(rankDest, tagDest);
+		memcpy(buf, (char*) msg, this->getMessageSize());
+	}
+
+protected:
+	void flushMessageBuffer(int rankDest, int tagDest, char *buffer, int &offset, bool sendZeroMessage = false) {
+		if (offset > 0 || sendZeroMessage) {
+			receiveAnyIncoming();
+			this->getWorld().send(rankDest, tagDest, buffer, offset);
+		}
+		offset = 0;
+	}
+public:
+	void flushMessageBuffer(int rankDest, int tagDest, bool sendZeroMessage = false) {
+		int &offset = _offsets[rankDest];
+		char *buffer = _sendBuffers + BufferBase::MESSAGE_BUFFER_SIZE * rankDest;
+		flushMessageBuffer(rankDest, tagDest, buffer, offset, sendZeroMessage);
+	}
+	void flushAllMessageBuffers(int tagDest, bool sendZeroMessage = false) {
+		for(int rankDest = 0 ; rankDest < this->getWorld().size(); rankDest++)
+			flushMessageBuffer(rankDest, tagDest, sendZeroMessage);
+	}
+	int receiveAnyIncoming() {
+		int count = 0;
+		for(unsigned int i = 0; i < _receivingBufferCallbacks.size(); i++)
+			count += _receivingBufferCallbacks[i]->receiveAllIncomingMessages();
+		return count;
+	}
+	void finalize(int tagDest) {
+		flushAllMessageBuffers(tagDest);
+		// send zero message buffer as checkpoint signal to stop
+		LOG_DEBUG_MT(2, this->getWorld().rank() << ": " << omp_get_thread_num() << ": sending stop message");
+		flushAllMessageBuffers(tagDest, true);
+		LOG_DEBUG_MT(2, this->getWorld().rank() << ": " << omp_get_thread_num() << ": sent checkpoints");
+	}
+};
 
 
 template <typename C, int BufferSize = 16 * 1024>
@@ -267,6 +331,9 @@ public:
 		delete [] _offsets;
 		delete [] _requests;
 	}
+	inline int getMessageSize() {
+		return _messageSize;
+	}
 	MessageClass *getTmpMessage() {
 		return getTmpMessage(omp_get_thread_num());
 	}
@@ -280,7 +347,7 @@ public:
 		int count = 0;
 		while (msg != end) {
 			_processMessage((MessageClass*) msg);
-			msg += _messageSize;
+			msg += getMessageSize();
 		}
 		return count;
 	}
@@ -291,16 +358,16 @@ public:
 		int threadId = omp_get_thread_num();
 		char *buffStart = _sendBuffers[threadId] + MESSAGE_BUFFER_SIZE * rankDest;
 		int &offset = _offsets[threadId][rankDest];
-		if (offset + _messageSize > MESSAGE_BUFFER_SIZE)
+		if (offset + getMessageSize() > MESSAGE_BUFFER_SIZE)
 			flushMessageBuffer(rankDest, tagDest, buffStart, offset);
 		MessageClass *buf = (MessageClass *) (buffStart+offset);
-		offset += _messageSize;
+		offset += getMessageSize();
 		return buf;
 	}
 	// copies msg as the next message in the buffer
 	void bufferMessage(int rankDest, int tagDest, MessageClass *msg) {
 		char *buf = (char*) bufferMessage(rankDest, tagDest);
-		memcpy(buf, (char*) msg, _messageSize);
+		memcpy(buf, (char*) msg, getMessageSize());
 	}
 
 protected:
