@@ -36,10 +36,10 @@
 #include "Options.h"
 #include "Kmer.h"
 #include "KmerSpectrum.h"
+#include "MPIBuffer.h"
 
 #include "boost/optional.hpp"
 #include <boost/thread/thread.hpp>
-#include <boost/date_time/posix_time/posix_time_types.hpp>
 
 #ifndef ENABLE_MPI
 #error "mpi is required for this library"
@@ -152,15 +152,44 @@ public:
 		WeightType weight; // weight is negative if kmer is rc of observed direction
 		// Kmer is next bytes, dynamically determined by KmerSizer::getTwoBitLength()
 		// kmer is least complement
+
+		// THIS IS DANGEROUS unless allocated an extra Kmer!
+		void set(ReadSetSizeType _readIdx, PositionType _readPos, WeightType _weight, const Kmer &_kmer) {
+			readIdx = _readIdx;
+			readPos = _readPos;
+			weight = _weight;
+			*((Kmer*)(this+1)) = _kmer;
+		}
 	};
 
+	typedef MPIMessageBuffers< StoreKmerMessageHeader > StoreKmerMessageBuffersBase;
+	class StoreKmerMessageBuffers2 : public StoreKmerMessageBuffersBase
+	{
+		DistributedKmerSpectrum &_spectrum;
+		DataPointers _pointers;
+
+	public:
+		StoreKmerMessageBuffers2(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize, int tag) : StoreKmerMessageBuffersBase(world, messageSize, tag), _spectrum(spectrum), _pointers(spectrum) {
+		}
+		~StoreKmerMessageBuffers2() {}
+		void _processMessage(StoreKmerMessageHeader *msg) {
+			Kmer *kmer = (Kmer*) (((char*)msg)+sizeof(StoreKmerMessageHeader));
+			LOG_DEBUG(4, this->_world.rank() << ": " << omp_get_thread_num() << ": message: " << msg->readIdx << " " << msg->readPos << " " << msg->weight << " " << kmer->toFasta());
+			_spectrum.append(_pointers, *kmer, msg->weight, msg->readIdx, msg->readPos);
+		}
+		inline DataPointers &getDataPointer() {
+			return _pointers;
+		}
+
+	};
+
+#if 0
 	class StoreKmerMessageBuffers {
 		static const int STORE_KMER_MESSAGE_BUFFER_SIZE = 1 * 1024;
 	public:
 		typedef boost::optional< mpi::request > OptionalRequest;
 		typedef boost::optional< mpi::status > OptionalStatus;
 		mpi::communicator &_world;
-		DistributedKmerSpectrum &_spectrum;
 		int _numCheckpoints;
 		int _messageSize;
 		int _maxNumMessages;
@@ -333,15 +362,25 @@ public:
 		}
 
 	};
+#endif
 
 	void _buildKmerSpectrumMPI( mpi::communicator &world, ReadSet &store, bool isSolid = false ) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
+		int messageSize = sizeof(StoreKmerMessageHeader) + KmerSizer::getTwoBitLength();
 
 		NumberType distributedThreadMask = world.size() - 1;
 
 		LOG_VERBOSE_MT(1, world.rank() << ": starting _buildSpectrum");
-		StoreKmerMessageBuffers buffers(world, *this);
+
+		StoreKmerMessageBuffers2 *buffers[numThreads];
+		#pragma omp parallel
+		{
+			int threadId = omp_get_thread_num();
+			buffers[threadId] = new StoreKmerMessageBuffers2(world, *this, messageSize, threadId);
+		}
+
+		//StoreKmerMessageBuffers buffers(world, *this);
 
 		LOG_DEBUG_MT(2, world.rank() << ": allocated buffers");
 
@@ -374,9 +413,10 @@ public:
 				WeightType weight = kmers.valueAt(readPos);
 				this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, distributedThreadMask);
 				if (rankDest == rank && threadDest == threadId)
-					this->append(buffers.getDataPointer( threadId ), kmers[readPos], weight, globalReadIdx, readPos);
-				else
-					buffers.bufferStoreKmerMessage(rankDest, threadDest, globalReadIdx, readPos, weight, kmers[readPos]);
+					this->append(buffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos);
+				else {
+					buffers[ threadId ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
+				}
 			}
 			if (++myCount & 1024*128 == 0)
 				LOG_DEBUG_MT(1, world.rank() << ": " << threadId << ": processed " << myCount << " reads");
@@ -389,16 +429,8 @@ public:
 		{
 			int threadId = omp_get_thread_num();
 			// send all pending buffers
-			buffers.flushAllStoreKmerMessageBuffers(true);
-			// send zero message buffer as checkpoint signal to stop
-			LOG_DEBUG_MT(2, world.rank() << ": " << threadId << ": sending stop message");
-			buffers.flushAllStoreKmerMessageBuffers(true, true);
-			buffers.checkpoint();
-			LOG_DEBUG_MT(2, world.rank() << ": " << threadId << ": sent checkpoints: " << buffers.getNumCheckpoints());
-			while (buffers.getNumCheckpoints() < numThreads * world.size() ) {
-				buffers.receiveAllIncomingMessages(omp_get_thread_num());
-				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
-			}
+			buffers[threadId]->finalize();
+			delete buffers[threadId];
 		}
 		LOG_DEBUG_MT(1, world.rank() << ": finished _buildKmerSpectrum");
 	}
