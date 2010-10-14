@@ -48,7 +48,7 @@ class Logger
 	OstreamPtr _os;
 	std::string _attribute;
 	unsigned int _level;
-	unsigned int _thisLevel;
+	int _thisLevel;
 	static void *world;
 	inline std::string getRank() {
 #ifdef _USE_MPI
@@ -95,7 +95,7 @@ public:
 	}
 	inline bool isActive(unsigned int level = 1) {
 		bool isActive = _os != NULL && _level >= level;
-		if (isActive)
+		if (isActive && _thisLevel < (int) level)
 			_thisLevel = level;
 		return isActive;
 	};
