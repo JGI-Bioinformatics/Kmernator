@@ -121,7 +121,7 @@ ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFile(string filePath, string filePath2, int rank, int size) {
 	if (size == 1 && Options::getMmapInput() > 0)
 		return appendAnyFileMmap(filePath, filePath2);
-	LOG_DEBUG_MT(2, "appendAnyFile(" << filePath << ", " << filePath2 << ", " << rank << ", " << size << ")");
+	LOG_DEBUG(2, "appendAnyFile(" << filePath << ", " << filePath2 << ", " << rank << ", " << size << ")");
 	ReadFileReader reader(filePath, filePath2);
 	appendFasta(reader, rank, size);
 	incrementFile(reader);
@@ -166,7 +166,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 		numThreads = omp_get_max_threads();
 		omp_set_nested(0);
 	}
-	LOG_DEBUG_MT(2, "reading " << fileCount << " file(s) using " << numThreads << " files at a time");
+	LOG_DEBUG(2, "reading " << fileCount << " file(s) using " << numThreads << " files at a time");
 
 #endif
 
@@ -174,7 +174,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 	#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 	for (long i = 0; i < filesSize; i++) {
 
-		LOG_DEBUG_MT(1, "reading " << files[i] << " using " << omp_get_max_threads() << " threads per file");
+		LOG_DEBUG(1, "reading " << files[i] << " using " << omp_get_max_threads() << " threads per file");
 
 		string qualFile;
 		if (!Options::getIgnoreQual()) {
@@ -185,7 +185,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 			if (! _qs.good()) {
 				qualFile.clear();
 			} else {
-				LOG_DEBUG_MT(2, "detected qual file: " << qualFile);
+				LOG_DEBUG(2, "detected qual file: " << qualFile);
 			}
 		}
 #ifdef _USE_OPENMP
@@ -196,12 +196,12 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 		incrementFile(parser);
 #endif
 
-		LOG_DEBUG_MT(1, "finished reading " << files[i]);
+		LOG_DEBUG(1, "finished reading " << files[i]);
 
 	}
 #ifdef _USE_OPENMP
 	omp_set_nested(OMP_NESTED_DEFAULT);
-	LOG_DEBUG_MT(1,"concatenating ReadSet buffers");
+	LOG_DEBUG(1,"concatenating ReadSet buffers");
 	for(int i = 0; i< (long) files.size(); i++) {
 	    append(myReads[i]);
 	    incrementFile(parsers[i]);
@@ -262,7 +262,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadSet::MmapSource &mmap,
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, int rank, int size) {
 	string name, bases, quals;
-	LOG_DEBUG_MT(2, "appendFasta(reader, " << rank << ", " << size << ")");
+	LOG_DEBUG(2, "appendFasta(reader, " << rank << ", " << size << ")");
 	unsigned long lastPos = MAX_UI64;
 	if (size > 1) {
 		unsigned long blockSize = reader.getBlockSize(size);
@@ -272,7 +272,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 		}
 		reader.seekToNextRecord( blockSize * rank );
 	}
-	LOG_DEBUG_MT(2, "appendFasta() at pos: " << reader.getPos());
+	LOG_DEBUG(2, "appendFasta() at pos: " << reader.getPos());
 	if (reader.isMmaped() && Options::getMmapInput() != 0) {
 	    RecordPtr recordPtr = reader.getStreamRecordPtr();
 	    RecordPtr qualPtr = reader.getStreamQualRecordPtr();
@@ -332,7 +332,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 	numReads[i] = 0;
 	SequenceStreamParserPtr singleParser;
 
-	LOG_DEBUG_MT(2, "appendFastqBlockedOMP(mmap): " << mmap << " with " << numThreads << " threads");
+	LOG_DEBUG(2, "appendFastqBlockedOMP(mmap): " << mmap << " with " << numThreads << " threads");
 
 	#pragma omp parallel num_threads(numThreads)
 	{
@@ -355,7 +355,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 
 			if (blockSize < 100)
 				blockSize = 100;
-			LOG_DEBUG_MT(1, "Reading " << mmap << " with " << numThreads << " threads" );
+			LOG_DEBUG(1, "Reading " << mmap << " with " << numThreads << " threads" );
 		}
 
 
@@ -687,8 +687,8 @@ Read ReadSet::getConsensusRead() const {
     		}
     		ss << consensus.toString() << std::endl;
     		ss << probs.toString() << std::endl;
-			#pragma omp critical (stderr)
-    		Log::Debug() << ss.str();
+
+    		Log::Debug(ss.str());
     	}
     }
     return consensus;

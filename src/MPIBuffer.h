@@ -36,6 +36,10 @@
 #error "mpi is required for this library"
 #endif
 
+#ifdef _USE_OPENMP
+#define OPENMP_CRITICAL_MPI
+#endif
+
 #include "boost/optional.hpp"
 #include <boost/thread/thread.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
@@ -116,11 +120,11 @@ public:
 				assert( rankSource == source );
 				assert( _tag == tag );
 
-				LOG_DEBUG_MT(4, _tag << ": receiving message from " << source << " size " << size);
+				LOG_DEBUG(4, _tag << ": receiving message from " << source << " size " << size);
 
 				if (size == 0) {
 					checkpoint();
-					LOG_DEBUG_MT(2, _tag << ": got checkpoint from " << source);
+					LOG_DEBUG(2, _tag << ": got checkpoint from " << source);
 				} else {
 					processMessages(source, size);
 				}
@@ -133,10 +137,10 @@ public:
 	int receiveAllIncomingMessages() {
 		int messages = 0;
 
-		LOG_DEBUG_MT(3, _tag << ": receiving all messages for tag ");
+		LOG_DEBUG(3, _tag << ": receiving all messages for tag ");
 		bool mayHavePending = true;
 		while (mayHavePending) {
-			LOG_DEBUG_MT(4, _tag << ": calling iprobe");
+			LOG_DEBUG(4, _tag << ": calling iprobe");
 			mayHavePending = false;
 			for(int rankSource = 0 ; rankSource < this->getWorld().size(); rankSource++) {
 				if (receiveIncomingMessage(rankSource)) {
@@ -145,11 +149,11 @@ public:
 				}
 			}
 		}
-		LOG_DEBUG_MT(3, _tag << ": processed messages: " << messages);
+		LOG_DEBUG(3, _tag << ": processed messages: " << messages);
 		return messages;
 	}
 	void finalize(int checkpointFactor = 1) {
-		LOG_DEBUG_MT(2, _tag << ": Entering recv checkpoint: " << getNumCheckpoints());
+		LOG_DEBUG(2, _tag << ": Entering recv checkpoint: " << getNumCheckpoints());
 		while ( ! reachedCheckpoint(checkpointFactor) ) {
 			receiveAllIncomingMessages();
 			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
@@ -159,7 +163,7 @@ public:
 	void checkpoint() {
 		#pragma omp atomic
 		_numCheckpoints++;
-		LOG_DEBUG_MT(2, _tag << ": checkpoint received:" << _numCheckpoints);
+		LOG_DEBUG(2, _tag << ": checkpoint received:" << _numCheckpoints);
 	}
 	inline int getNumCheckpoints() const {
 		return _numCheckpoints;
@@ -170,6 +174,9 @@ public:
 private:
 	OptionalRequest irecv(int sourceRank) {
 		OptionalRequest oreq;
+#ifdef OPENMP_CRITICAL_MPI
+		#pragma omp critical (MPI_recv)
+#endif
 		oreq = this->getWorld().irecv(sourceRank, _tag, _recvBuffers + sourceRank*BufferBase::MESSAGE_BUFFER_SIZE, BufferBase::MESSAGE_BUFFER_SIZE);
 		return oreq;
 	}
@@ -247,7 +254,10 @@ protected:
 	void flushMessageBuffer(int rankDest, int tagDest, char *buffer, int &offset, bool sendZeroMessage = false) {
 		if (offset > 0 || sendZeroMessage) {
 			receiveAnyIncoming();
-			LOG_DEBUG_MT(3, "sending message to " << rankDest << ", " << tagDest << " size " << offset);
+			LOG_DEBUG(3, "sending message to " << rankDest << ", " << tagDest << " size " << offset);
+#ifdef OPENMP_CRITICAL_MPI
+#pragma omp critical (MPI_send)
+#endif
 			this->getWorld().send(rankDest, tagDest, buffer, offset);
 		}
 		offset = 0;
@@ -271,13 +281,13 @@ public:
 	void finalize(int tagDest) {
 		flushAllMessageBuffers(tagDest);
 		// send zero message buffer as checkpoint signal to stop
-		LOG_DEBUG_MT(3, "sending stop message");
+		LOG_DEBUG(3, "sending stop message");
 		flushAllMessageBuffers(tagDest, true);
-		LOG_DEBUG_MT(2, "sent checkpoints");
+		LOG_DEBUG(2, "sent checkpoints");
 	}
 };
 
-
+#if 0
 template <typename C, int BufferSize = 16 * 1024>
 class MPIMessageBuffersOMP {
 public:
@@ -415,12 +425,12 @@ public:
 				assert( rankSource == source );
 				assert( threadId == tag );
 
-				LOG_DEBUG_MT(4, "receiving message from " << source << " size " << size << " t=" << threadId);
+				LOG_DEBUG(4, "receiving message from " << source << " size " << size << " t=" << threadId);
 
 				char *buffer = _recvBuffers[ threadId ] + ( source * MESSAGE_BUFFER_SIZE );
 				if (size == 0) {
 					checkpoint();
-					LOG_DEBUG_MT(2, "got checkpoint from " << source);
+					LOG_DEBUG(2, "got checkpoint from " << source);
 					optionalRequest = OptionalRequest();
 				} else {
 					processMessages(buffer, size);
@@ -436,10 +446,10 @@ public:
 		assert(threadId == msgTag);
 		int messages = 0;
 
-		LOG_DEBUG_MT(3, "receiving all messages for thread " << msgTag);
+		LOG_DEBUG(3, "receiving all messages for thread " << msgTag);
 		bool mayHavePending = true;
 		while (mayHavePending) {
-			LOG_DEBUG_MT(4, "calling iprobe");
+			LOG_DEBUG(4, "calling iprobe");
 
 			mayHavePending = false;
 			for(int rankSource = 0 ; rankSource < _world.size(); rankSource++) {
@@ -450,18 +460,19 @@ public:
 			}
 
 		}
-		LOG_DEBUG_MT(3, "processed messages: " << messages);
+		LOG_DEBUG(3, "processed messages: " << messages);
 		return messages;
 	}
 	void checkpoint() {
 		#pragma omp atomic
 		_numCheckpoints++;
-		LOG_DEBUG_MT(2, "checkpoint received:" << _numCheckpoints);
+		LOG_DEBUG(2, "checkpoint received:" << _numCheckpoints);
 	}
 	inline int getNumCheckpoints() const {
 		return _numCheckpoints;
 	}
 };
 
+#endif
 
 #endif /* MPIBUFFER_H_ */

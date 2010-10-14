@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
 
 	all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
 	if (world.rank() == 0)
-		LOG_VERBOSE_MT(1, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
+		LOG_VERBOSE(1, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
 
 	DKS spectrum(0);
 

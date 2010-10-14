@@ -189,7 +189,7 @@ public:
 		SequenceLengthType &maxAffected = results.maxAffected;
 		maxAffected = 0;
 
-		LOG_DEBUG_MT(2, "Checking " << read.getName() << "\t" << read.getFasta() );
+		LOG_DEBUG(2, "Checking " << read.getName() << "\t" << read.getFasta() );
 
 		SequenceLengthType seqLen = read.getLength();
 		TwoBitEncoding *ptr = read.getTwoBitSequence();
@@ -333,26 +333,21 @@ public:
 				}
 			}
 
-			if (Log::isDebug(1)) {
-
-				#pragma omp critical (stderr)
-				{
-				  ostream &debug = Log::Debug();
+			if (Log::isDebug(3)){
 				  Read read;
 				  if (isRead1Affected) {
 					  read = reads.getRead(readIdx1);
-					  debug << "FilterMatch1 to " << read.getName() << " "
+					  LOG_DEBUG(3, "FilterMatch1 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
-							  << wasPhiX << " " << sequences.getRead(results1.value).getName() << std::endl;
+							  << wasPhiX << " " << sequences.getRead(results1.value).getName());
 				  }
 				  if (isRead2Affected) {
 					  read = reads.getRead(readIdx2);
-					  debug << "FilterMatch2 to " << read.getName() << " "
+					  LOG_DEBUG(3, "FilterMatch2 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
-							  << wasPhiX << " " << sequences.getRead(results2.value).getName() << std::endl;
+							  << wasPhiX << " " << sequences.getRead(results2.value).getName());
 
 				  }
-			    }
 			}
 		}
 	}
@@ -532,7 +527,7 @@ public:
 		}
 		if (Log::isDebug(3)) {
 		  for (int i = 0; i < numThreads; i++) {
-			  Log::Debug() << "spectrum " << i << std::endl;
+			  LOG_DEBUG(3, "spectrum " << i);
 			  ksv[i].printHistograms();
 		  }
 		} else {

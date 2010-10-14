@@ -50,7 +50,7 @@ void reduceOMPThreads(mpi::communicator &world) {
 	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
 	omp_set_num_threads(numThreads);
 	if (world.rank() == 0)
-		LOG_DEBUG_MT(1, "set OpenMP threads to " << numThreads);
+		LOG_DEBUG(1, "set OpenMP threads to " << numThreads);
 }
 
 template<typename So, typename We, typename Si = TrackingDataSingleton>
@@ -215,7 +215,7 @@ public:
 
 		NumberType distributedThreadMask = world.size() - 1;
 
-		LOG_VERBOSE_MT(1, "starting _buildSpectrum");
+		LOG_VERBOSE(1, "starting _buildSpectrum");
 
 		SendStoreKmerMessageBuffer *sendBuffers[numThreads][numThreads];
 		RecvStoreKmerMessageBuffer *recvBuffers[numThreads];
@@ -229,7 +229,7 @@ public:
 			}
 		}
 
-		LOG_DEBUG_MT(2, "allocated buffers");
+		LOG_DEBUG(2, "allocated buffers");
 
 		// share ReadSet sizes for globally unique readIdx calculations
 		long readSetSize = store.getSize();
@@ -241,9 +241,9 @@ public:
 		long globalReadSetOffset = 0;
 		for(int i = 0; i < world.rank(); i++)
 			globalReadSetOffset += readSetSizes[i];
-		LOG_DEBUG_MT(2, "reduced readSetSizes " << globalReadSetOffset);
+		LOG_DEBUG(2, "reduced readSetSizes " << globalReadSetOffset);
 
-		LOG_DEBUG_MT(2, "building spectrum using " << numThreads << " threads (" << omp_get_max_threads() << ")");
+		LOG_DEBUG(2, "building spectrum using " << numThreads << " threads (" << omp_get_max_threads() << ")");
 		#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 		for(long readIdx = 0 ; readIdx < readSetSize; readIdx++)
 		{
@@ -268,10 +268,10 @@ public:
 			}
 
 			if (readIdx > 0 && readIdx % 100000 == 0 )
-				LOG_DEBUG_MT(1, "processed " << readIdx << " reads");
+				LOG_DEBUG(1, "processed " << readIdx << " reads");
 		}
 
-		LOG_DEBUG_MT(1, "finished generating kmers from reads");
+		LOG_DEBUG(1, "finished generating kmers from reads");
 
 		// flush buffers and wait
 		#pragma omp parallel num_threads(numThreads)
@@ -285,7 +285,7 @@ public:
 			recvBuffers[threadId]->finalize(numThreads);
 			delete recvBuffers[threadId];
 		}
-		LOG_DEBUG_MT(1, "finished _buildKmerSpectrum");
+		LOG_DEBUG(1, "finished _buildKmerSpectrum");
 	}
 
 	void printHistogramsMPI(mpi::communicator &world, std::ostream &os, bool printSolidOnly = false) {
@@ -314,11 +314,11 @@ public:
 
 		// purge low counts
 		if (Options::getMinDepth() > 1) {
-			LOG_VERBOSE_MT(1, "Clearing memory from singletons: " << this->singleton.size() << std::endl << MemoryUtils::getMemoryUsage());
+			LOG_VERBOSE(1, "Clearing memory from singletons: " << this->singleton.size() << std::endl << MemoryUtils::getMemoryUsage());
 			this->singleton.clear();
 		}
 		if (Options::getMinDepth() > 2) {
-			LOG_VERBOSE_MT(1, "Purging low count kmers (< " << Options::getMinDepth() << ")" << std::endl << MemoryUtils::getMemoryUsage());
+			LOG_VERBOSE(1, "Purging low count kmers (< " << Options::getMinDepth() << ")" << std::endl << MemoryUtils::getMemoryUsage());
 			this->purgeMinDepth(Options::getMinDepth());
 		}
 

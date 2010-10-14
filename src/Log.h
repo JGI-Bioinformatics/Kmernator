@@ -215,16 +215,14 @@ public:
 
 #ifdef NDEBUG
 // Higher possible verbosity and debug levels with NDEBUG set, optimized out otherwise
-#define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { Log::Verbose() << log << std::endl; }
-#define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { Log::Debug()   << log << std::endl; }
+#define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str()); }
+#define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str()); }
 #else
-#define LOG_VERBOSE(level, log) if ( level <=2 && Log::isVerbose(level)) { Log::Verbose() << log << std::endl; }
-#define LOG_DEBUG(level,   log) if ( level <=2 && Log::isDebug(level)  ) { Log::Debug()   << log << std::endl; }
+#define LOG_VERBOSE(level, log) if ( level <=2 && Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str()); }
+#define LOG_DEBUG(level,   log) if ( level <=2 && Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str()); }
 #endif
-#define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { Log::Warn()    << log << std::endl; }
-#define LOG_ERROR(level,   log) if ( Log::isError(level)  ) { Log::Error()   << log << std::endl; }
 
-#define LOG_VERBOSE_MT(level, log) if ( Log::isVerbose(level) ) { std::stringstream ss ; ss << log; Log::Verbose(ss.str()); }
-#define LOG_DEBUG_MT(level,   log) if ( Log::isDebug(level)   ) { std::stringstream ss ; ss << log; Log::Debug(ss.str()); }
+#define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { std::stringstream ss ; ss << log; Log::Warn(ss.str()); }
+#define LOG_ERROR(level,   log) if ( Log::isError(level)  ) { std::stringstream ss ; ss << log; Log::Error(ss.str()); }
 
 #endif /* LOG_H_ */
