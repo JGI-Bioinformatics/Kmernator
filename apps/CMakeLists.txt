@@ -46,6 +46,7 @@ target_link_libraries( CompareSpectrums
                               Sequence 
                               Kmer
                               ReadSet
+                              Log
                               boost_program_options-mt-static 
                               boost_iostreams-mt-static
                               boost_thread-mt-static
@@ -61,6 +62,7 @@ target_link_libraries( FilterReads
                               Sequence
                               Kmer
                               ReadSet
+                              Log
                               boost_program_options-mt-static
                               boost_iostreams-mt-static
                               boost_thread-mt-static
@@ -74,6 +76,7 @@ target_link_libraries( FilterReads-P
                               Sequence
                               Kmer
                               ReadSet
+                              Log
                               boost_program_options-mt-static
                               boost_iostreams-mt-static
                               boost_thread-mt-static
@@ -88,6 +91,7 @@ target_link_libraries( TnfDistance
                               Sequence
                               Kmer
                               ReadSet
+                              Log
                               boost_program_options-mt-static
                               boost_iostreams-mt-static
                               boost_thread-mt-static
@@ -97,9 +101,10 @@ set_source_files_properties( Fastq2Fasta
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )
 add_executable( Fastq2Fasta Fastq2Fasta )
-target_link_libraries( Fastq2Fasta
+target_link_libraries(        Fastq2Fasta
                               Sequence
                               ReadSet
+                              Log
                               boost_program_options-mt-static
                               boost_iostreams-mt-static
                               boost_thread-mt-static
@@ -109,9 +114,10 @@ set_source_files_properties( Fastq2FastaQual
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )
 add_executable( Fastq2FastaQual Fastq2FastaQual )
-target_link_libraries( Fastq2FastaQual
+target_link_libraries(        Fastq2FastaQual
                               Sequence
                               ReadSet
+                              Log
                               boost_program_options-mt-static
                               boost_iostreams-mt-static
                               boost_thread-mt-static
@@ -122,9 +128,10 @@ set_source_files_properties( FixPair
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )
 add_executable( FixPair FixPair )
-target_link_libraries( FixPair
+target_link_libraries(        FixPair
                               Sequence
                               ReadSet
+                              Log
                               boost_program_options-mt-static
                               boost_iostreams-mt-static
                               boost_thread-mt-static

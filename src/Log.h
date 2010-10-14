@@ -36,7 +36,7 @@
 #define LOG_H_
 
 #include <cstdlib>
-#include <ostream>
+#include <iostream>
 #include <ctime>
 
 class Logger
@@ -106,20 +106,20 @@ public:
 
 class Log
 {
+	static Logger verboseOstream;
 	static inline Logger &getVerboseOstream() {
-		static Logger verboseOstream = Logger( std::cerr, "INFO", 1 );
 		return verboseOstream;
 	}
+	static Logger debugOstream;
 	static inline Logger &getDebugOstream() {
-		static Logger debugOstream = Logger( std::cerr, "DEBUG", 0 );
 		return debugOstream;
 	}
+	static Logger warningOstream;
 	static inline Logger &getWarningOstream() {
-		static Logger warningOstream = Logger( std::cerr, "WARNING", 1 );
 		return warningOstream;
 	}
+	static Logger errorOstream;
 	static inline Logger &getErrorOstream() {
-		static Logger errorOstream = Logger( std::cerr, "ERROR", 1 );
 		return errorOstream;
 	}
 public:

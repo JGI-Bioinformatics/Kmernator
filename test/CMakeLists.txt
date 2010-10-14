@@ -46,6 +46,7 @@ set_source_files_properties( TwoBitSequenceTest
                              )
 add_executable( TwoBitSequenceTest TwoBitSequenceTest )
 target_link_libraries( TwoBitSequenceTest TwoBitSequence
+                                          Log
                                           boost_test_exec_monitor-mt 
                                           boost_unit_test_framework-mt 
                                           boost_thread-mt-static
@@ -59,6 +60,7 @@ set_source_files_properties( ReadSetTest
 add_executable( ReadSetTest ReadSetTest )
 target_link_libraries( ReadSetTest Sequence
                                    ReadSet 
+                                   Log
                                    boost_program_options-mt-static 
                                    boost_test_exec_monitor-mt 
                                    boost_unit_test_framework-mt 
@@ -72,7 +74,7 @@ set_source_files_properties( KmerTest
                           )
                                                                                                            
 add_executable( KmerTest KmerTest )
-target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet
+target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet Log
                                 boost_program_options-mt-static 
                                 boost_test_exec_monitor-mt 
                                 boost_unit_test_framework-mt
@@ -88,6 +90,7 @@ set_source_files_properties( ktest2
 add_executable( ktest2 ktest2 )
 target_link_libraries( ktest2 Sequence Kmer
                               ReadSet
+                              Log
                               boost_program_options-mt-static 
                               boost_iostreams-mt-static
                               boost_thread-mt-static
@@ -102,13 +105,18 @@ target_link_libraries( HashTester
                               Sequence 
                               Kmer
                               ReadSet
+                              Log
                               boost_program_options-mt-static 
                               boost_iostreams-mt-static
                               boost_thread-mt-static
                               )
 
+set_source_files_properties( MmapTempFileTest
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
+                             )
 add_executable( MmapTempFileTest MmapTempFileTest )
 target_link_libraries( MmapTempFileTest
+                                   Log
                                    boost_program_options-mt-static 
                                    boost_test_exec_monitor-mt 
                                    boost_unit_test_framework-mt 

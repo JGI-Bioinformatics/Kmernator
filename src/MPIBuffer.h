@@ -94,23 +94,12 @@ public:
 		_recvBuffers = new char[ BufferBase::MESSAGE_BUFFER_SIZE * this->getWorld().size() ];
 		_requests = new OptionalRequest[ this->getWorld().size() ];
 		for(int destRank = 0; destRank < this->getWorld().size(); destRank++) {
-			_requests[destRank] = this->getWorld().irecv(destRank, _tag, _recvBuffers + destRank*BufferBase::MESSAGE_BUFFER_SIZE, BufferBase::MESSAGE_BUFFER_SIZE);
+			_requests[destRank] = irecv(destRank);
 		}
 	}
 	~MPIRecvMessageBuffer() {
 		delete [] _recvBuffers;
 		delete [] _requests;
-	}
-	int processMessages(char *start, int size) {
-		char *msg, *end;
-		msg = start;
-		end = (start+size);
-		int count = 0;
-		while (msg != end) {
-			((MessageClass*) msg)->process(this);
-			msg += this->getMessageSize();
-		}
-		return count;
 	}
 
 	bool receiveIncomingMessage(int rankSource) {
@@ -129,14 +118,13 @@ public:
 
 				LOG_DEBUG_MT(4, this->getWorld().rank() << ": " << _tag << ": receiving message from " << source << " size " << size);
 
-				char *buffer = _recvBuffers + ( source * BufferBase::MESSAGE_BUFFER_SIZE );
 				if (size == 0) {
 					checkpoint();
 					LOG_DEBUG_MT(2,this->getWorld().rank() << ": " << _tag << ": got checkpoint from " << source);
 				} else {
-					processMessages(buffer, size);
+					processMessages(source, size);
 				}
-				optionalRequest = this->getWorld().irecv(source, _tag, buffer, BufferBase::MESSAGE_BUFFER_SIZE);
+				optionalRequest = irecv(source);
 				return true;
 			}
 		}
@@ -178,6 +166,23 @@ public:
 	}
 	bool reachedCheckpoint(int checkpointFactor = 1) {
 		return _numCheckpoints == this->getWorld().size() * checkpointFactor;
+	}
+private:
+	OptionalRequest irecv(int sourceRank) {
+		OptionalRequest oreq;
+		oreq = this->getWorld().irecv(sourceRank, _tag, _recvBuffers + sourceRank*BufferBase::MESSAGE_BUFFER_SIZE, BufferBase::MESSAGE_BUFFER_SIZE);
+		return oreq;
+	}
+	int processMessages(int sourceRank, int size) {
+		char *msg, *end, *start = _recvBuffers + sourceRank*BufferBase::MESSAGE_BUFFER_SIZE;
+		msg = start;
+		end = (start+size);
+		int count = 0;
+		while (msg != end) {
+			((MessageClass*) msg)->process(this);
+			msg += this->getMessageSize();
+		}
+		return count;
 	}
 
 };

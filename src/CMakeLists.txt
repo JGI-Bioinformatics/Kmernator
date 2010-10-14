@@ -53,11 +53,15 @@ set_source_files_properties( ReadSet
 set_source_files_properties( Kmer
                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
                           )
-                          
+set_source_files_properties( Log
+                            PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
+                          )
+                           
 add_library( TwoBitSequence TwoBitSequence )
 add_library( Sequence Sequence TwoBitSequence )
 add_library( Kmer Kmer TwoBitSequence)
 add_library( ReadSet ReadSet )
+add_library( Log Log )
 
 #
 # $Log: CMakeLists.txt,v $

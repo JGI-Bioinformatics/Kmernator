@@ -1001,7 +1001,7 @@ public:
 			weight = 0.0-weight;
 		}
 		if ( TrackingData::isDiscard( weight ) )  {
-			LOG_DEBUG(2, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << least.toFasta());
+			LOG_DEBUG(3, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << least.toFasta());
 			return;
 		}
 

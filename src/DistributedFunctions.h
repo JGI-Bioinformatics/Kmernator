@@ -191,17 +191,19 @@ public:
 		// kmer is least complement
 
 		// THIS IS DANGEROUS unless allocated an extra Kmer!
+		Kmer *getKmer() {
+			return (Kmer*) (((char*)this)+sizeof(*this));
+		}
 		void set(ReadSetSizeType _readIdx, PositionType _readPos, WeightType _weight, const Kmer &_kmer) {
 			readIdx = _readIdx;
 			readPos = _readPos;
 			weight = _weight;
-			*((Kmer*)(this+1)) = _kmer;
+			*(getKmer()) = _kmer;
 		}
 		void process(RecvStoreKmerMessageBufferBase *bufferCallback) {
 			RecvStoreKmerMessageBuffer *kbufferCallback = (RecvStoreKmerMessageBuffer*) bufferCallback;
-			Kmer *kmer = (Kmer*) (((char*)this)+sizeof(StoreKmerMessageHeader));
-			LOG_DEBUG(4, bufferCallback->getWorld().rank() << ": " << omp_get_thread_num() << ": message: " << readIdx << " " << readPos << " " << weight << " " << kmer->toFasta());
-			kbufferCallback->getSpectrum().append(kbufferCallback->getDataPointer(), *kmer, weight, readIdx, readPos);
+			LOG_DEBUG(4, bufferCallback->getWorld().rank() << ": " << omp_get_thread_num() << ": message: " << readIdx << " " << readPos << " " << weight << " " << getKmer()->toFasta());
+			kbufferCallback->getSpectrum().append(kbufferCallback->getDataPointer(), *getKmer(), weight, readIdx, readPos);
 		}
 	};
 
@@ -227,8 +229,6 @@ public:
 			}
 		}
 
-		//StoreKmerMessageBuffers buffers(world, *this);
-
 		LOG_DEBUG_MT(2, world.rank() << ": allocated buffers");
 
 		// share ReadSet sizes for globally unique readIdx calculations
@@ -243,11 +243,10 @@ public:
 			globalReadSetOffset += readSetSizes[i];
 		LOG_DEBUG_MT(2, world.rank() << ": reduced readSetSizes " << globalReadSetOffset);
 
-		long myCount = 0;
 		#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 		for(long readIdx = 0 ; readIdx < readSetSize; readIdx++)
 		{
-			int threadId = threadId;
+			int threadId = omp_get_thread_num();
 			const Read &read = store.getRead( readIdx );
 
 			if (read.isDiscarded())
@@ -259,14 +258,16 @@ public:
 				int rankDest, threadDest;
 				WeightType weight = kmers.valueAt(readPos);
 				this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, distributedThreadMask);
-				if (rankDest == rank && threadDest == threadId)
+
+				if (rankDest == rank && threadDest == threadId) {
 					this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos);
-				else {
+				} else {
 					sendBuffers[ threadId ][ threadDest ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
 				}
 			}
-			if (++myCount & 1024*128 == 0)
-				LOG_DEBUG_MT(1, world.rank() << ": " << threadId << ": processed " << myCount << " reads");
+
+			if (readIdx > 0 && readIdx % 100000 == 0 )
+				LOG_DEBUG_MT(1, world.rank() << ": " << threadId << ": processed " << readIdx << " reads");
 		}
 
 		LOG_DEBUG_MT(1, world.rank() << ": finished generating kmers from reads");
@@ -305,10 +306,6 @@ public:
 	Kmernator::MmapFileVector buildKmerSpectrumMPI(mpi::communicator &world, ReadSet &store ) {
 		bool isSolid = false; // not supported for references...
 		int numParts = world.size();
-		if (numParts == 1) {
-			this->buildKmerSpectrum(store);
-			return Kmernator::MmapFileVector();
-		}
 
 		assert((numParts & (numParts-1)) == 0); // numParts must be a power of 2
 

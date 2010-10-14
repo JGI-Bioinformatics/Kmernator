@@ -1433,7 +1433,7 @@ public:
 		return getLocalThreadId(key.hash(), numThreads);
 	}
 	inline int getDistributedThreadId(NumberType hash, NumberType threadBitMask) const {
-		assert( threadBitMask != 0 && ((threadBitMask+1) & threadBitMask) == 0); // number of threads must be a power of 2
+		assert( ((threadBitMask+1) & threadBitMask) == 0 ); // number of threads must be a power of 2
 
 		// stripe within the contiguous blocks for the local thread
 		return (hash & threadBitMask);
