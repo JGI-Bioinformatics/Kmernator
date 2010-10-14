@@ -116,11 +116,11 @@ public:
 				assert( rankSource == source );
 				assert( _tag == tag );
 
-				LOG_DEBUG_MT(4, this->getWorld().rank() << ": " << _tag << ": receiving message from " << source << " size " << size);
+				LOG_DEBUG_MT(4, _tag << ": receiving message from " << source << " size " << size);
 
 				if (size == 0) {
 					checkpoint();
-					LOG_DEBUG_MT(2,this->getWorld().rank() << ": " << _tag << ": got checkpoint from " << source);
+					LOG_DEBUG_MT(2, _tag << ": got checkpoint from " << source);
 				} else {
 					processMessages(source, size);
 				}
@@ -133,10 +133,10 @@ public:
 	int receiveAllIncomingMessages() {
 		int messages = 0;
 
-		LOG_DEBUG_MT(3, this->getWorld().rank() << ": " << _tag << ": receiving all messages for thread ");
+		LOG_DEBUG_MT(3, _tag << ": receiving all messages for tag ");
 		bool mayHavePending = true;
 		while (mayHavePending) {
-			LOG_DEBUG_MT(4, this->getWorld().rank() << ": " << _tag << ": calling iprobe");
+			LOG_DEBUG_MT(4, _tag << ": calling iprobe");
 			mayHavePending = false;
 			for(int rankSource = 0 ; rankSource < this->getWorld().size(); rankSource++) {
 				if (receiveIncomingMessage(rankSource)) {
@@ -145,11 +145,11 @@ public:
 				}
 			}
 		}
-		LOG_DEBUG_MT(3, this->getWorld().rank() << ": " << _tag << ": processed messages: " << messages);
+		LOG_DEBUG_MT(3, _tag << ": processed messages: " << messages);
 		return messages;
 	}
 	void finalize(int checkpointFactor = 1) {
-		LOG_DEBUG_MT(2, this->getWorld().rank() << ": " << _tag << ": Entering recv checkpoint: " << getNumCheckpoints());
+		LOG_DEBUG_MT(2, _tag << ": Entering recv checkpoint: " << getNumCheckpoints());
 		while ( ! reachedCheckpoint(checkpointFactor) ) {
 			receiveAllIncomingMessages();
 			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
@@ -159,7 +159,7 @@ public:
 	void checkpoint() {
 		#pragma omp atomic
 		_numCheckpoints++;
-		LOG_DEBUG_MT(2, this->getWorld().rank() << ": " << _tag << ": checkpoint received:" << _numCheckpoints);
+		LOG_DEBUG_MT(2, _tag << ": checkpoint received:" << _numCheckpoints);
 	}
 	inline int getNumCheckpoints() const {
 		return _numCheckpoints;
@@ -247,6 +247,7 @@ protected:
 	void flushMessageBuffer(int rankDest, int tagDest, char *buffer, int &offset, bool sendZeroMessage = false) {
 		if (offset > 0 || sendZeroMessage) {
 			receiveAnyIncoming();
+			LOG_DEBUG_MT(3, "sending message to " << rankDest << ", " << tagDest << " size " << offset);
 			this->getWorld().send(rankDest, tagDest, buffer, offset);
 		}
 		offset = 0;
@@ -270,9 +271,9 @@ public:
 	void finalize(int tagDest) {
 		flushAllMessageBuffers(tagDest);
 		// send zero message buffer as checkpoint signal to stop
-		LOG_DEBUG_MT(2, this->getWorld().rank() << ": " << omp_get_thread_num() << ": sending stop message");
+		LOG_DEBUG_MT(3, "sending stop message");
 		flushAllMessageBuffers(tagDest, true);
-		LOG_DEBUG_MT(2, this->getWorld().rank() << ": " << omp_get_thread_num() << ": sent checkpoints");
+		LOG_DEBUG_MT(2, "sent checkpoints");
 	}
 };
 
@@ -414,12 +415,12 @@ public:
 				assert( rankSource == source );
 				assert( threadId == tag );
 
-				LOG_DEBUG_MT(4, _world.rank() << ": " << threadId << ": receiving message from " << source << " size " << size << " t=" << threadId);
+				LOG_DEBUG_MT(4, "receiving message from " << source << " size " << size << " t=" << threadId);
 
 				char *buffer = _recvBuffers[ threadId ] + ( source * MESSAGE_BUFFER_SIZE );
 				if (size == 0) {
 					checkpoint();
-					LOG_DEBUG_MT(2,_world.rank() << ": " << threadId << ": got checkpoint from " << source);
+					LOG_DEBUG_MT(2, "got checkpoint from " << source);
 					optionalRequest = OptionalRequest();
 				} else {
 					processMessages(buffer, size);
@@ -435,10 +436,10 @@ public:
 		assert(threadId == msgTag);
 		int messages = 0;
 
-		LOG_DEBUG_MT(3, _world.rank() << ": " << threadId << ": receiving all messages for thread " << msgTag);
+		LOG_DEBUG_MT(3, "receiving all messages for thread " << msgTag);
 		bool mayHavePending = true;
 		while (mayHavePending) {
-			LOG_DEBUG_MT(4, _world.rank() << ": " << threadId << ": calling iprobe");
+			LOG_DEBUG_MT(4, "calling iprobe");
 
 			mayHavePending = false;
 			for(int rankSource = 0 ; rankSource < _world.size(); rankSource++) {
@@ -449,13 +450,13 @@ public:
 			}
 
 		}
-		LOG_DEBUG_MT(3, _world.rank() << ": " << threadId << ": processed messages: " << messages);
+		LOG_DEBUG_MT(3, "processed messages: " << messages);
 		return messages;
 	}
 	void checkpoint() {
 		#pragma omp atomic
 		_numCheckpoints++;
-		LOG_DEBUG_MT(2, _world.rank() << ": " << omp_get_thread_num() << ": checkpoint received:" << _numCheckpoints);
+		LOG_DEBUG_MT(2, "checkpoint received:" << _numCheckpoints);
 	}
 	inline int getNumCheckpoints() const {
 		return _numCheckpoints;

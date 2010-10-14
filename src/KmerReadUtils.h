@@ -82,7 +82,7 @@ public:
 			kmers.valueAt(i) = leastComplementForNegativeWeight && bools[i] ? weight : (0.0-weight);
 
 		}
-		if (Log::isDebug(3)) {
+		if (Log::isDebug(5)) {
 			ostream &debug = Log::Debug() << "KmerWeights: idx valueAt toFasta" << std::endl;;
 		    for(Kmer::IndexType i = 0 ; i < kmers.size(); i++) {
 			  debug << i << " " << kmers.valueAt(i) << " " << kmers[i].toFasta() << std::endl;

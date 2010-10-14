@@ -39,12 +39,31 @@
 #include <iostream>
 #include <ctime>
 
+#include "config.h"
+#include <boost/lexical_cast.hpp>
+
 class Logger
 {
 	typedef std::ostream* OstreamPtr;
 	OstreamPtr _os;
 	std::string _attribute;
 	unsigned int _level;
+	static void *world;
+	inline std::string getRank() {
+#ifdef _USE_MPI
+		if (world != NULL)
+			return "rank(" + boost::lexical_cast<std::string>( ((mpi::communicator*)world)->rank() ) + "): ";
+		else
+#endif
+			return std::string();
+	}
+	inline std::string getThread() {
+#ifdef _USE_OPENMP
+		return "thread(" + boost::lexical_cast<std::string>( omp_get_thread_num() ) + "): ";
+#else
+		return std::string();
+#endif
+	}
 	inline std::string getTime() {
 		time_t rawtime;
 		struct tm *timeinfo;
@@ -61,6 +80,9 @@ public:
 	Logger(std::ostream &os, std::string attr, unsigned int level) : _os(&os), _attribute(attr), _level(level) {}
 	Logger(const Logger &copy) {
 		*this = copy;
+	}
+	static void setWorld(void *_w) {
+		world = _w;
 	}
 	Logger &operator=(const Logger &copy) {
 		if (this == &copy)
@@ -88,7 +110,7 @@ public:
 	template<typename T>
 	inline std::ostream &operator<<(T log) {
 		if (isActive())
-			return *_os << getTime() << " " << _attribute << ": " << log;
+			return *_os << getTime() << " " << _attribute << ": " << getRank() << getThread() << log;
 		else
 			return misuseWarning();
 	}
@@ -202,7 +224,7 @@ public:
 #define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { Log::Warn()    << log << std::endl; }
 #define LOG_ERROR(level,   log) if ( Log::isError(level)  ) { Log::Error()   << log << std::endl; }
 
-#define LOG_VERBOSE_MT(level, log) if ( Log::isVerbose(level) ) { std::stringstream ss ; ss << log << std::endl; Log::Verbose(ss.str()); }
-#define LOG_DEBUG_MT(level,   log) if ( Log::isDebug(level)   ) { std::stringstream ss ; ss << log << std::endl; Log::Debug(ss.str()); }
+#define LOG_VERBOSE_MT(level, log) if ( Log::isVerbose(level) ) { std::stringstream ss ; ss << log; Log::Verbose(ss.str()); }
+#define LOG_DEBUG_MT(level,   log) if ( Log::isDebug(level)   ) { std::stringstream ss ; ss << log; Log::Debug(ss.str()); }
 
 #endif /* LOG_H_ */

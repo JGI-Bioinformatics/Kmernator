@@ -121,7 +121,7 @@ ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFile(string filePath, string filePath2, int rank, int size) {
 	if (size == 1 && Options::getMmapInput() > 0)
 		return appendAnyFileMmap(filePath, filePath2);
-
+	LOG_DEBUG_MT(2, "appendAnyFile(" << filePath << ", " << filePath2 << ", " << rank << ", " << size << ")");
 	ReadFileReader reader(filePath, filePath2);
 	appendFasta(reader, rank, size);
 	incrementFile(reader);
@@ -156,25 +156,25 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFileMmap(string fastaFilePath
 void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 
 #ifdef _USE_OPENMP
-	ReadSet myReads[ files.size() ];
-	SequenceStreamParserPtr parsers[ files.size() ];
+	int fileCount = files.size();
+	ReadSet myReads[ fileCount ];
+	SequenceStreamParserPtr parsers[ fileCount ];
 	int numThreads = omp_get_max_threads() / MAX_FILE_PARALLELISM;
-	if ( numThreads > 1 ) {
+	if ( numThreads >= 1 ) {
 		omp_set_nested(1);
 	} else {
 		numThreads = omp_get_max_threads();
 		omp_set_nested(0);
 	}
+	LOG_DEBUG_MT(2, "reading " << fileCount << " file(s) using " << numThreads << " files at a time");
+
 #endif
 
 	long filesSize = files.size();
 	#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 	for (long i = 0; i < filesSize; i++) {
 
-		#pragma omp critical (stderr)
-		{
-			LOG_DEBUG(1, "reading " << files[i]);
-		}
+		LOG_DEBUG_MT(1, "reading " << files[i] << " using " << omp_get_max_threads() << " threads per file");
 
 		string qualFile;
 		if (!Options::getIgnoreQual()) {
@@ -184,6 +184,8 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 			_qs.open(qualFile.c_str());
 			if (! _qs.good()) {
 				qualFile.clear();
+			} else {
+				LOG_DEBUG_MT(2, "detected qual file: " << qualFile);
 			}
 		}
 #ifdef _USE_OPENMP
@@ -194,16 +196,12 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 		incrementFile(parser);
 #endif
 
-		#pragma omp critical  (stderr)
-		{
-			LOG_DEBUG(1, "finished reading " << files[i]);
-		}
+		LOG_DEBUG_MT(1, "finished reading " << files[i]);
+
 	}
 #ifdef _USE_OPENMP
 	omp_set_nested(OMP_NESTED_DEFAULT);
-	{
-		LOG_DEBUG(1,"concatenating ReadSet buffers");
-	}
+	LOG_DEBUG_MT(1,"concatenating ReadSet buffers");
 	for(int i = 0; i< (long) files.size(); i++) {
 	    append(myReads[i]);
 	    incrementFile(parsers[i]);
@@ -264,15 +262,17 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadSet::MmapSource &mmap,
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, int rank, int size) {
 	string name, bases, quals;
+	LOG_DEBUG_MT(2, "appendFasta(reader, " << rank << ", " << size << ")");
 	unsigned long lastPos = MAX_UI64;
 	if (size > 1) {
 		unsigned long blockSize = reader.getBlockSize(size);
-		if (rank != size -1 ) {
+		if (rank + 1 != size ) {
 			reader.seekToNextRecord( blockSize * (rank+1) );
 			lastPos = reader.getPos();
 		}
 		reader.seekToNextRecord( blockSize * rank );
 	}
+	LOG_DEBUG_MT(2, "appendFasta() at pos: " << reader.getPos());
 	if (reader.isMmaped() && Options::getMmapInput() != 0) {
 	    RecordPtr recordPtr = reader.getStreamRecordPtr();
 	    RecordPtr qualPtr = reader.getStreamQualRecordPtr();
@@ -332,16 +332,19 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 	numReads[i] = 0;
 	SequenceStreamParserPtr singleParser;
 
+	LOG_DEBUG_MT(2, "appendFastqBlockedOMP(mmap): " << mmap << " with " << numThreads << " threads");
+
 	#pragma omp parallel num_threads(numThreads)
 	{
 
 		if (omp_get_num_threads() != numThreads)
 			throw "OMP thread count discrepancy!";
+		int threadId = omp_get_thread_num();
 
 		ReadSet myReads;
 		ReadFileReader reader(mmap);
 
-		if (omp_get_thread_num() == 0)
+		if (threadId == 0)
 			singleParser = reader.getParser();
 
 		unsigned long lastPos = MAX_UI64;
@@ -349,45 +352,47 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		{
 			lastPos = reader.getFileSize();
 			blockSize = lastPos / numThreads;
-			if (lastPos > 0)
-				lastPos--;
 
 			if (blockSize < 100)
 				blockSize = 100;
-			LOG_DEBUG(1, "Reading " << mmap << " with " << numThreads << " threads" );
+			LOG_DEBUG_MT(1, "Reading " << mmap << " with " << numThreads << " threads" );
 		}
 
 
 		string name,bases,quals;
-		bool hasNext = omp_get_thread_num() < (long) numThreads;
+		bool hasNext = true;
 
-		if (hasNext) {
-			reader.seekToNextRecord( blockSize * omp_get_thread_num() );
-			seekPos[ omp_get_thread_num() ] = reader.getPos();
+		unsigned long minimumPos = blockSize * threadId;
+		if (minimumPos >= lastPos) {
+			seekPos[ threadId ] = lastPos;
 		} else {
-			seekPos[ omp_get_thread_num() ] = lastPos;
+			reader.seekToNextRecord( minimumPos );
+			seekPos[ threadId ] = reader.getPos();
 		}
+		hasNext = seekPos[ threadId ] < lastPos;
 
 		#pragma omp barrier
 
-		if (hasNext && omp_get_thread_num() != (numThreads - 1) )
-			lastPos = seekPos[ omp_get_thread_num() + 1 ];
+		if (hasNext && threadId + 1 < numThreads )
+			lastPos = seekPos[ threadId + 1 ];
 
 		if (hasNext)
-			hasNext = (reader.getPos() < lastPos);
+			hasNext = (seekPos[ threadId ] < lastPos);
 
 		#pragma omp barrier
 
 		if (!hasNext)
-			seekPos[ omp_get_thread_num() ] = 0;
+			seekPos[ threadId ] = 0;
 
 		#pragma omp barrier
 
-		if (hasNext && omp_get_thread_num() != 0 && seekPos[omp_get_thread_num()] == seekPos[omp_get_thread_num()-1])
+		if (hasNext && threadId != 0 && seekPos[ threadId ] == seekPos[ threadId-1 ])
 			hasNext = false;
 
-		if (!hasNext)
+		if (!hasNext) {
+			seekPos[ threadId ] = 0;
 			lastPos = 0;
+		}
 
 		if (reader.isMmaped() && Options::getMmapInput() != 0) {
 		    RecordPtr recordPtr = reader.getStreamRecordPtr();

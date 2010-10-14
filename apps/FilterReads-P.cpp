@@ -36,11 +36,12 @@ typedef DistributedKmerSpectrum<DataType, DataType> DKS;
 
 int main(int argc, char *argv[]) {
 
-	if (!FilterReadsOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
-
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
+	Logger::setWorld(&world);
+
+	if (!FilterReadsOptions::parseOpts(argc, argv))
+		throw std::invalid_argument("Please fix the command line arguments");
 
 	#pragma omp single
 	reduceOMPThreads(world);
@@ -52,12 +53,11 @@ int main(int argc, char *argv[]) {
 	KmerSizer::set(Options::getKmerSize());
 
 	Options::FileListType inputs = Options::getInputFiles();
-	LOG_VERBOSE(1, world.rank() << ": Reading Input Files");
+	LOG_VERBOSE(1, "Reading Input Files");
 
 	reads.appendAllFiles(inputs, world.rank(), world.size());
 
-	LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
-
+	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
 	LOG_VERBOSE(1, "Identifying Pairs: ");
 
@@ -65,9 +65,8 @@ int main(int argc, char *argv[]) {
 	unsigned long &readCount = counts[0] = reads.getSize();
 	unsigned long &numPairs  = counts[1] = reads.identifyPairs();
 	unsigned long &baseCount = counts[2] = reads.getBaseCount();
-	LOG_VERBOSE(1, world.rank() << ": loaded " << readCount << " Reads, " << baseCount << " Bases ");
-	LOG_VERBOSE(1, world.rank() << ": Pairs + single = " << numPairs);
-	LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
+	LOG_VERBOSE(1, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
+	LOG_VERBOSE(1, "Pairs + single = " << numPairs);
 
 	all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
 	if (world.rank() == 0)

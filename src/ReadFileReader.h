@@ -84,6 +84,7 @@ public:
 			   _qs.open((fastaFilePath + ".qual").c_str());
 			 }
 		}
+		LOG_DEBUG_MT(2, "ReadFileReader(" << fastaFilePath << ", " << qualFilePath << ")");
 		setParser(_ifs, _qs);
 	}
 
@@ -106,11 +107,13 @@ public:
 
 	void setReader(MmapSource &mmap) {
 		assert(mmap.is_open());
+		LOG_DEBUG_MT(2, "setReader(mmap):" << (void*)mmap.data());
 		setParser(mmap, *mmap.data());
 	}
 	void setReader(MmapSource &mmap1, MmapSource &mmap2) {
 		assert(mmap1.is_open());
 		assert(mmap2.is_open());
+		LOG_DEBUG_MT(2, "setReader(mmap, mmap):" << (void*)mmap1.data() << " " << (void*)mmap2.data());
 		setParser(mmap1,mmap2);
 	}
 	void setParser(istream &fs1) {
@@ -119,6 +122,7 @@ public:
 		setParser(fs1, fs1.peek());
 	}
 	template<typename U> void setParser(U &data, char marker) {
+		LOG_DEBUG_MT(2, "setParser(U)");
 		if (marker == '@')
 		   _parser = SequenceStreamParserPtr(new FastqStreamParser(data));
 		else if (marker == '>')
@@ -135,9 +139,11 @@ public:
 		} else {
 			_parser = SequenceStreamParserPtr(new FastaQualStreamParser(fs1, fs2));
 		}
+		LOG_DEBUG_MT(2, "setParser(istream,istream) FastaQualStreamParser");
 	}
 	void setParser(MmapSource &mmap1, MmapSource &mmap2) {
 		_parser = SequenceStreamParserPtr(new FastaQualStreamParser(mmap1, mmap2));
+		LOG_DEBUG_MT(2, "setParser(mmap,mmap) FastaQualStreamParser");
 	}
 
 	bool isMmaped() {
@@ -168,6 +174,7 @@ public:
 		return _parser->isMultiline();
 	}
 	bool nextRead(RecordPtr &recordStart) {
+		LOG_DEBUG_MT(3, omp_get_thread_num() << ": nextRead(recordStart = " << (void*) recordStart << ")");
 		try {
 			assert(recordStart == _parser->getStreamRecordPtr());
 			RecordPtr endPtr = _parser->readRecord();
@@ -198,6 +205,7 @@ public:
 		return passed;
 	}
 	bool nextRead(string &name, string &bases, string &quals) {
+		LOG_DEBUG_MT(3, "nextRead(name, bases, quals)");
 		try {
 			_parser->readRecord();
 			name = _parser->getName();
@@ -212,6 +220,7 @@ public:
 			if (quals.length() != bases.length())
 				if (!(quals.length() == 1 && quals[0] == Read::REF_QUAL))
 					throw runtime_error((string("Number of bases and quals not equal: ") + bases + " " + quals).c_str());
+			LOG_DEBUG_MT(3, "nextRead() " << name);
 			return true;
 		}
 
@@ -310,6 +319,7 @@ public:
 
 		SequenceStreamParser(istream &stream, char marker) :
 			_stream(&stream), _line(0), _pos(0), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
+			LOG_DEBUG_MT(3, "SequenceStreamParser(istream, " << marker << ")");
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::MmapSource &mmap, char marker) :
@@ -317,19 +327,21 @@ public:
 			_stream = new MmapIStream(_mmap);
 			_lastPtr = _mmap.data() + _mmap.size();
 			_freeStream = true;
+			LOG_DEBUG_MT(3, "SequenceStreamParser(MmapSource, " << marker << ")");
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::FilteredIStream &stream, char marker) :
 			_line(0), _pos(0), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
 			_stream = (istream *) &stream;
+			LOG_DEBUG_MT(3, "SequenceStreamParser(FilteredIStream, " << marker << ")");
 			setBuffers();
 		}
 		void setBuffers() {
-			_nameBuffer.assign(omp_get_max_threads(), string());
-			_basesBuffer.assign(omp_get_max_threads(), string());
-			_qualsBuffer.assign(omp_get_max_threads(), string());
-			_lineBuffer.assign(omp_get_max_threads(), string());
-			_isMultiline.assign(omp_get_max_threads(), false);
+			_nameBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
+			_basesBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
+			_qualsBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
+			_lineBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
+			_isMultiline.assign(OMP_MAX_THREADS_DEFAULT, false);
 		}
 
 		virtual ~SequenceStreamParser() {
@@ -429,6 +441,7 @@ public:
 
 		virtual void seekToNextRecord(unsigned long minimumPos) {
 			int threadNum = omp_get_thread_num();
+			LOG_DEBUG_MT(1, "seekToNextRecord(" << minimumPos << ")");
 			// get to the first line after the pos
 			if (minimumPos > 0) {
 				seekg(minimumPos - 1);
@@ -443,7 +456,7 @@ public:
 				return;
 			}
 			if (Log::isDebug(1)) {
-                LOG_DEBUG_MT(1, omp_get_thread_num() << " seeked to " << tellg() );
+                LOG_DEBUG_MT(1, "seeked to " << tellg() );
 			}
 			while ( (!endOfStream()) && _stream->peek() != _marker) {
 				nextLine();
@@ -458,13 +471,13 @@ public:
 					seekg(tmpPos);
 					_lineBuffer[threadNum] = current;
 
-					LOG_DEBUG_MT(1, "Correctly picked record break point to read fastq in parallel: "
-							<< current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg());
+					LOG_DEBUG_MT(3, "Correctly picked record break point to read fastq in parallel: "
+							<< current << std::endl << tmp << " " << tellg());
 
 
 				} else {
-					LOG_DEBUG_MT(1, "Needed to skip an extra line to read fastq in parallel: "
-							<< current << std::endl << tmp << " " << omp_get_thread_num() << " " << tellg());
+					LOG_DEBUG_MT(3, "Needed to skip an extra line to read fastq in parallel: "
+							<< current << std::endl << tmp << " " << tellg());
 				}
 			}
 
@@ -478,7 +491,7 @@ public:
 			readRecord();
 			string name1 = getName();
 			if (name1.empty() || endOfStream()) {
-				LOG_DEBUG_MT(1, "Found endofstream 0 records in leaving at eof to preserve pair");
+				LOG_DEBUG_MT(3, "Found endofstream 0 records in leaving at eof to preserve pair");
 				return;
 			}
 
@@ -486,7 +499,7 @@ public:
 			readRecord();
 			string name2 = getName();
 			if (name2.empty() || endOfStream()) {
-				LOG_DEBUG_MT(1, "Found endofstream 1 record in leaving at eof to preserve pair" << name1);
+				LOG_DEBUG_MT(3, "Found endofstream 1 record in leaving at eof to preserve pair" << name1);
 				return;
 			}
 
@@ -494,18 +507,18 @@ public:
 			string name3 = getName();
 			if (name3.empty() || endOfStream()) {
 				seekg(here1);
-				LOG_DEBUG_MT(1, "Found endofstream two records in, rewinding to initial boundary: " << name1 << " & " << name2);
+				LOG_DEBUG_MT(3, "Found endofstream two records in, rewinding to initial boundary: " << name1 << " & " << name2);
 				return;
 			}
 
 			if (SequenceRecordParser::isPair(name1,name2)) {
 				seekg(here1);
-				LOG_DEBUG_MT(1, "Found natural pair at boundary, rewinding");
+				LOG_DEBUG_MT(3, "Found natural pair at boundary, rewinding");
 			} else if (SequenceRecordParser::isPair(name2, name3)) {
 				seekg(here2);
-				LOG_DEBUG_MT(1, "Found split pair at boundary, incrementing one record");
+				LOG_DEBUG_MT(3, "Found split pair at boundary, incrementing one record");
 			} else {
-				LOG_DEBUG_MT(1, "Found no pairs at boundary, rewinding");
+				LOG_DEBUG_MT(3, "Found no pairs at boundary, rewinding");
 				seekg(here1);
 			}
 		}
