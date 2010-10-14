@@ -552,7 +552,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			_pairs.push_back( Pair(spIdx, spIdx+1) );
 			read2.markPaired();
 			spIdx++;
-			LOG_DEBUG(2, "Paired sequential reads: " << read1.getName() << " " << read2.getName());
+			LOG_DEBUG(4, "Paired sequential reads: " << read1.getName() << " " << read2.getName());
 			sequentialPairs++;
 		}
 	}

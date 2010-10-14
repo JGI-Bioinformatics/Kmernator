@@ -48,18 +48,19 @@ class Logger
 	OstreamPtr _os;
 	std::string _attribute;
 	unsigned int _level;
+	unsigned int _thisLevel;
 	static void *world;
 	inline std::string getRank() {
 #ifdef _USE_MPI
 		if (world != NULL)
-			return "rank(" + boost::lexical_cast<std::string>( ((mpi::communicator*)world)->rank() ) + "): ";
+			return " R" + boost::lexical_cast<std::string>( ((mpi::communicator*)world)->rank() );
 		else
 #endif
 			return std::string();
 	}
 	inline std::string getThread() {
 #ifdef _USE_OPENMP
-		return "thread(" + boost::lexical_cast<std::string>( omp_get_thread_num() ) + "): ";
+		return " T" + boost::lexical_cast<std::string>( omp_get_thread_num() );
 #else
 		return std::string();
 #endif
@@ -77,7 +78,7 @@ class Logger
 		return std::cerr << "WARNING: Using Logger(" << _attribute << ") when it was explicitly disconnected!" << std::endl;
 	}
 public:
-	Logger(std::ostream &os, std::string attr, unsigned int level) : _os(&os), _attribute(attr), _level(level) {}
+	Logger(std::ostream &os, std::string attr, unsigned int level) : _os(&os), _attribute(attr), _level(level), _thisLevel(-1) {}
 	Logger(const Logger &copy) {
 		*this = copy;
 	}
@@ -93,7 +94,10 @@ public:
 		return *this;
 	}
 	inline bool isActive(unsigned int level = 1) {
-		return _os != NULL && _level >= level;
+		bool isActive = _os != NULL && _level >= level;
+		if (isActive)
+			_thisLevel = level;
+		return isActive;
 	};
 	inline void setOstream(std::ostream &os) {
 		_os = &os;
@@ -104,13 +108,24 @@ public:
 	inline unsigned int &getLevel() {
 		return _level;
 	}
+	inline void setThisLevel(int level) {
+		_thisLevel = level;
+	}
+	inline std::string getThisLevel() {
+		std::string val;
+		if (_thisLevel >= 0) {
+			val = boost::lexical_cast<std::string>(_thisLevel);
+			_thisLevel = -1;
+		}
+		return val;
+	}
 	inline void unsetOstream() {
 		_os = NULL;
 	}
 	template<typename T>
 	inline std::ostream &operator<<(T log) {
 		if (isActive())
-			return *_os << getTime() << " " << _attribute << ": " << getRank() << getThread() << log;
+			return *_os << getTime() << " " << _attribute << getThisLevel() << getRank() << getThread() << ": "<< log;
 		else
 			return misuseWarning();
 	}
