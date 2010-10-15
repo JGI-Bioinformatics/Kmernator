@@ -37,7 +37,7 @@
 #endif
 
 #ifdef _USE_OPENMP
-#define OPENMP_CRITICAL_MPI
+#define X_OPENMP_CRITICAL_MPI
 #endif
 
 #include "boost/optional.hpp"
@@ -99,6 +99,7 @@ protected:
 	OptionalRequest *_requests;
 	int _numCheckpoints;
 	int _tag;
+	std::vector<int> _requestAttempts;
 
 public:
 	MPIRecvMessageBuffer(mpi::communicator &world, int messageSize, int tag = mpi::any_tag) :
@@ -108,6 +109,7 @@ public:
 		for(int destRank = 0; destRank < this->getWorld().size(); destRank++) {
 			_requests[destRank] = irecv(destRank);
 		}
+		_requestAttempts.resize(this->getWorld().size(), 0);
 	}
 	~MPIRecvMessageBuffer() {
 		delete [] _recvBuffers;
@@ -115,33 +117,32 @@ public:
 	}
 
 	bool receiveIncomingMessage(int rankSource) {
+		bool returnValue = false;
 		OptionalStatus optionalStatus;
 		OptionalRequest &optionalRequest = _requests[rankSource];
+
 		if (!!optionalRequest) {
+			bool retry = ++_requestAttempts[rankSource] > 1000;
+
 			optionalStatus = optionalRequest.get().test();
+			if (!optionalStatus && retry) {
+				LOG_WARN(1, "Cancelling pending request that looks to be stuck");
+				optionalRequest.get().cancel();
+				optionalStatus = optionalRequest.get().test();
+				if (!optionalStatus) {
+					optionalRequest = irecv(rankSource);
+					optionalStatus = optionalRequest.get().test();
+				}
+			}
+
 			if (!!optionalStatus) {
 				mpi::status status = optionalStatus.get();
-				int source = status.source();
-				int tag =  status.tag();
-				int size = status.count<char>().get();
-
-				assert( rankSource == source );
-				assert( _tag == tag );
-
-				this->newMessage();
-				LOG_DEBUG(3, _tag << ": received message " << this->getCount() << " from " << source << " size " << size);
-
-				if (size == 0) {
-					checkpoint();
-					LOG_DEBUG(2, _tag << ": got checkpoint from " << source);
-				} else {
-					processMessages(source, size);
-				}
-				optionalRequest = irecv(source);
-				return true;
+				process(status, rankSource);
+				optionalRequest = irecv(rankSource);
+				returnValue = true;
 			}
 		}
-		return false;
+		return returnValue;
 	}
 	int receiveAllIncomingMessages() {
 		int messages = 0;
@@ -149,7 +150,6 @@ public:
 		LOG_DEBUG(3, _tag << ": receiving all messages for tag. cp: " << getNumCheckpoints() << " msgCount: " << this->getCount());
 		bool mayHavePending = true;
 		while (mayHavePending) {
-			LOG_DEBUG(4, _tag << ": calling iprobe");
 			mayHavePending = false;
 			for(int rankSource = 0 ; rankSource < this->getWorld().size(); rankSource++) {
 				if (receiveIncomingMessage(rankSource)) {
@@ -187,6 +187,7 @@ private:
 		#pragma omp critical (MPI_buffer)
 #endif
 		oreq = this->getWorld().irecv(sourceRank, _tag, _recvBuffers + sourceRank*BufferBase::MESSAGE_BUFFER_SIZE, BufferBase::MESSAGE_BUFFER_SIZE);
+		_requestAttempts[sourceRank] = 0;
 		return oreq;
 	}
 	int processMessages(int sourceRank, int size) {
@@ -199,6 +200,30 @@ private:
 			msg += this->getMessageSize();
 		}
 		return count;
+	}
+	bool process(mpi::status &status, int rankSource) {
+
+		assert( status.error() == 0 );
+		int source = status.source();
+		int tag =  status.tag();
+		int size = status.count<char>().get();
+		if (status.cancelled()) {
+			LOG_WARN(1, _tag << ": request was successfully cancelled from " << source << " size " << size);
+		} else {
+
+			assert( rankSource == source );
+			assert( _tag == tag );
+
+			this->newMessage();
+			LOG_DEBUG(3, _tag << ": received message " << this->getCount() << " from " << source << " size " << size);
+
+			if (size == 0) {
+				checkpoint();
+				LOG_DEBUG(2, _tag << ": got checkpoint from " << source);
+			} else {
+				processMessages(source, size);
+			}
+		}
 	}
 
 };
@@ -270,7 +295,16 @@ protected:
 #endif
 			request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
 			this->newMessage();
+			int count = 0;
 			while ( ! request.test() ) {
+				if (++count > 1000) {
+					request.cancel();
+					if ( ! request.test() ) {
+						request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
+						count = 0;
+						LOG_WARN(1, "Canceled and retried pending message to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount());
+					}
+				}
 				LOG_DEBUG(3, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount());
 				receiveAnyIncoming();
 				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
