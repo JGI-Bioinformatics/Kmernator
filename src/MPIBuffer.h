@@ -106,10 +106,10 @@ public:
 		BufferBase(world, messageSize), _numCheckpoints(0), _tag(tag) {
 		_recvBuffers = new char[ BufferBase::MESSAGE_BUFFER_SIZE * this->getWorld().size() ];
 		_requests = new OptionalRequest[ this->getWorld().size() ];
+		_requestAttempts.resize(this->getWorld().size(), 0);
 		for(int destRank = 0; destRank < this->getWorld().size(); destRank++) {
 			_requests[destRank] = irecv(destRank);
 		}
-		_requestAttempts.resize(this->getWorld().size(), 0);
 	}
 	~MPIRecvMessageBuffer() {
 		delete [] _recvBuffers;
@@ -126,7 +126,7 @@ public:
 
 			optionalStatus = optionalRequest.get().test();
 			if (!optionalStatus && retry) {
-				LOG_WARN(1, "Cancelling pending request that looks to be stuck");
+				LOG_WARN(1, "Canceling pending request that looks to be stuck tag: " << _tag);
 				optionalRequest.get().cancel();
 				optionalStatus = optionalRequest.get().test();
 				if (!optionalStatus) {
@@ -208,14 +208,14 @@ private:
 		int tag =  status.tag();
 		int size = status.count<char>().get();
 		if (status.cancelled()) {
-			LOG_WARN(1, _tag << ": request was successfully cancelled from " << source << " size " << size);
+			LOG_WARN(1, _tag << ": request was successfully canceled from " << source << " size " << size);
 		} else {
 
 			assert( rankSource == source );
 			assert( _tag == tag );
 
 			this->newMessage();
-			LOG_DEBUG(3, _tag << ": received message " << this->getCount() << " from " << source << " size " << size);
+			LOG_DEBUG(3, _tag << ": received message " << this->getCount() << " from " << source << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
 
 			if (size == 0) {
 				checkpoint();
@@ -330,7 +330,7 @@ public:
 		return count;
 	}
 	void finalize(int tagDest) {
-		LOG_DEBUG(3, "entering finalize()" << tagDest);
+		LOG_DEBUG(3, "entering finalize() for tag " << tagDest);
 		flushAllMessageBuffers(tagDest);
 		// send zero message buffer as checkpoint signal to stop
 		LOG_DEBUG(3, "sending checkpoint tag " << tagDest);

@@ -123,7 +123,12 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	LOG_VERBOSE(2, "Clearing spectrum");
 	spectrum.reset();
+
+	world.barrier();
+	if (world.rank() == 0)
+		LOG_VERBOSE(1, "Finished");
 
 	return 0;
 }

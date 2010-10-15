@@ -295,6 +295,7 @@ public:
 			delete recvBuffers[threadId];
 
 		}
+		world.barrier();
 		LOG_DEBUG(1, "finished _buildKmerSpectrum");
 	}
 
