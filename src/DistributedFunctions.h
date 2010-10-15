@@ -219,17 +219,6 @@ public:
 
 		SendStoreKmerMessageBuffer *sendBuffers[numThreads][numThreads];
 		RecvStoreKmerMessageBuffer *recvBuffers[numThreads];
-		#pragma omp parallel
-		{
-			int threadId = omp_get_thread_num();
-			recvBuffers[threadId] = new RecvStoreKmerMessageBuffer(world, *this, messageSize, threadId);
-			for(int recvThread = 0 ; recvThread < numThreads; recvThread++) {
-				sendBuffers[threadId][recvThread] = new SendStoreKmerMessageBuffer(world, *this, messageSize);
-				sendBuffers[threadId][recvThread]->addCallback( *recvBuffers[threadId] );
-			}
-		}
-
-		LOG_DEBUG(2, "allocated buffers");
 
 		// share ReadSet sizes for globally unique readIdx calculations
 		long readSetSize = store.getSize();
@@ -244,46 +233,67 @@ public:
 		LOG_DEBUG(2, "reduced readSetSizes " << globalReadSetOffset);
 
 		LOG_DEBUG(2, "building spectrum using " << numThreads << " threads (" << omp_get_max_threads() << ")");
-		#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
-		for(long readIdx = 0 ; readIdx < readSetSize; readIdx++)
-		{
-			int threadId = omp_get_thread_num();
-			const Read &read = store.getRead( readIdx );
 
-			if (read.isDiscarded())
-				continue;
-
-			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
-			ReadSetSizeType globalReadIdx = readIdx + globalReadSetOffset;
-			for (PositionType readPos = 0 ; readPos < kmers.size(); readPos++) {
-				int rankDest, threadDest;
-				WeightType weight = kmers.valueAt(readPos);
-				this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, distributedThreadMask);
-
-				if (rankDest == rank && threadDest == threadId) {
-					this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos);
-				} else {
-					sendBuffers[ threadId ][ threadDest ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
-				}
-			}
-
-			if (readIdx > 0 && readIdx % 100000 == 0 )
-				LOG_DEBUG(1, "processed " << readIdx << " reads");
-		}
-
-		LOG_DEBUG(1, "finished generating kmers from reads");
-
-		// flush buffers and wait
 		#pragma omp parallel num_threads(numThreads)
 		{
 			int threadId = omp_get_thread_num();
+			LOG_DEBUG(3, "allocating buffers for thread");
+			recvBuffers[threadId] = new RecvStoreKmerMessageBuffer(world, *this, messageSize, threadId);
+			for(int recvThread = 0 ; recvThread < numThreads; recvThread++) {
+				sendBuffers[threadId][recvThread] = new SendStoreKmerMessageBuffer(world, *this, messageSize);
+				sendBuffers[threadId][recvThread]->addCallback( *recvBuffers[threadId] );
+			}
+
+
+			for(long readIdx = threadId ; readIdx < readSetSize; readIdx+=numThreads)
+			{
+
+				const Read &read = store.getRead( readIdx );
+
+				if (read.isDiscarded())
+					continue;
+
+				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
+				ReadSetSizeType globalReadIdx = readIdx + globalReadSetOffset;
+				LOG_DEBUG(2, "Read " << readIdx << " (" << globalReadIdx << ") " << kmers.size() );
+
+				for (PositionType readPos = 0 ; readPos < kmers.size(); readPos++) {
+					int rankDest, threadDest;
+					WeightType weight = kmers.valueAt(readPos);
+					this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, distributedThreadMask);
+
+					if (rankDest == rank && threadDest == threadId) {
+						this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos);
+					} else {
+						sendBuffers[ threadId ][ threadDest ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
+					}
+				}
+
+				if (threadId == 0 && readIdx > 0 && readIdx % 100000 == 0 )
+					LOG_VERBOSE(1, "processed " << readIdx << " reads");
+
+			}
+
+			LOG_DEBUG(2, "finished generating kmers from reads");
+
+			// receiving any new messages
+			recvBuffers[threadId]->receiveAllIncomingMessages();
+
+			LOG_DEBUG(2, "sending final flush");
 			// send all pending buffers
+			for(int destThread = 0; destThread < numThreads; destThread++) {
+				sendBuffers[threadId][destThread]->flushAllMessageBuffers(destThread);
+			}
+			LOG_DEBUG(2, "sending final messages")
 			for(int destThread = 0; destThread < numThreads; destThread++) {
 				sendBuffers[threadId][destThread]->finalize(destThread);
 				delete sendBuffers[threadId][destThread];
 			}
+
+			LOG_DEBUG(2, "receiving final messages");
 			recvBuffers[threadId]->finalize(numThreads);
 			delete recvBuffers[threadId];
+
 		}
 		LOG_DEBUG(1, "finished _buildKmerSpectrum");
 	}

@@ -228,11 +228,12 @@ public:
 	}
 };
 
-#ifdef NDEBUG
-// Higher possible verbosity and debug levels with NDEBUG set, optimized out otherwise
+#ifndef NDEBUG
+// Higher possible verbosity and debug levels without NDEBUG set
 #define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str()); }
 #define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str()); }
 #else
+// optimized out high debug and verbosity levels
 #define LOG_VERBOSE(level, log) if ( level <=2 && Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str()); }
 #define LOG_DEBUG(level,   log) if ( level <=2 && Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str()); }
 #endif

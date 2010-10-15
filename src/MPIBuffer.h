@@ -58,10 +58,11 @@ protected:
 	mpi::communicator &_world;
 	int _messageSize;
 	char *_message;
+	long _count;
 
 public:
 	MPIMessageBufferBase(mpi::communicator &world, int messageSize)
-	  : _world(world), _messageSize(messageSize) {
+	  : _world(world), _messageSize(messageSize), _count(0) {
 		_message = new char[ getMessageSize() ];
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
 	}
@@ -76,6 +77,13 @@ public:
 	}
 	inline int getMessageSize() {
 		return _messageSize;
+	}
+	inline long getCount() {
+		return _count;
+	}
+	inline void newMessage() {
+		#pragma omp atomic
+		_count++;
 	}
 };
 
@@ -120,7 +128,8 @@ public:
 				assert( rankSource == source );
 				assert( _tag == tag );
 
-				LOG_DEBUG(4, _tag << ": receiving message from " << source << " size " << size);
+				this->newMessage();
+				LOG_DEBUG(3, _tag << ": received message " << this->getCount() << " from " << source << " size " << size);
 
 				if (size == 0) {
 					checkpoint();
@@ -137,7 +146,7 @@ public:
 	int receiveAllIncomingMessages() {
 		int messages = 0;
 
-		LOG_DEBUG(3, _tag << ": receiving all messages for tag ");
+		LOG_DEBUG(3, _tag << ": receiving all messages for tag. cp: " << getNumCheckpoints() << " msgCount: " << this->getCount());
 		bool mayHavePending = true;
 		while (mayHavePending) {
 			LOG_DEBUG(4, _tag << ": calling iprobe");
@@ -175,7 +184,7 @@ private:
 	OptionalRequest irecv(int sourceRank) {
 		OptionalRequest oreq;
 #ifdef OPENMP_CRITICAL_MPI
-		#pragma omp critical (MPI_recv)
+		#pragma omp critical (MPI_buffer)
 #endif
 		oreq = this->getWorld().irecv(sourceRank, _tag, _recvBuffers + sourceRank*BufferBase::MESSAGE_BUFFER_SIZE, BufferBase::MESSAGE_BUFFER_SIZE);
 		return oreq;
@@ -252,13 +261,21 @@ public:
 
 protected:
 	void flushMessageBuffer(int rankDest, int tagDest, char *buffer, int &offset, bool sendZeroMessage = false) {
+		receiveAnyIncoming();
 		if (offset > 0 || sendZeroMessage) {
-			receiveAnyIncoming();
+			mpi::request request;
 			LOG_DEBUG(3, "sending message to " << rankDest << ", " << tagDest << " size " << offset);
 #ifdef OPENMP_CRITICAL_MPI
-#pragma omp critical (MPI_send)
+#pragma omp critical (MPI_buffer)
 #endif
-			this->getWorld().send(rankDest, tagDest, buffer, offset);
+			request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
+			this->newMessage();
+			while ( ! request.test() ) {
+				LOG_DEBUG(3, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount());
+				receiveAnyIncoming();
+				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+			}
+			LOG_DEBUG(3, "finished sending message to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount());
 		}
 		offset = 0;
 	}
@@ -279,11 +296,12 @@ public:
 		return count;
 	}
 	void finalize(int tagDest) {
+		LOG_DEBUG(3, "entering finalize()" << tagDest);
 		flushAllMessageBuffers(tagDest);
 		// send zero message buffer as checkpoint signal to stop
-		LOG_DEBUG(3, "sending stop message");
+		LOG_DEBUG(3, "sending checkpoint tag " << tagDest);
 		flushAllMessageBuffers(tagDest, true);
-		LOG_DEBUG(2, "sent checkpoints");
+		LOG_DEBUG(2, "sent checkpoints tag " << tagDest);
 	}
 };
 
