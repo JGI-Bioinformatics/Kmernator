@@ -299,20 +299,34 @@ public:
 		LOG_DEBUG(1, "finished _buildKmerSpectrum");
 	}
 
-	void printHistogramsMPI(mpi::communicator &world, std::ostream &os, bool printSolidOnly = false) {
-		Histogram histogram(127);
+	class MPIHistogram : public Histogram {
+	public:
+		typedef typename Histogram::HistogramElement HistogramElement;
+		typedef typename Histogram::BucketsType BucketsType;
+		MPIHistogram(unsigned int _zoomMax, double _logBase = 2.0) : Histogram(_zoomMax, _logBase) {}
 
-		if (!printSolidOnly) {
-			this->setWeakHistogram(histogram);
-			this->setSingletonHistogram(histogram);
+		void reduce(mpi::communicator &world) {
+
+			BucketsType copy(this->buckets);
+			for(int i = 0; i < copy.size(); i++) {
+				mpi::all_reduce(world, this->buckets[i].visits, copy[i].visits, std::plus<unsigned long>());
+				mpi::all_reduce(world, this->buckets[i].visitedCount, copy[i].visitedCount, std::plus<unsigned long>());
+				mpi::all_reduce(world, this->buckets[i].visitedWeight, copy[i].visitedWeight, std::plus<double>());
+			}
+			this->buckets.swap(copy);
 		}
-		this->setSolidHistogram(histogram);
+	};
 
-		Histogram dest(127);
-		mpi::reduce(world, histogram, dest, std::plus<Histogram>(), 0);
+	void printHistogramsMPI(mpi::communicator &world, std::ostream &os, bool printSolidOnly = false) {
+		MPIHistogram histogram(127);
+
+		histogram.set(*this, false, world.rank(), world.size());
+		LOG_DEBUG(2, histogram.toString());
+
+		histogram.reduce(world);
 
 		if (world.rank() == 0)
-			os << dest.toString();
+			os << histogram.toString();
 	}
 
 	Kmernator::MmapFileVector buildKmerSpectrumMPI(mpi::communicator &world, ReadSet &store ) {
@@ -322,6 +336,15 @@ public:
 		assert((numParts & (numParts-1)) == 0); // numParts must be a power of 2
 
 		_buildKmerSpectrumMPI(world, store, isSolid);
+
+		MPIHistogram histogram(127);
+		histogram.set(*this, false);
+		LOG_DEBUG(2, "Individual raw histogram\n" << histogram.toString());
+
+		histogram.reduce(world);
+		if (world.rank() == 0)
+			LOG_VERBOSE(1, "Collective raw histogram\n" << histogram.toString());
+		world.barrier();
 
 		// purge low counts
 		if (Options::getMinDepth() > 1) {
@@ -347,7 +370,7 @@ public:
 		if (Log::isVerbose(1)) {
 			this->printStats(Log::Verbose("Final Stats"), store.getSize(), isSolid, true);
 			if (!isSolid) {
-				//printHistogramsMPI(world, Log::Verbose("Final Histogram"));
+				printHistogramsMPI(world, Log::Verbose("Final Histogram"));
 			}
 		}
 

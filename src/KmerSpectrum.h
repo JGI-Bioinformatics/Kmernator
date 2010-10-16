@@ -366,7 +366,7 @@ public:
 
 		typedef std::vector< HistogramElement > BucketsType;
 
-	private:
+	protected:
 		double logBase;
 		double logFactor;
 		unsigned int zoomMax;
@@ -418,6 +418,12 @@ public:
 			lastBucket = 0;
 			totalCount = totalWeightedCount = 0.0;
 		}
+		void reset() {
+			int s = buckets.size();
+			resetTotals();
+			buckets.clear();
+			buckets.resize(s);
+		}
 		void finish() {
 			resetTotals();
 			for(size_t i = 0; i<buckets.size(); i++) {
@@ -462,6 +468,27 @@ public:
 			}
 			return ss.str();
 		}
+		void set(KmerSpectrum &ks, bool solidOnly = false, int rank = 0, int size = 1) {
+			reset();
+			if ( ! solidOnly ) {
+				for(WeakIterator it(ks.weak.begin(rank, size)), itEnd(ks.weak.end()); it != itEnd; it++) {
+					WeakDataType &data = it->value();
+					addRecord( data.getCount(), data.getWeightedCount() );
+				}
+				for(SingletonIterator it(ks.singleton.begin(rank, size)), itEnd(ks.singleton.end()); it != itEnd; it++) {
+					SingletonDataType &data = it->value();
+					addRecord( data.getCount(), data.getWeightedCount() );
+				}
+				for(unsigned long i; i < ks.purgedSingletons ; i++) {
+					addRecord( 1, 1.0);
+				}
+			}
+			for(SolidIterator it(ks.solid.begin(rank, size)), itEnd(ks.solid.end()); it != itEnd; it++) {
+				SolidDataType &data = it->value();
+				addRecord( data.getCount(), data.getWeightedCount() );
+			}
+
+		}
 	};
 
 	void printHistograms(bool printSolidOnly = false) {
@@ -471,35 +498,9 @@ public:
 	void printHistograms(std::ostream &os, bool printSolidOnly = false) {
 		Histogram histogram(63);
 
-		if (!printSolidOnly) {
-			setWeakHistogram(histogram);
-			setSingletonHistogram(histogram);
-		}
-		setSolidHistogram(histogram);
+		histogram.set(*this, printSolidOnly);
 
 		os << histogram.toString();
-	}
-
-	void setWeakHistogram(Histogram &histogram) {
-		for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
-			WeakDataType &data = it->value();
-			histogram.addRecord( data.getCount(), data.getWeightedCount() );
-		}
-	}
-	void setSolidHistogram(Histogram &histogram) {
-		for(SolidIterator it(solid.begin()), itEnd(solid.end()); it != itEnd; it++) {
-			SolidDataType &data = it->value();
-			histogram.addRecord( data.getCount(), data.getWeightedCount() );
-		}
-	}
-	void setSingletonHistogram(Histogram &histogram) {
-		for(SingletonIterator it(singleton.begin()), itEnd(singleton.end()); it != itEnd; it++) {
-			SingletonDataType &data = it->value();
-			histogram.addRecord( data.getCount(), data.getWeightedCount() );
-		}
-		for(unsigned long i; i < purgedSingletons ; i++) {
-			histogram.addRecord( 1, 1.0);
-		}
 	}
 
 	class GCCoverageHeatMap {

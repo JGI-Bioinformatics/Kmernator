@@ -121,6 +121,10 @@ public:
 		OptionalStatus optionalStatus;
 		OptionalRequest &optionalRequest = _requests[rankSource];
 
+		if (!optionalRequest) {
+			LOG_WARN(1, "Detected non-pending request for tag: " << _tag);
+			optionalRequest = irecv(rankSource);
+		}
 		if (!!optionalRequest) {
 			bool retry = ++_requestAttempts[rankSource] > 1000;
 
@@ -305,7 +309,7 @@ protected:
 						LOG_WARN(1, "Canceled and retried pending message to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount());
 					}
 				}
-				LOG_DEBUG(3, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount());
+				LOG_DEBUG(3, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount() << " attempt count " << count);
 				receiveAnyIncoming();
 				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 			}

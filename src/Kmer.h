@@ -1810,13 +1810,16 @@ public:
 		const KmerMap *_target;
 		BucketsVectorIterator _iBucket;
 		BucketTypeIterator _iElement;
+		int _rank, _size;
 
 	public:
-		Iterator(KmerMap *target):
+		Iterator(KmerMap *target, int rank = 0, int size = 1):
 		_target(target),
 		_iBucket(target->_buckets.begin()),
-		_iElement(_iBucket->begin())
+		_iElement(_iBucket->begin()),
+		_rank(rank), _size(size)
 		{
+			_moveToRank();
 			_moveToNextValidElement();
 		}
 
@@ -1824,23 +1827,29 @@ public:
 			_target = copy._target;
 			_iBucket = copy._iBucket;
 			_iElement = copy._iElement;
+			_rank = copy._rank;
+			_size = copy._size;
 		}
 
-		Iterator(KmerMap *target, BucketsVectorIterator bucketPtr):
+		Iterator(KmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1):
 		_target(target),
 		_iBucket(bucketPtr),
-		_iElement()
+		_iElement(),
+		_rank(rank), _size(size)
 		{
 			if (!isEnd())
 			_iElement = _iBucket->begin();
+			_moveToRank();
 			_moveToNextValidElement();
 		}
 
-		Iterator(KmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr):
+		Iterator(KmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr, int rank = 0, int size = 1):
 		_target(target),
 		_iBucket(bucketPtr),
-		_iElement(elementPtr)
+		_iElement(elementPtr),
+		_rank(rank), _size(size)
 		{
+			_moveToRank();
 		}
 
 	private:
@@ -1849,7 +1858,22 @@ public:
 		}
 
 		void _moveToNextValidElement() {
-			while( (!isEnd()) && _iElement == _iBucket->end() && ++_iBucket != _target->_buckets.end())
+			while (! isEnd() ) {
+				if (_iElement == _iBucket->end()) {
+					for(int i = 0 ; i < _size; i++)
+						if (++_iBucket == _target->_buckets.end())
+							break;
+						else
+							_iElement = _iBucket->begin();
+				} else
+					break;
+			}
+		}
+		void _moveToRank() {
+			for(int i = 0 ; i < _rank ; i++) {
+				if (++_iBucket == _target->_buckets.end())
+					return;
+			}
 			_iElement = _iBucket->begin();
 		}
 
@@ -1894,10 +1918,10 @@ public:
 	private:
 		Iterator _iterator;
 	public:
-		ConstIterator(KmerMap *target) : _iterator(target) {}
+		ConstIterator(KmerMap *target, int rank = 0, int size = 1) : _iterator(target, rank, size) {}
 		ConstIterator(const ConstIterator &copy) : _iterator(copy._iterator) {}
-		ConstIterator(KmerMap *target, BucketsVectorIterator bucketPtr) : _iterator(target,bucketPtr) {}
-		ConstIterator(KmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr): _iterator(target,bucketPtr,elementPtr) {}
+		ConstIterator(KmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1) : _iterator(target,bucketPtr, rank, size) {}
+		ConstIterator(KmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr, int rank = 0, int size = 1): _iterator(target,bucketPtr,elementPtr, rank, size) {}
 		bool operator==(const ConstIterator& other) const {return _iterator == other._iterator;}
 		bool operator!=(const ConstIterator& other) const {return _iterator != other._iterator;}
 		ConstIterator& operator++() {++_iterator; return *this;}
@@ -1910,10 +1934,10 @@ public:
 		const IndexType bucketIndex() const {return _iterator.bucketIndex();}
 	};
 
-	Iterator begin() {return Iterator(this);}
+	Iterator begin(int rank = 0, int size = 1) {return Iterator(this, rank, size);}
 	Iterator end() {return Iterator(this,_buckets.end());}
 
-	ConstIterator begin() const {return Iterator(this);}
+	ConstIterator begin(int rank = 0, int size = 1) const {return Iterator(this, rank, size);}
 	ConstIterator end() const {return Iterator(this, _buckets.end());}
 
 	typedef std::pair<BucketsVectorIterator, BucketsVectorIterator> ThreadedBuckets;
@@ -1937,8 +1961,8 @@ public:
 			return ThreadedBuckets(begin,end);
 		}
 	}
-	Iterator beginThreaded() {
-		return Iterator(this, _getThreadedBuckets().first);
+	Iterator beginThreaded(int rank = 0, int size = 1) {
+		return Iterator(this, _getThreadedBuckets().first, rank, size);
 	}
 	Iterator endThreaded() {
 		return Iterator(this, _getThreadedBuckets().second);
