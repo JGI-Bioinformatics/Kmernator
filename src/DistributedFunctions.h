@@ -321,7 +321,7 @@ public:
 		MPIHistogram histogram(127);
 
 		histogram.set(*this, false, world.rank(), world.size());
-		LOG_DEBUG(2, histogram.toString());
+		LOG_DEBUG(2, "Individual histogram\n" << histogram.toString());
 
 		histogram.reduce(world);
 
@@ -366,13 +366,6 @@ public:
 		}
 
 		LOG_VERBOSE(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
-
-		if (Log::isVerbose(1)) {
-			this->printStats(Log::Verbose("Final Stats"), store.getSize(), isSolid, true);
-			if (!isSolid) {
-				printHistogramsMPI(world, Log::Verbose("Final Histogram"));
-			}
-		}
 
 		return ourSpectrum;
 
