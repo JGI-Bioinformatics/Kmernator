@@ -36,14 +36,19 @@ typedef DistributedKmerSpectrum<DataType, DataType> DKS;
 
 int main(int argc, char *argv[]) {
 
+	if (!FilterReadsOptions::parseOpts(argc, argv))
+		throw std::invalid_argument("Please fix the command line arguments");
+
+	int threadSupport = MPI::Init_thread(MPI_THREAD_MULTIPLE);
+
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
 	Logger::setWorld(&world);
 
-	if (!FilterReadsOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
-
-	#pragma omp single
+	if (threadSupport != MPI_THREAD_MULTIPLE) {
+		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE, reducing OpenMP threads to 1")
+		omp_set_num_threads(1);
+	}
 	reduceOMPThreads(world);
 
 	MemoryUtils::getMemoryUsage();
@@ -129,6 +134,8 @@ int main(int argc, char *argv[]) {
 	world.barrier();
 	if (world.rank() == 0)
 		LOG_VERBOSE(1, "Finished");
+
+	MPI::Finalize();
 
 	return 0;
 }

@@ -207,7 +207,7 @@ private:
 	}
 	bool process(mpi::status &status, int rankSource) {
 
-		assert( status.error() == 0 );
+		bool wasMessage = false;
 		int source = status.source();
 		int tag =  status.tag();
 		int size = status.count<char>().get();
@@ -227,7 +227,9 @@ private:
 			} else {
 				processMessages(source, size);
 			}
+			wasMessage = true;
 		}
+		return wasMessage;
 	}
 
 };

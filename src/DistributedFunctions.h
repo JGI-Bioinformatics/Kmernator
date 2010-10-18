@@ -91,10 +91,13 @@ public:
 		NumberType *offsetArray = mySizeCounts;
 		NumberType offset = sizeof(NumberType) * (2+numBuckets);
 		NumberType totalSize = 0;
-		for(IndexType i = 0; i < numBuckets; i++) {
-			totalSize += ourSizeCounts[i];
-			offsetArray[i] = offset;
-			offset += D::BucketType::sizeToStore( ourSizeCounts[i] );
+		// store the arrays in mmap blocked by mpi rank, to minimized mapped footprint
+		for(int rank = 0 ; rank < world.size(); rank++) {
+			for(IndexType i = rank; i < numBuckets; i+= world.size()) {
+				totalSize += ourSizeCounts[i];
+				offsetArray[i] = offset;
+				offset += D::BucketType::sizeToStore( ourSizeCounts[i] );
+			}
 		}
 
 		delete [] ourSizeCounts;
@@ -308,7 +311,7 @@ public:
 		void reduce(mpi::communicator &world) {
 
 			BucketsType copy(this->buckets);
-			for(int i = 0; i < copy.size(); i++) {
+			for(unsigned int i = 0; i < copy.size(); i++) {
 				mpi::all_reduce(world, this->buckets[i].visits, copy[i].visits, std::plus<unsigned long>());
 				mpi::all_reduce(world, this->buckets[i].visitedCount, copy[i].visitedCount, std::plus<unsigned long>());
 				mpi::all_reduce(world, this->buckets[i].visitedWeight, copy[i].visitedWeight, std::plus<double>());
