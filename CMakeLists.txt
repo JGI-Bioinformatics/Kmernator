@@ -73,12 +73,12 @@ if(Boost_FOUND)
   include_directories(${BOOST_INCLUDE_DIRS})
   link_directories(${BOOST_LIB_DIRS})
 else()
-  set(BOOST_INSTALL_VER boost-1.40.0.cmake2)
-  if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/${BOOST_INSTALL_VER})
+  set(BOOST_INSTALL_VER boost-1.41.0.cmake)
+  if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/boost-cmake)
     message("Unpacking Distro Version of Boost")
     execute_process(COMMAND tar -xzf ${CMAKE_CURRENT_SOURCE_DIR}/opt/${BOOST_INSTALL_VER}.tar.gz )
   endif()
-  add_subdirectory( ${CMAKE_CURRENT_BINARY_DIR}/${BOOST_INSTALL_VER} ${CMAKE_CURRENT_BINARY_DIR}/${BOOST_INSTALL_VER} EXCLUDE_FROM_ALL)
+  add_subdirectory( ${CMAKE_CURRENT_BINARY_DIR}/boost-cmake ${CMAKE_CURRENT_BINARY_DIR}/boost-cmake EXCLUDE_FROM_ALL)
   add_custom_target( boost_subset ALL)
   add_dependencies( boost_subset boost_mpi-mt-static 
                                  boost_regex-mt-static 
@@ -88,7 +88,7 @@ else()
                                  boost_iostreams-mt-static
                                  boost_thread-mt-static
                                  )
-  include_directories( ${CMAKE_CURRENT_BINARY_DIR}/${BOOST_INSTALL_VER} )
+  include_directories( ${CMAKE_CURRENT_BINARY_DIR}/boost-cmake )
   link_directories( ${CMAKE_CURRENT_BINARY_DIR}/lib )
 endif()
 

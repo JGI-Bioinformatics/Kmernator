@@ -1,0 +1,12 @@
+INSTALL
+
+Requirements:
+
+cmake >= 2.6.4
+g++ >= 4.3.2
+
+mpi ( OpenMPI >= 1.4 compiled with "--enable-mpi-threads --with-threads=posix" )
+
+
+
+
