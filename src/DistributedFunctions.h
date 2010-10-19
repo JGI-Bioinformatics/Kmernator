@@ -37,9 +37,12 @@
 #include "Kmer.h"
 #include "KmerSpectrum.h"
 #include "MPIBuffer.h"
+#include "ReadSet.h"
+#include "ReadSelector.h"
 
 #include "boost/optional.hpp"
 #include <boost/thread/thread.hpp>
+#include <vector>
 
 #ifndef ENABLE_MPI
 #error "mpi is required for this library"
@@ -51,6 +54,22 @@ void reduceOMPThreads(mpi::communicator &world) {
 	omp_set_num_threads(numThreads);
 	if (world.rank() == 0)
 		LOG_DEBUG(1, "set OpenMP threads to " << numThreads);
+}
+
+ReadSet::ReadSetSizeType setGlobalReadSetOffset(mpi::communicator &world, ReadSet &store) {
+	// share ReadSet sizes for globally unique readIdx calculations
+	long readSetSize = store.getSize();
+	long readSetSizesInput[ world.size() ];
+	long readSetSizes[ world.size() ];
+	for(int i = 0; i < world.size(); i++)
+		readSetSizesInput[i] = i == world.rank() ? readSetSize : 0;
+	mpi::all_reduce(world, (long*) readSetSizesInput, world.size(), (long*) readSetSizes, mpi::maximum<long>());
+	long globalReadSetOffset = 0;
+	for(int i = 0; i < world.rank(); i++)
+		globalReadSetOffset += readSetSizes[i];
+	LOG_DEBUG(2, "reduced readSetSizes " << globalReadSetOffset);
+	store.setGlobalOffset( globalReadSetOffset );
+	return globalReadSetOffset;
 }
 
 template<typename So, typename We, typename Si = TrackingDataSingleton>
@@ -67,19 +86,23 @@ public:
 	typedef typename KS::WeightType WeightType;
 	typedef typename KS::DataPointers DataPointers;
 
+protected:
+	mpi::communicator world;
+
 public:
-	DistributedKmerSpectrum(unsigned long buckets = 0, bool separateSingletons = true)
-	: KS(buckets, separateSingletons) {
+	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long buckets = 0, bool separateSingletons = true)
+	: KS(buckets, separateSingletons), world(_world) {
 	}
 	~DistributedKmerSpectrum() {
 	}
-	DistributedKmerSpectrum &operator=(const KS &other) {
+	DistributedKmerSpectrum &operator=(const DistributedKmerSpectrum &other) {
 		*((KS*) this) = other;
+		world = other.world;
 		return *this;
 	}
 
 	template<typename D>
-	MmapFile writeKmerMapMPI(mpi::communicator &world, D &kmerMap, std::string filepath) {
+	MmapFile writeKmerMapMPI(D &kmerMap, std::string filepath) {
 		NumberType numBuckets = kmerMap.getNumBuckets();
 		NumberType *mySizeCounts = new NumberType[ numBuckets ];
 		for(IndexType i = 0 ; i < numBuckets; i++)
@@ -138,11 +161,13 @@ public:
 	};
 
 	/*
-	 * each rank & thread listens for worldSize IRecv messages (rank, data tag)
+	 * StoreKmer / buildKmerSpectrumMPI
+	 *
+	 * each rank & thread listens for worldSize IRecv messages (rank, thread-tag)
 	 * each rank scans ReadSet, each thread scheduled dynamically
-	 * each thread builds message buffer of kmers for that rank & thread (numThreads * worldSize * numThreads) buffers, sends when full.
-	 * send first receives & processes all pending messages, initiates new irecv if msg was non-zero, if zero, checkpoint increments
-	 * done when all requests are MPI_REQUEST_NULL
+	 * each thread builds own message buffer of kmers for each rank & thread numThreads * ( worldSize * numThreads ) buffers, sends when full.
+	 * every send first receives & processes all pending messages, initiates new irecv, if zero sized, checkpoint increments
+	 * done when all checkpoints have been received
 	 *
 	 * message (for a specific rank & thread):
 	 * readIdx, readPos, weight (rc if neg) + kmer
@@ -205,16 +230,17 @@ public:
 		}
 		void process(RecvStoreKmerMessageBufferBase *bufferCallback) {
 			RecvStoreKmerMessageBuffer *kbufferCallback = (RecvStoreKmerMessageBuffer*) bufferCallback;
-			LOG_DEBUG(4, bufferCallback->getWorld().rank() << ": " << omp_get_thread_num() << ": message: " << readIdx << " " << readPos << " " << weight << " " << getKmer()->toFasta());
+			LOG_DEBUG(4, "StoreKmerMessage: " << readIdx << " " << readPos << " " << weight << " " << getKmer()->toFasta());
 			kbufferCallback->getSpectrum().append(kbufferCallback->getDataPointer(), *getKmer(), weight, readIdx, readPos);
 		}
 	};
-
 
 	void _buildKmerSpectrumMPI( mpi::communicator &world, ReadSet &store, bool isSolid = false ) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
 		int messageSize = sizeof(StoreKmerMessageHeader) + KmerSizer::getTwoBitLength();
+
+		long readSetSize = store.getSize();
 
 		NumberType distributedThreadMask = world.size() - 1;
 
@@ -223,19 +249,10 @@ public:
 		SendStoreKmerMessageBuffer *sendBuffers[numThreads][numThreads];
 		RecvStoreKmerMessageBuffer *recvBuffers[numThreads];
 
-		// share ReadSet sizes for globally unique readIdx calculations
-		long readSetSize = store.getSize();
-		long readSetSizesInput[ world.size() ];
-		long readSetSizes[ world.size() ];
-		for(int i = 0; i < world.size(); i++)
-			readSetSizesInput[i] = i == world.rank() ? readSetSize : 0;
-		mpi::all_reduce(world, (long*) readSetSizesInput, world.size(), (long*) readSetSizes, mpi::maximum<long>());
-		long globalReadSetOffset = 0;
-		for(int i = 0; i < world.rank(); i++)
-			globalReadSetOffset += readSetSizes[i];
-		LOG_DEBUG(2, "reduced readSetSizes " << globalReadSetOffset);
-
 		LOG_DEBUG(2, "building spectrum using " << numThreads << " threads (" << omp_get_max_threads() << ")");
+
+		ReadSetSizeType globalReadSetOffset = store.getGlobalOffset();
+		assert( world.rank() == 0 ? (globalReadSetOffset == 0) : (globalReadSetOffset > 0) );
 
 		#pragma omp parallel num_threads(numThreads)
 		{
@@ -258,7 +275,7 @@ public:
 
 				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
 				ReadSetSizeType globalReadIdx = readIdx + globalReadSetOffset;
-				LOG_DEBUG(2, "Read " << readIdx << " (" << globalReadIdx << ") " << kmers.size() );
+				LOG_DEBUG(3, "Read " << readIdx << " (" << globalReadIdx << ") " << kmers.size() );
 
 				for (PositionType readPos = 0 ; readPos < kmers.size(); readPos++) {
 					int rankDest, threadDest;
@@ -311,28 +328,39 @@ public:
 		void reduce(mpi::communicator &world) {
 
 			BucketsType copy(this->buckets);
+			unsigned long *inbuffer = new unsigned long[this->buckets.size()];
+			unsigned long *outbuffer = new unsigned long[this->buckets.size()];
+			double *inbuffer_d = new double[this->buckets.size()];
+			double *outbuffer_d = new double[this->buckets.size()];
+
 			for(unsigned int i = 0; i < copy.size(); i++) {
-				mpi::all_reduce(world, this->buckets[i].visits, copy[i].visits, std::plus<unsigned long>());
-				mpi::all_reduce(world, this->buckets[i].visitedCount, copy[i].visitedCount, std::plus<unsigned long>());
-				mpi::all_reduce(world, this->buckets[i].visitedWeight, copy[i].visitedWeight, std::plus<double>());
+				inbuffer[i] = this->buckets[i].visits;
 			}
+			mpi::all_reduce(world, inbuffer, copy.size(), outbuffer, std::plus<unsigned long>());
+			for(unsigned int i = 0; i < copy.size(); i++) {
+				copy[i].visits = outbuffer[i];
+				inbuffer[i] = copy[i].visitedCount;
+			}
+			mpi::all_reduce(world, inbuffer, copy.size(), outbuffer, std::plus<unsigned long>());
+			for(unsigned int i = 0; i < copy.size(); i++) {
+				copy[i].visitedCount = outbuffer[i];
+				inbuffer_d[i] = copy[i].visitedWeight;
+			}
+			mpi::all_reduce(world, inbuffer_d, copy.size(), outbuffer_d, std::plus<double>());
+			for(unsigned int i = 0; i < copy.size(); i++) {
+				copy[i].visitedWeight = outbuffer_d[i];
+			}
+
+			delete [] inbuffer;
+			delete [] outbuffer;
+			delete [] inbuffer_d;
+			delete [] outbuffer_d;
+
 			this->buckets.swap(copy);
 		}
 	};
 
-	void printHistogramsMPI(mpi::communicator &world, std::ostream &os, bool printSolidOnly = false) {
-		MPIHistogram histogram(127);
-
-		histogram.set(*this, false, world.rank(), world.size());
-		LOG_DEBUG(2, "Individual histogram\n" << histogram.toString());
-
-		histogram.reduce(world);
-
-		if (world.rank() == 0)
-			os << histogram.toString();
-	}
-
-	Kmernator::MmapFileVector buildKmerSpectrumMPI(mpi::communicator &world, ReadSet &store ) {
+	Kmernator::MmapFileVector buildKmerSpectrumMPI(ReadSet &store ) {
 		bool isSolid = false; // not supported for references...
 		int numParts = world.size();
 
@@ -362,10 +390,10 @@ public:
 		// communicate sizes and allocate permanent file
 		LOG_VERBOSE(1, "Merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() );
 		Kmernator::MmapFileVector ourSpectrum(2);
-		ourSpectrum[0] = writeKmerMapMPI(world, this->weak, Options::getTmpDir() + "/weak-kmer-mmap");
+		ourSpectrum[0] = writeKmerMapMPI(this->weak, Options::getTmpDir() + "/weak-kmer-mmap");
 
 		if (Options::getMinDepth() <= 1) {
-			ourSpectrum[1] = writeKmerMapMPI(world, this->singleton, Options::getTmpDir() + "/singleton-kmer-mmap");
+			ourSpectrum[1] = writeKmerMapMPI(this->singleton, Options::getTmpDir() + "/singleton-kmer-mmap");
 		}
 
 		LOG_VERBOSE(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
@@ -374,10 +402,46 @@ public:
 
 	}
 
+}; // DistributedKmerSpectrum
+
+template<typename M>
+class DistributedReadSelector : public ReadSelector<M>
+{
+public:
+	typedef ReadSelector<M> RS;
+	typedef M DataType;
+	typedef typename RS::KMType KMType;
+	typedef typename RS::ScoreType ScoreType;
+	typedef typename RS::ReadSetSizeType ReadSetSizeType;
+	typedef typename RS::ReadTrimType ReadTrimType;
+	typedef typename RS::KA KA;
+	typedef typename RS::ElementType ElementType;
+
+	typedef Kmer::NumberType NumberType;
+
+	typedef std::vector<ScoreType> KmerValueVector;
+	typedef std::vector<ReadSetSizeType> ReadIdxVector;
+	typedef typename ReadIdxVector::const_iterator ReadIdxVectorIterator;
+
+protected:
+	mpi::communicator _world;
+
+public:
+	DistributedReadSelector(mpi::communicator &world, const ReadSet &reads, const KMType &map)
+		: RS(reads, map), _world(world) {}
+
 	/*
 	 * ReadTrim
-	 * each rank IRecv message for each file to output from previous rank (except rank that first opens file)
-
+	 * each rank IRecv FileReadyMessage tag=2*numThreads for each file to output from previous rank (except rank that first opens file)
+     * each rank & thread Irecv RequestMessage tag = threadId
+     * each rank & thread Irecv ResponseMessage tag = threadId + numThreads
+     *
+     * each rank & thread maintains linear buffer of read kmer values
+     * RequestMessage process( callback ) adds message to response
+     * ResponseMessage process( callback ) populates data in kmer values linear buffer
+     *
+     * periodically (by batch) communication flushes, checkpoints, and read trims get updated, files get written.
+     *
 message:
 receiveMessage[worldSize-1] { numReads, trimLengths[numReads], twoBitLengths[numReads], TwoBitReadBytes[ numReads ] }, numReads, trimLengths[numReads]
     last is reduction from worldSize cycles ago, apply to input files and output
@@ -392,16 +456,281 @@ done when empty cycle is received
 	 *
 	 */
 
+	class RequestKmerMessageHeader;
+	class RespondKmerMessageHeader;
 
-	/*
-	 * ReadSet
-	 *
-	 * stream reads (no mmap or Read in-memory storage)
-	 * open/write files by (inputFileIdx + rank) % inputFileSize
-keep track of globalReadIds, or at least read-file boundaries
-	 *
-	 */
+	typedef MPIMessageBufferBase< RequestKmerMessageHeader > RequestKmerMessageBuffersBase;
+	typedef MPIRecvMessageBuffer< RequestKmerMessageHeader > RecvRequestKmerMessageBufferBase;
+	typedef MPISendMessageBuffer< RequestKmerMessageHeader > SendRequestKmerMessageBufferBase;
+
+	typedef MPIMessageBufferBase< RespondKmerMessageHeader > RespondKmerMessageBuffersBase;
+	typedef MPIRecvMessageBuffer< RespondKmerMessageHeader > RecvRespondKmerMessageBufferBase;
+	typedef MPISendMessageBuffer< RespondKmerMessageHeader > SendRespondKmerMessageBufferBase;
+
+	class RecvRespondKmerMessageBuffer : public RespondKmerMessageBuffersBase
+	{
+	public:
+		KmerValueVector &_kmerValues;
+		RecvRespondKmerMessageBuffer(mpi::communicator &world, int messageSize, int tag, KmerValueVector &kmerValues)
+			: RespondKmerMessageBuffersBase(world, messageSize, tag), _kmerValues(kmerValues) {
+		}
+	};
+	class SendRespondKmerMessageBuffer : public RespondKmerMessageBuffersBase
+	{
+	public:
+		SendRespondKmerMessageBuffer(mpi::communicator &world, int messageSize)
+			: RespondKmerMessageBuffersBase(world, messageSize) {
+		}
+	};
+
+	class RecvRequestKmerMessageBuffer : public RequestKmerMessageBuffersBase
+	{
+	public:
+		SendRespondKmerMessageBuffer &_sendResponse;
+		RS &_readSelector;
+		int _numThreads;
+		RecvRequestKmerMessageBuffer(mpi::communicator &world, int messageSize, int tag, SendRespondKmerMessageBuffer &sendResponse, RS &readSelector, int numThreads)
+			: RequestKmerMessageBuffersBase(world, messageSize, tag), _sendResponse(sendResponse), _readSelector(readSelector), _numThreads(numThreads) {
+		}
+	};
+	class SendRequestKmerMessageBuffer : public RequestKmerMessageBuffersBase
+	{
+	public:
+		SendRequestKmerMessageBuffer(mpi::communicator &world,int messageSize)
+			: RequestKmerMessageBuffersBase(world, messageSize) {
+		}
+	};
+
+	class RespondKmerMessageHeader {
+		long requestId;
+		ScoreType score;
+
+		void set(long _requestId, ScoreType _score) {
+			requestId = _requestId;
+			score = _score;
+		}
+		// store response in kmer value vector
+		void process(RecvRespondKmerMessageBufferBase *bufferCallback) {
+			RecvRespondKmerMessageBuffer *kbufferCallback = (RecvRespondKmerMessageBuffer*) bufferCallback;
+			LOG_DEBUG(4, "RespondKmerMessage: " << requestId << " " << score);
+			kbufferCallback->_kmerValues[requestId] = score;
+		}
+	};
+
+	class RequestKmerMessageHeader {
+	public:
+		long requestId;
+		// Kmer is next bytes, dynamically determined by KmerSizer::getTwoBitLength()
+		// kmer is least complement
+
+		// THIS IS DANGEROUS unless allocated an extra Kmer!
+		Kmer *getKmer() {
+			return (Kmer*) (((char*)this)+sizeof(*this));
+		}
+		void set(long _requestId, const Kmer &_kmer) {
+			requestId = _requestId;
+			*(getKmer()) = _kmer;
+		}
+		// lookup kmer in map and build response message
+		void process(RecvRequestKmerMessageBufferBase *bufferCallback) {
+			RecvRequestKmerMessageBuffer *kbufferCallback = (RecvRequestKmerMessageBuffer*) bufferCallback;
+			LOG_DEBUG(4, "RequestKmerMessage: " << requestId << " " << getKmer()->toFasta());
+
+			ScoreType score = kbufferCallback->_readSelector.getValue( *getKmer() );
+			kbufferCallback->_sendResponse.bufferMessage(kbufferCallback->getSource(), kbufferCallback->getTag() + kbufferCallback->_numThreads).set( requestId, score );
+		}
+	};
+
+#if 0
+	void _scoreReadByKmersMPI(const Read &read, Sequence::BaseLocationVectorType &markups, ReadTrimType &trim, double minimumKmerScore, int correctionAttempts) {
+		  KA kmers = this->getKmersForRead(read);
+		  SequenceLengthType numKmers = kmers.size();
+
+		  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
+		  if ( markupLength != 0 ) {
+		    // find first N or X markup and that is the maximum trim point
+			SequenceLengthType maxTrimPoint = markupLength;
+			if (maxTrimPoint > KmerSizer::getSequenceLength()) {
+				numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
+			} else {
+				numKmers = 0;
+			}
+		  }
+
+		  for(SequenceLengthType j = 0; j < numKmers; j++) {
+			const ElementType elem = this->_map.getElementIfExists(kmers[j]);
+			if (elem.isValid()) {
+				ScoreType score = elem.value().getCount();
+				if (score >= minimumKmerScore) {
+					trim.trimLength++;
+					trim.score += score;
+				} else
+				break;
+			} else
+			break;
+		  }
+	}
+#endif
+
+	void _batchKmerLookup(const Read &read, SequenceLengthType trimLength, ReadIdxVector &readOffsetVector, KmerValueVector &batchBuffer, SendRequestKmerMessageBuffer &sendReq, int &thisThreadId, int &numThreads, NumberType &distributedThreadBitMask) {
+		KA kmers = this->getKmersForRead(read);
+		SequenceLengthType numKmers = 0;
+		if (trimLength > KmerSizer::getSequenceLength()) {
+			numKmers = trimLength - KmerSizer::getSequenceLength();
+		}
+
+		ReadSetSizeType offset = batchBuffer.size();
+		readOffsetVector.push_back( offset );
+		batchBuffer.insert(batchBuffer.end(), numKmers, ScoreType(0));
+		for(SequenceLengthType kmerIdx = 0; kmerIdx < numKmers; kmerIdx++) {
+			int localThreadId, distributedThreadId;
+			getThreadIds(kmers[kmerIdx], localThreadId, numThreads, distributedThreadId, distributedThreadBitMask);
+			if (distributedThreadId == _world.rank()) {
+				// handle this directly
+				batchBuffer[offset + kmerIdx] =  this->getValue(kmers[kmerIdx]);
+			} else {
+				sendReq.bufferMessage( distributedThreadId, thisThreadId ).set( offset + kmerIdx, kmers[kmerIdx]) ;
+			}
+		}
+	}
+	void scoreAndTrimReadsMPI(ScoreType minimumKmerScore, int correctionAttempts = 0) {
+		this->_trims.resize(this->_reads.getSize());
+		bool useKmers = Options::getKmerSize() != 0;
+
+		long readsSize = this->_reads.getSize();
+		long batchSize = 1000;
+		long batchReadIdx = 0;
+		int respondMessageSize = sizeof(RespondKmerMessageHeader);
+		int requestMessageSize = sizeof(RequestKmerMessageHeader) + KmerSizer::getTwoBitLength();
+
+		int numThreads = omp_get_max_threads();
+		NumberType distributedThreadBitMask = _world.size() - 1;
+
+		KmerValueVector batchBuffer[ numThreads ]((batchSize * 200 / numThreads) + 1);
+		ReadIdxVector readIndexBuffer[ numThreads ]((batchSize / numThreads) + 1);
+		ReadIdxVector readOffsetBuffer[ numThreads ]((batchSize / numThreads) + 1);
+
+
+		RecvRequestKmerMessageBuffer recvReq[numThreads];
+		SendRequestKmerMessageBuffer sendReq[numThreads];
+
+		RecvRespondKmerMessageBuffer recvResp[numThreads];
+		SendRespondKmerMessageBuffer sendResp[numThreads];
+
+		#pragma omp parallel num_threads(numThreads)
+		{
+			// initialize message buffers
+			int threadId = omp_get_thread_num();
+			recvResp[threadId] = new RecvRespondKmerMessageBuffer(_world, respondMessageSize, threadId + numThreads, batchBuffer[threadId]);
+			sendResp[threadId] = new SendRespondKmerMessageBuffer(_world, respondMessageSize);
+			sendResp[threadId]->addCallback( recvResp[threadId] );
+
+			recvReq[threadId] = new RecvRequestKmerMessageBuffer(_world, requestMessageSize, threadId, *sendResp[threadId], *this, numThreads);
+			sendReq[threadId] = new SendRequestKmerMessageBuffer(_world, requestMessageSize);
+			sendReq[threadId]->addCallback( recvReq[threadId] );
+
+		}
+
+		#pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
+		while (batchReadIdx < readsSize) {
+			int threadId = omp_get_thread_num();
+			batchBuffer[threadId].resize(0);
+			readIndexBuffer[threadId].resize(0);
+			readOffsetBuffer[threadId].resize(0);
+
+			LOG_DEBUG(1, "Starting batch for kmer lookups: " << batchReadIdx);
+
+			for(long i = threadId ; i < batchSize ; i+=numThreads) {
+
+				ReadSetSizeType readIdx = batchReadIdx + i;
+				if (readIdx >= readsSize)
+					continue;
+				const Read &read = this->_reads.getRead(readIdx);
+				if (read.isDiscarded()) {
+					continue;
+				}
+				readIndexBuffer[threadId].push_back(readIdx);
+
+				ReadTrimType &trim = this->_trims[readIdx];
+
+				Sequence::BaseLocationVectorType markups = read.getMarkups();
+				SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
+				if ( markupLength == 0 ) {
+					trim.trimLength = read.getLength();
+				} else {
+					// trim at first N or X markup
+					trim.trimLength = markupLength - 1;
+				}
+				if (useKmers) {
+					_batchKmerLookup(read, trim.trimLength, readOffsetBuffer[threadId], batchBuffer[threadId], *sendReq[threadId], threadId, numThreads, distributedThreadBitMask);
+				}
+
+			}
+
+			LOG_DEBUG(1, "kmer lookups finished, flushing communications");
+			sendReq[threadId]->flushAllMessageBuffers(threadId);
+			sendReq[threadId]->finalize(threadId);
+			recvReq[threadId]->finalize();
+			sendResp[threadId]->flushAllMessageBuffers(threadId+numThreads);
+			sendResp[threadId]->finalize(threadId+numThreads);
+			recvResp[threadId]->finalize();
+
+			LOG_DEBUG(1, "assigning trim values");
+			for(long i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
+				ReadSetSizeType &readIdx = readIndexBuffer[threadId][i];
+
+				ReadIdxVectorIterator buffBegin = (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i] );
+				ReadIdxVectorIterator buffEnd = ( (i+1) < readIndexBuffer[threadId].size() ? (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i+1]) : batchBuffer[threadId].end() );
+				ReadTrimType &trim = this->_trims[readIdx];
+
+				trim.score = 0;
+				trim.trimLength = 0;
+				while (buffBegin != buffEnd) {
+					ScoreType score = *(buffBegin++);
+					if (score >= minimumKmerScore) {
+						trim.trimLength++;
+						trim.score += score;
+					 } else
+						 break;
+				}
+				double reportScore;
+				if (trim.trimLength > 0) {
+					// calculate average score (before adding kmer length)
+					reportScore= trim.score /= (ScoreType) trim.trimLength;
+					if (useKmers) {
+						trim.trimLength += KmerSizer::getSequenceLength() - 1;
+					}
+				} else {
+					// keep available so that pairs will be selected together
+					trim.score = -1.0;
+					reportScore = 0.0;
+				}
+				if (!trim.label.empty())
+					trim.label += " ";
+				trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( reportScore );
+			}
+
+			LOG_DEBUG(1, "Finished assigning trim values: " << batchReadIdx);
+			batchReadIdx += batchSize;
+
+			// local & world threads are okay to start without sync
+		}
+	}
+
+
 
 };
+
+
+/*
+ * ReadSet
+ *
+ * stream reads (no mmap or Read in-memory storage)
+ * open/write files by (inputFileIdx + rank) % inputFileSize
+keep track of globalReadIds, or at least read-file boundaries
+ *
+ */
+
+
 
 #endif /* DISTRIBUTED_FUNCTIONS_H_ */

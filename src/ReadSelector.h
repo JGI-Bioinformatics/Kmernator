@@ -93,39 +93,39 @@ public:
 	typedef std::vector< PairScore > PairScoreVector;
 	typedef boost::unordered_set< std::string > DuplicateSet;
 	typedef ReadSet::PairedIndexType PairedIndexType;
+	typedef KmerArray<double> KA;
 
-private:
+protected:
 	const ReadSet &_reads;
 	const KMType &_map;
 	ReadTrimVector _trims;
 	PairedIndexType _picks;
 	KmerCountMap _counts;
-	bool needCounts;
+	bool _needCounts;
 	DuplicateSet _duplicateSet;
-	bool needDuplicateCheck;
+	bool _needDuplicateCheck;
 	ReadSetSizeType _lastSortedPick;
 
 public:
-	ReadSelector(const ReadSet &reads, const KMType &map, ScoreType minimumKmerScore = 0.0):
+	ReadSelector(const ReadSet &reads, const KMType &map):
 	_reads(reads),
 	_map(map),
 	_trims(),
 	_picks(),
 	_counts(),
-	needCounts(false),
+	_needCounts(false),
 	_duplicateSet(),
-	needDuplicateCheck(false),
+	_needDuplicateCheck(false),
 	_lastSortedPick(0)
 	{
-		scoreAndTrimReads(minimumKmerScore);
 	}
 
 	void clear() {
 		resetPicks();
 		_trims.clear();
 		_counts.clear();
-		needCounts = false;
-		needDuplicateCheck = false;
+		_needCounts = false;
+		_needDuplicateCheck = false;
 	}
 
 	void resetPicks() {
@@ -156,20 +156,19 @@ public:
 	};
 
 	void setNeedCounts() {
-		if (needCounts) {
+		if (_needCounts) {
 		  return;
 		}
 		_counts = KmerCountMap(_map.getNumBuckets());
 		// TODO verify counts are initialized to 0
-		needCounts = true;
+		_needCounts = true;
 	}
 	void setNeedDuplicateCheck() {
-		if (needDuplicateCheck)
+		if (_needDuplicateCheck)
 		return;
-		needDuplicateCheck = true;
+		_needDuplicateCheck = true;
 	}
 
-	typedef KmerArray<double> KA;
 	inline KA getKmersForRead(const Read &read) {
 		KA kmers(read.getTwoBitSequence(), read.getLength(), true);
 		return kmers;
@@ -230,7 +229,7 @@ public:
 		if (readIdx1 != ReadSet::MAX_READ_IDX) {
 
 			// check for duplicates
-			if (needDuplicateCheck) {
+			if (_needDuplicateCheck) {
 				bool isGood = _testDup(readIdx1) || _testDup(readIdx2);
 				if (!isGood) {
 					return false;
@@ -245,7 +244,7 @@ public:
 			}
 
 			// account for the picked read
-			if (needCounts) {
+			if (_needCounts) {
 				_storeCounts(readIdx1);
 				_storeCounts(readIdx2);
 			}
@@ -310,9 +309,8 @@ public:
 		KA kmers = getKmersForTrimmedRead(readIdx);
 		ScoreType score = 0.0;
 		for(SequenceLengthType j = 0; j < kmers.size(); j++) {
-			const ElementType elem = _map.getElementIfExists(kmers[j]);
-			if (elem.isValid()) {
-				ScoreType contribution = elem.value().getCount();
+			ScoreType contribution = getValue(kmers[j]);
+			if (contribution > 0) {
 				int pickedCount = _counts[kmers[j]];
 				if ( pickedCount >= maxPickedKmerDepth ) {
 					trim.score = -1.0;
@@ -438,13 +436,17 @@ public:
 		return kmers.size();
 	}
 
+	inline ScoreType getValue( const Kmer &kmer ) {
+		const ElementType elem = _map.getElementIfExists(kmer);
+		if (elem.isValid()) {
+			return elem.value().getCount();
+		} else {
+			return ScoreType(0);
+		}
+	}
 	void _scoreReadByKmers(const Read &read, Sequence::BaseLocationVectorType &markups, ReadTrimType &trim, double minimumKmerScore, int correctionAttempts) {
 		  KA kmers = getKmersForRead(read);
 		  SequenceLengthType numKmers = kmers.size();
-
-		  SequenceLengthType transitionPoint = _detectTransition(kmers);
-		  if (transitionPoint < kmers.size())
-			  ; // TODO use transitionPoint
 
 		  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 		  if ( markupLength != 0 ) {
@@ -458,16 +460,12 @@ public:
 		  }
 
 		  for(SequenceLengthType j = 0; j < numKmers; j++) {
-			const ElementType elem = _map.getElementIfExists(kmers[j]);
-			if (elem.isValid()) {
-				ScoreType score = elem.value().getCount();
-				if (score >= minimumKmerScore) {
+			  ScoreType score = getValue(kmers[j]);
+			  if (score >= minimumKmerScore) {
 					trim.trimLength++;
 					trim.score += score;
-				} else
-				break;
-			} else
-			break;
+			  } else
+				  break;
 		  }
 	}
 

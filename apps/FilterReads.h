@@ -102,7 +102,8 @@ public:
 long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, std::string outputFilename)
 {
 	LOG_VERBOSE(1, "Trimming reads: ");
-	RS selector(reads, spectrum.weak, minDepth);
+	RS selector(reads, spectrum.weak);
+	selector.scoreAndTrimReads(minDepth);
 	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 	LOG_VERBOSE(1, "Picking reads: ");
 

@@ -46,7 +46,7 @@
 #include <vector>
 
 
-template <typename C, int BufferSize = 16 * 1024>
+template <typename C, int BufferSize = 256 * 1024>
 class MPIMessageBufferBase {
 public:
 	static const int MESSAGE_BUFFER_SIZE = BufferSize;
@@ -99,11 +99,13 @@ protected:
 	OptionalRequest *_requests;
 	int _numCheckpoints;
 	int _tag;
+	int _source;
+	int _size;
 	std::vector<int> _requestAttempts;
 
 public:
 	MPIRecvMessageBuffer(mpi::communicator &world, int messageSize, int tag = mpi::any_tag) :
-		BufferBase(world, messageSize), _numCheckpoints(0), _tag(tag) {
+		BufferBase(world, messageSize), _numCheckpoints(0), _tag(tag), _source(mpi::any_source), _size(0) {
 		_recvBuffers = new char[ BufferBase::MESSAGE_BUFFER_SIZE * this->getWorld().size() ];
 		_requests = new OptionalRequest[ this->getWorld().size() ];
 		_requestAttempts.resize(this->getWorld().size(), 0);
@@ -116,6 +118,15 @@ public:
 		delete [] _requests;
 	}
 
+	inline int getSource() {
+		return _source;
+	}
+	inline int getTag() {
+		return _tag;
+	}
+	inline int getSize() {
+		return _size;
+	}
 	bool receiveIncomingMessage(int rankSource) {
 		bool returnValue = false;
 		OptionalStatus optionalStatus;
@@ -162,7 +173,9 @@ public:
 				}
 			}
 		}
-		LOG_DEBUG(3, _tag << ": processed messages: " << messages);
+		if (messages > 0)
+			LOG_DEBUG(3, _tag << ": processed messages: " << messages);
+
 		return messages;
 	}
 	void finalize(int checkpointFactor = 1) {
@@ -171,6 +184,7 @@ public:
 			receiveAllIncomingMessages();
 			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 		}
+		_numCheckpoints = 0;
 	}
 
 	void checkpoint() {
@@ -217,6 +231,8 @@ private:
 
 			assert( rankSource == source );
 			assert( _tag == tag );
+			_source = source;
+			_size = size;
 
 			this->newMessage();
 			LOG_DEBUG(3, _tag << ": received message " << this->getCount() << " from " << source << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
@@ -261,6 +277,7 @@ public:
 		delete [] _offsets;
 	}
 
+	// receive buffers to flush before and/or during send
 	void addCallback( RecvBuffer& receiveBuffer ) {
 		_receivingBufferCallbacks.push_back( &receiveBuffer );
 	}

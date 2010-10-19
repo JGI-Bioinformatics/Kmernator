@@ -77,7 +77,9 @@ int main(int argc, char *argv[]) {
 	if (world.rank() == 0)
 		LOG_VERBOSE(1, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
 
-	DKS spectrum(0);
+	setGlobalReadSetOffset(world, reads);
+
+	DKS spectrum(world, 0);
 
 	Kmernator::MmapFileVector spectrumMmaps;
 
@@ -89,19 +91,13 @@ int main(int argc, char *argv[]) {
 	  if (world.rank() == 0)
 		  LOG_VERBOSE(1, "targeting " << numBuckets << " buckets for reads ");
 
-	  spectrum = DKS(numBuckets);
+	  spectrum = DKS(world, numBuckets);
 	  LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
 
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
-	  spectrumMmaps = spectrum.buildKmerSpectrumMPI(world, reads);
+	  spectrumMmaps = spectrum.buildKmerSpectrumMPI(reads);
 	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
-
-	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {
-		  LOG_VERBOSE(1, "Creating GC Heat Map " <<  MemoryUtils::getMemoryUsage());
-		  OfstreamMap ofmap(outputFilename + "-GC", ".txt");
-		  spectrum.printGC(ofmap.getOfstream(""));
-	  }
 
 	  if (Options::getMinDepth() > 1) {
         LOG_VERBOSE(1, "Clearing singletons from memory");

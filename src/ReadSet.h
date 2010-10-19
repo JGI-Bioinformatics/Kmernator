@@ -117,6 +117,7 @@ protected:
 	PartitioningData<ReadSetSizeType> _filePartitions;
 	unsigned long _baseCount;
 	SequenceLengthType _maxSequenceLength;
+	ReadSetSizeType _globalOffset;
 	PairedIndexType _pairs;
 	std::string previousReadName; // for fast pairing
 
@@ -153,7 +154,7 @@ private:
 
 public:
 	ReadSet() :
-		_baseCount(0), _maxSequenceLength(0) {
+		_baseCount(0), _maxSequenceLength(0), _globalOffset(0) {
 	}
 	~ReadSet() {
 	}
@@ -180,6 +181,14 @@ public:
 
 	inline ReadSetSizeType getPairSize() const {
 		return _pairs.size();
+	}
+
+	inline void setGlobalOffset(ReadSetSizeType globalOffset) {
+		_globalOffset = globalOffset;
+	}
+
+	inline ReadSetSizeType getGlobalOffset() {
+		return _globalOffset;
 	}
 
 	inline bool isValidRead(ReadSetSizeType index) const {
