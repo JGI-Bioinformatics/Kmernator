@@ -292,7 +292,7 @@ void testMarkup() {
 #define TEST_GC(inFasta,count)\
   sequenceLength = std::strlen(inFasta);\
   TwoBitSequence::compressSequence(inFasta, in);\
-  BOOST_CHECK_EQUAL(TwoBitSequence::getGC(in,sequenceLength),count);
+  BOOST_CHECK_EQUAL((long)TwoBitSequence::getGC(in,sequenceLength),(long)count);
 
 
 void testGC()

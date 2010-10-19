@@ -235,7 +235,7 @@ private:
 			_size = size;
 
 			this->newMessage();
-			LOG_DEBUG(3, _tag << ": received message " << this->getCount() << " from " << source << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
+			LOG_DEBUG(3, _tag << ": received message " << this->getCount() << " from " << source << "," << tag << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
 
 			if (size == 0) {
 				checkpoint();

@@ -479,7 +479,7 @@ public:
 					SingletonDataType &data = it->value();
 					addRecord( data.getCount(), data.getWeightedCount() );
 				}
-				for(unsigned long i; i < ks.purgedSingletons ; i++) {
+				for(unsigned long i = 0; i < ks.purgedSingletons ; i++) {
 					addRecord( 1, 1.0);
 				}
 			}

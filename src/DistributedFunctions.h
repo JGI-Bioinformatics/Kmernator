@@ -238,11 +238,14 @@ public:
 	void _buildKmerSpectrumMPI( mpi::communicator &world, ReadSet &store, bool isSolid = false ) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
+		int numParts = world.size();
+		assert((numParts & (numParts-1)) == 0); // numParts must be a power of 2
+
 		int messageSize = sizeof(StoreKmerMessageHeader) + KmerSizer::getTwoBitLength();
 
 		long readSetSize = store.getSize();
 
-		NumberType distributedThreadMask = world.size() - 1;
+		NumberType distributedThreadMask = numParts - 1;
 
 		LOG_VERBOSE(1, "starting _buildSpectrum");
 
@@ -362,9 +365,6 @@ public:
 
 	Kmernator::MmapFileVector buildKmerSpectrumMPI(ReadSet &store ) {
 		bool isSolid = false; // not supported for references...
-		int numParts = world.size();
-
-		assert((numParts & (numParts-1)) == 0); // numParts must be a power of 2
 
 		_buildKmerSpectrumMPI(world, store, isSolid);
 
