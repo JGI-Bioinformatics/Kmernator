@@ -29,10 +29,15 @@
 // PURPOSE.
 //
 
+
 #include "FilterReads.h"
 #include "DistributedFunctions.h"
 
-typedef DistributedKmerSpectrum<DataType, DataType> DKS;
+typedef TrackingDataMinimal4f DataType;
+typedef DistributedKmerSpectrum<DataType, DataType> KS;
+typedef DistributedReadSelector<DataType> RS;
+
+#include "FilterReadsTemplate.h"
 
 int main(int argc, char *argv[]) {
 
@@ -79,31 +84,31 @@ int main(int argc, char *argv[]) {
 
 	setGlobalReadSetOffset(world, reads);
 
-	DKS spectrum(world, 0);
+	long numBuckets = 0;
+	if (Options::getKmerSize() > 0) {
 
+		numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
+
+		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
+		if (world.rank() == 0)
+			LOG_VERBOSE(1, "targeting " << numBuckets << " buckets for reads ");
+	}
+	KS spectrum(world, numBuckets);
 	Kmernator::MmapFileVector spectrumMmaps;
 
 	if (Options::getKmerSize() > 0) {
+		LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
-	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
+		TrackingData::minimumWeight = Options::getMinKmerQuality();
 
-	  numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-	  if (world.rank() == 0)
-		  LOG_VERBOSE(1, "targeting " << numBuckets << " buckets for reads ");
+		spectrumMmaps = spectrum.buildKmerSpectrumMPI(reads);
+		LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
 
-	  spectrum = DKS(world, numBuckets);
-	  LOG_VERBOSE(1, world.rank() << ": " << MemoryUtils::getMemoryUsage());
-
-	  TrackingData::minimumWeight = Options::getMinKmerQuality();
-
-	  spectrumMmaps = spectrum.buildKmerSpectrumMPI(reads);
-	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
-
-	  if (Options::getMinDepth() > 1) {
-        LOG_VERBOSE(1, "Clearing singletons from memory");
-        spectrum.singleton.clear();
-	    LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
-	  }
+		if (Options::getMinDepth() > 1) {
+			LOG_VERBOSE(1, "Clearing singletons from memory");
+			spectrum.singleton.clear();
+			LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+		}
 	}
 
 
@@ -120,7 +125,11 @@ int main(int argc, char *argv[]) {
 			if (Options::getKmerSize() > 0) {
 				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
 			}
-			selectReads(thisDepth, reads, spectrum, pickOutputFilename);
+			LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
+			RS selector(world, reads, spectrum.weak);
+			selector.scoreAndTrimReadsMPI(minDepth);
+
+			selectReads(thisDepth, reads, spectrum, selector, pickOutputFilename);
 		}
 	}
 

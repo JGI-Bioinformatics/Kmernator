@@ -31,6 +31,13 @@
 
 #include "FilterReads.h"
 
+typedef TrackingDataMinimal4f DataType;
+typedef KmerSpectrum<DataType, DataType> KS;
+typedef ReadSelector<DataType> RS;
+
+#include "FilterReadsTemplate.h"
+
+
 int main(int argc, char *argv[]) {
 
 	if (!FilterReadsOptions::parseOpts(argc, argv))
@@ -110,12 +117,17 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (!outputFilename.empty()) {
+
 		for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
 			std::string pickOutputFilename = outputFilename;
 			if (Options::getKmerSize() > 0) {
 				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
 			}
-			selectReads(thisDepth, reads, spectrum, pickOutputFilename);
+			LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
+			RS selector(reads, spectrum.weak);
+			selector.scoreAndTrimReads(minDepth);
+
+			selectReads(thisDepth, reads, spectrum, selector, pickOutputFilename);
 		}
 	}
 

@@ -55,7 +55,7 @@ public:
 	typedef boost::optional< mpi::status > OptionalStatus;
 
 protected:
-	mpi::communicator &_world;
+	mpi::communicator _world;
 	int _messageSize;
 	char *_message;
 	long _count;
