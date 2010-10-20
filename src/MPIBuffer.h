@@ -40,12 +40,15 @@
 #define X_OPENMP_CRITICAL_MPI
 #endif
 
+#define _RETRY_MESSAGES false
+#define _RETRY_THRESHOLD 10000
+
 #include "boost/optional.hpp"
 #include <boost/thread/thread.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
 
-#define MPI_BUFFER_DEFAULT_SIZE (16 * 1024)
+#define MPI_BUFFER_DEFAULT_SIZE (256 * 1024)
 
 template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
 class MPIMessageBufferBase {
@@ -147,10 +150,11 @@ public:
 			optionalRequest = irecv(rankSource);
 		}
 		if (!!optionalRequest) {
-			bool retry = ++_requestAttempts[rankSource] > 1000;
+			++_requestAttempts[rankSource];
+			bool retry =  _RETRY_MESSAGES && _requestAttempts[rankSource] > _RETRY_THRESHOLD;
 
 			optionalStatus = optionalRequest.get().test();
-			if (!optionalStatus && retry) {
+			if (retry && !optionalStatus) {
 				LOG_WARN(1, "Canceling pending request that looks to be stuck tag: " << _tag);
 				optionalRequest.get().cancel();
 				optionalStatus = optionalRequest.get().test();
@@ -216,8 +220,8 @@ private:
 		#pragma omp critical (MPI_buffer)
 #endif
 		oreq = this->getWorld().irecv(sourceRank, _tag, _recvBuffers + sourceRank*BufferBase::MESSAGE_BUFFER_SIZE, BufferBase::MESSAGE_BUFFER_SIZE);
-		_requestAttempts[sourceRank] = 0;
 		assert(!!oreq);
+		_requestAttempts[sourceRank] = 0;
 		return oreq;
 	}
 	int processMessages(int sourceRank, int size) {
@@ -337,7 +341,7 @@ protected:
 			int count = 0;
 			OptionalStatus optStatus = request.test();
 			while ( ! optStatus ) {
-				if (++count > 1000) {
+				if (_RETRY_MESSAGES && ++count > _RETRY_THRESHOLD) {
 					request.cancel();
 					if ( ! request.test() ) {
 						request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
