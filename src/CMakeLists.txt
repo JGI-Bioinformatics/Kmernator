@@ -40,6 +40,8 @@ IF(CXX_FLAGS)
   SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
 ENDIF(CXX_FLAGS)
 
+SET(CMAKE_CXX_FLAGS "-fno-strict-aliasing ${CMAKE_CXX_FLAGS}")
+
 set_source_files_properties( TwoBitSequence
                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
                           )
