@@ -578,7 +578,7 @@ done when empty cycle is received
 
 
 		ReadSetSizeType readsSize = this->_reads.getSize();
-		ReadSetSizeType batchSize = 100;
+		ReadSetSizeType batchSize = 100000;
 		ReadSetSizeType batchReadIdx = 0;
 		int respondMessageSize = sizeof(RespondKmerMessageHeader);
 		int requestMessageSize = sizeof(RequestKmerMessageHeader) + KmerSizer::getTwoBitLength();
@@ -631,7 +631,7 @@ done when empty cycle is received
 			readIndexBuffer[threadId].resize(0);
 			readOffsetBuffer[threadId].resize(0);
 
-			LOG_DEBUG(1, "Starting batch for kmer lookups: " << batchReadIdx);
+			LOG_DEBUG(3, "Starting batch for kmer lookups: " << batchReadIdx);
 
 			for(ReadSetSizeType i = threadId ; i < batchSize ; i+=numThreads) {
 
@@ -660,20 +660,20 @@ done when empty cycle is received
 
 			}
 
-			LOG_DEBUG(1, "kmer lookups finished, flushing communications");
+			LOG_DEBUG(3, "kmer lookups finished, flushing communications");
 			LOG_DEBUG(3, "readIndexBuffer: " << readIndexBuffer[threadId].size() << "/" << readIndexBuffer[threadId][readIndexBuffer[threadId].size()-1]);
 			LOG_DEBUG(3, "batchBuffer: " << batchBuffer[threadId].size());
 
 			sendReq[threadId]->flushAllMessageBuffers(threadId);
 			sendReq[threadId]->finalize(threadId);
 			recvReq[threadId]->finalize();
-			LOG_DEBUG(1, "Request sent: " << sendReq[threadId]->getCount() << " received: " << recvReq[threadId]->getCount());
 			sendResp[threadId]->flushAllMessageBuffers(threadId+numThreads);
 			sendResp[threadId]->finalize(threadId+numThreads);
 			recvResp[threadId]->finalize();
-			LOG_DEBUG(1, "Response sent: " << sendResp[threadId]->getCount() << " received: " << recvResp[threadId]->getCount());
+			LOG_DEBUG(2, "Request sent: " << sendReq[threadId]->getCount() << " received: " << recvReq[threadId]->getCount() << " "
+					 <<  "Response sent: " << sendResp[threadId]->getCount() << " received: " << recvResp[threadId]->getCount());
 
-			LOG_DEBUG(1, "assigning trim values");
+			LOG_DEBUG(3, "assigning trim values");
 			for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
 				ReadSetSizeType &readIdx = readIndexBuffer[threadId][i];
 
@@ -708,7 +708,7 @@ done when empty cycle is received
 				trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( reportScore );
 			}
 
-			LOG_DEBUG(1, "Finished assigning trim values: " << batchReadIdx);
+			LOG_DEBUG(3, "Finished assigning trim values: " << batchReadIdx);
 			batchReadIdx += batchSize;
 
 			// local & world threads are okay to start without sync
