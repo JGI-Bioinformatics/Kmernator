@@ -578,7 +578,7 @@ public:
 		if (byInputFile) {
 			key += "-" + _reads.getReadFileNamePrefix(readIdx);
 		}
-		LOG_DEBUG(1, "Writing to " << key << " " << readIdx );
+		LOG_DEBUG(4, "Writing " << readIdx << " to *" << key);
 		_writePickRead(ofstreamMap.getOfstream(key), readIdx, trim, format);
 	}
 };

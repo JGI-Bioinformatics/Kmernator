@@ -1307,19 +1307,20 @@ public:
 
 				for(int threads = 0; threads < numThreads; threads++)
 				{
-					for(unsigned long idx = 0; idx < startReadIdx[ threads ][ omp_get_thread_num() ].size(); idx++)
+					int threadId = omp_get_thread_num();
+					for(unsigned long idx = 0; idx < startReadIdx[ threads ][ threadId ].size(); idx++)
 					{
-						ReadPosType readPos = startReadIdx[ threads ][ omp_get_thread_num() ][idx];
+						ReadPosType readPos = startReadIdx[ threads ][ threadId ][idx];
 						unsigned long startIdx = readPos.second;
 						unsigned long len = 0;
-						if ( idx < startReadIdx[ threads ][ omp_get_thread_num() ].size() -1) {
-							len = startReadIdx[ threads ][ omp_get_thread_num() ][idx+1].second - startIdx;
+						if ( idx < startReadIdx[ threads ][ threadId ].size() -1) {
+							len = startReadIdx[ threads ][ threadId ][idx+1].second - startIdx;
 						} else {
-							len = kmerBuffers[threads][ omp_get_thread_num() ].size() - startIdx;
+							len = kmerBuffers[threads][ threadId ].size() - startIdx;
 						}
 						if (len > 0) {
 							// do not include partIdx or partBitmMask , as getSMPThread() already accounted for partitioning
-						    append(kmerBuffers[threads][ omp_get_thread_num() ], readPos.first, isSolid, startIdx, len, 0, 0);
+						    append(kmerBuffers[threads][ threadId ], readPos.first, isSolid, startIdx, len, 0, 0);
 						}
 					}
 				}
