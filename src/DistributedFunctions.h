@@ -267,6 +267,10 @@ public:
 				sendBuffers[threadId][recvThread]->addCallback( *recvBuffers[threadId] );
 			}
 
+			#pragma omp barrier
+			LOG_DEBUG(1, "message buffers ready");
+			#pragma omp master
+			world.barrier();
 
 			for(long readIdx = threadId ; readIdx < readSetSize; readIdx+=numThreads)
 			{
@@ -308,16 +312,20 @@ public:
 				sendBuffers[threadId][destThread]->flushAllMessageBuffers(destThread);
 			}
 			LOG_DEBUG(2, "sending final messages")
+
 			for(int destThread = 0; destThread < numThreads; destThread++) {
 				sendBuffers[threadId][destThread]->finalize(destThread);
+				LOG_DEBUG(1, "sendBuffers["<<threadId<<"]["<<destThread<<"] sent " << sendBuffers[threadId][destThread]->getCount());
 				delete sendBuffers[threadId][destThread];
 			}
 
 			LOG_DEBUG(2, "receiving final messages");
 			recvBuffers[threadId]->finalize(numThreads);
+			LOG_DEBUG(1, "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getCount());
 			delete recvBuffers[threadId];
 
-		}
+		} // omp parallel
+
 		world.barrier();
 		LOG_DEBUG(1, "finished _buildKmerSpectrum");
 	}
@@ -568,14 +576,17 @@ done when empty cycle is received
 		this->_trims.resize(this->_reads.getSize());
 		bool useKmers = Options::getKmerSize() != 0;
 
+
 		ReadSetSizeType readsSize = this->_reads.getSize();
-		ReadSetSizeType batchSize = 10;
+		ReadSetSizeType batchSize = 100;
 		ReadSetSizeType batchReadIdx = 0;
 		int respondMessageSize = sizeof(RespondKmerMessageHeader);
 		int requestMessageSize = sizeof(RequestKmerMessageHeader) + KmerSizer::getTwoBitLength();
 
 		int numThreads = omp_get_max_threads();
 		NumberType distributedThreadBitMask = _world.size() - 1;
+
+		LOG_DEBUG(1, "Starting scoreAndTrimReadsMPI - trimming: " << readsSize << " using " << numThreads << " threads");
 
 		KmerValueVector batchBuffer[ numThreads ];
 		ReadIdxVector readIndexBuffer[ numThreads ];
@@ -586,6 +597,9 @@ done when empty cycle is received
 
 		RecvRespondKmerMessageBuffer *recvResp[numThreads];
 		SendRespondKmerMessageBuffer *sendResp[numThreads];
+
+		ReadSetSizeType mostReads = mpi::all_reduce(_world, readsSize, mpi::maximum<ReadSetSizeType>());
+		LOG_DEBUG(1, "Largest number of reads to batch: " << mostReads);
 
 		#pragma omp parallel num_threads(numThreads)
 		{
@@ -607,8 +621,11 @@ done when empty cycle is received
 
 		}
 
+		LOG_DEBUG(1, "message buffers ready");
+		_world.barrier();
+
 		#pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
-		while (batchReadIdx < readsSize) {
+		while (batchReadIdx < mostReads) {
 			int threadId = omp_get_thread_num();
 			batchBuffer[threadId].resize(0);
 			readIndexBuffer[threadId].resize(0);
@@ -644,12 +661,17 @@ done when empty cycle is received
 			}
 
 			LOG_DEBUG(1, "kmer lookups finished, flushing communications");
+			LOG_DEBUG(3, "readIndexBuffer: " << readIndexBuffer[threadId].size() << "/" << readIndexBuffer[threadId][readIndexBuffer[threadId].size()-1]);
+			LOG_DEBUG(3, "batchBuffer: " << batchBuffer[threadId].size());
+
 			sendReq[threadId]->flushAllMessageBuffers(threadId);
 			sendReq[threadId]->finalize(threadId);
 			recvReq[threadId]->finalize();
+			LOG_DEBUG(1, "Request sent: " << sendReq[threadId]->getCount() << " received: " << recvReq[threadId]->getCount());
 			sendResp[threadId]->flushAllMessageBuffers(threadId+numThreads);
 			sendResp[threadId]->finalize(threadId+numThreads);
 			recvResp[threadId]->finalize();
+			LOG_DEBUG(1, "Response sent: " << sendResp[threadId]->getCount() << " received: " << recvResp[threadId]->getCount());
 
 			LOG_DEBUG(1, "assigning trim values");
 			for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
@@ -692,18 +714,23 @@ done when empty cycle is received
 			// local & world threads are okay to start without sync
 		}
 
+		LOG_DEBUG(1, "Finished trimming, waiting for remote processes");
+		_world.barrier();
+
 		#pragma omp parallel num_threads(numThreads)
 		{
 			int threadId = omp_get_thread_num();
 			// initialize message buffers
 
+			LOG_DEBUG(2, "Releasing Request/Response message buffers");
 			delete recvResp[threadId];
 			delete sendResp[threadId];
 
 			delete recvReq[threadId];
 			delete sendReq[threadId];
 		}
-
+		LOG_DEBUG(1, "Finished scoreAndTrimReadsMPI");
+		_world.barrier();
 	}
 
 

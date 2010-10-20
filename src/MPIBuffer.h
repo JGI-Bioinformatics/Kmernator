@@ -45,8 +45,9 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
 
+#define MPI_BUFFER_DEFAULT_SIZE (16 * 1024)
 
-template <typename C, int BufferSize = 256 * 1024>
+template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
 class MPIMessageBufferBase {
 public:
 	static const int MESSAGE_BUFFER_SIZE = BufferSize;
@@ -87,7 +88,7 @@ public:
 	}
 };
 
-template <typename C, int BufferSize = 16 * 1024>
+template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
 class MPIRecvMessageBuffer: public MPIMessageBufferBase<C, BufferSize> {
 public:
 	typedef MPIMessageBufferBase<C, BufferSize> BufferBase;
@@ -114,6 +115,7 @@ public:
 		}
 	}
 	~MPIRecvMessageBuffer() {
+		cancelAllRequests();
 		delete [] _recvBuffers;
 		delete [] _requests;
 	}
@@ -126,6 +128,14 @@ public:
 	}
 	inline int getSize() {
 		return _size;
+	}
+	void cancelAllRequests() {
+		for(int source = 0 ; source < this->getWorld().size() ; source++) {
+			if (!!_requests[source]) {
+				_requests[source].get().cancel();
+				_requests[source] = OptionalRequest();
+			}
+		}
 	}
 	bool receiveIncomingMessage(int rankSource) {
 		bool returnValue = false;
@@ -201,11 +211,13 @@ public:
 private:
 	OptionalRequest irecv(int sourceRank) {
 		OptionalRequest oreq;
+		LOG_DEBUG(4, "Starting irecv for " << sourceRank << "," << _tag);
 #ifdef OPENMP_CRITICAL_MPI
 		#pragma omp critical (MPI_buffer)
 #endif
 		oreq = this->getWorld().irecv(sourceRank, _tag, _recvBuffers + sourceRank*BufferBase::MESSAGE_BUFFER_SIZE, BufferBase::MESSAGE_BUFFER_SIZE);
 		_requestAttempts[sourceRank] = 0;
+		assert(!!oreq);
 		return oreq;
 	}
 	int processMessages(int sourceRank, int size) {
@@ -251,11 +263,13 @@ private:
 };
 
 
-template <typename C, int BufferSize = 16 * 1024>
+template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
 class MPISendMessageBuffer: public MPIMessageBufferBase<C, BufferSize> {
 public:
 	typedef MPIMessageBufferBase<C, BufferSize> BufferBase;
 	typedef MPIRecvMessageBuffer<C, BufferSize> RecvBuffer;
+	typedef typename BufferBase::OptionalRequest OptionalRequest;
+	typedef typename BufferBase::OptionalStatus OptionalStatus;
 	typedef C MessageClass;
 	typedef std::vector< RecvBuffer* > RecvBufferCallbackVector;
 protected:
@@ -280,6 +294,8 @@ public:
 	// receive buffers to flush before and/or during send
 	void addCallback( RecvBuffer& receiveBuffer ) {
 		_receivingBufferCallbacks.push_back( &receiveBuffer );
+		receiveAnyIncoming();
+		assert(receiveBuffer.getCount() == 0);
 	}
 
 	MessageClass *bufferMessage(int rankDest, int tagDest) {
@@ -319,7 +335,8 @@ protected:
 			request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
 			this->newMessage();
 			int count = 0;
-			while ( ! request.test() ) {
+			OptionalStatus optStatus = request.test();
+			while ( ! optStatus ) {
 				if (++count > 1000) {
 					request.cancel();
 					if ( ! request.test() ) {
@@ -331,7 +348,12 @@ protected:
 				LOG_DEBUG(3, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount() << " attempt count " << count);
 				receiveAnyIncoming();
 				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+				optStatus = request.test();
 			}
+			mpi::status status = optStatus.get();
+			// hmmm looks like error is sometimes populated with junk...
+			//if (status.error() > 0)
+			//	LOG_WARN(1, "sending message returned an error: " << status.error());
 			LOG_DEBUG(3, "finished sending message to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount());
 		}
 		offset = 0;
