@@ -62,11 +62,12 @@ protected:
 	mpi::communicator _world;
 	int _messageSize;
 	char *_message;
-	long _count;
+	long _deliveries;
+	long _numMessages;
 
 public:
 	MPIMessageBufferBase(mpi::communicator &world, int messageSize)
-	  : _world(world), _messageSize(messageSize), _count(0) {
+	  : _world(world), _messageSize(messageSize), _deliveries(0), _numMessages(0) {
 		_message = new char[ getMessageSize() ];
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
 	}
@@ -82,12 +83,19 @@ public:
 	inline int getMessageSize() {
 		return _messageSize;
 	}
-	inline long getCount() {
-		return _count;
+	inline long getNumDeliveries() {
+		return _deliveries;
+	}
+	inline void newMessageDelivery() {
+		#pragma omp atomic
+		_deliveries++;
+	}
+	inline long getNumMessages() {
+		return _numMessages;
 	}
 	inline void newMessage() {
 		#pragma omp atomic
-		_count++;
+		_numMessages++;
 	}
 };
 
@@ -176,7 +184,7 @@ public:
 	int receiveAllIncomingMessages() {
 		int messages = 0;
 
-		LOG_DEBUG(3, _tag << ": receiving all messages for tag. cp: " << getNumCheckpoints() << " msgCount: " << this->getCount());
+		LOG_DEBUG(3, _tag << ": receiving all messages for tag. cp: " << getNumCheckpoints() << " msgCount: " << this->getNumDeliveries());
 		bool mayHavePending = true;
 		while (mayHavePending) {
 			mayHavePending = false;
@@ -232,6 +240,7 @@ private:
 		while (msg != end) {
 			((MessageClass*) msg)->process(this);
 			msg += this->getMessageSize();
+			this->newMessage();
 		}
 		return count;
 	}
@@ -250,8 +259,8 @@ private:
 			_source = source;
 			_size = size;
 
-			this->newMessage();
-			LOG_DEBUG(3, _tag << ": received message " << this->getCount() << " from " << source << "," << tag << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
+			this->newMessageDelivery();
+			LOG_DEBUG(3, _tag << ": received delivery " << this->getNumDeliveries() << " from " << source << "," << tag << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
 
 			if (size == 0) {
 				checkpoint();
@@ -299,7 +308,7 @@ public:
 	void addCallback( RecvBuffer& receiveBuffer ) {
 		_receivingBufferCallbacks.push_back( &receiveBuffer );
 		receiveAnyIncoming();
-		assert(receiveBuffer.getCount() == 0);
+		assert(receiveBuffer.getNumDeliveries() == 0);
 	}
 
 	MessageClass *bufferMessage(int rankDest, int tagDest) {
@@ -318,6 +327,7 @@ public:
 		}
 		MessageClass *buf = (MessageClass *) (buffStart+offset);
 		offset += this->getMessageSize();
+		this->newMessage();
 
 		return buf;
 	}
@@ -337,7 +347,7 @@ protected:
 #pragma omp critical (MPI_buffer)
 #endif
 			request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
-			this->newMessage();
+			this->newMessageDelivery();
 			int count = 0;
 			OptionalStatus optStatus = request.test();
 			while ( ! optStatus ) {
@@ -346,10 +356,10 @@ protected:
 					if ( ! request.test() ) {
 						request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
 						count = 0;
-						LOG_WARN(1, "Canceled and retried pending message to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount());
+						LOG_WARN(1, "Canceled and retried pending message to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries());
 					}
 				}
-				LOG_DEBUG(3, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount() << " attempt count " << count);
+				LOG_DEBUG(3, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries() << " attempt count " << count);
 				receiveAnyIncoming();
 				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 				optStatus = request.test();
@@ -358,7 +368,7 @@ protected:
 			// hmmm looks like error is sometimes populated with junk...
 			//if (status.error() > 0)
 			//	LOG_WARN(1, "sending message returned an error: " << status.error());
-			LOG_DEBUG(3, "finished sending message to " << rankDest << ", " << tagDest << " size " << offset << " msgCount " << this->getCount());
+			LOG_DEBUG(3, "finished sending message to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries());
 		}
 		offset = 0;
 	}

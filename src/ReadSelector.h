@@ -445,6 +445,16 @@ public:
 		}
 	}
 
+	void trimReadByMarkupLength(const Read &read, ReadTrimType &trim, SequenceLengthType markupLength) {
+		  if ( markupLength == 0 ) {
+			  trim.trimLength = read.getLength();
+		  } else {
+			  // trim at first N or X markup
+			  trim.trimLength = markupLength - 1;
+		  }
+		  trim.score = trim.trimLength;
+	}
+
 	template<typename U>
 	void trimReadByMinimumKmerScore(double minimumKmerScore, ReadTrimType &trim, U buffBegin, U buffEnd) {
 
@@ -478,20 +488,7 @@ public:
 		trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( reportScore );
 	}
 
-	void trimReadByMarkupLength(const Read &read, ReadTrimType &trim, SequenceLengthType markupLength) {
-		  if ( markupLength == 0 ) {
-			  trim.trimLength = read.getLength();
-		  } else {
-			  // trim at first N or X markup
-			  trim.trimLength = markupLength - 1;
-		  }
-		  trim.score = trim.trimLength;
-	}
-
-	void _scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore, int correctionAttempts) {
-		  KA kmers = getKmersForRead(read);
-		  SequenceLengthType numKmers = kmers.size();
-
+	void _setNumKmers( SequenceLengthType markupLength, SequenceLengthType &numKmers) {
 		  if ( markupLength != 0 ) {
 			  // find first N or X markup and that is the maximum trim point
 			  SequenceLengthType maxTrimPoint = markupLength;
@@ -501,17 +498,24 @@ public:
 				  numKmers = 0;
 			  }
 		  }
+	}
+	void scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore, int correctionAttempts) {
+		KA kmers = getKmersForRead(read);
+		SequenceLengthType numKmers = kmers.size();
 
-		  SequenceLengthType j = 0;
-		  for(; j < numKmers; j++) {
-			  ScoreType score = getValue(kmers[j]);
-			  if(score >= minimumKmerScore)
-				  kmers.valueAt(j) = score;
-			  else
-				  break;
-		  }
+		_setNumKmers(markupLength, numKmers);
+		assert(numKmers <= kmers.size());
 
-		  trimReadByMinimumKmerScore(minimumKmerScore, trim, kmers.beginValue(), kmers.beginValue() + j);
+		SequenceLengthType j = 0;
+		for(; j < numKmers; j++) {
+			ScoreType score = getValue(kmers[j]);
+			if(score >= minimumKmerScore)
+				kmers.valueAt(j) = score;
+			else
+				break;
+		}
+
+		trimReadByMinimumKmerScore(minimumKmerScore, trim, kmers.beginValue(), kmers.beginValue() + j);
 	}
 
 	void scoreAndTrimReads(ScoreType minimumKmerScore, int correctionAttempts = 0) {
@@ -530,7 +534,7 @@ public:
 			SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 
 			if (useKmers) {
-				_scoreReadByKmers(read, markupLength, trim, minimumKmerScore, correctionAttempts);
+				scoreReadByKmers(read, markupLength, trim, minimumKmerScore, correctionAttempts);
 			} else { // !useKmers
 				trimReadByMarkupLength(read, trim, markupLength);
 			}
