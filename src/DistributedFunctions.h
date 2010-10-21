@@ -315,13 +315,13 @@ public:
 
 			for(int destThread = 0; destThread < numThreads; destThread++) {
 				sendBuffers[threadId][destThread]->finalize(destThread);
-				LOG_DEBUG(1, "sendBuffers["<<threadId<<"]["<<destThread<<"] sent " << sendBuffers[threadId][destThread]->getNumDeliveries());
+				LOG_DEBUG(1, "sendBuffers["<<threadId<<"]["<<destThread<<"] sent " << sendBuffers[threadId][destThread]->getNumDeliveries() << "/" << sendBuffers[threadId][destThread]->getNumMessages());
 				delete sendBuffers[threadId][destThread];
 			}
 
 			LOG_DEBUG(2, "receiving final messages");
 			recvBuffers[threadId]->finalize(numThreads);
-			LOG_DEBUG(1, "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries());
+			LOG_DEBUG(1, "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries() << "/" << recvBuffers[threadId]->getNumMessages());
 			delete recvBuffers[threadId];
 
 		} // omp parallel
@@ -398,10 +398,10 @@ public:
 		// communicate sizes and allocate permanent file
 		LOG_VERBOSE(1, "Merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() );
 		Kmernator::MmapFileVector ourSpectrum(2);
-		ourSpectrum[0] = writeKmerMapMPI(this->weak, Options::getTmpDir() + "/weak-kmer-mmap");
+		ourSpectrum[0] = writeKmerMapMPI(this->weak, Options::getOutputFile() + "-kmer-mmap");
 
 		if (Options::getMinDepth() <= 1) {
-			ourSpectrum[1] = writeKmerMapMPI(this->singleton, Options::getTmpDir() + "/singleton-kmer-mmap");
+			ourSpectrum[1] = writeKmerMapMPI(this->singleton, Options::getOutputFile() + "-singleton-kmer-mmap");
 		}
 
 		LOG_VERBOSE(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
@@ -705,9 +705,13 @@ done when empty cycle is received
 			// initialize message buffers
 
 			LOG_DEBUG(2, "Releasing Request/Response message buffers");
+			LOG_DEBUG(1, "recvResp["<<threadId<<"] received " << recvResp[threadId]->getNumDeliveries() << "/" << recvResp[threadId]->getNumMessages());
+			LOG_DEBUG(1, "sendResp["<<threadId<<"] sent     " << sendResp[threadId]->getNumDeliveries() << "/" << sendResp[threadId]->getNumMessages());
 			delete recvResp[threadId];
 			delete sendResp[threadId];
 
+			LOG_DEBUG(1, "recvReq["<<threadId<<"] received " << recvReq[threadId]->getNumDeliveries() << "/" << recvReq[threadId]->getNumMessages());
+			LOG_DEBUG(1, "sendReq["<<threadId<<"] sent     " << sendReq[threadId]->getNumDeliveries() << "/" << sendReq[threadId]->getNumMessages());
 			delete recvReq[threadId];
 			delete sendReq[threadId];
 		}

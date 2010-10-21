@@ -41,6 +41,9 @@ typedef DistributedReadSelector<DataType> RS;
 
 int main(int argc, char *argv[]) {
 
+	// assign defaults
+	Options::getMmapInput() = 0;
+
 	if (!FilterReadsOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
@@ -49,6 +52,11 @@ int main(int argc, char *argv[]) {
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
 	Logger::setWorld(&world);
+	if ((world.size() & (world.size()-1)) != 0) {
+		throw std::invalid_argument(
+				(std::string("The maximum number of mpi processes must be a power-of-two.\nPlease adjust the number of processes. ")
+		+ boost::lexical_cast<std::string>(world.size())).c_str());
+	}
 
 	if (threadSupport != MPI_THREAD_MULTIPLE) {
 		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE, reducing OpenMP threads to 1")
