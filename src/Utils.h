@@ -107,12 +107,17 @@ private:
     Map _map;
     std::string _outputFilePathPrefix;
     std::string _suffix;
+    bool _append;
 
 public:
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
 	 : _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {}
 	~OfstreamMap() {
         clear();
+	}
+	static bool &getAppend() {
+		static bool _append = false;
+		return _append;
 	}
 	void clear() {
 		for(Iterator it = _map.begin() ; it != _map.end(); it++) {
@@ -132,7 +137,15 @@ public:
 				it = _map.find(filename);
 				if (it == _map.end()) {
 					LOG_VERBOSE(1, "Writing to " << filename);
-					OStreamPtr osp(new std::ofstream(filename.c_str()));
+					std::ios_base::openmode mode = std::ios_base::out;
+					if (getAppend())
+						mode |= std::ios_base::app;
+					else
+						mode |= std::ios_base::trunc;
+					OStreamPtr osp(new std::ofstream(filename.c_str(), mode));
+					if(  osp->fail() )
+						throw std::runtime_error((std::string("Could not open file for writing: ") + filename).c_str());
+
 					it = _map.insert( it, Map::value_type(filename, osp) );
 				}
 			}

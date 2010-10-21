@@ -33,7 +33,7 @@
 #include "FilterReads.h"
 #include "DistributedFunctions.h"
 
-typedef TrackingDataMinimal4f DataType;
+typedef TrackingDataWithDirection DataType;
 typedef DistributedKmerSpectrum<DataType, DataType> KS;
 typedef DistributedReadSelector<DataType> RS;
 
@@ -129,7 +129,22 @@ int main(int argc, char *argv[]) {
 			RS selector(world, reads, spectrum.weak);
 			selector.scoreAndTrimReadsMPI(minDepth);
 
-			selectReads(thisDepth, reads, spectrum, selector, pickOutputFilename);
+			// TODO implement a more efficient algorithm to output data in order
+
+			// rank 0 will overwrite, all others will append
+			if (world.rank() != 0)
+				OfstreamMap::getAppend() = true;
+
+			// let only one rank at a time write to the files
+			int rank = 0;
+			while (rank < world.size()) {
+				if (rank == world.rank()) {
+					LOG_VERBOSE(1, "Writing files");
+					selectReads(thisDepth, reads, spectrum, selector, pickOutputFilename);
+				}
+				world.barrier();
+				rank++;
+			}
 		}
 	}
 

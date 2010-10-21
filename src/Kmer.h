@@ -704,6 +704,13 @@ public:
 		return *(getValueStart() + index);
 	}
 
+	const Value *beginValue() const {
+		return getValueStart();
+	}
+	const Value *endValue() const {
+		return getValueStart() + _size;
+	}
+
 public:
 	const ElementType getElement(IndexType idx) const {
 		return ElementType(idx, *this);

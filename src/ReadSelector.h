@@ -444,29 +444,74 @@ public:
 			return ScoreType(0);
 		}
 	}
-	void _scoreReadByKmers(const Read &read, Sequence::BaseLocationVectorType &markups, ReadTrimType &trim, double minimumKmerScore, int correctionAttempts) {
+
+	template<typename U>
+	void trimReadByMinimumKmerScore(double minimumKmerScore, ReadTrimType &trim, U buffBegin, U buffEnd) {
+
+		trim.score = 0;
+		trim.trimLength = 0;
+
+		while (buffBegin != buffEnd) {
+			ScoreType score = *(buffBegin++);
+			if (score >= minimumKmerScore) {
+				trim.trimLength++;
+				trim.score += score;
+			 } else
+				 break;
+		}
+	};
+	void setTrimHeaders(ReadTrimType &trim, bool useKmers) {
+		double reportScore;
+		if (trim.trimLength > 0) {
+			// calculate average score (before adding kmer length)
+			reportScore= trim.score /= (ScoreType) trim.trimLength;
+			if (useKmers) {
+				trim.trimLength += KmerSizer::getSequenceLength() - 1;
+			}
+		} else {
+			// keep available so that pairs will be selected together
+			trim.score = -1.0;
+			reportScore = 0.0;
+		}
+		if (!trim.label.empty())
+			trim.label += " ";
+		trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( reportScore );
+	}
+
+	void trimReadByMarkupLength(const Read &read, ReadTrimType &trim, SequenceLengthType markupLength) {
+		  if ( markupLength == 0 ) {
+			  trim.trimLength = read.getLength();
+		  } else {
+			  // trim at first N or X markup
+			  trim.trimLength = markupLength - 1;
+		  }
+		  trim.score = trim.trimLength;
+	}
+
+	void _scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore, int correctionAttempts) {
 		  KA kmers = getKmersForRead(read);
 		  SequenceLengthType numKmers = kmers.size();
 
-		  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 		  if ( markupLength != 0 ) {
-		    // find first N or X markup and that is the maximum trim point
-			SequenceLengthType maxTrimPoint = markupLength;
-			if (maxTrimPoint > KmerSizer::getSequenceLength()) {
-				numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
-			} else {
-				numKmers = 0;
-			}
+			  // find first N or X markup and that is the maximum trim point
+			  SequenceLengthType maxTrimPoint = markupLength;
+			  if (maxTrimPoint > KmerSizer::getSequenceLength()) {
+				  numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
+			  } else {
+				  numKmers = 0;
+			  }
 		  }
 
-		  for(SequenceLengthType j = 0; j < numKmers; j++) {
+		  SequenceLengthType j = 0;
+		  for(; j < numKmers; j++) {
 			  ScoreType score = getValue(kmers[j]);
-			  if (score >= minimumKmerScore) {
-					trim.trimLength++;
-					trim.score += score;
-			  } else
+			  if(score >= minimumKmerScore)
+				  kmers.valueAt(j) = score;
+			  else
 				  break;
 		  }
+
+		  trimReadByMinimumKmerScore(minimumKmerScore, trim, kmers.beginValue(), kmers.beginValue() + j);
 	}
 
 	void scoreAndTrimReads(ScoreType minimumKmerScore, int correctionAttempts = 0) {
@@ -482,34 +527,14 @@ public:
 				continue;
 			}
 			Sequence::BaseLocationVectorType markups = read.getMarkups();
-			if (useKmers) {
-			  _scoreReadByKmers(read, markups, trim, minimumKmerScore, correctionAttempts);
-			} else { // !useKmers
-			  SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
-			  if ( markupLength == 0 ) {
-				  trim.trimLength = read.getLength();
-			  } else {
-				  // trim at first N or X markup
-				  trim.trimLength = markupLength - 1;
-			  }
-			  trim.score = trim.trimLength;
+			SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 
+			if (useKmers) {
+				_scoreReadByKmers(read, markupLength, trim, minimumKmerScore, correctionAttempts);
+			} else { // !useKmers
+				trimReadByMarkupLength(read, trim, markupLength);
 			}
-			double reportScore;
-			if (trim.trimLength > 0) {
-				// calculate average score (before adding kmer length)
-				reportScore= trim.score /= (ScoreType) trim.trimLength;
-				if (useKmers) {
-				  trim.trimLength += KmerSizer::getSequenceLength() - 1;
-				}
-			} else {
-				// keep available so that pairs will be selected together
-				trim.score = -1.0;
-				reportScore = 0.0;
-			}
-			if (!trim.label.empty())
-				trim.label += " ";
-			trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( reportScore );
+			setTrimHeaders(trim, useKmers);
 		}
 	}
 

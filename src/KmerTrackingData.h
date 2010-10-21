@@ -236,6 +236,13 @@ public:
 		directionBias += other.directionBias;
 		return *this;
 	};
+	template<typename U>
+	TrackingDataWithDirection &operator=(const U &other) {
+		count = other.getCount();
+		weightedCount = other.getWeightedCount();
+		directionBias = other.getDirectionBias();
+		return *this;
+	}
 
 };
 
@@ -275,6 +282,16 @@ public:
 	TrackingDataWithLastRead &add(const U &other) {
 		TrackingDataWithDirection::add(other);
 		readPosition = other.readPosition;
+		return *this;
+	}
+	template<typename U>
+	TrackingDataWithDirection &operator=(const U &other) {
+		count = other.getCount();
+		weightedCount = other.getWeightedCount();
+		directionBias = other.getDirectionBias();
+		ReadPositionWeight v = other.getEachInstance()[0];
+		readPosition.position = v.position;
+		readPosition.readId = v.readId;
 		return *this;
 	}
 

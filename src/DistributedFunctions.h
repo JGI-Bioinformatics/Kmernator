@@ -555,8 +555,9 @@ done when empty cycle is received
 		KA kmers = this->getKmersForRead(read);
 		SequenceLengthType numKmers = 0;
 		if (trimLength > KmerSizer::getSequenceLength()) {
-			numKmers = trimLength - KmerSizer::getSequenceLength();
+			numKmers = trimLength - KmerSizer::getSequenceLength() + 1;
 		}
+		assert(numKmers <= kmers.size());
 
 		ReadSetSizeType offset = batchBuffer.size();
 		readOffsetVector.push_back( offset );
@@ -566,7 +567,7 @@ done when empty cycle is received
 			this->_map.getThreadIds(kmers[kmerIdx], localThreadId, numThreads, distributedThreadId, distributedThreadBitMask);
 			if (distributedThreadId == _world.rank()) {
 				// handle this directly
-				batchBuffer[offset + kmerIdx] =  this->getValue(kmers[kmerIdx]);
+				batchBuffer[offset + kmerIdx] = this->getValue(kmers[kmerIdx]);
 			} else {
 				sendReq.bufferMessage( distributedThreadId, thisThreadId )->set( offset + kmerIdx, kmers[kmerIdx]) ;
 			}
@@ -648,6 +649,7 @@ done when empty cycle is received
 
 				Sequence::BaseLocationVectorType markups = read.getMarkups();
 				SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
+
 				if ( markupLength == 0 ) {
 					trim.trimLength = read.getLength();
 				} else {
@@ -681,31 +683,8 @@ done when empty cycle is received
 				KmerValueVectorIterator buffEnd = ( (i+1) < readIndexBuffer[threadId].size() ? (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i+1]) : batchBuffer[threadId].end() );
 				ReadTrimType &trim = this->_trims[readIdx];
 
-				trim.score = 0;
-				trim.trimLength = 0;
-				while (buffBegin != buffEnd) {
-					ScoreType score = *(buffBegin++);
-					if (score >= minimumKmerScore) {
-						trim.trimLength++;
-						trim.score += score;
-					 } else
-						 break;
-				}
-				double reportScore;
-				if (trim.trimLength > 0) {
-					// calculate average score (before adding kmer length)
-					reportScore= trim.score /= (ScoreType) trim.trimLength;
-					if (useKmers) {
-						trim.trimLength += KmerSizer::getSequenceLength() - 1;
-					}
-				} else {
-					// keep available so that pairs will be selected together
-					trim.score = -1.0;
-					reportScore = 0.0;
-				}
-				if (!trim.label.empty())
-					trim.label += " ";
-				trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( reportScore );
+				this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);
+				this->setTrimHeaders(trim, useKmers);
 			}
 
 			LOG_DEBUG(3, "Finished assigning trim values: " << batchReadIdx);
@@ -733,7 +712,8 @@ done when empty cycle is received
 		_world.barrier();
 	}
 
-
+	// TODO
+	// rescoreByBestCoveringSubset*
 
 };
 

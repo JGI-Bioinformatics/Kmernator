@@ -31,7 +31,7 @@
 
 #include "FilterReads.h"
 
-typedef TrackingDataMinimal4f DataType;
+typedef TrackingDataWithDirection DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 typedef ReadSelector<DataType> RS;
 
