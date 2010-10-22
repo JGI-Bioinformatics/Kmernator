@@ -264,7 +264,7 @@ public:
 			recvBuffers[threadId] = new RecvStoreKmerMessageBuffer(world, *this, messageSize, threadId);
 			for(int recvThread = 0 ; recvThread < numThreads; recvThread++) {
 				sendBuffers[threadId][recvThread] = new SendStoreKmerMessageBuffer(world, *this, messageSize);
-				sendBuffers[threadId][recvThread]->addCallback( *recvBuffers[threadId] );
+				sendBuffers[threadId][recvThread]->addReceiveAllCallback( recvBuffers[threadId] );
 			}
 
 			#pragma omp barrier
@@ -615,12 +615,14 @@ done when empty cycle is received
 
 			recvResp[threadId] = new RecvRespondKmerMessageBuffer(_world, respondMessageSize, threadId + numThreads, batchBuffer[threadId]);
 			sendResp[threadId] = new SendRespondKmerMessageBuffer(_world, respondMessageSize);
-			sendResp[threadId]->addCallback( *recvResp[threadId] );
+			sendResp[threadId]->addReceiveAllCallback( recvResp[threadId] );
 
 			recvReq[threadId] = new RecvRequestKmerMessageBuffer(_world, requestMessageSize, threadId, *sendResp[threadId], *this, numThreads);
 			sendReq[threadId] = new SendRequestKmerMessageBuffer(_world, requestMessageSize);
-			sendReq[threadId]->addCallback( *recvReq[threadId] );
+			sendReq[threadId]->addReceiveAllCallback( recvReq[threadId] );
+			sendReq[threadId]->addReceiveAllCallback( recvResp[threadId] );
 
+			recvReq[threadId]->addFlushAllCallback( sendResp[threadId], threadId + numThreads);
 		}
 
 		LOG_DEBUG(1, "message buffers ready");
@@ -633,7 +635,7 @@ done when empty cycle is received
 			readIndexBuffer[threadId].resize(0);
 			readOffsetBuffer[threadId].resize(0);
 
-			LOG_DEBUG(3, "Starting batch for kmer lookups: " << batchReadIdx);
+			LOG_VERBOSE(2, "Starting batch for kmer lookups: " << batchReadIdx);
 
 			for(ReadSetSizeType i = threadId ; i < batchSize ; i+=numThreads) {
 
@@ -657,14 +659,25 @@ done when empty cycle is received
 
 			}
 
+			LOG_VERBOSE(2, "Starting communication sync for kmer lookups: " << batchReadIdx);
+
+			sendReq[threadId]->flushAllMessageBuffers(threadId);
+			while (sendReq[threadId]->getNumMessages() != recvResp[threadId]->getNumMessages()) {
+				recvReq[threadId]->receiveAllIncomingMessages();
+				sendResp[threadId]->flushAllMessageBuffers(threadId+numThreads);
+				recvResp[threadId]->receiveAllIncomingMessages();
+			}
+
+			LOG_VERBOSE(2, "Finishing communication sync for kmer lookups: " << batchReadIdx);
+
 			LOG_DEBUG(3, "kmer lookups finished, flushing communications");
 			LOG_DEBUG(3, "readIndexBuffer: " << readIndexBuffer[threadId].size() << "/" << readIndexBuffer[threadId][readIndexBuffer[threadId].size()-1]);
 			LOG_DEBUG(3, "batchBuffer: " << batchBuffer[threadId].size());
 
-			sendReq[threadId]->flushAllMessageBuffers(threadId);
+			LOG_DEBUG(2, "Waiting for Request buffers to finalize");
 			sendReq[threadId]->finalize(threadId);
 			recvReq[threadId]->finalize();
-			sendResp[threadId]->flushAllMessageBuffers(threadId+numThreads);
+			LOG_DEBUG(2, "Waiting for Response buffers to finalize");
 			sendResp[threadId]->finalize(threadId+numThreads);
 			recvResp[threadId]->finalize();
 			LOG_DEBUG(2, "Delivery Request sent: " << sendReq[threadId]->getNumDeliveries() << " received: " << recvReq[threadId]->getNumDeliveries() << " "
@@ -674,7 +687,7 @@ done when empty cycle is received
 			assert( sendReq[threadId]->getNumMessages() == recvResp[threadId]->getNumMessages() );
 			assert( recvReq[threadId]->getNumMessages() == sendResp[threadId]->getNumMessages() );
 
-			LOG_DEBUG(3, "assigning trim values");
+			LOG_VERBOSE(2, "Starting trim for kmer lookups: " << batchReadIdx);
 			for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
 				ReadSetSizeType &readIdx = readIndexBuffer[threadId][i];
 
