@@ -107,13 +107,13 @@ public:
 
 	void setReader(MmapSource &mmap) {
 		assert(mmap.is_open());
-		LOG_DEBUG(2, "setReader(mmap):" << (void*)mmap.data());
+		LOG_DEBUG(3, "setReader(mmap):" << (void*)mmap.data());
 		setParser(mmap, *mmap.data());
 	}
 	void setReader(MmapSource &mmap1, MmapSource &mmap2) {
 		assert(mmap1.is_open());
 		assert(mmap2.is_open());
-		LOG_DEBUG(2, "setReader(mmap, mmap):" << (void*)mmap1.data() << " " << (void*)mmap2.data());
+		LOG_DEBUG(3, "setReader(mmap, mmap):" << (void*)mmap1.data() << " " << (void*)mmap2.data());
 		setParser(mmap1,mmap2);
 	}
 	void setParser(istream &fs1) {
@@ -122,7 +122,7 @@ public:
 		setParser(fs1, fs1.peek());
 	}
 	template<typename U> void setParser(U &data, char marker) {
-		LOG_DEBUG(2, "setParser(U)");
+		LOG_DEBUG(3, "setParser(U)");
 		if (marker == '@')
 		   _parser = SequenceStreamParserPtr(new FastqStreamParser(data));
 		else if (marker == '>')
@@ -139,11 +139,11 @@ public:
 		} else {
 			_parser = SequenceStreamParserPtr(new FastaQualStreamParser(fs1, fs2));
 		}
-		LOG_DEBUG(2, "setParser(istream,istream) FastaQualStreamParser");
+		LOG_DEBUG(3, "setParser(istream,istream) FastaQualStreamParser");
 	}
 	void setParser(MmapSource &mmap1, MmapSource &mmap2) {
 		_parser = SequenceStreamParserPtr(new FastaQualStreamParser(mmap1, mmap2));
-		LOG_DEBUG(2, "setParser(mmap,mmap) FastaQualStreamParser");
+		LOG_DEBUG(3, "setParser(mmap,mmap) FastaQualStreamParser");
 	}
 
 	bool isMmaped() {
@@ -174,7 +174,7 @@ public:
 		return _parser->isMultiline();
 	}
 	bool nextRead(RecordPtr &recordStart) {
-		LOG_DEBUG(3, "nextRead(recordStart = " << (void*) recordStart << ")");
+		LOG_DEBUG(5, "nextRead(recordStart = " << (void*) recordStart << ")");
 		try {
 			assert(recordStart == _parser->getStreamRecordPtr());
 			RecordPtr endPtr = _parser->readRecord();
@@ -219,7 +219,7 @@ public:
 			if (quals.length() != bases.length())
 				if (!(quals.length() == 1 && quals[0] == Read::REF_QUAL))
 					throw runtime_error((string("Number of bases and quals not equal: ") + bases + " " + quals).c_str());
-			LOG_DEBUG(3, "nextRead(name, bases, quals) " << name);
+			LOG_DEBUG(5, "nextRead(name, bases, quals) " << name);
 			return true;
 		}
 
@@ -318,7 +318,7 @@ public:
 
 		SequenceStreamParser(istream &stream, char marker) :
 			_stream(&stream), _line(0), _pos(0), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
-			LOG_DEBUG(3, "SequenceStreamParser(istream, " << marker << ")");
+			LOG_DEBUG(4, "SequenceStreamParser(istream, " << marker << ")");
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::MmapSource &mmap, char marker) :
@@ -326,13 +326,13 @@ public:
 			_stream = new MmapIStream(_mmap);
 			_lastPtr = _mmap.data() + _mmap.size();
 			_freeStream = true;
-			LOG_DEBUG(3, "SequenceStreamParser(MmapSource, " << marker << ")");
+			LOG_DEBUG(4, "SequenceStreamParser(MmapSource, " << marker << ")");
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::FilteredIStream &stream, char marker) :
 			_line(0), _pos(0), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
 			_stream = (istream *) &stream;
-			LOG_DEBUG(3, "SequenceStreamParser(FilteredIStream, " << marker << ")");
+			LOG_DEBUG(4, "SequenceStreamParser(FilteredIStream, " << marker << ")");
 			setBuffers();
 		}
 		void setBuffers() {
@@ -440,7 +440,7 @@ public:
 
 		virtual void seekToNextRecord(unsigned long minimumPos) {
 			int threadNum = omp_get_thread_num();
-			LOG_DEBUG(1, "seekToNextRecord(" << minimumPos << ")");
+			LOG_DEBUG(2, "seekToNextRecord(" << minimumPos << ")");
 			// get to the first line after the pos
 			if (minimumPos > 0) {
 				seekg(minimumPos - 1);
@@ -454,9 +454,8 @@ public:
 				seekg(0);
 				return;
 			}
-			if (Log::isDebug(1)) {
-                LOG_DEBUG(1, "seeked to " << tellg() );
-			}
+			LOG_DEBUG(2, "seeked to " << tellg() );
+
 			while ( (!endOfStream()) && _stream->peek() != _marker) {
 				nextLine();
 			}
@@ -481,7 +480,7 @@ public:
 			}
 
 			if (endOfStream()) {
-				LOG_DEBUG(1, "At endofstream already");
+				LOG_DEBUG(3, "At endofstream already");
 				return;
 			}
 

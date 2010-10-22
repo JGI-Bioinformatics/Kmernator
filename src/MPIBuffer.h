@@ -228,7 +228,7 @@ public:
 	int receiveAllIncomingMessages() {
 		int messages = this->receiveAll();
 
-		LOG_DEBUG(3, _tag << ": receiving all messages for tag. cp: " << getNumCheckpoints() << " msgCount: " << this->getNumDeliveries());
+		LOG_DEBUG(4, _tag << ": receiving all messages for tag. cp: " << getNumCheckpoints() << " msgCount: " << this->getNumDeliveries());
 		bool mayHavePending = true;
 		while (mayHavePending) {
 			mayHavePending = false;
@@ -240,17 +240,18 @@ public:
 			}
 		}
 		if (messages > 0)
-			LOG_DEBUG(3, _tag << ": processed messages: " << messages);
+			LOG_DEBUG(4, _tag << ": processed messages: " << messages);
 
 		return messages;
 	}
 	void finalize(int checkpointFactor = 1) {
-		LOG_DEBUG(1, _tag << ": Entering finalize checkpoint: " << getNumCheckpoints());
+		LOG_DEBUG(2, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints());
 		while ( ! reachedCheckpoint(checkpointFactor) ) {
 			this->receiveAllIncomingMessages();
 			this->flushAll();
 			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 		}
+		LOG_DEBUG(3, "Recv " << _tag << ": Finished finalize checkpoint: " << getNumCheckpoints());
 		_numCheckpoints = 0;
 	}
 
@@ -268,7 +269,7 @@ public:
 private:
 	OptionalRequest irecv(int sourceRank) {
 		OptionalRequest oreq;
-		LOG_DEBUG(4, "Starting irecv for " << sourceRank << "," << _tag);
+		LOG_DEBUG(5, "Starting irecv for " << sourceRank << "," << _tag);
 #ifdef OPENMP_CRITICAL_MPI
 		#pragma omp critical (MPI_buffer)
 #endif
@@ -305,11 +306,11 @@ private:
 			_size = size;
 
 			this->newMessageDelivery();
-			LOG_DEBUG(3, _tag << ": received delivery " << this->getNumDeliveries() << " from " << source << "," << tag << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
+			LOG_DEBUG(4, _tag << ": received delivery " << this->getNumDeliveries() << " from " << source << "," << tag << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
 
 			if (size == 0) {
 				checkpoint();
-				LOG_DEBUG(2, _tag << ": got checkpoint from " << source << ": " << _numCheckpoints);
+				LOG_DEBUG(3, _tag << ": got checkpoint from " << source << ": " << _numCheckpoints);
 			} else {
 				processMessages(source, size);
 			}
@@ -402,7 +403,7 @@ protected:
 						LOG_WARN(1, "Canceled and retried pending message to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries());
 					}
 				}
-				LOG_DEBUG(3, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries() << " attempt count " << count);
+				LOG_DEBUG(4, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries() << " attempt count " << count);
 				this->receiveAllIncomingMessages();
 				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 				optStatus = request.test();
@@ -411,7 +412,7 @@ protected:
 			// hmmm looks like error is sometimes populated with junk...
 			//if (status.error() > 0)
 			//	LOG_WARN(1, "sending message returned an error: " << status.error());
-			LOG_DEBUG(3, "finished sending message to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries());
+			LOG_DEBUG(4, "finished sending message to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries());
 		}
 		offset = 0;
 	}
@@ -430,12 +431,11 @@ public:
 		this->flushAll();
 	}
 	void finalize(int tagDest) {
-		LOG_DEBUG(3, "entering finalize() for tag " << tagDest);
+		LOG_DEBUG(3, "Send " << tagDest << ": entering finalize()");
 		flushAllMessageBuffers(tagDest);
 		// send zero message buffer as checkpoint signal to stop
-		LOG_DEBUG(3, "sending checkpoint tag " << tagDest);
 		flushAllMessageBuffers(tagDest, true);
-		LOG_DEBUG(3, "sent checkpoints tag " << tagDest);
+		LOG_DEBUG(4, "Send " << tagDest << ": finished finalize()");
 	}
 };
 

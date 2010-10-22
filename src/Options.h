@@ -362,7 +362,7 @@ public:
 				LOG_VERBOSE(1, "log-file is: " << getLogFile().c_str());
 			}
 
-			bool print = (Log::isVerbose(1) || Log::isDebug(1));
+			bool print = Logger::isMaster() && ((Log::isVerbose(1) || Log::isDebug(1)));
 			std::ostream *output = NULL;
 			if (print) {
 				output = Log::Verbose("Options Set").getOstreamPtr();

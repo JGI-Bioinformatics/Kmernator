@@ -1,7 +1,7 @@
 //
 // Kmernator/src/DistributedFunctions.h
 //
-// Author: Rob Egan, Craig Furman
+// Author: Rob Egan
 //
 // Copyright 2010 The Regents of the University of California.
 // All rights reserved.
@@ -247,7 +247,7 @@ public:
 
 		NumberType distributedThreadMask = numParts - 1;
 
-		LOG_VERBOSE(1, "starting _buildSpectrum");
+		LOG_VERBOSE(2, "starting _buildSpectrumMPI");
 
 		SendStoreKmerMessageBuffer *sendBuffers[numThreads][numThreads];
 		RecvStoreKmerMessageBuffer *recvBuffers[numThreads];
@@ -296,7 +296,7 @@ public:
 					}
 				}
 
-				if (threadId == 0 && readIdx > 0 && readIdx % 100000 == 0 )
+				if (threadId == 0 && readIdx > 0 && readIdx % 1000000 == 0 )
 					LOG_VERBOSE(1, "processed " << readIdx << " reads");
 
 			}
@@ -387,16 +387,19 @@ public:
 
 		// purge low counts
 		if (Options::getMinDepth() > 1) {
-			LOG_VERBOSE(1, "Clearing memory from singletons: " << this->singleton.size() << std::endl << MemoryUtils::getMemoryUsage());
+			LOG_VERBOSE(2, "Clearing memory from singletons: " << this->singleton.size() );
+			LOG_DEBUG(2, MemoryUtils::getMemoryUsage());
 			this->singleton.clear();
 		}
 		if (Options::getMinDepth() > 2) {
-			LOG_VERBOSE(1, "Purging low count kmers (< " << Options::getMinDepth() << ")" << std::endl << MemoryUtils::getMemoryUsage());
+			LOG_VERBOSE(2, "Purging low count kmers (< " << Options::getMinDepth() << ")");
+			LOG_DEBUG(2, MemoryUtils::getMemoryUsage());
 			this->purgeMinDepth(Options::getMinDepth());
 		}
 
 		// communicate sizes and allocate permanent file
-		LOG_VERBOSE(1, "Merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() );
+		LOG_VERBOSE(2, "Merging partial spectrums" );
+		LOG_DEBUG(2, MemoryUtils::getMemoryUsage() );
 		Kmernator::MmapFileVector ourSpectrum(2);
 		ourSpectrum[0] = writeKmerMapMPI(this->weak, Options::getOutputFile() + "-kmer-mmap");
 
@@ -404,7 +407,7 @@ public:
 			ourSpectrum[1] = writeKmerMapMPI(this->singleton, Options::getOutputFile() + "-singleton-kmer-mmap");
 		}
 
-		LOG_VERBOSE(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
+		LOG_DEBUG(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
 
 		return ourSpectrum;
 
@@ -601,7 +604,7 @@ done when empty cycle is received
 		SendRespondKmerMessageBuffer *sendResp[numThreads];
 
 		ReadSetSizeType mostReads = mpi::all_reduce(_world, readsSize, mpi::maximum<ReadSetSizeType>());
-		LOG_DEBUG(1, "Largest number of reads to batch: " << mostReads);
+		LOG_DEBUG(2, "Largest number of reads to batch: " << mostReads);
 
 		#pragma omp parallel num_threads(numThreads)
 		{
@@ -625,7 +628,7 @@ done when empty cycle is received
 			recvReq[threadId]->addFlushAllCallback( sendResp[threadId], threadId + numThreads);
 		}
 
-		LOG_DEBUG(1, "message buffers ready");
+		LOG_DEBUG(2, "message buffers ready");
 		_world.barrier();
 
 		#pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
@@ -635,7 +638,7 @@ done when empty cycle is received
 			readIndexBuffer[threadId].resize(0);
 			readOffsetBuffer[threadId].resize(0);
 
-			LOG_VERBOSE(2, "Starting batch for kmer lookups: " << batchReadIdx);
+			LOG_DEBUG(3, "Starting batch for kmer lookups: " << batchReadIdx);
 
 			for(ReadSetSizeType i = threadId ; i < batchSize ; i+=numThreads) {
 
@@ -659,7 +662,7 @@ done when empty cycle is received
 
 			}
 
-			LOG_VERBOSE(2, "Starting communication sync for kmer lookups: " << batchReadIdx);
+			LOG_DEBUG(3, "Starting communication sync for kmer lookups: " << batchReadIdx);
 
 			sendReq[threadId]->flushAllMessageBuffers(threadId);
 			while (sendReq[threadId]->getNumMessages() != recvResp[threadId]->getNumMessages()) {
@@ -668,26 +671,25 @@ done when empty cycle is received
 				recvResp[threadId]->receiveAllIncomingMessages();
 			}
 
-			LOG_VERBOSE(2, "Finishing communication sync for kmer lookups: " << batchReadIdx);
+			LOG_DEBUG(3, "Finishing communication sync for kmer lookups: " << batchReadIdx);
 
-			LOG_DEBUG(3, "kmer lookups finished, flushing communications");
-			LOG_DEBUG(3, "readIndexBuffer: " << readIndexBuffer[threadId].size() << "/" << readIndexBuffer[threadId][readIndexBuffer[threadId].size()-1]);
-			LOG_DEBUG(3, "batchBuffer: " << batchBuffer[threadId].size());
+			LOG_DEBUG(4, "readIndexBuffer: " << readIndexBuffer[threadId].size() << "/" << readIndexBuffer[threadId][readIndexBuffer[threadId].size()-1]);
+			LOG_DEBUG(4, "batchBuffer: " << batchBuffer[threadId].size());
 
-			LOG_DEBUG(2, "Waiting for Request buffers to finalize");
+			LOG_DEBUG(4, "Waiting for Request buffers to finalize");
 			sendReq[threadId]->finalize(threadId);
 			recvReq[threadId]->finalize();
-			LOG_DEBUG(2, "Waiting for Response buffers to finalize");
+			LOG_DEBUG(4, "Waiting for Response buffers to finalize");
 			sendResp[threadId]->finalize(threadId+numThreads);
 			recvResp[threadId]->finalize();
-			LOG_DEBUG(2, "Delivery Request sent: " << sendReq[threadId]->getNumDeliveries() << " received: " << recvReq[threadId]->getNumDeliveries() << " "
+			LOG_DEBUG(4, "Delivery Request sent: " << sendReq[threadId]->getNumDeliveries() << " received: " << recvReq[threadId]->getNumDeliveries() << " "
 					 <<  "Response sent: " << sendResp[threadId]->getNumDeliveries() << " received: " << recvResp[threadId]->getNumDeliveries());
-			LOG_DEBUG(3, "Messages request/response: " << sendReq[threadId]->getNumMessages() << "/" << recvResp[threadId]->getNumMessages() << " "
+			LOG_DEBUG(4, "Messages request/response: " << sendReq[threadId]->getNumMessages() << "/" << recvResp[threadId]->getNumMessages() << " "
 					 << recvReq[threadId]->getNumMessages() << "/" << sendResp[threadId]->getNumMessages());
 			assert( sendReq[threadId]->getNumMessages() == recvResp[threadId]->getNumMessages() );
 			assert( recvReq[threadId]->getNumMessages() == sendResp[threadId]->getNumMessages() );
 
-			LOG_VERBOSE(2, "Starting trim for kmer lookups: " << batchReadIdx);
+			LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
 			for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
 				ReadSetSizeType &readIdx = readIndexBuffer[threadId][i];
 

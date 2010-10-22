@@ -43,10 +43,6 @@ int main(int argc, char *argv[]) {
 
 	// assign defaults
 	Options::getMmapInput() = 0;
-
-	if (!FilterReadsOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
-
 	int threadSupport = MPI::Init_thread(MPI_THREAD_MULTIPLE);
 
 	mpi::environment env(argc, argv);
@@ -54,9 +50,12 @@ int main(int argc, char *argv[]) {
 	Logger::setWorld(&world);
 	if ((world.size() & (world.size()-1)) != 0) {
 		throw std::invalid_argument(
-				(std::string("The maximum number of mpi processes must be a power-of-two.\nPlease adjust the number of processes. ")
+				(std::string("The number of mpi processes must be a power-of-two.\nPlease adjust the number of processes. ")
 		+ boost::lexical_cast<std::string>(world.size())).c_str());
 	}
+
+	if (!FilterReadsOptions::parseOpts(argc, argv))
+		throw std::invalid_argument("Please fix the command line arguments");
 
 	if (threadSupport != MPI_THREAD_MULTIPLE) {
 		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE, reducing OpenMP threads to 1")
@@ -75,7 +74,7 @@ int main(int argc, char *argv[]) {
 
 	reads.appendAllFiles(inputs, world.rank(), world.size());
 
-	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	LOG_VERBOSE(1, "Identifying Pairs: ");
 
@@ -99,23 +98,23 @@ int main(int argc, char *argv[]) {
 
 		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
 		if (world.rank() == 0)
-			LOG_VERBOSE(1, "targeting " << numBuckets << " buckets for reads ");
+			LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
 	}
 	KS spectrum(world, numBuckets);
 	Kmernator::MmapFileVector spectrumMmaps;
 
 	if (Options::getKmerSize() > 0) {
-		LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 		spectrumMmaps = spectrum.buildKmerSpectrumMPI(reads);
-		LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		if (Options::getMinDepth() > 1) {
-			LOG_VERBOSE(1, "Clearing singletons from memory");
+			LOG_DEBUG(1, "Clearing singletons from memory");
 			spectrum.singleton.clear();
-			LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 		}
 	}
 
@@ -147,7 +146,7 @@ int main(int argc, char *argv[]) {
 			int rank = 0;
 			while (rank < world.size()) {
 				if (rank == world.rank()) {
-					LOG_VERBOSE(1, "Writing files");
+					LOG_VERBOSE(1, "Writing files part " << (rank+1) << " of " << world.size());
 					selectReads(thisDepth, reads, spectrum, selector, pickOutputFilename);
 				}
 				world.barrier();
@@ -156,7 +155,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	LOG_VERBOSE(2, "Clearing spectrum");
+	LOG_DEBUG(2, "Clearing spectrum");
 	spectrum.reset();
 
 	world.barrier();

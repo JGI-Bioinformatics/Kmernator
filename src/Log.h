@@ -30,6 +30,16 @@
  * PURPOSE.
  *
  *
+ * Log guildines:
+ * Verbose 1 - Major milestones, information
+ * Verbose 2 - Progress/batch milestones
+ * Verbose 3 - more information
+ *
+ * Debug 1 - debug major steps
+ * Debug 2 - debug progress/batch steps
+ * Debug 3 - detail progress/batch
+ * Debug 4 - per outer loop diagnostics
+ * Debug 5 - per inner loop (per-read / kmer) diagnostics
  */
 
 #ifndef LOG_H_
@@ -92,6 +102,16 @@ public:
 		_attribute = copy._attribute;
 		_level = copy._level;
 		return *this;
+	}
+	static inline bool isMaster() {
+		if (world == NULL)
+			return true;
+		else
+#ifdef  _USE_MPI
+			return ((mpi::communicator*)world)->rank() == 0;
+#else
+			return true;
+#endif
 	}
 	inline bool isActive(unsigned int level = 1) {
 		bool isActive = _os != NULL && _level >= level;

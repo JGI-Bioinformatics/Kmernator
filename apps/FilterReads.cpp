@@ -54,28 +54,28 @@ int main(int argc, char *argv[]) {
 	reads.appendAllFiles(inputs);
 	LOG_VERBOSE(1, "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
 			<< " Bases ");
-	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	LOG_VERBOSE(1, "Identifying Pairs: ");
 	long numPairs = reads.identifyPairs();
 	LOG_VERBOSE(1, "Pairs + single = " << numPairs);
-	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	if (Options::getSkipArtifactFilter() == 0) {
 
 	  LOG_VERBOSE(1, "Preparing artifact filter: ");
       FilterKnownOddities filter;
-      LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+      LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-	  LOG_VERBOSE(1, "Applying sequence artifact filter to Input Files");
+	  LOG_VERBOSE(2, "Applying sequence artifact filter to Input Files");
 	  unsigned long filtered = filter.applyFilter(reads);
 	  LOG_VERBOSE(1, "filter affected (trimmed/removed) " << filtered << " Reads ");;
-	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-	  LOG_VERBOSE(1, "Applying DuplicateFragmentPair Filter to Input Files");
+	  LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
 	  unsigned long duplicateFragments = filter.filterDuplicateFragments(reads);
-	  LOG_VERBOSE(1, "filter affected  (removed) " << duplicateFragments);
-	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	  LOG_VERBOSE(1, "filter removed duplicate fragment pair reads: " << duplicateFragments);
+	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 	}
 
 	KS spectrum(0);
@@ -85,26 +85,27 @@ int main(int argc, char *argv[]) {
 	if (Options::getKmerSize() > 0) {
 
 	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
-	  LOG_VERBOSE(1, "targeting " << numBuckets << " buckets for reads ");
+	  LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
 
 	  spectrum = KS(numBuckets);
-	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
-	  LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {
-		  LOG_VERBOSE(1, "Creating GC Heat Map " <<  MemoryUtils::getMemoryUsage());
+		  LOG_VERBOSE(1, "Creating GC Heat Map ");
+		  LOG_DEBUG(1,  MemoryUtils::getMemoryUsage());
 		  OfstreamMap ofmap(outputFilename + "-GC", ".txt");
 		  spectrum.printGC(ofmap.getOfstream(""));
 	  }
 
 	  if (Options::getMinDepth() > 1) {
-        LOG_VERBOSE(1, "Clearing singletons from memory");
-        spectrum.singleton.clear();
-	    LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+		  LOG_DEBUG(1, "Clearing singletons from memory");
+		  spectrum.singleton.clear();
+		  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 	  }
 	}
 
@@ -131,7 +132,10 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	LOG_DEBUG(1, "Clearing spectrum");
 	spectrum.reset();
+
+	LOG_VERBOSE(1, "Finished");
 
 	return 0;
 }

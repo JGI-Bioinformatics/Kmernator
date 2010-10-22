@@ -600,7 +600,7 @@ public:
 			LOG_DEBUG(1, "There are no eligible kmers to promote");
 			return 0;
 		}
-		LOG_DEBUG(1, "Heap: " << weakHeap.size() << " " << weakHeap[0].value());
+		LOG_DEBUG(2, "Heap: " << weakHeap.size() << " " << weakHeap[0].value());
 
 		//heapify kmer counts
 		std::make_heap( weakHeap.begin(), weakHeap.end() );
@@ -621,7 +621,7 @@ public:
 				promotedInBatch++;
 			}
 			if (++count == 1000) {
-				LOG_DEBUG(1, "Added " << promotedInBatch << ", Heap size: " << weakHeap.size() << " lastCount: " << lastCount);
+				LOG_DEBUG(3, "Added " << promotedInBatch << ", Heap size: " << weakHeap.size() << " lastCount: " << lastCount);
 				if (promotedInBatch == 0)
 				break;
 				promotedInBatch = count = 0;
@@ -1122,7 +1122,7 @@ public:
 		}
 		unsigned long singletonCount = singleton.size();
 		purgedSingletons += singletonCount;
-		LOG_VERBOSE(1, "Purging Singletons: " << singletonCount << " (" << purgedSingletons << " total so far)");
+		LOG_DEBUG(2, "Purging Singletons: " << singletonCount << " (" << purgedSingletons << " total so far)");
 		singleton.reset();
 		return singletonCount;
 	}
@@ -1148,7 +1148,7 @@ public:
 
 		// build each part of the spectrum
 		for (NumberType partIdx = 0; partIdx < numParts; partIdx++) {
-			LOG_VERBOSE(1, "Building part of spectrum: " << (partIdx+1) << " of " << numParts << std::endl << MemoryUtils::getMemoryUsage());
+			LOG_VERBOSE(2, "Building part of spectrum: " << (partIdx+1) << " of " << numParts << std::endl << MemoryUtils::getMemoryUsage());
 
 			// build
 			buildKmerSpectrum(store, isSolid, partIdx, numParts);
@@ -1171,11 +1171,12 @@ public:
 
 		// first free up memory
 		if (Options::getMinDepth() <= 1) {
-			LOG_VERBOSE(1, "Clearing memory from singletons" << std::endl << MemoryUtils::getMemoryUsage());
+			LOG_DEBUG(2, "Clearing memory from singletons" << std::endl << MemoryUtils::getMemoryUsage());
 		    singleton.clear();
 		}
 
-		LOG_VERBOSE(1, "Merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage() );
+		LOG_VERBOSE(2, "Merging partial spectrums" );
+		LOG_DEBUG(2, MemoryUtils::getMemoryUsage() );
 
 		const WeakMapType constWeak(weak.getNumBuckets());
 		const SingletonMapType constSingleton(singleton.getNumBuckets());
@@ -1193,7 +1194,7 @@ public:
 		if (Options::getMinDepth() <= 1)
 			singleton.swap( const_cast<SingletonMapType&>( constSingleton) );
 
-		LOG_VERBOSE(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
+		LOG_VERBOSE(2, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
 
 		if (Log::isVerbose(1)) {
 			printStats(Log::Verbose("Final Stats"), store.getSize(), isSolid, true);
@@ -1255,13 +1256,13 @@ public:
 
 		#pragma omp parallel num_threads(numThreads)
 		{
+			int threadId = omp_get_thread_num();
 			if (numThreads != omp_get_num_threads())
 			throw "OMP thread count mis-match";
 
-			#pragma omp single
-			{
+			if (threadId == 0)
 				LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads);
-			}
+
 		}
 
 		while (batchIdx < (long) store.getSize())

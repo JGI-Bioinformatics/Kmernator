@@ -113,7 +113,7 @@ public:
 				filter.getOrSetElement( kmers[j] , i );
 			}
 		}
-		LOG_VERBOSE(1,  "Prepared exact match: " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
+		LOG_DEBUG(2,  "Prepared exact match: " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
 
 		for (int error = 0; error < numErrors; error++) {
 			std::vector< KM::BucketType > tmpKmers;
@@ -128,7 +128,7 @@ public:
 				}
 			}
 		    tmpKmers.clear();
-			LOG_VERBOSE(1, "Prepared order " << (error+1) << ": " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
+			LOG_DEBUG(2, "Prepared order " << (error+1) << ": " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
 		}
 
 		KmerSizer::set(oldKmerLength);
@@ -189,7 +189,7 @@ public:
 		SequenceLengthType &maxAffected = results.maxAffected;
 		maxAffected = 0;
 
-		LOG_DEBUG(2, "Checking " << read.getName() << "\t" << read.getFasta() );
+		LOG_DEBUG(5, "Checking " << read.getName() << "\t" << read.getFasta() );
 
 		SequenceLengthType seqLen = read.getLength();
 		TwoBitEncoding *ptr = read.getTwoBitSequence();
@@ -333,17 +333,17 @@ public:
 				}
 			}
 
-			if (Log::isDebug(3)){
+			if (Log::isDebug(5)){
 				  Read read;
 				  if (isRead1Affected) {
 					  read = reads.getRead(readIdx1);
-					  LOG_DEBUG(3, "FilterMatch1 to " << read.getName() << " "
+					  LOG_DEBUG(5, "FilterMatch1 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
 							  << wasPhiX << " " << sequences.getRead(results1.value).getName());
 				  }
 				  if (isRead2Affected) {
 					  read = reads.getRead(readIdx2);
-					  LOG_DEBUG(3, "FilterMatch2 to " << read.getName() << " "
+					  LOG_DEBUG(5, "FilterMatch2 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
 							  << wasPhiX << " " << sequences.getRead(results2.value).getName());
 
@@ -531,7 +531,7 @@ public:
 			  ksv[i].printHistograms();
 		  }
 		} else {
-			LOG_VERBOSE(1, "merging duplicate fragment spectrums" );
+			LOG_VERBOSE(2, "merging duplicate fragment spectrums" );
 		}
 
 		KS::mergeVector(ksv, 1);
@@ -548,23 +548,22 @@ public:
 
 		#pragma omp parallel private(elems)
 		{
+			int threadId = omp_get_thread_num();
 			for(KS::WeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
 				KSElementType &elem = *it;
 				if (elem.isValid() && elem.value().getCount() >= cutoffThreshold)
 					elems.push_back(elem);
 			}
 
-			#pragma omp single
-			{
-				LOG_VERBOSE(1, "Sorting all nodes >= " << cutoffThreshold << " count: " << elems.size() << " " << MemoryUtils::getMemoryUsage());
-			}
+			if (threadId == 0)
+				LOG_VERBOSE(2, "Sorting all nodes >= " << cutoffThreshold << " count: " << elems.size() << " " << MemoryUtils::getMemoryUsage());
+
 			std::sort(elems.begin(), elems.end());
 
 
-			#pragma omp single
-			{
-				LOG_VERBOSE(1, "Merging elements. " << MemoryUtils::getMemoryUsage());
-			}
+			if (threadId == 0)
+				LOG_VERBOSE(2, "Merging elements. " << MemoryUtils::getMemoryUsage());
+
 			for(KSElementVector::reverse_iterator it = elems.rbegin(); it != elems.rend(); it++) {
 				KSElementType &elem = *it;
 				if (elem.isValid() && elem.value().getCount() >= cutoffThreshold) {
@@ -572,10 +571,8 @@ public:
 				}
 			}
 
-			#pragma omp single
-			{
-				LOG_VERBOSE(1, "Merging elements below cutoffThreshold. " << MemoryUtils::getMemoryUsage() );
-			}
+			if (threadId == 0)
+				LOG_VERBOSE(2, "Merging elements below cutoffThreshold. " << MemoryUtils::getMemoryUsage() );
 
 			// do not clear elements until all merging has completed
 			elems.clear();
@@ -592,13 +589,14 @@ public:
 			}
 		} // omp parallel
 
-		LOG_VERBOSE(1, "Merged histogram. " << MemoryUtils::getMemoryUsage() );
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage() );
 		ks.printHistograms();
 
 	}
 	static ReadSetSizeType _buildConsensusUnPairedReads(KS &ks, ReadSet &reads, ReadSet &newReads, unsigned int cutoffThreshold) {
 		ReadSet::madviseMmapsRandom();
-		LOG_VERBOSE(1, "Building consensus reads. " << MemoryUtils::getMemoryUsage());
+		LOG_VERBOSE(1, "Building consensus reads. ");
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		ReadSetSizeType affectedCount = 0;
 
@@ -636,7 +634,7 @@ public:
 
 		    }
 		}
-		LOG_VERBOSE(1, "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() );
+		LOG_DEBUG(1, "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() );
 		ks.reset();
 		LOG_VERBOSE(1, "Built " << newReads.getSize() << " new consensus reads: " <<  MemoryUtils::getMemoryUsage() );
 		newReads.identifyPairs();
@@ -645,7 +643,8 @@ public:
 
 	static ReadSetSizeType _buildConsensusPairedReads(KS &ks, ReadSet &reads, ReadSet &newReads, unsigned int cutoffThreshold) {
 		ReadSet::madviseMmapsRandom();
-		LOG_VERBOSE(1, "Building consensus reads. " << MemoryUtils::getMemoryUsage());
+		LOG_VERBOSE(1, "Building consensus reads. ");
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		ReadSetSizeType affectedCount = 0;
 		ReadSetSizeType pairSize = reads.getPairSize();
@@ -709,7 +708,7 @@ public:
 		for(int i = 0 ; i < numThreads; i++)
 			newReads.append(_threadNewReads[i]);
 
-		LOG_VERBOSE(1, "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() );
+		LOG_DEBUG(1, "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() );
 		ks.reset();
 		LOG_VERBOSE(1, "Built " << newReads.getSize() << " new consensus reads: " <<  MemoryUtils::getMemoryUsage() );
 		newReads.identifyPairs();

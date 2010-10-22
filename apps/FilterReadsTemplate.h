@@ -11,8 +11,8 @@
 long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, RS &selector, std::string outputFilename)
 {
 
-	LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
-	LOG_VERBOSE(1, "Picking reads: ");
+	LOG_VERBOSE(1, "selectReads with minDepth " << minDepth << ": " << reads.getSize());
+	LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	long oldPicked = 0;
 	long picked = 0;
@@ -30,14 +30,14 @@ long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, RS &select
 			else
 				picked += selector.pickBestCoveringSubsetReads(depth,
 						minDepth, Options::getMinReadLength());
-			LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 		}
 
 		if (picked > 0 && !outputFilename.empty()) {
 			LOG_VERBOSE(1, "Writing " << picked << " reads to output file(s)");
 			selector.writePicks(ofmap, oldPicked);
 		}
-		LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 		oldPicked += picked;
 
 
@@ -70,9 +70,9 @@ long selectReads(unsigned int minDepth, ReadSet &reads, KS &spectrum, RS &select
 				picked = selector.pickAllPassingReads(tmpMinDepth,
 						Options::getMinReadLength());
 			}
-			LOG_VERBOSE(1, "At or above coverage: " << depth << " Picked " << picked
+			LOG_VERBOSE(2, "At or above coverage: " << depth << " Picked " << picked
 			<< " / " << reads.getSize() << " reads");
-			LOG_VERBOSE(1, MemoryUtils::getMemoryUsage());
+			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			if (picked > 0 && !outputFilename.empty()) {
 				LOG_VERBOSE(1, "Writing " << picked << " reads  to output files");
