@@ -296,9 +296,13 @@ public:
 					}
 				}
 
-				if (threadId == 0 && readIdx > 0 && readIdx % 1000000 == 0 )
-					LOG_VERBOSE(1, "processed " << readIdx << " reads");
-
+				if (threadId == 0 && readIdx % 1000000 == 0) {
+					if (world.rank() == 0)  {
+						LOG_VERBOSE(1, "distributed processing " << (readIdx * world.size()) << " reads");
+					} else {
+						LOG_DEBUG(2, "local processed: " << readIdx << " reads");
+					}
+				}
 			}
 
 			LOG_DEBUG(2, "finished generating kmers from reads");
@@ -583,7 +587,7 @@ done when empty cycle is received
 
 
 		ReadSetSizeType readsSize = this->_reads.getSize();
-		ReadSetSizeType batchSize = 100000;
+		ReadSetSizeType batchSize = 500000;
 		ReadSetSizeType batchReadIdx = 0;
 		int respondMessageSize = sizeof(RespondKmerMessageHeader);
 		int requestMessageSize = sizeof(RequestKmerMessageHeader) + KmerSizer::getTwoBitLength();
@@ -637,6 +641,9 @@ done when empty cycle is received
 			batchBuffer[threadId].resize(0);
 			readIndexBuffer[threadId].resize(0);
 			readOffsetBuffer[threadId].resize(0);
+
+			if (_world.rank() == 0 && threadId == 0)
+				LOG_VERBOSE(1, "trimming batch: " << batchReadIdx * _world.size());
 
 			LOG_DEBUG(3, "Starting batch for kmer lookups: " << batchReadIdx);
 
