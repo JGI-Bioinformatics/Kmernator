@@ -40,8 +40,13 @@ typedef ReadSelector<DataType> RS;
 
 int main(int argc, char *argv[]) {
 
-	if (!FilterReadsOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	try {
+		if (!FilterReadsOptions::parseOpts(argc, argv))
+			throw std::invalid_argument("Please fix the command line arguments");
+	} catch (...) {
+		std::cerr << std::endl << "Please fix the options OpenMP environment" << std::endl;
+		exit(1);
+	}
 
 	MemoryUtils::getMemoryUsage();
     std::string outputFilename = Options::getOutputFile();

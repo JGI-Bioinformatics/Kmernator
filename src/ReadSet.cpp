@@ -174,7 +174,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 	#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 	for (long i = 0; i < filesSize; i++) {
 
-		LOG_DEBUG(1, "reading " << files[i] << " using " << omp_get_max_threads() << " threads per file");
+		LOG_DEBUG(2, "reading " << files[i] << " using " << omp_get_max_threads() << " threads per file");
 
 		string qualFile;
 		if (!Options::getIgnoreQual()) {
@@ -196,12 +196,12 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 		incrementFile(parser);
 #endif
 
-		LOG_DEBUG(1, "finished reading " << files[i]);
+		LOG_DEBUG(2, "finished reading " << files[i]);
 
 	}
 #ifdef _USE_OPENMP
 	omp_set_nested(OMP_NESTED_DEFAULT);
-	LOG_DEBUG(1,"concatenating ReadSet buffers");
+	LOG_DEBUG(2,"concatenating ReadSet buffers");
 	for(int i = 0; i< (long) files.size(); i++) {
 	    append(myReads[i]);
 	    incrementFile(parsers[i]);
@@ -355,7 +355,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 
 			if (blockSize < 100)
 				blockSize = 100;
-			LOG_DEBUG(1, "Reading " << mmap << " with " << numThreads << " threads" );
+			LOG_DEBUG(2, "Reading " << mmap << " with " << numThreads << " threads" );
 		}
 
 
@@ -557,7 +557,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 		}
 	}
 
-	LOG_VERBOSE(1, "Paired sequential reads (fast): " << sequentialPairs);
+	LOG_DEBUG(2, "Paired sequential reads (fast): " << sequentialPairs);
 
 	newPairs += sequentialPairs;
 
@@ -640,10 +640,10 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 
 		readIdx++;
 		if (++countNewPaired % 10000000 == 0)
-			LOG_VERBOSE(2, "Processed " << countNewPaired << " pairs for pairing");
+			LOG_VERBOSE(3, "Processed " << countNewPaired << " pairs for pairing");
 	}
 
-	LOG_VERBOSE(1, "Identified new pairs: " << newPairs);
+	LOG_VERBOSE_OPTIONAL(1, true, "Identified new pairs: " << newPairs);
 
 	return _pairs.size();
 }

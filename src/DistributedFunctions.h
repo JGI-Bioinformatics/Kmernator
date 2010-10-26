@@ -39,6 +39,7 @@
 #include "MPIBuffer.h"
 #include "ReadSet.h"
 #include "ReadSelector.h"
+#include "Log.h"
 
 #include "boost/optional.hpp"
 #include <boost/thread/thread.hpp>
@@ -53,8 +54,7 @@ void reduceOMPThreads(mpi::communicator &world) {
 	int numThreads = Options::getMaxThreads();
 	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
 	omp_set_num_threads(numThreads);
-	if (world.rank() == 0)
-		LOG_VERBOSE(1, "set OpenMP threads to " << numThreads);
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
 }
 
 void validateMPIWorld(mpi::communicator &world, int threadSupport) {
@@ -118,7 +118,7 @@ public:
 	}
 
 	template<typename D>
-	MmapFile writeKmerMapMPI(D &kmerMap, std::string filepath) {
+	MmapFile writeKmerMap(D &kmerMap, std::string filepath) {
 		NumberType numBuckets = kmerMap.getNumBuckets();
 		NumberType *mySizeCounts = new NumberType[ numBuckets ];
 		for(IndexType i = 0 ; i < numBuckets; i++)
@@ -199,17 +199,20 @@ public:
 	{
 		DistributedKmerSpectrum &_spectrum;
 		DataPointers _pointers;
+		bool _isSolid;
 
 	public:
-		RecvStoreKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize, int tag)
-			: RecvStoreKmerMessageBufferBase(world, messageSize, tag), _spectrum(spectrum), _pointers(spectrum) {
+		RecvStoreKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize, int tag, bool isSolid = false)
+			: RecvStoreKmerMessageBufferBase(world, messageSize, tag), _spectrum(spectrum), _pointers(spectrum), _isSolid(isSolid) {
 		}
-		~RecvStoreKmerMessageBuffer() {}
 		inline DataPointers &getDataPointer() {
 			return _pointers;
 		}
 		inline DistributedKmerSpectrum &getSpectrum() {
 			return _spectrum;
+		}
+		inline bool isSolid() const {
+			return _isSolid;
 		}
 	};
 	class SendStoreKmerMessageBuffer : public SendStoreKmerMessageBufferBase
@@ -220,7 +223,6 @@ public:
 		SendStoreKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize)
 			: SendStoreKmerMessageBufferBase(world, messageSize), _spectrum(spectrum) {
 		}
-		~SendStoreKmerMessageBuffer() {}
 		inline DistributedKmerSpectrum &getSpectrum() {
 			return _spectrum;
 		}
@@ -247,11 +249,11 @@ public:
 		void process(RecvStoreKmerMessageBufferBase *bufferCallback) {
 			RecvStoreKmerMessageBuffer *kbufferCallback = (RecvStoreKmerMessageBuffer*) bufferCallback;
 			LOG_DEBUG(4, "StoreKmerMessage: " << readIdx << " " << readPos << " " << weight << " " << getKmer()->toFasta());
-			kbufferCallback->getSpectrum().append(kbufferCallback->getDataPointer(), *getKmer(), weight, readIdx, readPos);
+			kbufferCallback->getSpectrum().append(kbufferCallback->getDataPointer(), *getKmer(), weight, readIdx, readPos, kbufferCallback->isSolid());
 		}
 	};
 
-	void _buildKmerSpectrumMPI( mpi::communicator &world, ReadSet &store, bool isSolid = false ) {
+	void _buildKmerSpectrumMPI(ReadSet &store, bool isSolid) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
 		int numParts = world.size();
@@ -277,14 +279,14 @@ public:
 		{
 			int threadId = omp_get_thread_num();
 			LOG_DEBUG(3, "allocating buffers for thread");
-			recvBuffers[threadId] = new RecvStoreKmerMessageBuffer(world, *this, messageSize, threadId);
+			recvBuffers[threadId] = new RecvStoreKmerMessageBuffer(world, *this, messageSize, threadId, isSolid);
 			for(int recvThread = 0 ; recvThread < numThreads; recvThread++) {
 				sendBuffers[threadId][recvThread] = new SendStoreKmerMessageBuffer(world, *this, messageSize);
 				sendBuffers[threadId][recvThread]->addReceiveAllCallback( recvBuffers[threadId] );
 			}
 
 			#pragma omp barrier
-			LOG_DEBUG(1, "message buffers ready");
+			LOG_DEBUG(2, "message buffers ready");
 			#pragma omp master
 			world.barrier();
 
@@ -306,18 +308,15 @@ public:
 					this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, distributedThreadMask);
 
 					if (rankDest == rank && threadDest == threadId) {
-						this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos);
+						this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos, isSolid);
 					} else {
 						sendBuffers[ threadId ][ threadDest ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
 					}
 				}
 
 				if (threadId == 0 && readIdx % 1000000 == 0) {
-					if (world.rank() == 0)  {
-						LOG_VERBOSE(1, "distributed processing " << (readIdx * world.size()) << " reads");
-					} else {
-						LOG_DEBUG(2, "local processed: " << readIdx << " reads");
-					}
+					LOG_DEBUG(2, "local processed: " << readIdx << " reads");
+					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed processing " << (readIdx * world.size()) << " reads");
 				}
 			}
 
@@ -333,15 +332,19 @@ public:
 			}
 			LOG_DEBUG(2, "sending final messages")
 
+			stringstream ss;
 			for(int destThread = 0; destThread < numThreads; destThread++) {
 				sendBuffers[threadId][destThread]->finalize(destThread);
-				LOG_DEBUG(1, "sendBuffers["<<threadId<<"]["<<destThread<<"] sent " << sendBuffers[threadId][destThread]->getNumDeliveries() << "/" << sendBuffers[threadId][destThread]->getNumMessages());
+				if (Log::isDebug(1))
+					ss << "sendBuffers["<<threadId<<"]["<<destThread<<"] sent " << sendBuffers[threadId][destThread]->getNumDeliveries() << "/" << sendBuffers[threadId][destThread]->getNumMessages() << std::endl;
 				delete sendBuffers[threadId][destThread];
 			}
 
 			LOG_DEBUG(2, "receiving final messages");
 			recvBuffers[threadId]->finalize(numThreads);
-			LOG_DEBUG(1, "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries() << "/" << recvBuffers[threadId]->getNumMessages());
+
+			#pragma omp critical
+			LOG_DEBUG(1, std::endl << ss.str() << "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries() << "/" << recvBuffers[threadId]->getNumMessages());
 			delete recvBuffers[threadId];
 
 		} // omp parallel
@@ -391,18 +394,20 @@ public:
 		}
 	};
 
-	Kmernator::MmapFileVector buildKmerSpectrumMPI(ReadSet &store ) {
-		bool isSolid = false; // not supported for references...
+	void buildKmerSpectrum( ReadSet &store ) {
+		return this->buildKmerSpectrum(store, false);
+	}
 
-		_buildKmerSpectrumMPI(world, store, isSolid);
+	void buildKmerSpectrum(ReadSet &store, bool isSolid) {
+
+		_buildKmerSpectrumMPI(store, isSolid);
 
 		MPIHistogram histogram(127);
 		histogram.set(*this, false);
 		LOG_DEBUG(2, "Individual raw histogram\n" << histogram.toString());
 
 		histogram.reduce(world);
-		if (world.rank() == 0)
-			LOG_VERBOSE(1, "Collective raw histogram\n" << histogram.toString());
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective raw histogram\n" << histogram.toString());
 		world.barrier();
 
 		// purge low counts
@@ -417,20 +422,24 @@ public:
 			this->purgeMinDepth(Options::getMinDepth());
 		}
 
+	}
+	Kmernator::MmapFileVector writeKmerMaps(string fileprefix = Options::getOutputFile()) {
 		// communicate sizes and allocate permanent file
 		LOG_VERBOSE(2, "Merging partial spectrums" );
 		LOG_DEBUG(2, MemoryUtils::getMemoryUsage() );
-		Kmernator::MmapFileVector ourSpectrum(2);
-		ourSpectrum[0] = writeKmerMapMPI(this->weak, Options::getOutputFile() + "-kmer-mmap");
+		Kmernator::MmapFileVector ourSpectrum(3);
+		if (this->hasSolids){
+			ourSpectrum[0] = this->writeKmerMap(this->solid, fileprefix + "-kmer-mmap");
+		}
+		ourSpectrum[1] = this->writeKmerMap(this->weak, fileprefix + "-kmer-mmap");
 
-		if (Options::getMinDepth() <= 1) {
-			ourSpectrum[1] = writeKmerMapMPI(this->singleton, Options::getOutputFile() + "-singleton-kmer-mmap");
+		if (Options::getMinDepth() <= 1 && this->hasSingletons) {
+			ourSpectrum[2] = this->writeKmerMap(this->singleton, fileprefix + "-singleton-kmer-mmap");
 		}
 
 		LOG_DEBUG(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
 
 		return ourSpectrum;
-
 	}
 
 }; // DistributedKmerSpectrum

@@ -86,7 +86,7 @@ public:
 			{
 				throw std::invalid_argument("You can not specify both max-kmer-depth and partition-by-depth");
 			}
-			if (Options::getOutputFile().empty())
+			if (Options::getOutputFile().empty() && Logger::isMaster())
 			{
 				LOG_WARN(1, "no output file specified... This is a dry run!");
 			}

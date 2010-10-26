@@ -205,7 +205,7 @@ public:
 					end = it->length() - 1;
 
 				std::string fileprefix = it->substr( start, end-start );
-				LOG_DEBUG(1, "InputFilePrefix: " << fileprefix );
+				LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "InputFilePrefix: " << fileprefix );
 				
 				getOptions().inputFilePrefixes.push_back( fileprefix );
 			}
@@ -218,7 +218,7 @@ public:
 		int maxThreads = omp_get_max_threads();
 
 		if (getMaxThreads() > maxThreads) {
-			LOG_DEBUG(1, "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads);
+			LOG_DEBUG(2, "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads);
 			getMaxThreads() = maxThreads;
 		}
 		if ((getMaxThreads() & (getMaxThreads()-1)) != 0) {
@@ -238,7 +238,7 @@ public:
 				t=1;
 			}
 			getMaxThreads() = t;
-			LOG_DEBUG(1, "Reducing the number of threads from " << start << " to " << t );
+			LOG_DEBUG(2, "Reducing the number of threads from " << start << " to " << t );
 		}
 		omp_set_num_threads(getMaxThreads());
 #endif
@@ -270,7 +270,7 @@ protected:
 		("format-output", po::value<unsigned int>()->default_value(formatOutput),
 				"0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
 
-        ("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
+	        ("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
 		        "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
 
 		("filter-output", po::value<unsigned int>()->default_value(filterOutput),
@@ -331,7 +331,7 @@ protected:
 				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.  Must be a power of 2")
 
 		("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap),
-		"If set, a GC Heat map will be output (requires --output)")					;
+				"If set, a GC Heat map will be output (requires --output)")					;
 
 	}
 
@@ -344,10 +344,10 @@ public:
 		if (vm.count(key.c_str())) {
 			val = vm[key.c_str()].as<T>();
 			if (print) {
-				LOG_VERBOSE(1, key << " is: " << val );
+				LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " is: " << val );
 			}
 		} else if (print) {
-			LOG_VERBOSE(1, key << " was not specified.");
+			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " was not specified.");
 		}
 
 	}
@@ -382,6 +382,11 @@ public:
 
 
 			setOpt<unsigned int>("verbose", getVerbosity());
+			{
+				char hostname[128];
+				gethostname(hostname, 128);
+				LOG_VERBOSE(1, "Starting on " << hostname);
+			}
 
 			setOpt<unsigned int>("debug", getDebug());
 
@@ -390,8 +395,9 @@ public:
 				getOptions().logFileStream.reset( new std::ofstream(getLogFile().c_str(), std::ios_base::out | std::ios_base::ate) );
 				Log::Verbose().setOstream( *getOptions().logFileStream );
 				Log::Debug().setOstream( *getOptions().logFileStream );
-				LOG_VERBOSE(1, "log-file is: " << getLogFile().c_str());
+				LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "log-file is: " << getLogFile().c_str());
 			}
+
 
 			bool print = Logger::isMaster() && ((Log::isVerbose(1) || Log::isDebug(1)));
 			std::ostream *output = NULL;

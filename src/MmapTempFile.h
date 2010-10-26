@@ -91,7 +91,7 @@ public:
 			filename = Options::getTmpDir() + "/.tmp-" + generateUniqueName();
 		else
 			filename = permanentFile;
-		LOG_DEBUG(1, "Creating new file: " << filename << " " << size);
+		LOG_DEBUG_OPTIONAL(1, true, "Creating new file: " << filename << " " << size);
 		FileHandle fh(filename);
 		fh.getOS().seekp(size-1);
 		fh.getOS() << '\0';

@@ -1139,7 +1139,10 @@ public:
 	Kmernator::MmapFileVector buildKmerSpectrumInParts(ReadSet &store, NumberType numParts) {
 		bool isSolid = false; // not supported for references...
 		if (numParts == 0) {
-			buildKmerSpectrum(store);
+			buildKmerSpectrum(store, isSolid);
+
+			// purge
+			purgeMinDepth(Options::getMinDepth());
 			return Kmernator::MmapFileVector();
 		}
 
@@ -1334,7 +1337,13 @@ public:
 
 	}
 
-	void buildKmerSpectrum( ReadSet &store, bool isSolid = false, NumberType partIdx = 0, NumberType numParts = 1)
+	virtual void buildKmerSpectrum( ReadSet &store ) {
+		return this->buildKmerSpectrum(store, false);
+	}
+	virtual void buildKmerSpectrum( ReadSet &store, bool isSolid ) {
+		return this->buildKmerSpectrum(store, isSolid, 0, 1);
+	}
+	void buildKmerSpectrum( ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts)
 	{
 		assert( numParts != 0 && (numParts & (numParts-1)) == 0); // numParts must be a power of 2
 		assert(partIdx < numParts);

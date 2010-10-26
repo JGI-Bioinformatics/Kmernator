@@ -47,10 +47,19 @@ int main(int argc, char *argv[]) {
 	int threadSupport = MPI::Init_thread(MPI_THREAD_MULTIPLE);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
-	validateMPIWorld(world, threadSupport);
 
-	if (!FilterReadsOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	try {
+
+		validateMPIWorld(world, threadSupport);
+
+		if (!FilterReadsOptions::parseOpts(argc, argv))
+			throw std::invalid_argument("Please fix the command line arguments");
+
+	} catch (...) {
+		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
+		exit(1);
+	}
+	world.barrier();
 
 	MemoryUtils::getMemoryUsage();
     std::string outputFilename = Options::getOutputFile();
@@ -59,15 +68,13 @@ int main(int argc, char *argv[]) {
 	KmerSizer::set(Options::getKmerSize());
 
 	Options::FileListType inputs = Options::getInputFiles();
-	if (world.rank() == 0)
-		LOG_VERBOSE(1, "Reading Input Files");
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
 	reads.appendAllFiles(inputs, world.rank(), world.size());
 
 	LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-	if (world.rank() == 0)
-		LOG_VERBOSE(1, "Identifying Pairs: ");
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Identifying Pairs: ");
 
 	unsigned long counts[3], totalCounts[3];
 	unsigned long &readCount = counts[0] = reads.getSize();
@@ -77,21 +84,18 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(2, "Pairs + single = " << numPairs);
 
 	all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
-	if (world.rank() == 0)
-		LOG_VERBOSE(1, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
 
 	setGlobalReadSetOffset(world, reads);
 
 	if (Options::getSkipArtifactFilter() == 0) {
 
-		if (world.rank() == 0)
-			LOG_VERBOSE(1, "Preparing artifact filter: ");
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Preparing artifact filter: ");
 
 		FilterKnownOddities filter;
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-		if (world.rank() == 0)
-			LOG_VERBOSE(2, "Applying sequence artifact filter to Input Files");
+		LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Applying sequence artifact filter to Input Files");
 
 		unsigned long filtered = filter.applyFilter(reads);
 
@@ -100,8 +104,7 @@ int main(int argc, char *argv[]) {
 
 		unsigned long allFiltered;
 		reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
-		if (world.rank() == 0)
-			LOG_VERBOSE(1, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
 
 		LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
 		unsigned long duplicateFragments = filter.filterDuplicateFragments(reads);
@@ -111,8 +114,7 @@ int main(int argc, char *argv[]) {
 
 		unsigned long allDuplicateFragments;
 		reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
-		if (world.rank() == 0)
-			LOG_VERBOSE(1, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
 
 	}
 
@@ -122,8 +124,7 @@ int main(int argc, char *argv[]) {
 		numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
 
 		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-		if (world.rank() == 0)
-			LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads ");
 	}
 	KS spectrum(world, numBuckets);
 	Kmernator::MmapFileVector spectrumMmaps;
@@ -133,7 +134,8 @@ int main(int argc, char *argv[]) {
 
 		TrackingData::minimumWeight = Options::getMinKmerQuality();
 
-		spectrumMmaps = spectrum.buildKmerSpectrumMPI(reads);
+		spectrum.buildKmerSpectrum(reads);
+		spectrumMmaps = spectrum.writeKmerMaps(Options::getOutputFile() + "-mmap");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		if (Options::getMinDepth() > 1) {
@@ -157,8 +159,7 @@ int main(int argc, char *argv[]) {
 			if (Options::getKmerSize() > 0) {
 				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
 			}
-			if (world.rank() == 0)
-				LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << thisDepth);
 			RS selector(world, reads, spectrum.weak);
 			selector.scoreAndTrimReads(minDepth);
 
@@ -183,10 +184,10 @@ int main(int argc, char *argv[]) {
 
 	LOG_DEBUG(2, "Clearing spectrum");
 	spectrum.reset();
+	LOG_DEBUG(1, "Finished, waiting for rest of collective");
 
 	world.barrier();
-	if (world.rank() == 0)
-		LOG_VERBOSE(1, "Finished");
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 
 	MPI::Finalize();
 

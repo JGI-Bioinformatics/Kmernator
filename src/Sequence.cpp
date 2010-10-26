@@ -576,7 +576,7 @@ double Read::qualityToProbability[256];
 
 int Read::initializeQualityToProbability(unsigned char minQualityScore, char startChar) {
 	if (startChar != FASTQ_START_CHAR) {
-		LOG_DEBUG(1, "Switching quality scale for FASTQ (std vs Illumina) to " << (int) startChar);
+		LOG_DEBUG_OPTIONAL(1, true, "Switching quality scale for FASTQ (std vs Illumina) to " << (int) startChar);
 	}
 	FASTQ_START_CHAR = startChar;
 	for (int i = 0; i < 256; i++) {

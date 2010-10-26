@@ -95,6 +95,33 @@ public:
 	static void setWorld(void *_w) {
 		world = _w;
 	}
+#ifdef _USE_MPI
+	std::string gatherMessages(std::string msg) {
+		if (world != NULL) {
+			//*_os << getStamp() << "Entering gatherMessages: " << msg << std::endl;
+			mpi::communicator &w = *((mpi::communicator*) world);
+			std::string out[w.size()];
+			if (!msg.empty())
+				msg = getStamp() + msg + "\n";
+			try {
+				mpi::gather(w, msg, out, 0);
+			} catch (...) {
+				*_os << "ERROR: Failed to gather all messages: " << msg;
+				throw;
+			}
+			std::stringstream ss;
+			for(int i = 0 ; i < w.size(); i++)
+				ss << out[i];
+			msg = ss.str();
+			if (!msg.empty() && w.rank() == 0)
+				return "MPI Gathered Log Entries:\n" + msg;
+			else
+				return std::string();
+		} else {
+			return msg;
+		}
+	}
+#endif
 	Logger &operator=(const Logger &copy) {
 		if (this == &copy)
 			return *this;
@@ -142,10 +169,13 @@ public:
 	inline void unsetOstream() {
 		_os = NULL;
 	}
+	inline std::string getStamp() {
+		return getTime() + " " + _attribute + getThisLevel() + getRank() + getThread() + ": ";
+	}
 	template<typename T>
 	inline std::ostream &operator<<(T log) {
 		if (isActive())
-			return *_os << getTime() << " " << _attribute << getThisLevel() << getRank() << getThread() << ": "<< log;
+			return *_os << getStamp() << log;
 		else
 			return misuseWarning();
 	}
@@ -179,6 +209,19 @@ class Log
 	static inline Logger &getErrorOstream() {
 		return errorOstream;
 	}
+	static inline Logger &_log(Logger &log, std::string &msg, bool bypassmpi = true) {
+#ifdef _USE_MPI
+		if (!bypassmpi)
+			msg = log.gatherMessages(msg);
+#endif
+		if (!msg.empty()) {
+			#pragma omp critical(Log)
+			{
+				log << msg << std::endl;
+			}
+		}
+		return log;
+	}
 public:
 	static inline void setVerboseOstream(std::ostream &os) {
 		getVerboseOstream().setOstream(os);
@@ -202,63 +245,38 @@ public:
 		std::string msg;
 		return Verbose(msg);
 	}
-	static inline Logger &Verbose(std::string msg) {
-		Logger &log = getVerboseOstream();
-		if (!msg.empty()) {
-			#pragma omp critical(Log)
-			log << msg << std::endl;
-		}
-		return log;
+	static inline Logger &Verbose(std::string msg, bool bypassMPI = true) {
+		return _log(getVerboseOstream(), msg, bypassMPI);
 	}
 	static inline Logger &Debug() {
 		std::string msg;
 		return Debug(msg);
 	}
-	static inline Logger &Debug(std::string msg) {
-		Logger &log =  getDebugOstream();
-		if (!msg.empty()) {
-			#pragma omp critical(Log)
-			log << msg << std::endl;
-		}
-		return log;
+	static inline Logger &Debug(std::string msg, bool bypassMPI = true) {
+		return _log(getDebugOstream(), msg, bypassMPI);
 	}
 	static inline Logger &Warn() {
 		std::string msg;
 		return Warn(msg);
 	}
-	static inline Logger &Warn(std::string msg) {
-		Logger &log =  getWarningOstream();
-		if (!msg.empty()) {
-			#pragma omp critical (Log)
-			log << msg << std::endl;
-		}
-		return log;
+	static inline Logger &Warn(std::string msg, bool bypassMPI = true) {
+		return _log(getWarningOstream(), msg, bypassMPI);
 	}
 	static inline Logger &Error() {
 		std::string msg;
 		return Error(msg);
 	}
-	static inline Logger &Error(std::string msg) {
-		Logger &log =  getErrorOstream();
-		if (!msg.empty()) {
-			#pragma omp critical (Log)
-			log << msg << std::endl;
-		}
-		return log;
+	static inline Logger &Error(std::string msg, bool bypassMPI = true) {
+		return _log(getErrorOstream(), msg, bypassMPI);
 	}
 };
 
-#ifndef LESSLOG
-// Higher possible verbosity and debug levels without NDEBUG set
-#define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str()); }
-#define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str()); }
-#else
-// optimized out high debug and verbosity levels
-#define LOG_VERBOSE(level, log) if ( level <=2 && Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str()); }
-#define LOG_DEBUG(level,   log) if ( level <=2 && Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str()); }
-#endif
+#define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), level >= 3); }
+#define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), level >= 2); }
+#define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { std::stringstream ss ; ss << log; Log::Warn(ss.str(), true); }
+#define LOG_ERROR(level,   log) if ( Log::isError(level)  ) { std::stringstream ss ; ss << log; Log::Error(ss.str(), true); }
 
-#define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { std::stringstream ss ; ss << log; Log::Warn(ss.str()); }
-#define LOG_ERROR(level,   log) if ( Log::isError(level)  ) { std::stringstream ss ; ss << log; Log::Error(ss.str()); }
+#define LOG_VERBOSE_OPTIONAL(level, test, log) if ( test && Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), true); }
+#define LOG_DEBUG_OPTIONAL(level,   test, log) if ( test && Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), true); }
 
 #endif /* LOG_H_ */
