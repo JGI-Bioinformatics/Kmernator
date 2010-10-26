@@ -43,25 +43,14 @@ int main(int argc, char *argv[]) {
 
 	// assign defaults
 	Options::getMmapInput() = 0;
-	int threadSupport = MPI::Init_thread(MPI_THREAD_MULTIPLE);
 
+	int threadSupport = MPI::Init_thread(MPI_THREAD_MULTIPLE);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
-	Logger::setWorld(&world);
-	if ((world.size() & (world.size()-1)) != 0) {
-		throw std::invalid_argument(
-				(std::string("The number of mpi processes must be a power-of-two.\nPlease adjust the number of processes. ")
-		+ boost::lexical_cast<std::string>(world.size())).c_str());
-	}
+	validateMPIWorld(world, threadSupport);
 
 	if (!FilterReadsOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
-
-	if (threadSupport != MPI_THREAD_MULTIPLE) {
-		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE, reducing OpenMP threads to 1")
-		omp_set_num_threads(1);
-	}
-	reduceOMPThreads(world);
 
 	MemoryUtils::getMemoryUsage();
     std::string outputFilename = Options::getOutputFile();
@@ -70,26 +59,62 @@ int main(int argc, char *argv[]) {
 	KmerSizer::set(Options::getKmerSize());
 
 	Options::FileListType inputs = Options::getInputFiles();
-	LOG_VERBOSE(1, "Reading Input Files");
+	if (world.rank() == 0)
+		LOG_VERBOSE(1, "Reading Input Files");
 
 	reads.appendAllFiles(inputs, world.rank(), world.size());
 
 	LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-	LOG_VERBOSE(1, "Identifying Pairs: ");
+	if (world.rank() == 0)
+		LOG_VERBOSE(1, "Identifying Pairs: ");
 
 	unsigned long counts[3], totalCounts[3];
 	unsigned long &readCount = counts[0] = reads.getSize();
 	unsigned long &numPairs  = counts[1] = reads.identifyPairs();
 	unsigned long &baseCount = counts[2] = reads.getBaseCount();
-	LOG_VERBOSE(1, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
-	LOG_VERBOSE(1, "Pairs + single = " << numPairs);
+	LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
+	LOG_VERBOSE(2, "Pairs + single = " << numPairs);
 
 	all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
 	if (world.rank() == 0)
 		LOG_VERBOSE(1, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
 
 	setGlobalReadSetOffset(world, reads);
+
+	if (Options::getSkipArtifactFilter() == 0) {
+
+		if (world.rank() == 0)
+			LOG_VERBOSE(1, "Preparing artifact filter: ");
+
+		FilterKnownOddities filter;
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+		if (world.rank() == 0)
+			LOG_VERBOSE(2, "Applying sequence artifact filter to Input Files");
+
+		unsigned long filtered = filter.applyFilter(reads);
+
+		LOG_VERBOSE(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+		unsigned long allFiltered;
+		reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
+		if (world.rank() == 0)
+			LOG_VERBOSE(1, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
+
+		LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
+		unsigned long duplicateFragments = filter.filterDuplicateFragments(reads);
+
+		LOG_VERBOSE(2, "filter removed duplicate fragment pair reads: " << duplicateFragments);
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+		unsigned long allDuplicateFragments;
+		reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
+		if (world.rank() == 0)
+			LOG_VERBOSE(1, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
+
+	}
 
 	long numBuckets = 0;
 	if (Options::getKmerSize() > 0) {
@@ -132,9 +157,10 @@ int main(int argc, char *argv[]) {
 			if (Options::getKmerSize() > 0) {
 				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
 			}
-			LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
+			if (world.rank() == 0)
+				LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
 			RS selector(world, reads, spectrum.weak);
-			selector.scoreAndTrimReadsMPI(minDepth);
+			selector.scoreAndTrimReads(minDepth);
 
 			// TODO implement a more efficient algorithm to output data in order
 

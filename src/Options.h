@@ -213,6 +213,37 @@ public:
 		return getOptions().inputFilePrefixes[fileIdx];
 	}
 
+	static void validateOMPThreads() {
+#ifdef _USE_OPENMP
+		int maxThreads = omp_get_max_threads();
+
+		if (getMaxThreads() > maxThreads) {
+			LOG_DEBUG(1, "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads);
+			getMaxThreads() = maxThreads;
+		}
+		if ((getMaxThreads() & (getMaxThreads()-1)) != 0) {
+			int start = getMaxThreads();
+			int t = getMaxThreads();
+			if (t > 32) {
+				t=32;
+			} else if (t > 16) {
+				t=16;
+			} else if (t > 8) {
+				t=8;
+			} else if (t > 4) {
+				t=4;
+			} else if (t > 2) {
+				t=2;
+			} else {
+				t=1;
+			}
+			getMaxThreads() = t;
+			LOG_DEBUG(1, "Reducing the number of threads from " << start << " to " << t );
+		}
+		omp_set_num_threads(getMaxThreads());
+#endif
+	}
+
 protected:
 	void setOptions() {
 
@@ -370,35 +401,8 @@ public:
 
 #ifdef _USE_OPENMP
 
-			int maxThreads = omp_get_max_threads();
 			setOpt<int>("threads", getMaxThreads(), print);
-			if (getMaxThreads() > maxThreads) {
-				if (print)
-					Log::Verbose() << "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads;
-				getMaxThreads() = maxThreads;
-			}
-			if ((getMaxThreads() & (getMaxThreads()-1)) != 0) {
-				if (print)
-					Log::Verbose()  << "Reducing the number of threads from " << getMaxThreads();
-				int t = getMaxThreads();
-				if (t > 32) {
-					t=32;
-				} else if (t > 16) {
-					t=16;
-				} else if (t > 8) {
-					t=8;
-				} else if (t > 4) {
-					t=4;
-				} else if (t > 2) {
-					t=2;
-				} else {
-					t=1;
-				}
-				getMaxThreads() = t;
-				if (print)
-					*output << " to " << t << std::endl;
-			}
-			omp_set_num_threads(getMaxThreads());
+			validateOMPThreads();
 
 #endif
 

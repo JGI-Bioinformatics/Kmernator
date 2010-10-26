@@ -499,7 +499,7 @@ public:
 			  }
 		  }
 	}
-	void scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore, int correctionAttempts) {
+	void scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore) {
 		KA kmers = getKmersForRead(read);
 		SequenceLengthType numKmers = kmers.size();
 
@@ -518,7 +518,7 @@ public:
 		trimReadByMinimumKmerScore(minimumKmerScore, trim, kmers.beginValue(), kmers.beginValue() + j);
 	}
 
-	void scoreAndTrimReads(ScoreType minimumKmerScore, int correctionAttempts = 0) {
+	virtual void scoreAndTrimReads(ScoreType minimumKmerScore) {
 		_trims.resize(_reads.getSize());
 		bool useKmers = Options::getKmerSize() != 0;
 
@@ -534,7 +534,7 @@ public:
 			SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 
 			if (useKmers) {
-				scoreReadByKmers(read, markupLength, trim, minimumKmerScore, correctionAttempts);
+				scoreReadByKmers(read, markupLength, trim, minimumKmerScore);
 			} else { // !useKmers
 				trimReadByMarkupLength(read, trim, markupLength);
 			}

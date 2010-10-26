@@ -49,12 +49,28 @@
 #endif
 
 void reduceOMPThreads(mpi::communicator &world) {
-	int numThreads = omp_get_max_threads();
+	Options::validateOMPThreads();
+	int numThreads = Options::getMaxThreads();
 	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
 	omp_set_num_threads(numThreads);
 	if (world.rank() == 0)
-		LOG_DEBUG(1, "set OpenMP threads to " << numThreads);
+		LOG_VERBOSE(1, "set OpenMP threads to " << numThreads);
 }
+
+void validateMPIWorld(mpi::communicator &world, int threadSupport) {
+	Logger::setWorld(&world);
+	if ((world.size() & (world.size()-1)) != 0) {
+		throw std::invalid_argument(
+				(std::string("The number of mpi processes must be a power-of-two.\nPlease adjust the number of processes. ")
+		+ boost::lexical_cast<std::string>(world.size())).c_str());
+	}
+	if (threadSupport != MPI_THREAD_MULTIPLE) {
+		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE, reducing OpenMP threads to 1")
+		omp_set_num_threads(1);
+	}
+	reduceOMPThreads(world);
+}
+
 
 ReadSet::ReadSetSizeType setGlobalReadSetOffset(mpi::communicator &world, ReadSet &store) {
 	// share ReadSet sizes for globally unique readIdx calculations
@@ -581,7 +597,7 @@ done when empty cycle is received
 			}
 		}
 	}
-	void scoreAndTrimReadsMPI(ScoreType minimumKmerScore, int correctionAttempts = 0) {
+	void scoreAndTrimReads(ScoreType minimumKmerScore, int correctionAttempts = 0) {
 		this->_trims.resize(this->_reads.getSize());
 		bool useKmers = Options::getKmerSize() != 0;
 
