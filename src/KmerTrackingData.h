@@ -233,7 +233,7 @@ public:
 	template<typename U>
 	TrackingDataWithDirection &add(const U &other) {
 		TrackingData::add(other);
-		directionBias += other.directionBias;
+		directionBias += other.getDirectionBias();
 		return *this;
 	};
 	template<typename U>
@@ -281,7 +281,12 @@ public:
 	template<typename U>
 	TrackingDataWithLastRead &add(const U &other) {
 		TrackingDataWithDirection::add(other);
-		readPosition = other.readPosition;
+		ReadPositionWeightVector v = other.getEachInstance();
+		if (v.size() > 0) {
+			ReadPositionWeight &rpw = v[v.size()-1];
+			readPosition.position = rpw.position;
+			readPosition.readId = rpw.readId;
+		}
 		return *this;
 	}
 	template<typename U>
@@ -559,8 +564,8 @@ public:
 	}
 	TrackingDataWithAllReads &add(const TrackingDataWithAllReads &other) {
 		instances.insert(instances.end(), other.instances.begin(), other.instances.end());
-		directionBias += other.directionBias;
-		weightedCount += other.weightedCount;
+		directionBias += other.getDirectionBias();
+		weightedCount += other.getWeightedCount();
 		return *this;
 	}
 

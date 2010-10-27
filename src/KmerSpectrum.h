@@ -336,8 +336,25 @@ public:
 		    if (!trans && hasSingletons) {
 		    	SingletonElementType src = getIfExistsSingleton(srcKmer);
 		    	if (src.isValid()) {
-		    		SingletonElementType dst = getSingleton(dstKmer);
-		    		dst.value().add(src.value());
+		    		WeakElementType dst = getIfExistsWeak(dstKmer);
+		    		if (dst.isValid()) {
+		    			// dst Weak exists, so add this src singlton
+		    			dst.value().add(src.value());
+		    		} else {
+		    			// dst Weak does not exist
+		    			SingletonElementType dst2 = getSingleton(dstKmer);
+		    			if (dst2.isValid()) {
+		    				// dst Singleton exists, promote both to new Weak entry
+		    				dst = getWeak(dstKmer);
+		    				dst.value() = dst2.value();
+		    				dst.value().add(src.value());
+		    				dst2.value().reset();
+		    				singleton.remove(dstKmer);
+		    			} else {
+		    				// migrate singleton to dst
+		    				dst2.value() = src.value();
+		    			}
+		    		}
 		    		trans = true;
 		    		src.value().reset();
 		    	}

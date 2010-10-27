@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
 
 		LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
-		unsigned long duplicateFragments = filter.filterDuplicateFragments(reads);
+		unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
 
 		LOG_VERBOSE(2, "filter removed duplicate fragment pair reads: " << duplicateFragments);
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());

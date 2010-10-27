@@ -41,8 +41,11 @@
 #include "Options.h"
 #include "ReadSet.h"
 #include "FilterKnownOddities.h"
+#include "DuplicateFragmentFilter.h"
+#include "Kmer.h"
 #include "KmerSpectrum.h"
 #include "ReadSelector.h"
+#include "KmerTrackingData.h"
 #include "Utils.h"
 #include "Log.h"
 
