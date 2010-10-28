@@ -272,6 +272,12 @@ public:
 				maxAffected = 0;
 			}
 		}
+		if (value == 0 && maxQualityPass != MAX_SEQUENCE_LENGTH) {
+			value = sequences.getSize();
+			if (maxAffected == 0) {
+				maxAffected = seqLen;
+			}
+		}
 		if (value > 0) {
 			read.markupBases(minAffected , maxAffected - minAffected, 'X');
 			if (recordEffects)
@@ -280,12 +286,19 @@ public:
 		return results;
 	}
 
+	std::string getFilterName(KM::ValueType value) {
+		assert(value > 0);
+		if (value < sequences.getSize()) {
+			return sequences.getRead(value).getName();
+		} else {
+			return std::string("MinQualityTrim" + boost::lexical_cast<std::string>(Options::getMinQuality()));
+		}
+	}
 	void recordAffectedRead(ReadSet &reads, Recorder &recorder, FilterResults results1, ReadSet::ReadSetSizeType readIdx1, FilterResults results2 = FilterResults(), ReadSet::ReadSetSizeType readIdx2 = ReadSet::MAX_READ_IDX) {
 		bool isRead1 = reads.isValidRead(readIdx1);
 		bool isRead2 = reads.isValidRead(readIdx2);
 
 		bool wasAffected = (results1.value != 0) | (results2.value != 0);
-		bool wasQualityTrimmed = (isRead1 && results1.maxQualityPass != MAX_SEQUENCE_LENGTH) | (isRead2 && results2.maxQualityPass != MAX_SEQUENCE_LENGTH);
 		bool wasPhiX = isPhiX(results1.value) | isPhiX(results2.value);
 
 		int threadNum = omp_get_thread_num();
@@ -327,25 +340,24 @@ public:
 				std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix( isRead1 ? readIdx1 : readIdx2);
 				std::string label1, label2;
 				if (isRead1Affected)
-					label1 = sequences.getRead(results1.value).getName();
+					label1 = getFilterName(results1.value);
 				if (isRead2Affected)
-					label2 = sequences.getRead(results2.value).getName();
+					label2 = getFilterName(results2.value);
 
 				#pragma omp critical (writeFilter)
 				{
 					ostream &os = recorder.omArtifact->getOfstream( fileSuffix );
-					// if the read length is less than the desired minimum, discard it completely regardless if it was output or not
 					if (isRead1 && results1.value != 0) {
-						Read &read = reads.getRead(readIdx1);
-						_writeFilterRead(os, read, read.getLength(), label1);
 						if (results1.minAffected == 0 || results1.minAffected < recorder.minReadPos) {
+							Read &read = reads.getRead(readIdx1);
+							_writeFilterRead(os, read, read.getLength(), label1);
 							read.discard();
 						}
 					}
 					if (isRead2 && results2.value != 0) {
-						Read &read = reads.getRead(readIdx2);
-						_writeFilterRead(os, read, read.getLength(), label2);
 						if (results2.minAffected == 0 || results2.minAffected < recorder.minReadPos) {
+							Read &read = reads.getRead(readIdx2);
+							_writeFilterRead(os, read, read.getLength(), label2);
 							read.discard();
 						}
 					}
@@ -358,38 +370,16 @@ public:
 					  read = reads.getRead(readIdx1);
 					  LOG_DEBUG(5, "FilterMatch1 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
-							  << wasPhiX << " " << sequences.getRead(results1.value).getName());
+							  << wasPhiX << " " << getFilterName(results1.value));
 				  }
 				  if (isRead2Affected) {
 					  read = reads.getRead(readIdx2);
 					  LOG_DEBUG(5, "FilterMatch2 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
-							  << wasPhiX << " " << sequences.getRead(results2.value).getName());
+							  << wasPhiX << " " << getFilterName(results2.value));
 
 				  }
 			}
-		} else if (wasQualityTrimmed) {
-			if (isRead1 && results1.maxQualityPass != MAX_SEQUENCE_LENGTH) {
-				recorder.threadCounts[threadNum][ sequences.getSize() ]++;
-				Read &read = reads.getRead(readIdx1);
-				LOG_DEBUG(5, "Quality Trimmed to " << results1.minAffected << " " << read.toString());
-				if (results1.minAffected == 0 || results1.minAffected < recorder.minReadPos) {
-					read.discard();
-				} else {
-					read.markupBases(results1.minAffected , read.getLength() - results1.minAffected, 'X');
-				}
-			}
-			if (isRead2 && results2.maxQualityPass != MAX_SEQUENCE_LENGTH) {
-				recorder.threadCounts[threadNum][ sequences.getSize() ]++;
-				Read &read = reads.getRead(readIdx2);
-				LOG_DEBUG(5, "Quality Trimmed to " << results2.minAffected << " " << read.toString());
-				if (results2.minAffected == 0 || results2.minAffected < recorder.minReadPos) {
-					read.discard();
-				} else {
-					read.markupBases(results2.minAffected , read.getLength() - results2.minAffected, 'X');
-				}
-			}
-
 		}
 	}
 
@@ -461,7 +451,7 @@ public:
 			// TODO sort
 			for(unsigned long idx = 0 ; idx < counts.size(); idx++) {
 				if (counts[idx] > 0) {
-				    ss << "\t" << counts[idx] << "\t" << (idx < sequences.getSize() ? sequences.getRead(idx).getName() : std::string("PoorQualityTrim") ) << std::endl;
+					ss << "\t" << counts[idx] << "\t" << getFilterName(idx) << std::endl;
 				}
 			}
 			std::string s = ss.str();
