@@ -81,6 +81,8 @@ private:
 	unsigned int ignoreQual;
 	unsigned int periodicSingletonPurge;
 	unsigned int skipArtifactFilter;
+	unsigned int artifactFilterMatchLength;
+	unsigned int artifactFilterEditDistance;
 	unsigned int maskSimpleRepeats;
 	unsigned int phiXOutput;
 	unsigned int filterOutput;
@@ -95,7 +97,8 @@ private:
 
 	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10),
 	minQuality(10), minDepth(2), depthRange(2), minReadLength(22), ignoreQual(0),
-	periodicSingletonPurge(0), skipArtifactFilter(0), maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
+	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2),
+	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
 	mmapInput(1), buildPartitions(0), gcHeatMap(1) {
 	}
@@ -155,6 +158,12 @@ public:
 	}
 	static inline unsigned int &getSkipArtifactFilter() {
 		return getOptions().skipArtifactFilter;
+	}
+	static inline unsigned int &getArtifactFilterMatchLength() {
+		return getOptions().artifactFilterMatchLength;
+	}
+	static inline unsigned int &getArtifactFilterEditDistance() {
+		return getOptions().artifactFilterEditDistance;
 	}
 	static inline unsigned int &getMaskSimpleRepeats() {
 		return getOptions().maskSimpleRepeats;
@@ -305,6 +314,12 @@ protected:
 
 		("skip-artifact-filter", po::value<unsigned int>()->default_value(skipArtifactFilter),
 				"Skip homo-polymer, primer-dimer and duplicated fragment pair filtering")
+
+		("artifact-match-length", po::value<unsigned int>()->default_value(artifactFilterMatchLength),
+				"Kmer match length to known artifact sequences")
+
+		("artifact-edit-distance", po::value<unsigned int>()->default_value(artifactFilterEditDistance),
+				"edit-distance to apply to artifact-match-length matches to know artifacts")
 
 		("mask-simple-repeats", po::value<unsigned int>()->default_value(maskSimpleRepeats),
 				"if filtering artifacts, also mask simple repeats")
@@ -479,6 +494,8 @@ public:
 
 			// set skipArtifactFiltering
 			setOpt<unsigned int>("skip-artifact-filter", getSkipArtifactFilter(), print);
+			setOpt<unsigned int>("artifact-match-length", getArtifactFilterMatchLength(), print);
+			setOpt<unsigned int>("artifact-edit-distance", getArtifactFilterEditDistance(), print);
 
 			// set simple repeat masking
 			setOpt<unsigned int>("mask-simple-repeats", getMaskSimpleRepeats() , print);

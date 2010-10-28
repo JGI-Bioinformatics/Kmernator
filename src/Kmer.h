@@ -1246,13 +1246,13 @@ public:
 				}
 				bool operator==(const Iterator& other) const {return _idx == other._idx && _tgt == other._tgt;}
 				bool operator!=(const Iterator& other) const {return _idx != other._idx || _tgt != other._tgt;}
-				Iterator& operator++() {if ( !isEnd() ) {++_idx; setElement();}return *this;}
+				Iterator& operator++() {if ( !isEnd() ) {++_idx; setElement();} return *this;}
 				Iterator operator++(int unused) {Iterator tmp(*this); ++(*this); return tmp;}
 				ElementType &operator*() {return thisElement;}
 				Kmer &key() {return thisElement.key();}
 				Value &value() {return thisElement.value();}
 				ElementType *operator->() {return &thisElement;}
-				bool isEnd() const {return _idx >= _tgt->size();}
+				bool isEnd() const {if (_tgt == NULL) { return true; } else { return _idx >= _tgt->size(); }}
 			};
 			class ConstIterator : public std::iterator<std::forward_iterator_tag, KmerArray>
 			{
@@ -1331,6 +1331,11 @@ public:
 	~KmerMap()
 	{
 		clear();
+	}
+	KmerMap &operator=(const KmerMap &other) {
+		_buckets = other._buckets;
+		BUCKET_MASK = other.BUCKET_MASK;
+		return *this;
 	}
 
 	// restore new instance from mmap
@@ -1416,7 +1421,7 @@ public:
 	void clear(bool releaseMemory = true) {
 		reset(releaseMemory);
 		if (releaseMemory)
-		    _buckets.resize(1); // iterators require at least 1
+		    _buckets.resize(0);
 	}
 
 	void setReadOnlyOptimization() {
@@ -1820,12 +1825,16 @@ public:
 		int _rank, _size;
 
 	public:
+		Iterator() : _target(NULL), _rank(0), _size(0) {}
+
 		Iterator(KmerMap *target, int rank = 0, int size = 1):
 		_target(target),
 		_iBucket(target->_buckets.begin()),
-		_iElement(_iBucket->begin()),
+		_iElement(),
 		_rank(rank), _size(size)
 		{
+			if (!isEnd())
+				_iElement = _iBucket->begin();
 			_moveToRank();
 			_moveToNextValidElement();
 		}
@@ -1845,12 +1854,12 @@ public:
 		_rank(rank), _size(size)
 		{
 			if (!isEnd())
-			_iElement = _iBucket->begin();
+				_iElement = _iBucket->begin();
 			_moveToRank();
 			_moveToNextValidElement();
 		}
 
-		Iterator(KmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr, int rank = 0, int size = 1):
+		Iterator(KmerMap *target, BucketsVectorIterator bucketPtr, BucketTypeIterator elementPtr, int rank = 0, int size = 1):
 		_target(target),
 		_iBucket(bucketPtr),
 		_iElement(elementPtr),
@@ -1877,6 +1886,8 @@ public:
 			}
 		}
 		void _moveToRank() {
+			if (isEnd() || ((int) _target->_buckets.size() <= _rank))
+				return;
 			for(int i = 0 ; i < _rank ; i++) {
 				if (++_iBucket == _target->_buckets.end())
 					return;

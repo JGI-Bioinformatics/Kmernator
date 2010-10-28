@@ -328,6 +328,10 @@ public:
 		}
 		reads.append(newReads);
 
+		// force release all memory before KmerSizer is called
+		for (int i = 0 ; i < numThreads ; i++)
+			ksv[i].reset();
+
 		return affectedCount;
 	}
 

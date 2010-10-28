@@ -63,8 +63,8 @@ private:
 	SequenceCounts counts;
 
 public:
-	FilterKnownOddities(int _length = 24, int numErrors = 2) :
-		length(_length), filter(32*1024*1024) {
+	FilterKnownOddities(int _length = Options::getArtifactFilterMatchLength(), int numErrors = Options::getArtifactFilterEditDistance()) :
+		length(_length), filter(16*1024*1024) {
 		if (length > 28) {
 			throw std::invalid_argument("FilterKnownOddities must use 7 bytes or less (<= 28 bases)");
 		}
@@ -88,7 +88,7 @@ public:
 			getPhiXReadIdx() = sequences.getSize();
 			sequences.appendFastaFile(fasta);
 		}
-		counts.resize( sequences.getSize() );
+		counts.resize( sequences.getSize()+1 );
 
 		prepareMaps(numErrors);
 	}
@@ -96,8 +96,11 @@ public:
 		clear();
 	}
 	void clear() {
+		unsigned long oldKmerLength = KmerSizer::getSequenceLength();
+		KmerSizer::set(length);
 		filter.clear();
 		counts.clear();
+		KmerSizer::set(oldKmerLength);
 	}
 
 	void prepareMaps(int numErrors) {
@@ -140,8 +143,9 @@ public:
 		KM::ValueType value;
 		SequenceLengthType minAffected;
 		SequenceLengthType maxAffected;
-		FilterResults() : value(0), minAffected(0), maxAffected(0) {}
-		FilterResults(KM::ValueType &_v, SequenceLengthType &_m, SequenceLengthType &_x) : value(_v), minAffected(_m), maxAffected(_x){}
+		SequenceLengthType maxQualityPass;
+		FilterResults() : value(0), minAffected(0), maxAffected(0), maxQualityPass(0) {}
+		FilterResults(KM::ValueType &_v, SequenceLengthType &_m, SequenceLengthType &_x, SequenceLengthType &_q) : value(_v), minAffected(_m), maxAffected(_x), maxQualityPass(_q) {}
 	};
 	class Recorder {
 	public:
@@ -189,6 +193,8 @@ public:
 		minAffected = MAX_SEQUENCE_LENGTH;
 		SequenceLengthType &maxAffected = results.maxAffected;
 		maxAffected = 0;
+		SequenceLengthType &maxQualityPass = results.maxQualityPass;
+		maxQualityPass = MAX_SEQUENCE_LENGTH;
 
 		LOG_DEBUG(5, "Checking " << read.getName() << "\t" << read.getFasta() );
 
@@ -199,6 +205,17 @@ public:
 		TwoBitEncoding *revPtr = revcomp;
 		SequenceLengthType seqLenByteBoundary = seqLen & ~((SequenceLengthType) 0x03);
 		TwoBitSequence::reverseComplement(ptr, revPtr, seqLenByteBoundary);
+
+		// Validate quality scores
+		std::string quals = read.getQuals();
+		char minQual = Read::FASTQ_START_CHAR + Options::getMinQuality();
+		for(unsigned int i = 0 ; i < quals.size() ; i++) {
+			if (quals[i] < minQual) {
+				minAffected = maxQualityPass = i;
+				break;
+			}
+		}
+
 		long byteHops = bytes - twoBitLength - ((seqLen & 0x03) == 0 ? 0 : 1);
 		if (byteHops < 0)
 			return results;
@@ -268,7 +285,10 @@ public:
 		bool isRead2 = reads.isValidRead(readIdx2);
 
 		bool wasAffected = (results1.value != 0) | (results2.value != 0);
+		bool wasQualityTrimmed = (isRead1 && results1.maxQualityPass != MAX_SEQUENCE_LENGTH) | (isRead2 && results2.maxQualityPass != MAX_SEQUENCE_LENGTH);
 		bool wasPhiX = isPhiX(results1.value) | isPhiX(results2.value);
+
+		int threadNum = omp_get_thread_num();
 
 		if (wasAffected) {
 
@@ -278,8 +298,6 @@ public:
 
 			bool isRead1Affected = isRead1 && results1.value != 0;
 			bool isRead2Affected = isRead2 && results2.value != 0;
-
-			int threadNum = omp_get_thread_num();
 
 			if (isRead1Affected)
 				recorder.threadCounts[threadNum][ results1.value ]++;
@@ -350,6 +368,28 @@ public:
 
 				  }
 			}
+		} else if (wasQualityTrimmed) {
+			if (isRead1 && results1.maxQualityPass != MAX_SEQUENCE_LENGTH) {
+				recorder.threadCounts[threadNum][ sequences.getSize() ]++;
+				Read &read = reads.getRead(readIdx1);
+				LOG_DEBUG(5, "Quality Trimmed to " << results1.minAffected << " " << read.toString());
+				if (results1.minAffected == 0 || results1.minAffected < recorder.minReadPos) {
+					read.discard();
+				} else {
+					read.markupBases(results1.minAffected , read.getLength() - results1.minAffected, 'X');
+				}
+			}
+			if (isRead2 && results2.maxQualityPass != MAX_SEQUENCE_LENGTH) {
+				recorder.threadCounts[threadNum][ sequences.getSize() ]++;
+				Read &read = reads.getRead(readIdx2);
+				LOG_DEBUG(5, "Quality Trimmed to " << results2.minAffected << " " << read.toString());
+				if (results2.minAffected == 0 || results2.minAffected < recorder.minReadPos) {
+					read.discard();
+				} else {
+					read.markupBases(results2.minAffected , read.getLength() - results2.minAffected, 'X');
+				}
+			}
+
 		}
 	}
 
@@ -380,7 +420,7 @@ public:
 		recorder.threadCounts = threadCounts;
 
         for (int i = 0; i < numThreads; i++) {
-            threadCounts[i].resize( sequences.getSize() );
+            threadCounts[i].resize( sequences.getSize() + 1 );
         }
 		// start with any existing state
 		counts.swap(threadCounts[0]);
@@ -392,6 +432,7 @@ public:
 
 		#pragma omp parallel for schedule(dynamic)
 		for (long idx = 0; idx < size; idx++) {
+			LOG_DEBUG(5, "filtering read " << (byPair ? "pair " : "" ) << idx);
 
 			if (byPair)
 				applyFilterToPair(reads, idx, threadCounts, recorder);
@@ -404,7 +445,7 @@ public:
 		for(int i = 1 ; i < numThreads; i++) {
 			for(ReadSetSizeType j = 0 ; j < threadCounts[i].size(); j++) {
 				if (threadCounts[0].size() <= j)
-					threadCounts[0].resize(j+1);
+					threadCounts[0].resize(threadCounts[i].size());
 				threadCounts[0][j] += threadCounts[i][j];
 			}
 		}
@@ -415,14 +456,16 @@ public:
 			affectedCount += counts[j];
 
 		if (Log::isVerbose(1)) {
-			ostream &log = Log::Verbose();
-			log << "Final Filter Matches to reads: " << affectedCount << std::endl;
+			std::stringstream ss ;
+			ss << "Final Filter Matches to reads: " << affectedCount << std::endl;
 			// TODO sort
 			for(unsigned long idx = 0 ; idx < counts.size(); idx++) {
 				if (counts[idx] > 0) {
-				    log << "\t" << counts[idx] << "\t" << sequences.getRead(idx).getName() << std::endl;
+				    ss << "\t" << counts[idx] << "\t" << (idx < sequences.getSize() ? sequences.getRead(idx).getName() : std::string("PoorQualityTrim") ) << std::endl;
 				}
 			}
+			std::string s = ss.str();
+			LOG_VERBOSE(1, s);
 		}
 
 		KmerSizer::set(oldKmerLength);

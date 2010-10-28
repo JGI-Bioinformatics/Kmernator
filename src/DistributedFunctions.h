@@ -343,8 +343,10 @@ public:
 			LOG_DEBUG(2, "receiving final messages");
 			recvBuffers[threadId]->finalize(numThreads);
 
+			std::string s = ss.str();
+
 			#pragma omp critical
-			LOG_DEBUG(1, std::endl << ss.str() << "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries() << "/" << recvBuffers[threadId]->getNumMessages());
+			LOG_DEBUG(1, std::endl << s << "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries() << "/" << recvBuffers[threadId]->getNumMessages());
 			delete recvBuffers[threadId];
 
 		} // omp parallel

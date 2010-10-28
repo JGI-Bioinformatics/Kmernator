@@ -322,7 +322,8 @@ public:
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::MmapSource &mmap, char marker) :
-		    _stream(NULL), _line(0), _pos(0), _marker(marker), _mmap(mmap), _lastPtr(NULL), _freeStream(false) {
+		    _stream(NULL), _line(0), _pos(0), _marker(marker), _mmap( mmap ), _lastPtr(NULL), _freeStream(false) {
+
 			_stream = new MmapIStream(_mmap);
 			_lastPtr = _mmap.data() + _mmap.size();
 			_freeStream = true;
@@ -344,8 +345,10 @@ public:
 		}
 
 		virtual ~SequenceStreamParser() {
-			if (_freeStream)
-				free(_stream);
+			// TODO fix this -- open a new mmap that can be closed!
+			// Do not free/close istream as that closes the mmap too!!!
+			//if (_freeStream)
+			//	delete _stream;
 		}
 
 		unsigned long lineNumber() {

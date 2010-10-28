@@ -688,7 +688,8 @@ Read ReadSet::getConsensusRead() const {
     		ss << consensus.toString() << std::endl;
     		ss << probs.toString() << std::endl;
 
-    		Log::Debug(ss.str());
+    		std::string s = ss.str();
+    		LOG_DEBUG(2, s);
     	}
     }
     return consensus;
