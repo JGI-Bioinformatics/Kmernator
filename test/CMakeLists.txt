@@ -48,9 +48,8 @@ set_source_files_properties( TwoBitSequenceTest
 add_executable( TwoBitSequenceTest TwoBitSequenceTest )
 target_link_libraries( TwoBitSequenceTest TwoBitSequence
                                           Log
-                                          boost_test_exec_monitor-mt 
-                                          boost_unit_test_framework-mt 
-                                          boost_thread-mt-static
+                                          ${KMERNATOR_BOOST_LIBS}
+                                          ${KMERNATOR_BOOST_TEST_LIBS}
                                           )
 add_test( TwoBitSequenceTest TwoBitSequenceTest )
 
@@ -62,11 +61,8 @@ add_executable( ReadSetTest ReadSetTest )
 target_link_libraries( ReadSetTest Sequence
                                    ReadSet 
                                    Log
-                                   boost_program_options-mt-static 
-                                   boost_test_exec_monitor-mt 
-                                   boost_unit_test_framework-mt 
-                                   boost_iostreams-mt-static
-                                   boost_thread-mt-static
+                                   ${KMERNATOR_BOOST_LIBS}
+                                          ${KMERNATOR_BOOST_TEST_LIBS}
                                    )
 add_test( ReadSetTest ReadSetTest )
                             
@@ -76,11 +72,8 @@ set_source_files_properties( KmerTest
                                                                                                            
 add_executable( KmerTest KmerTest )
 target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet Log
-                                boost_program_options-mt-static 
-                                boost_test_exec_monitor-mt 
-                                boost_unit_test_framework-mt
-                                boost_iostreams-mt-static
-                                boost_thread-mt-static
+                                ${KMERNATOR_BOOST_LIBS}
+                                ${KMERNATOR_BOOST_TEST_LIBS}
                                 )
 add_test( KmerTest KmerTest )
 
@@ -92,9 +85,7 @@ add_executable( ktest2 ktest2 )
 target_link_libraries( ktest2 Sequence Kmer
                               ReadSet
                               Log
-                              boost_program_options-mt-static 
-                              boost_iostreams-mt-static
-                              boost_thread-mt-static
+                              ${KMERNATOR_BOOST_LIBS}
                               )
 add_test(ktest2 ktest2 --mask-simple-repeats 0 21 10.fastq)
 
@@ -107,9 +98,7 @@ target_link_libraries( HashTester
                               Kmer
                               ReadSet
                               Log
-                              boost_program_options-mt-static 
-                              boost_iostreams-mt-static
-                              boost_thread-mt-static
+                              ${KMERNATOR_BOOST_LIBS}
                               )
 
 set_source_files_properties( MmapTempFileTest
@@ -118,11 +107,8 @@ set_source_files_properties( MmapTempFileTest
 add_executable( MmapTempFileTest MmapTempFileTest )
 target_link_libraries( MmapTempFileTest
                                    Log
-                                   boost_program_options-mt-static 
-                                   boost_test_exec_monitor-mt 
-                                   boost_unit_test_framework-mt 
-                                   boost_iostreams-mt-static
-                                   boost_thread-mt-static
+                                   ${KMERNATOR_BOOST_LIBS}
+                                   ${KMERNATOR_BOOST_TEST_LIBS}
                                    )
 add_test( MmapTempFileTest MmapTempFileTest )
 

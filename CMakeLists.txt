@@ -62,10 +62,10 @@ else()
   if ( MPI_FOUND )
     set(KMERNATOR_MPI_CXX_FLAGS "${MPI_COMPILE_FLAGS} -DENABLE_MPI")
     include_directories(${MPI_INCLUDE_PATH})
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINKER_FLAGS}")
-    set(KMERNATOR_EXTRA_LIBS ${KMERNATOR_EXTRA_LIBS} boost_mpi-mt-static)
+    link_directories(${MPI_LINK_PATH})
+    set(KMERNATOR_P_LIBS ${KMERNATOR_P_LIBS} boost_mpi-mt-static)
   else()
-    set(KMERNATOR_MPI_CXX_FLAGS = "-DDISABLE_MPI")
+      set(KMERNATOR_MPI_CXX_FLAGS = "-DDISABLE_MPI")
   endif()
 endif()
 
@@ -82,14 +82,19 @@ else()
   endif()
   add_subdirectory( ${CMAKE_CURRENT_BINARY_DIR}/boost-cmake ${CMAKE_CURRENT_BINARY_DIR}/boost-cmake EXCLUDE_FROM_ALL)
   add_custom_target( boost_subset ALL)
-  add_dependencies( boost_subset boost_mpi-mt-static 
-                                 boost_regex-mt-static 
-                                 boost_test_exec_monitor-mt-static
-                                 boost_unit_test_framework-mt-static
-                                 boost_program_options-mt-static
+  set(KMERNATOR_BOOST_LIBS       boost_program_options-mt-static
                                  boost_iostreams-mt-static
                                  boost_thread-mt-static
                                  )
+  set(KMERNATOR_BOOST_TEST_LIBS  boost_test_exec_monitor-mt-static
+                                 boost_unit_test_framework-mt-static
+                                 )
+  add_dependencies( boost_subset ${KMERNATOR_BOOST_LIBS} ${KMERNATOR_BOOST_TEST_LIBS})
+  
+  if( MPI_FOUND )
+    add_dependencies( boost_subset ${KMERNATOR_P_LIBS})
+  endif()
+                  
   include_directories( ${CMAKE_CURRENT_BINARY_DIR}/boost-cmake )
   link_directories( ${CMAKE_CURRENT_BINARY_DIR}/lib )
 endif()

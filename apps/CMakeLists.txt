@@ -52,7 +52,6 @@ target_link_libraries( CompareSpectrums
                               boost_program_options-mt-static 
                               boost_iostreams-mt-static
                               boost_thread-mt-static
-                              ${KMERNATOR_EXTRA_LIBS}
                               )
 
 
@@ -65,24 +64,23 @@ target_link_libraries( FilterReads
                               Kmer
                               ReadSet
                               Log
-                              boost_program_options-mt-static
-                              boost_iostreams-mt-static
-                              boost_thread-mt-static
+                              ${KMERNATOR_BOOST_LIBS}
                               )
 
 set_source_files_properties( FilterReads-P
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
 add_executable( FilterReads-P FilterReads-P )
+set_target_properties( FilterReads-P
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       )
 target_link_libraries( FilterReads-P 
                               Sequence
                               Kmer
                               ReadSet
                               Log
-                              boost_program_options-mt-static
-                              boost_iostreams-mt-static
-                              boost_thread-mt-static
-                              ${KMERNATOR_EXTRA_LIBS}
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
                               )
                            
 set_source_files_properties( TnfDistance
@@ -94,9 +92,7 @@ target_link_libraries( TnfDistance
                               Kmer
                               ReadSet
                               Log
-                              boost_program_options-mt-static
-                              boost_iostreams-mt-static
-                              boost_thread-mt-static
+                              ${KMERNATOR_BOOST_LIBS}
                               )
    
 set_source_files_properties( Fastq2Fasta
@@ -107,9 +103,7 @@ target_link_libraries(        Fastq2Fasta
                               Sequence
                               ReadSet
                               Log
-                              boost_program_options-mt-static
-                              boost_iostreams-mt-static
-                              boost_thread-mt-static
+                              ${KMERNATOR_BOOST_LIBS}
                               )
 
 set_source_files_properties( Fastq2FastaQual
@@ -120,9 +114,7 @@ target_link_libraries(        Fastq2FastaQual
                               Sequence
                               ReadSet
                               Log
-                              boost_program_options-mt-static
-                              boost_iostreams-mt-static
-                              boost_thread-mt-static
+                              ${KMERNATOR_BOOST_LIBS}
                               )
 
 
@@ -134,9 +126,7 @@ target_link_libraries(        FixPair
                               Sequence
                               ReadSet
                               Log
-                              boost_program_options-mt-static
-                              boost_iostreams-mt-static
-                              boost_thread-mt-static
+                              ${KMERNATOR_BOOST_LIBS}
                               )
 
 
