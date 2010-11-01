@@ -37,6 +37,7 @@
 #include <cstdlib>
 #include <vector>
 #include <cstring>
+#include <cmath>
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
@@ -363,6 +364,73 @@ public:
 			return false;
 		}
 	}
+};
+
+class Statistics
+{
+public:
+	class MeanStdCount
+	{
+	public:
+		double mean;
+		double stdDev;
+		long count;
+		MeanStdCount() : mean(0.0), stdDev(0.0), count(0) {}
+
+		template<typename forwardIterator>
+		MeanStdCount(forwardIterator begin, forwardIterator end, bool isPoisson = true) : mean(0.0), stdDev(0.0), count(0) {
+			for(forwardIterator it = begin; it != end ; it++) {
+				count++;
+				mean += *it;
+			}
+			if (count > 1) {
+				mean /= (double) count;
+				for(forwardIterator it = begin; it != end; it++) {
+					double diff = ((double)*it) - mean;
+					stdDev += diff*diff;
+				}
+				stdDev /= (double) (count-1);
+			}
+			if (isPoisson && mean > 0.0) {
+				double poissonStdDev = sqrt(mean);
+				if (stdDev < poissonStdDev) {
+					stdDev = poissonStdDev;
+				}
+			}
+		}
+	};
+	
+	template<typename forwardIterator>
+	static forwardIterator findBimodalPartition(double numSigmas, MeanStdCount &firstMSC, MeanStdCount &secondMSC, forwardIterator begin, forwardIterator end, bool isPoisson = true) {
+		if (begin == end)
+			return end;
+		forwardIterator bestPart = end;
+		double bestDiff = 0.0;
+		forwardIterator part = begin;
+		while (++part != end) {
+			MeanStdCount first(begin, part, isPoisson);
+			MeanStdCount second(part, end, isPoisson);
+			if (first.count == 1 && second.count == 1)
+				continue; // can not evaluate unless one sample is >1
+			double diff = abs(first.mean - second.mean);
+			// use the larger of the two standard deviations
+			double stdDev = std::max(first.stdDev, second.stdDev);
+			if (diff > numSigmas * stdDev) {	
+				if (diff > bestDiff) {
+					bestDiff = diff;
+					bestPart = part;
+					firstMSC = first;
+					secondMSC = second;
+				}
+			}
+		}
+		return bestPart;
+	};
+	template<typename forwardIterator>
+	static forwardIterator findBimodalPartition(double numSigmas, forwardIterator begin, forwardIterator end, bool isPoisson = true) {
+		MeanStdCount f, s;
+		return findBimodalPartition(numSigmas, f, s, begin, end, isPoisson);
+	};
 };
 
 #endif

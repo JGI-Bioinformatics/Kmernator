@@ -112,6 +112,17 @@ target_link_libraries( MmapTempFileTest
                                    )
 add_test( MmapTempFileTest MmapTempFileTest )
 
+set_source_files_properties( UtilTest
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
+                             )
+add_executable( UtilTest UtilTest )
+target_link_libraries( UtilTest
+                                   Log
+                                   ${KMERNATOR_BOOST_LIBS}
+                                   ${KMERNATOR_BOOST_TEST_LIBS}
+                                   )
+add_test( UtilTest UtilTest )
+
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 # v2.8: file(COPY test/500.fasta test/500.qual DESTINATION test)

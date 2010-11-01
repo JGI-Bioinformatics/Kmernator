@@ -105,6 +105,7 @@ protected:
 	DuplicateSet _duplicateSet;
 	bool _needDuplicateCheck;
 	ReadSetSizeType _lastSortedPick;
+	double _bimodalSigmas;
 
 public:
 	ReadSelector(const ReadSet &reads, const KMType &map):
@@ -118,6 +119,7 @@ public:
 	_needDuplicateCheck(false),
 	_lastSortedPick(0)
 	{
+		_bimodalSigmas = Options::getBimodalSigmas();
 	}
 
 	void clear() {
@@ -461,13 +463,43 @@ public:
 		trim.score = 0;
 		trim.trimLength = 0;
 
-		while (buffBegin != buffEnd) {
-			ScoreType score = *(buffBegin++);
+		U it = buffBegin;
+		while (it != buffEnd) {
+			ScoreType score = *(it++);
 			if (score >= minimumKmerScore) {
 				trim.trimLength++;
 				trim.score += score;
-			 } else
-				 break;
+			} else
+				break;
+		}
+		if (trim.trimLength >= 3 && _bimodalSigmas >= 0.0) {
+			Statistics::MeanStdCount f, s;
+			U end = buffBegin + trim.trimLength;
+			U p = Statistics::findBimodalPartition(_bimodalSigmas, f, s, buffBegin, end);
+			if (p != end) {
+				std::string label("Bimodal@" + boost::lexical_cast<std::string>( (p - buffBegin)+KmerSizer::getSequenceLength() )
+						+ ":" + boost::lexical_cast<std::string>( (int) f.mean )
+						+ "/" + boost::lexical_cast<std::string>( (int) s.mean ));
+
+				if (f.mean > s.mean) {
+					// remove the second partition from the original trim estimate
+					for(it = p; it != end; it++) {
+						trim.score -= (ScoreType) *it;
+						trim.trimLength--;
+					}
+					if (!trim.label.empty())
+						trim.label += " ";
+					trim.label += label;
+				} else {
+					// second partition is greater than first... unsupported, so trim entire read
+					trim.score = 0;
+					trim.trimLength = 0;
+					if (!trim.label.empty())
+						trim.label += " ";
+					trim.label += "Inv" + label;
+				}
+			}
+
 		}
 	};
 	void setTrimHeaders(ReadTrimType &trim, bool useKmers) {
