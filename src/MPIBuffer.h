@@ -53,93 +53,114 @@
 class _MPIMessageBufferBase
 {
 public:
-    typedef boost::optional< mpi::request > OptionalRequest;
-    typedef boost::optional< mpi::status > OptionalStatus;
-    typedef std::pair< _MPIMessageBufferBase*, int> CallbackBase;
-    typedef std::vector< CallbackBase > CallbackVector;
+	typedef boost::optional< mpi::request > OptionalRequest;
+	typedef boost::optional< mpi::status > OptionalStatus;
+	typedef std::pair< _MPIMessageBufferBase*, int> CallbackBase;
+	typedef std::vector< CallbackBase > CallbackVector;
 
 protected:
-    CallbackVector _flushAllCallbacks;
-    CallbackVector _receiveAllCallbacks;
-    long _deliveries;
-    long _numMessages;
+	CallbackVector _flushAllCallbacks;
+	CallbackVector _receiveAllCallbacks;
+	long _deliveries;
+	long _numMessages;
 
 public:
-    _MPIMessageBufferBase() : _deliveries(0), _numMessages(0) {}
-    virtual ~_MPIMessageBufferBase() {}
+	_MPIMessageBufferBase() : _deliveries(0), _numMessages(0) {}
+	virtual ~_MPIMessageBufferBase() {}
 
-    // receive buffers to flush before and/or during send
-    void addReceiveAllCallback( _MPIMessageBufferBase *receiveAllBuffer ) {
-    	_receiveAllCallbacks.push_back( CallbackBase(receiveAllBuffer, -1) );
-    	receiveAll();
-    	assert(receiveAllBuffer->getNumDeliveries() == 0);
-    }
-    void addFlushAllCallback( _MPIMessageBufferBase *flushAllBuffer, int tagDest ) {
-    	_flushAllCallbacks.push_back( CallbackBase(flushAllBuffer, tagDest) );
-    	flushAll( );
-    	assert(flushAllBuffer->getNumDeliveries() == 0);
-    }
-    virtual int receiveAllIncomingMessages() { return 0; }
-    virtual void flushAllMessageBuffers(int tagDest) { }
+	// receive buffers to flush before and/or during send
+	void addReceiveAllCallback( _MPIMessageBufferBase *receiveAllBuffer ) {
+		_receiveAllCallbacks.push_back( CallbackBase(receiveAllBuffer, -1) );
+		receiveAll();
+		assert(receiveAllBuffer->getNumDeliveries() == 0);
+	}
+	void addFlushAllCallback( _MPIMessageBufferBase *flushAllBuffer, int tagDest ) {
+		_flushAllCallbacks.push_back( CallbackBase(flushAllBuffer, tagDest) );
+		flushAll( );
+		assert(flushAllBuffer->getNumDeliveries() == 0);
+	}
+	virtual long receiveAllIncomingMessages() { return 0; }
+	virtual long flushAllMessageBuffers(int tagDest) { return 0; }
 
-    int receiveAll() {
-    	int count = 0;
-    	for(unsigned int i = 0; i < _receiveAllCallbacks.size(); i++)
-    		count += _receiveAllCallbacks[i].first->receiveAllIncomingMessages();
-    	return count;
-    }
-    void flushAll() {
-    	for(unsigned int i = 0; i < _flushAllCallbacks.size(); i++)
-    		_flushAllCallbacks[i].first->flushAllMessageBuffers(_flushAllCallbacks[i].second);
-    }
-    inline long getNumDeliveries() {
-    	return _deliveries;
-    }
-    inline void newMessageDelivery() {
+	long receiveAll() {
+		long count = 0;
+		for(unsigned int i = 0; i < _receiveAllCallbacks.size(); i++)
+			count += _receiveAllCallbacks[i].first->receiveAllIncomingMessages();
+		return count;
+	}
+	long flushAll() {
+		long count = 0;
+		for(unsigned int i = 0; i < _flushAllCallbacks.size(); i++)
+			count += _flushAllCallbacks[i].first->flushAllMessageBuffers(_flushAllCallbacks[i].second);
+		return count;
+	}
+	inline long getNumDeliveries() {
+		return _deliveries;
+	}
+	inline void newMessageDelivery() {
 		#pragma omp atomic
-    	_deliveries++;
-    }
-    inline long getNumMessages() {
-    	return _numMessages;
-    }
-    inline void newMessage() {
+		_deliveries++;
+	}
+	inline long getNumMessages() {
+		return _numMessages;
+	}
+	inline void newMessage() {
 		#pragma omp atomic
-    	_numMessages++;
-    }
+		_numMessages++;
+	}
 
 };
 
 template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
 class MPIMessageBufferBase : public _MPIMessageBufferBase {
 public:
-		static const int MESSAGE_BUFFER_SIZE = BufferSize;
-		typedef C MessageClass;
-		typedef _MPIMessageBufferBase::OptionalRequest OptionalRequest;
-		typedef _MPIMessageBufferBase::OptionalStatus  OptionalStatus;
+	static const int MESSAGE_BUFFER_SIZE = BufferSize;
+	typedef C MessageClass;
+	typedef _MPIMessageBufferBase::OptionalRequest OptionalRequest;
+	typedef _MPIMessageBufferBase::OptionalStatus  OptionalStatus;
+	typedef char * Buffer;
+	typedef std::vector< Buffer > FreeBufferCache;
 
 protected:
-        mpi::communicator _world;
-        int _messageSize;
-        char *_message;
+	mpi::communicator _world;
+	int _messageSize;
+	Buffer _message;
+	FreeBufferCache freeBuffers;
 
 public:
-        MPIMessageBufferBase(mpi::communicator &world, int messageSize)
-        : _world(world), _messageSize(messageSize) {
-        	_message = new char[ getMessageSize() ];
-        	assert(getMessageSize() >= (int) sizeof(MessageClass));
-        }
-        ~MPIMessageBufferBase() {
-        	delete [] _message;
-        }
-        inline mpi::communicator &getWorld() {
-        	return _world;
-        }
-        inline int getMessageSize() {
-        	return _messageSize;
-        }
-        MessageClass *getTmpMessage() {
-        	return (MessageClass*) this->_message;
-        }
+	MPIMessageBufferBase(mpi::communicator &world, int messageSize)
+	: _world(world), _messageSize(messageSize) {
+		_message = new char[ getMessageSize() ];
+		assert(getMessageSize() >= (int) sizeof(MessageClass));
+	}
+	~MPIMessageBufferBase() {
+		delete [] _message;
+		for(FreeBufferCache::iterator it = freeBuffers.begin(); it != freeBuffers.end(); it++)
+			delete [] *it;
+		freeBuffers.clear();
+	}
+	inline mpi::communicator &getWorld() {
+		return _world;
+	}
+	inline int getMessageSize() {
+		return _messageSize;
+	}
+	MessageClass *getTmpMessage() {
+		return (MessageClass*) this->_message;
+	}
+	Buffer getNewBuffer() {
+		if (freeBuffers.empty()) {
+			return new char[ MESSAGE_BUFFER_SIZE ];
+		} else {
+			Buffer buf;
+			buf = freeBuffers.back();
+			freeBuffers.pop_back();
+			return buf;
+		}	
+	}
+	void returnBuffer(Buffer buf) {
+		freeBuffers.push_back(buf);
+	}
 };
 
 template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
@@ -148,10 +169,11 @@ public:
 	typedef MPIMessageBufferBase<C, BufferSize> BufferBase;
 	typedef typename BufferBase::OptionalRequest OptionalRequest;
 	typedef typename BufferBase::OptionalStatus OptionalStatus;
+	typedef typename BufferBase::Buffer Buffer;
 	typedef C MessageClass;
 
 protected:
-	char *_recvBuffers;
+	Buffer *_recvBuffers;
 	OptionalRequest *_requests;
 	int _numCheckpoints;
 	int _tag;
@@ -162,17 +184,30 @@ protected:
 public:
 	MPIRecvMessageBuffer(mpi::communicator &world, int messageSize, int tag = mpi::any_tag) :
 		BufferBase(world, messageSize), _numCheckpoints(0), _tag(tag), _source(mpi::any_source), _size(0) {
-		_recvBuffers = new char[ BufferBase::MESSAGE_BUFFER_SIZE * this->getWorld().size() ];
+		_recvBuffers = new Buffer[ this->getWorld().size() ];
 		_requests = new OptionalRequest[ this->getWorld().size() ];
 		_requestAttempts.resize(this->getWorld().size(), 0);
 		for(int destRank = 0; destRank < this->getWorld().size(); destRank++) {
+			_recvBuffers[destRank] = NULL;
 			_requests[destRank] = irecv(destRank);
 		}
 	}
 	~MPIRecvMessageBuffer() {
 		cancelAllRequests();
+		for(int i = 0 ; i < this->getWorld().size(); i++) {
+			Buffer &buf = _recvBuffers[i];
+			if (buf != NULL)
+				delete [] buf;
+			buf = NULL;
+		}
 		delete [] _recvBuffers;
 		delete [] _requests;
+	}
+	Buffer &getBuffer(int rank) {
+		Buffer &buf = _recvBuffers[rank];
+		if (buf == NULL) 
+			buf = this->getNewBuffer();
+		return buf;
 	}
 
 	inline int getSource() {
@@ -203,7 +238,7 @@ public:
 		}
 		if (!!optionalRequest) {
 			++_requestAttempts[rankSource];
-			bool retry =  _RETRY_MESSAGES && _requestAttempts[rankSource] > _RETRY_THRESHOLD;
+			bool retry = _RETRY_MESSAGES && _requestAttempts[rankSource] > _RETRY_THRESHOLD;
 
 			optionalStatus = optionalRequest.get().test();
 			if (retry && !optionalStatus) {
@@ -225,8 +260,8 @@ public:
 		}
 		return returnValue;
 	}
-	int receiveAllIncomingMessages() {
-		int messages = this->receiveAll();
+	long receiveAllIncomingMessages() {
+		long messages = this->receiveAll();
 
 		LOG_DEBUG(4, _tag << ": receiving all messages for tag. cp: " << getNumCheckpoints() << " msgCount: " << this->getNumDeliveries());
 		bool mayHavePending = true;
@@ -245,10 +280,12 @@ public:
 		return messages;
 	}
 	void finalize(int checkpointFactor = 1) {
-		LOG_DEBUG(2, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints());
-		while ( ! reachedCheckpoint(checkpointFactor) ) {
-			this->receiveAllIncomingMessages();
-			this->flushAll();
+		LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints());
+		long messages = 1;
+		while ( (messages != 0) || (!reachedCheckpoint(checkpointFactor)) ) {
+			messages = 0;
+			messages += this->receiveAllIncomingMessages();
+			messages += this->flushAll();
 			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 		}
 		LOG_DEBUG(3, "Recv " << _tag << ": Finished finalize checkpoint: " << getNumCheckpoints());
@@ -271,15 +308,15 @@ private:
 		OptionalRequest oreq;
 		LOG_DEBUG(5, "Starting irecv for " << sourceRank << "," << _tag);
 #ifdef OPENMP_CRITICAL_MPI
-		#pragma omp critical (MPI_buffer)
+#pragma omp critical (MPI_buffer)
 #endif
-		oreq = this->getWorld().irecv(sourceRank, _tag, _recvBuffers + sourceRank*BufferBase::MESSAGE_BUFFER_SIZE, BufferBase::MESSAGE_BUFFER_SIZE);
+		oreq = this->getWorld().irecv(sourceRank, _tag, getBuffer(sourceRank), BufferBase::MESSAGE_BUFFER_SIZE);
 		assert(!!oreq);
 		_requestAttempts[sourceRank] = 0;
 		return oreq;
 	}
-	int processMessages(int sourceRank, int size) {
-		char *msg, *end, *start = _recvBuffers + sourceRank*BufferBase::MESSAGE_BUFFER_SIZE;
+	int processMessages(Buffer buf, int size) {
+		Buffer msg, end, start = buf;
 		msg = start;
 		end = (start+size);
 		int count = 0;
@@ -287,6 +324,7 @@ private:
 			((MessageClass*) msg)->process(this);
 			msg += this->getMessageSize();
 			this->newMessage();
+			count++;
 		}
 		return count;
 	}
@@ -305,6 +343,10 @@ private:
 			_source = source;
 			_size = size;
 
+			Buffer &bufLoc = getBuffer(source);
+			Buffer buf = bufLoc;
+			bufLoc = NULL;
+
 			this->newMessageDelivery();
 			LOG_DEBUG(4, _tag << ": received delivery " << this->getNumDeliveries() << " from " << source << "," << tag << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
 
@@ -312,8 +354,9 @@ private:
 				checkpoint();
 				LOG_DEBUG(3, _tag << ": got checkpoint from " << source << ": " << _numCheckpoints);
 			} else {
-				processMessages(source, size);
+				processMessages(buf, size);
 			}
+			this->returnBuffer(buf);
 			wasMessage = true;
 		}
 		return wasMessage;
@@ -329,27 +372,43 @@ public:
 	typedef MPIRecvMessageBuffer<C, BufferSize> RecvBuffer;
 	typedef typename BufferBase::OptionalRequest OptionalRequest;
 	typedef typename BufferBase::OptionalStatus OptionalStatus;
+	typedef typename BufferBase::Buffer Buffer;
 	typedef C MessageClass;
 	typedef std::vector< _MPIMessageBufferBase* > RecvBufferCallbackVector;
 
 protected:
-	char *_sendBuffers;
+	Buffer *_sendBuffers;
 	int  *_offsets;
 
 public:
 	MPISendMessageBuffer(mpi::communicator &world, int messageSize) :
 		BufferBase(world, messageSize) {
-		_sendBuffers = new char[ BufferBase::MESSAGE_BUFFER_SIZE * world.size() ];
+		_sendBuffers = new Buffer[ world.size() ];
 		_offsets = new int[ this->getWorld().size() ];
 		for(int destRank = 0; destRank < this->getWorld().size(); destRank++) {
+			_sendBuffers[destRank] = NULL;
 			_offsets[destRank] = 0;
 		}
 	}
 	~MPISendMessageBuffer() {
+		for(int i = 0 ; i < this->getWorld().size(); i++) {
+			Buffer &buf = _sendBuffers[i];
+			if (buf != NULL)
+				delete [] buf;
+			buf = NULL;
+		}
 		delete [] _sendBuffers;
 		delete [] _offsets;
 	}
 
+	Buffer &getBuffer(int rank) {
+		Buffer &buf = _sendBuffers[rank];
+		if (buf == NULL) {
+			buf = this->getNewBuffer();
+			_offsets[rank] = 0;
+		}
+		return buf;
+	}
 
 	MessageClass *bufferMessage(int rankDest, int tagDest) {
 		bool wasSent;
@@ -357,14 +416,14 @@ public:
 	}
 	// returns a pointer to the next message.  User can use this to create message
 	MessageClass *bufferMessage(int rankDest, int tagDest, bool &wasSent) {
-		char *buffStart = _sendBuffers + BufferBase::MESSAGE_BUFFER_SIZE * rankDest;
 		int &offset = _offsets[rankDest];
-		if (offset + this->getMessageSize() > BufferBase::MESSAGE_BUFFER_SIZE) {
-			flushMessageBuffer(rankDest, tagDest, buffStart, offset);
+		wasSent = false;
+		while (offset + this->getMessageSize() > BufferBase::MESSAGE_BUFFER_SIZE) {
+			flushMessageBuffer(rankDest, tagDest);
 			wasSent = true;
-		} else {
-			wasSent = false;
 		}
+		Buffer &buffStart = getBuffer(rankDest);
+		assert(buffStart != NULL);
 		MessageClass *buf = (MessageClass *) (buffStart+offset);
 		offset += this->getMessageSize();
 		this->newMessage();
@@ -373,18 +432,36 @@ public:
 	}
 	// copies msg as the next message in the buffer
 	void bufferMessage(int rankDest, int tagDest, MessageClass *msg) {
-		char *buf = (char*) bufferMessage(rankDest, tagDest);
-		memcpy(buf, (char*) msg, this->getMessageSize());
+		char *buf = (char *) bufferMessage(rankDest, tagDest);
+		memcpy(buf, (char *) msg, this->getMessageSize());
 	}
 
-	int receiveAllIncomingMessages() {
+	long receiveAllIncomingMessages() {
 		return this->receiveAll();
 	}
 
-protected:
-	void flushMessageBuffer(int rankDest, int tagDest, char *buffer, int &offset, bool sendZeroMessage = false) {
-		this->receiveAllIncomingMessages();
-		if (offset > 0 || sendZeroMessage) {
+public:
+	long flushMessageBuffer(int rankDest, int tagDest, bool sendZeroMessage = false) {
+		long messages = 0;
+		long newMessages = 0;
+
+		int &offsetLocation = _offsets[rankDest];
+
+		while (sendZeroMessage && (offsetLocation > 0 || newMessages != 0) ) {
+			// flush all messages until there is nothing in the buffer
+			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+			newMessages = flushMessageBuffer(rankDest, tagDest, false);
+			messages += newMessages;
+		}
+
+		if (offsetLocation > 0 || sendZeroMessage) {
+			Buffer &bufferLocation = getBuffer(rankDest);
+
+			Buffer buffer = bufferLocation;
+			bufferLocation = NULL;
+			int offset = offsetLocation;
+			offsetLocation = 0;
+
 			mpi::request request;
 			LOG_DEBUG(3, "sending message to " << rankDest << ", " << tagDest << " size " << offset);
 #ifdef OPENMP_CRITICAL_MPI
@@ -392,7 +469,7 @@ protected:
 #endif
 			request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
 			this->newMessageDelivery();
-			int count = 0;
+			long count = 0;
 			OptionalStatus optStatus = request.test();
 			while ( ! optStatus ) {
 				if (_RETRY_MESSAGES && ++count > _RETRY_THRESHOLD) {
@@ -404,7 +481,7 @@ protected:
 					}
 				}
 				LOG_DEBUG(4, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries() << " attempt count " << count);
-				this->receiveAllIncomingMessages();
+				messages += this->receiveAllIncomingMessages();
 				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 				optStatus = request.test();
 			}
@@ -413,29 +490,50 @@ protected:
 			//if (status.error() > 0)
 			//	LOG_WARN(1, "sending message returned an error: " << status.error());
 			LOG_DEBUG(4, "finished sending message to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries());
+
+			this->returnBuffer(buffer);
+			messages++;
 		}
-		offset = 0;
+		messages += this->receiveAllIncomingMessages();
+		return messages;
 	}
-public:
-	void flushMessageBuffer(int rankDest, int tagDest, bool sendZeroMessage = false) {
-		int &offset = _offsets[rankDest];
-		char *buffer = _sendBuffers + BufferBase::MESSAGE_BUFFER_SIZE * rankDest;
-		flushMessageBuffer(rankDest, tagDest, buffer, offset, sendZeroMessage);
+
+	long flushAllMessageBuffers(int tagDest) {
+		return flushAllMessageBuffers(tagDest, false);
 	}
-	void flushAllMessageBuffers(int tagDest) {
-		flushAllMessageBuffers(tagDest, false);
-	}
-	void flushAllMessageBuffers(int tagDest, bool sendZeroMessage) {
+	long flushAllMessageBuffers(int tagDest, bool sendZeroMessage) {
+		long messages = 0;
 		for(int rankDest = 0 ; rankDest < this->getWorld().size(); rankDest++)
-			flushMessageBuffer(rankDest, tagDest, sendZeroMessage);
-		this->flushAll();
+			messages += flushMessageBuffer(rankDest, tagDest, sendZeroMessage);
+		messages += this->flushAll();
+		return messages;
+	}
+	void flushAllMessagesUntilEmpty(int tagDest) {
+		long messages = flushAllMessageBuffers(tagDest);
+		while (messages != 0) {
+			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+			messages = flushAllMessageBuffers(tagDest);
+		}
+
 	}
 	void finalize(int tagDest) {
-		LOG_DEBUG(3, "Send " << tagDest << ": entering finalize()");
-		flushAllMessageBuffers(tagDest);
-		// send zero message buffer as checkpoint signal to stop
+		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest << ": entering finalize()");
+
+		// first clear the buffer and in-flight messages
+		flushAllMessagesUntilEmpty(tagDest);
+
+		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest << ": entering finalize stage2()");
+		// send zero-message as checkpoint signal to stop
 		flushAllMessageBuffers(tagDest, true);
-		LOG_DEBUG(4, "Send " << tagDest << ": finished finalize()");
+		boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+
+		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest << ": entering finalize stage3()");
+		// now continue to flush until there is nothing left in the buffer;
+		flushAllMessagesUntilEmpty(tagDest);
+
+		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest << ": finished finalize()");
+
+		LOG_DEBUG(3, "Send " << tagDest << ": finished finalize()");
 	}
 };
 
