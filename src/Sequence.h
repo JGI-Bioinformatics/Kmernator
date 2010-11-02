@@ -259,6 +259,13 @@ public:
 	}
 
 	std::string getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
+	std::string getFasta(SequenceLengthType trimOffset, SequenceLengthType trimLength) const {
+		std::string fasta = getFasta(trimOffset+trimLength);
+		if (trimOffset > 0)
+			return fasta.substr(trimOffset, trimLength);
+		else
+			return fasta;
+	}
 	std::string getFastaNoMarkup(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
 
 	SequenceLengthType getMarkupBasesCount() const;

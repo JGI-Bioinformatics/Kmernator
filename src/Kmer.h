@@ -583,6 +583,15 @@ public:
 		*this = copy;
 	}
 
+	KmerArray copyRange(SequenceLengthType offset, SequenceLengthType length) {
+		assert(offset+length < _size);
+		if (offset == 0 && length == _size)
+			return KmerArray(*this);
+		KmerArray splice(length);
+		splice._copyRange(_begin, getValueStart(), offset, offset, length, false);
+		return splice;
+	}
+
 	~KmerArray() {
 		reset();
 		destroyLock();
