@@ -420,6 +420,7 @@ public:
 		if (byPair)
 			size = reads.getPairSize();
 
+		LOG_VERBOSE(1, "Applying Artifact filter to " << size << " " << (byPair?"Pairs":"Reads"));
 		#pragma omp parallel for schedule(dynamic)
 		for (long idx = 0; idx < size; idx++) {
 			LOG_DEBUG(5, "filtering read " << (byPair ? "pair " : "" ) << idx);
