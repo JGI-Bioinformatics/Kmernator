@@ -58,12 +58,13 @@ public:
 	typedef float ScoreType;
 	class ReadTrimType {
 	public:
+		SequenceLengthType trimOffset;
 		SequenceLengthType trimLength;
 		ScoreType score;
 		std::string label;
 		bool isAvailable;
 		ReadTrimType() :
-			trimLength(0), score(0.0), label(), isAvailable(true) {
+			trimOffset(0), trimLength(0), score(0.0), label(), isAvailable(true) {
 		}
 	};
 	class PairScore {
@@ -180,7 +181,10 @@ public:
 		return getKmersForRead(read);
 	}
 	inline KA getKmersForTrimmedRead(ReadSetSizeType readIdx) {
-		KA kmers(_reads.getRead(readIdx).getTwoBitSequence(), _trims[readIdx].trimLength, true);
+		KA kmers(_reads.getRead(readIdx).getTwoBitSequence(), _trims[readIdx].trimOffset + _trims[readIdx].trimLength, true);
+		if (_trims[readIdx].trimOffset > 0) {
+			kmers = kmers.copyRange(_trims[readIdx].trimOffset, _trims[readIdx].trimLength);
+		}
 		return kmers;
 	}
 
@@ -189,7 +193,7 @@ protected:
 		bool isGood = true;
 		if (!_reads.isValidRead(readIdx))
 			return false;
-		std::string str = _reads.getRead(readIdx).getFasta( _trims[readIdx].trimLength );
+		std::string str = _reads.getRead(readIdx).getFasta( _trims[readIdx].trimOffset, _trims[readIdx].trimLength );
 		DuplicateSet::iterator test = _duplicateSet.find(str);
 		if (test == _duplicateSet.end()) {
 			_duplicateSet.insert(str);
@@ -433,11 +437,6 @@ public:
 		return picked;
 	}
 
-	SequenceLengthType _detectTransition(KA &kmers) {
-		//TODO implement
-		return kmers.size();
-	}
-
 	inline ScoreType getValue( const Kmer &kmer ) {
 		const ElementType elem = _map.getElementIfExists(kmer);
 		if (elem.isValid()) {
@@ -451,7 +450,9 @@ public:
 		  if ( markupLength == 0 ) {
 			  trim.trimLength = read.getLength();
 		  } else {
+			  // TODO find longest stretch...
 			  // trim at first N or X markup
+			  trim.trimOffset = 0;
 			  trim.trimLength = markupLength - 1;
 		  }
 		  trim.score = trim.trimLength;
@@ -460,47 +461,63 @@ public:
 	template<typename U>
 	void trimReadByMinimumKmerScore(double minimumKmerScore, ReadTrimType &trim, U buffBegin, U buffEnd) {
 
-		trim.score = 0;
-		trim.trimLength = 0;
+		ReadTrimType test, best;
 
 		U it = buffBegin;
 		while (it != buffEnd) {
 			ScoreType score = *(it++);
 			if (score >= minimumKmerScore) {
-				trim.trimLength++;
-				trim.score += score;
-			} else
-				break;
+				test.trimLength++;
+				test.score += score;
+			} else {
+				if (test.score > best.score) {
+					best = test;
+				}
+				test.score = 0;
+				test.trimOffset = test.trimLength;
+				test.trimLength = 0;
+			}
 		}
-		if (trim.trimLength >= 3 && _bimodalSigmas >= 0.0) {
+		if (test.score > best.score) {
+			best = test;
+		}
+
+		if (best.trimLength >= 3 && _bimodalSigmas >= 0.0) {
 			Statistics::MeanStdCount f, s;
-			U end = buffBegin + trim.trimLength;
-			U p = Statistics::findBimodalPartition(_bimodalSigmas, f, s, buffBegin, end);
+			U begin = buffBegin + best.trimOffset;
+			U end   = begin + best.trimLength;
+			U p = Statistics::findBimodalPartition(_bimodalSigmas, f, s, begin, end);
 			if (p != end) {
-				std::string label("Bimodal@" + boost::lexical_cast<std::string>( (p - buffBegin)+KmerSizer::getSequenceLength() )
+				std::string label("Bimodal@" + boost::lexical_cast<std::string>( (p - begin)+KmerSizer::getSequenceLength() )
 						+ ":" + boost::lexical_cast<std::string>( (int) f.mean )
 						+ "/" + boost::lexical_cast<std::string>( (int) s.mean ));
 
 				if (f.mean > s.mean) {
 					// remove the second partition from the original trim estimate
 					for(it = p; it != end; it++) {
-						trim.score -= (ScoreType) *it;
-						trim.trimLength--;
+						best.score -= (ScoreType) *it;
+						best.trimLength--;
 					}
 					if (!trim.label.empty())
 						trim.label += " ";
 					trim.label += label;
 				} else {
-					// second partition is greater than first... unsupported, so trim entire read
-					trim.score = 0;
-					trim.trimLength = 0;
+					// second partition is greater than first, remove the first
+					for(it = begin; it != p ; it++) {
+						best.score -= (ScoreType) *it;
+						best.trimLength--;
+						best.trimOffset++;
+					}
 					if (!trim.label.empty())
 						trim.label += " ";
 					trim.label += "Inv" + label;
 				}
 			}
-
 		}
+		trim.score = best.score;
+		trim.trimOffset = best.trimOffset;
+		trim.trimLength = best.trimLength;
+
 	};
 	void setTrimHeaders(ReadTrimType &trim, bool useKmers) {
 		double reportScore;
@@ -512,12 +529,16 @@ public:
 			}
 		} else {
 			// keep available so that pairs will be selected together
+			trim.trimOffset = 0;
 			trim.score = -1.0;
 			reportScore = 0.0;
 		}
+		std::stringstream ss;
 		if (!trim.label.empty())
-			trim.label += " ";
-		trim.label += "Trim:" + boost::lexical_cast<std::string>( trim.trimLength ) + " Score:" + boost::lexical_cast<std::string>( reportScore );
+			ss << " ";
+		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength
+				<< " Score:" << std::fixed << std::setprecision(2) << reportScore;
+		trim.label += ss.str();
 	}
 
 	void _setNumKmers( SequenceLengthType markupLength, SequenceLengthType &numKmers) {
