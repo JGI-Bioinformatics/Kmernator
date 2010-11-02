@@ -101,13 +101,19 @@ public:
 	typedef typename KS::PositionType PositionType;
 	typedef typename KS::WeightType WeightType;
 	typedef typename KS::DataPointers DataPointers;
+	typedef typename KS::WeakElementType WeakElementType;
+	typedef typename KS::WeakBucketType WeakBucketType;
 
 protected:
 	mpi::communicator world;
+	NumberType distributedThreadMask;
 
 public:
 	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long buckets = 0, bool separateSingletons = true)
 	: KS(buckets, separateSingletons), world(_world) {
+		NumberType numParts = world.size();
+		distributedThreadMask = numParts - 1;
+		assert((numParts & (distributedThreadMask)) == 0); // numParts must be a power of 2
 	}
 	~DistributedKmerSpectrum() {
 	}
@@ -256,14 +262,11 @@ public:
 	void _buildKmerSpectrumMPI(ReadSet &store, bool isSolid) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
-		int numParts = world.size();
-		assert((numParts & (numParts-1)) == 0); // numParts must be a power of 2
 
 		int messageSize = sizeof(StoreKmerMessageHeader) + KmerSizer::getTwoBitLength();
 
 		long readSetSize = store.getSize();
 
-		NumberType distributedThreadMask = numParts - 1;
 
 		LOG_VERBOSE(2, "starting _buildSpectrumMPI");
 
@@ -305,12 +308,17 @@ public:
 				for (PositionType readPos = 0 ; readPos < kmers.size(); readPos++) {
 					int rankDest, threadDest;
 					WeightType weight = kmers.valueAt(readPos);
-					this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, distributedThreadMask);
-
-					if (rankDest == rank && threadDest == threadId) {
-						this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos, isSolid);
+					if ( TrackingData::isDiscard( (weight<0.0) ? 0.0-weight : weight ) )  {
+						LOG_DEBUG(4, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << kmers[readPos].toFasta());
 					} else {
-						sendBuffers[ threadId ][ threadDest ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
+
+						this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, distributedThreadMask);
+
+						if (rankDest == rank && threadDest == threadId) {
+							this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos, isSolid);
+						} else {
+							sendBuffers[ threadId ][ threadDest ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
+						}
 					}
 				}
 
@@ -404,12 +412,8 @@ public:
 
 		_buildKmerSpectrumMPI(store, isSolid);
 
-		MPIHistogram histogram(127);
-		histogram.set(*this, false);
-		LOG_DEBUG(2, "Individual raw histogram\n" << histogram.toString());
-
-		histogram.reduce(world);
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective raw histogram\n" << histogram.toString());
+		std::string hist = getHistogram(isSolid);
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective raw histogram\n" << hist);
 		world.barrier();
 
 		// purge low counts
@@ -425,6 +429,18 @@ public:
 		}
 
 	}
+
+	virtual std::string getHistogram(bool solidOnly = false) {
+		MPIHistogram histogram(127);
+		histogram.set(*this, solidOnly);
+		LOG_DEBUG(2, "Individual histogram\n" << histogram.toString());
+
+		histogram.reduce(world);
+
+		return histogram.toString();
+	}
+
+
 	Kmernator::MmapFileVector writeKmerMaps(string fileprefix = Options::getOutputFile()) {
 		// communicate sizes and allocate permanent file
 		LOG_VERBOSE(2, "Merging partial spectrums" );
@@ -443,6 +459,150 @@ public:
 
 		return ourSpectrum;
 	}
+
+	/*
+	 * PurgeVariantKmer / buildKmerSpectrumMPI
+	 *
+	 * message (for a specific rank & thread 0):
+	 * threshold + kmer
+	 *
+	 */
+	class PurgeVariantKmerMessageHeader;
+
+	typedef MPIMessageBufferBase< PurgeVariantKmerMessageHeader > PurgeVariantKmerMessageBuffersBase;
+	typedef MPIRecvMessageBuffer< PurgeVariantKmerMessageHeader > RecvPurgeVariantKmerMessageBufferBase;
+	typedef MPISendMessageBuffer< PurgeVariantKmerMessageHeader > SendPurgeVariantKmerMessageBufferBase;
+
+	class RecvPurgeVariantKmerMessageBuffer : public RecvPurgeVariantKmerMessageBufferBase
+	{
+		DistributedKmerSpectrum &_spectrum;
+		DataPointers _pointers;
+		double _variantSigmas, _minDepth;
+
+	public:
+		RecvPurgeVariantKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize, double variantSigmas, double minDepth)
+			: RecvPurgeVariantKmerMessageBufferBase(world, messageSize, 0), _spectrum(spectrum), _pointers(spectrum), _variantSigmas(variantSigmas), _minDepth(minDepth) {
+		}
+		inline DataPointers &getDataPointer() {
+			return _pointers;
+		}
+		inline DistributedKmerSpectrum &getSpectrum() {
+			return _spectrum;
+		}
+		inline double getVariantSigmas() {
+			return _variantSigmas;
+		}
+		inline double getMinDepth() {
+			return _minDepth;
+		}
+	};
+	class SendPurgeVariantKmerMessageBuffer : public SendPurgeVariantKmerMessageBufferBase
+	{
+		DistributedKmerSpectrum &_spectrum;
+
+	public:
+		SendPurgeVariantKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize)
+			: SendPurgeVariantKmerMessageBufferBase(world, messageSize), _spectrum(spectrum) {
+		}
+		inline DistributedKmerSpectrum &getSpectrum() {
+			return _spectrum;
+		}
+	};
+
+	class PurgeVariantKmerMessageHeader {
+	public:
+		float threshold;
+		// Kmer is next bytes, dynamically determined by KmerSizer::getTwoBitLength()
+		// kmer is least complement
+
+		// THIS IS DANGEROUS unless allocated an extra Kmer!
+		Kmer *getKmer() {
+			return (Kmer*) (((char*)this)+sizeof(*this));
+		}
+		void set(float _threshold, const Kmer &_kmer) {
+			threshold = _threshold;
+			*(getKmer()) = _kmer;
+		}
+		void process(RecvPurgeVariantKmerMessageBufferBase *bufferCallback) {
+			RecvPurgeVariantKmerMessageBuffer *kbufferCallback = (RecvPurgeVariantKmerMessageBuffer*) bufferCallback;
+			LOG_DEBUG(4, "PurgeVariantKmerMessage: " << threshold << " " << getKmer()->toFasta());
+			double newThreshold;
+			bool wasPurged = kbufferCallback->getSpectrum()._setPurgeVariant(kbufferCallback->getDataPointer(), *getKmer(), threshold, kbufferCallback->getVariantSigmas(), newThreshold);
+			if (wasPurged)
+				kbufferCallback->getSpectrum().variantWasPurged();
+			if (wasPurged && newThreshold > kbufferCallback->getMinDepth())
+				kbufferCallback->getSpectrum()._purgeVariants(kbufferCallback->getDataPointer(), *getKmer(), newThreshold, kbufferCallback->getVariantSigmas(), kbufferCallback->getMinDepth());
+		}
+	};
+	void variantWasPurged() {
+		#pragma omp atomic
+		_purgedVariants++;
+	}
+private:
+	SendPurgeVariantKmerMessageBuffer *sendPurgeVariant;
+	RecvPurgeVariantKmerMessageBuffer *recvPurgeVariant;
+	long _purgedVariants;
+	double variantSigmas;
+	double minDepth;
+
+	void _preVariants(double variantSigmas, double minDepth) {
+		_purgedVariants = 0;
+		long messageSize = sizeof(PurgeVariantKmerMessageHeader) + KmerSizer::getByteSize();
+		sendPurgeVariant = new SendPurgeVariantKmerMessageBuffer(world, *this, messageSize);
+		recvPurgeVariant = new RecvPurgeVariantKmerMessageBuffer(world, *this, messageSize, variantSigmas, minDepth);
+
+		sendPurgeVariant->addReceiveAllCallback( recvPurgeVariant );
+		world.barrier();
+	}
+
+	long _postVariants() {
+
+		sendPurgeVariant->finalize(0);
+		recvPurgeVariant->finalize(1);
+
+		delete sendPurgeVariant;
+		delete recvPurgeVariant;
+		return _purgedVariants;
+	}
+
+	// recursively purge kmers of edit distance 1
+	long _purgeVariants(DataPointers &pointers, const Kmer &kmer, double threshold, double variantSigmas, double minDepth) {
+		int rank = world.rank();
+
+		WeakBucketType variants = WeakBucketType::permuteBases(kmer, true);
+		std::vector<double> wasPurged;
+		wasPurged.resize(variants.size(), 0.0);
+
+		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
+			int rankDest, threadDest;
+			Kmer &kmer = variants[i];
+			this->solid.getThreadIds(kmer, threadDest, 1, rankDest, distributedThreadMask);
+
+			if (rankDest == rank) {
+				double newThreshold;
+				if (_setPurgeVariant(pointers, kmer, threshold, variantSigmas, newThreshold)) {
+					variantWasPurged();
+
+					if (newThreshold > minDepth) {
+						wasPurged[i] = newThreshold;
+					}
+				}
+
+			} else {
+				sendPurgeVariant->bufferMessage(rankDest, 0)->set(threshold, kmer);
+			}
+		}
+
+		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
+			if (wasPurged[i] > minDepth) {
+				Kmer &kmer = variants[i];
+				double &newThreshold = wasPurged[i];
+				_purgedVariants += this->_purgeVariants(pointers, kmer, newThreshold, variantSigmas, minDepth);
+			}
+		}
+		return 0;
+	}
+
 
 }; // DistributedKmerSpectrum
 

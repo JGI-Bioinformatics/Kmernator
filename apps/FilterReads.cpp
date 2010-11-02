@@ -98,6 +98,13 @@ int main(int argc, char *argv[]) {
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
+	  if (Options::getVariantSigmas() > 0.0) {
+		  spectrum.purgeVariants();
+		  if (Log::isVerbose(1)) {
+			  spectrum.printHistograms(Log::Verbose("Variant-Removed Histogram"));
+		  }
+	  }
+
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {

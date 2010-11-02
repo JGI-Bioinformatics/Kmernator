@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
 		numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
 
 		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads ");
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
 	}
 	KS spectrum(world, numBuckets);
 	Kmernator::MmapFileVector spectrumMmaps;
@@ -135,6 +135,18 @@ int main(int argc, char *argv[]) {
 		TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 		spectrum.buildKmerSpectrum(reads);
+		if (Options::getVariantSigmas() > 0.0) {
+			long purgedVariants = spectrum.purgeVariants();
+			long totalPurgedVariants = all_reduce(world, purgedVariants, std::plus<long>());
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << totalPurgedVariants << " kmer variants");
+
+			std::string hist = spectrum.getHistogram(false);
+
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Variant Purged Histogram\n" << hist);
+			world.barrier();
+
+		}
+
 		spectrumMmaps = spectrum.writeKmerMaps(Options::getOutputFile() + "-mmap");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 

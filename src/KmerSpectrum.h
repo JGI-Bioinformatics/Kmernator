@@ -95,10 +95,13 @@ public:
 
 	typedef typename SolidMapType::Iterator SolidIterator;
 	typedef typename SolidMapType::ElementType SolidElementType;
+	typedef typename SolidMapType::BucketType SolieBucketType;
 	typedef typename WeakMapType::Iterator WeakIterator;
 	typedef typename WeakMapType::ElementType WeakElementType;
+	typedef typename WeakMapType::BucketType WeakBucketType;
 	typedef typename SingletonMapType::Iterator SingletonIterator;
 	typedef typename SingletonMapType::ElementType SingletonElementType;
+	typedef typename SingletonMapType::BucketType SingletonBucketType;
 
 	typedef std::vector< KmerSpectrum > Vector;
 
@@ -513,11 +516,13 @@ public:
 			printHistograms(Log::Verbose(), printSolidOnly);
 	}
 	void printHistograms(std::ostream &os, bool printSolidOnly = false) {
+		os << getHistogram(printSolidOnly);
+	}
+	virtual std::string getHistogram(bool solidOnly = false) {
 		Histogram histogram(63);
 
-		histogram.set(*this, printSolidOnly);
-
-		os << histogram.toString();
+		histogram.set(*this, solidOnly);
+		return histogram.toString();
 	}
 
 	class GCCoverageHeatMap {
@@ -1396,6 +1401,73 @@ public:
 			    printHistograms(Log::Verbose("Histogram"));
 		    }
 		}
+	}
+
+	bool _setPurgeVariant(DataPointers &pointers, const Kmer &kmer, double threshold, double variantSigmas, double &newThreshold) {
+		newThreshold = 0.0;
+		bool returnValue = false;
+		pointers.set( kmer );
+		WeakElementType &w = pointers.weakElem;
+		if (w.isValid()) {
+			double v = w.value().getWeightedCount();
+			if (v > 0.0 && v < threshold) {
+				w.value().reset();
+				LOG_DEBUG(4, "Purged Variant " << kmer.toFasta() << " " << v);
+				newThreshold = v - sqrt(v)*variantSigmas;
+				returnValue = true;
+			}
+		}
+		return returnValue;
+	}
+	// recursively purge kmers of edit distance 1
+	virtual long _purgeVariants(DataPointers &pointers, const Kmer &kmer, double threshold, double variantSigmas, double minDepth) {
+		WeakBucketType variants = WeakBucketType::permuteBases(kmer, true);
+		long purgedKmers = 0;
+		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
+			Kmer &kmer = variants[i];
+			double newThreshold;
+			if (_setPurgeVariant(pointers, kmer, threshold, variantSigmas, newThreshold))
+				purgedKmers++;
+			if (newThreshold > minDepth) {
+				purgedKmers += this->_purgeVariants(pointers, kmer, newThreshold, variantSigmas, minDepth);
+			}
+		}
+		return purgedKmers;
+	}
+	virtual void _preVariants(double variantSigmas, double minDepth) {}
+	virtual long _postVariants() { return 0; }
+
+
+	long purgeVariants(double variantSigmas = Options::getVariantSigmas()) {
+		if (variantSigmas < 0.0)
+			return 0;
+		long purgedKmers = 0;
+		LOG_VERBOSE(1, "Purging kmer variants that are >= " << variantSigmas << " sigmas below a more abundant version");
+
+		if (hasSolids) {
+			throw; // TODO unsupported
+		}
+		double minDepth = Options::getMinDepth();
+		this->_preVariants(variantSigmas, minDepth);
+
+		DataPointers pointers(*this);
+		for(WeakIterator it = weak.begin(); it != weak.end(); it++) {
+			double count = it->value().getWeightedCount();
+			if (count <= minDepth)
+				continue;
+			double threshold = count - sqrt(count)*variantSigmas;
+			if (threshold > minDepth) {
+				LOG_DEBUG(3, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
+				purgedKmers += this->_purgeVariants(pointers, it->key(), threshold, variantSigmas, minDepth);
+			}
+		}
+
+		purgedKmers += this->_postVariants();
+
+		this->purgeMinDepth(Options::getMinDepth());
+
+		LOG_VERBOSE(1, "Removed " << purgedKmers << " kmer-variants");
+		return purgedKmers;
 	}
 
 	static void experimentOnSpectrum( ostream &os, KmerSpectrum &spectrum ) {

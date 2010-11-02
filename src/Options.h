@@ -79,6 +79,7 @@ private:
 	unsigned int depthRange;
 	unsigned int minReadLength;
 	double       bimodalSigmas;
+	double       variantSigmas;
 	unsigned int ignoreQual;
 	unsigned int periodicSingletonPurge;
 	unsigned int skipArtifactFilter;
@@ -97,7 +98,7 @@ private:
 	unsigned int gcHeatMap;
 
 	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10),
-	minQuality(5), minDepth(2), depthRange(2), minReadLength(22), bimodalSigmas(-1.0), ignoreQual(0),
+	minQuality(5), minDepth(2), depthRange(2), minReadLength(22), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
@@ -153,6 +154,9 @@ public:
 	}
 	static inline double &getBimodalSigmas() {
 		return getOptions().bimodalSigmas;
+	}
+	static inline double &getVariantSigmas() {
+		return getOptions().variantSigmas;
 	}
 	static inline unsigned int &getIgnoreQual() {
 		return getOptions().ignoreQual;
@@ -312,6 +316,9 @@ protected:
 
 		("bimodal-sigmas", po::value<double>()->default_value(bimodalSigmas),
 				"Detect bimodal kmer-signatures across reads and trim at transition point if the two means are separated by bimodal-sigmas * stdDev (2.0 to 3.0 suggested).  disabled if < 0.0")
+
+		("variant-sigmas", po::value<double>()->default_value(variantSigmas),
+				"Detect and purge kmer-variants if >= variant-sigmas * Poisson-stdDev (2.0-3.0 suggested).  disabled if < 0.0")
 
 		("ignore-quality", po::value<unsigned int>()->default_value(ignoreQual),
 				"ignore the quality score, to save memory or if they are untrusted")
@@ -494,6 +501,8 @@ public:
 			}
 
 			setOpt<double>("bimodal-sigmas", getBimodalSigmas(), print);
+			setOpt<double>("variant-sigmas", getVariantSigmas(), print);
+
 			// set the ignore quality value
 			setOpt<unsigned int>("ignore-quality", getIgnoreQual(), print);
 
