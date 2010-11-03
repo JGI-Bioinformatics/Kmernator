@@ -153,13 +153,21 @@ public:
 			return new char[ MESSAGE_BUFFER_SIZE ];
 		} else {
 			Buffer buf;
-			buf = freeBuffers.back();
-			freeBuffers.pop_back();
+			#pragma omp critical (mpi_buffer_base_free_buffers)
+			{
+				buf = freeBuffers.back();
+				freeBuffers.pop_back();
+			}
 			return buf;
 		}	
 	}
 	void returnBuffer(Buffer buf) {
-		freeBuffers.push_back(buf);
+		if (freeBuffers.size() >= (size_t) (_world.size() * 3) ) {
+			delete [] buf;
+		} else {
+			#pragma omp critical (mpi_buffer_base_free_buffers)
+			freeBuffers.push_back(buf);
+		}
 	}
 };
 
@@ -170,6 +178,15 @@ public:
 	typedef typename BufferBase::OptionalRequest OptionalRequest;
 	typedef typename BufferBase::OptionalStatus OptionalStatus;
 	typedef typename BufferBase::Buffer Buffer;
+	class BufferReceived {
+	public:
+		Buffer buffer;
+		int size;
+		int source;
+		int tag;
+		BufferReceived(Buffer b, int s, int src, int t) : buffer(b), size(s), source(src), tag(t) {}
+	};
+	typedef std::list<BufferReceived> ProcessBufferQueue;
 	typedef C MessageClass;
 
 protected:
@@ -177,13 +194,16 @@ protected:
 	OptionalRequest *_requests;
 	int _numCheckpoints;
 	int _tag;
-	int _source;
-	int _size;
+	int _recvSource;
+	int _recvTag;
+	int _recvSize;
 	std::vector<int> _requestAttempts;
+	ProcessBufferQueue _processBufferQueue;
+	bool _isProcessing;
 
 public:
 	MPIRecvMessageBuffer(mpi::communicator &world, int messageSize, int tag = mpi::any_tag) :
-		BufferBase(world, messageSize), _numCheckpoints(0), _tag(tag), _source(mpi::any_source), _size(0) {
+		BufferBase(world, messageSize), _numCheckpoints(0), _tag(tag), _recvSource(mpi::any_source), _recvTag(mpi::any_tag), _recvSize(0), _isProcessing(false) {
 		_recvBuffers = new Buffer[ this->getWorld().size() ];
 		_requests = new OptionalRequest[ this->getWorld().size() ];
 		_requestAttempts.resize(this->getWorld().size(), 0);
@@ -193,6 +213,7 @@ public:
 		}
 	}
 	~MPIRecvMessageBuffer() {
+		assert(_processBufferQueue.empty());
 		cancelAllRequests();
 		for(int i = 0 ; i < this->getWorld().size(); i++) {
 			Buffer &buf = _recvBuffers[i];
@@ -210,14 +231,14 @@ public:
 		return buf;
 	}
 
-	inline int getSource() {
-		return _source;
+	inline int getRecvSource() {
+		return _recvSource;
 	}
-	inline int getTag() {
-		return _tag;
+	inline int getRecvTag() {
+		return _recvTag;
 	}
-	inline int getSize() {
-		return _size;
+	inline int getRecvSize() {
+		return _recvSize;
 	}
 	void cancelAllRequests() {
 		for(int source = 0 ; source < this->getWorld().size() ; source++) {
@@ -253,8 +274,9 @@ public:
 
 			if (!!optionalStatus) {
 				mpi::status status = optionalStatus.get();
-				process(status, rankSource);
+				queueMessage(status, rankSource);
 				optionalRequest = irecv(rankSource);
+				processQueue();
 				returnValue = true;
 			}
 		}
@@ -279,16 +301,32 @@ public:
 
 		return messages;
 	}
-	void finalize(int checkpointFactor = 1) {
-		LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints());
-		long messages = 1;
-		while ( (messages != 0) || (!reachedCheckpoint(checkpointFactor)) ) {
+private:
+	long _finalize(int checkpointFactor) {
+		long messages;
+		do {
 			messages = 0;
+			messages += processQueue();
 			messages += this->receiveAllIncomingMessages();
 			messages += this->flushAll();
-			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+			if (reachedCheckpoint(checkpointFactor) && messages != 0) {
+				LOG_DEBUG_OPTIONAL(1, true, "Recv " << _tag << ": Achieved checkpoint but more messages are pending");
+				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+			}
+		} while (!reachedCheckpoint(checkpointFactor));
+		return messages;
+	}
+public:
+	void finalize(int checkpointFactor = 1) {
+		LOG_DEBUG_OPTIONAL(1, true, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints());
+
+		long globalMessages = 1;
+		while(globalMessages != 0) {
+			long messages = _finalize(checkpointFactor);
+			all_reduce(this->getWorld(), messages, globalMessages, mpi::maximum<long>());
 		}
-		LOG_DEBUG(3, "Recv " << _tag << ": Finished finalize checkpoint: " << getNumCheckpoints());
+
+		LOG_DEBUG_OPTIONAL(1, true, "Recv " << _tag << ": Finished finalize checkpoint: " << getNumCheckpoints());
 		_numCheckpoints = 0;
 	}
 
@@ -315,10 +353,14 @@ private:
 		_requestAttempts[sourceRank] = 0;
 		return oreq;
 	}
-	int processMessages(Buffer buf, int size) {
-		Buffer msg, end, start = buf;
+	int processMessages(BufferReceived bufferReceived) {
+		Buffer msg, end, start = bufferReceived.buffer;
+		this->_recvSize = bufferReceived.size;
+		this->_recvSource = bufferReceived.source;
+		this->_recvTag = bufferReceived.tag;
+
 		msg = start;
-		end = (start+size);
+		end = (start+bufferReceived.size);
 		int count = 0;
 		while (msg != end) {
 			((MessageClass*) msg)->process(this);
@@ -328,7 +370,7 @@ private:
 		}
 		return count;
 	}
-	bool process(mpi::status &status, int rankSource) {
+	bool queueMessage(mpi::status &status, int rankSource) {
 
 		bool wasMessage = false;
 		int source = status.source();
@@ -340,26 +382,48 @@ private:
 
 			assert( rankSource == source );
 			assert( _tag == tag );
-			_source = source;
-			_size = size;
 
 			Buffer &bufLoc = getBuffer(source);
 			Buffer buf = bufLoc;
 			bufLoc = NULL;
+			BufferReceived bufferReceived( buf, size, source, tag );
+
+			#pragma omp critical (mpi_recv_buffer_process_queue)
+			_processBufferQueue.push_back( bufferReceived );
 
 			this->newMessageDelivery();
 			LOG_DEBUG(4, _tag << ": received delivery " << this->getNumDeliveries() << " from " << source << "," << tag << " size " << size << " probe attempts: " << _requestAttempts[rankSource]);
 
-			if (size == 0) {
-				checkpoint();
-				LOG_DEBUG(3, _tag << ": got checkpoint from " << source << ": " << _numCheckpoints);
-			} else {
-				processMessages(buf, size);
-			}
-			this->returnBuffer(buf);
 			wasMessage = true;
 		}
 		return wasMessage;
+
+	}
+	long processQueue() {
+		long processCount = 0;
+		// code to allow recursive message generation
+		if (!_isProcessing) {
+			_isProcessing = true;
+
+			while( !_processBufferQueue.empty() ) {
+				BufferReceived bufferReceived = _processBufferQueue.front();
+
+				#pragma omp critical (mpi_recv_buffer_process_queue)
+				_processBufferQueue.pop_front();
+
+				if (bufferReceived.size == 0) {
+					checkpoint();
+					LOG_DEBUG(3, _tag << ": got checkpoint from " << bufferReceived.source << "/" << bufferReceived.tag << ": " << _numCheckpoints);
+				} else {
+					processMessages(bufferReceived);
+				}
+				this->returnBuffer(bufferReceived.buffer);
+				processCount++;
+			}
+
+			_isProcessing = false;
+		}
+		return processCount;
 	}
 
 };
@@ -373,12 +437,48 @@ public:
 	typedef typename BufferBase::OptionalRequest OptionalRequest;
 	typedef typename BufferBase::OptionalStatus OptionalStatus;
 	typedef typename BufferBase::Buffer Buffer;
+	class SentBuffer {
+	public:
+		mpi::request request;
+		Buffer buffer;
+		int destRank;
+		int destTag;
+		int size;
+		long deliveryNum;
+		long pollCount;
+
+		SentBuffer(Buffer &_buffer, int _rank, int _tag, int _size, int _id) : request(), buffer(_buffer), destRank(_rank), destTag(_tag), size(_size), deliveryNum(_id), pollCount(0) {}
+		SentBuffer() : request(), buffer(NULL), destRank(mpi::any_source), destTag(mpi::any_tag), size(0), deliveryNum(0), pollCount(0) {}
+		SentBuffer(const SentBuffer &copy) {
+			*this = copy;
+		}
+		SentBuffer &operator=(const SentBuffer &copy) {
+			request = copy.request;
+			buffer = copy.buffer;
+			destRank = copy.destRank;
+			destTag = copy.destTag;
+			size = copy.size;
+			deliveryNum = copy.deliveryNum;
+			pollCount = copy.pollCount;
+			return *this;
+		}
+		void reset() {
+			*this = SentBuffer();
+		}
+		// predicate test for removal
+		bool operator() (const SentBuffer &sent) {
+			return (sent.buffer == NULL);
+		}
+	};
+	typedef std::list< SentBuffer > SentBuffers;
+	typedef typename SentBuffers::iterator SentBuffersIterator;
 	typedef C MessageClass;
 	typedef std::vector< _MPIMessageBufferBase* > RecvBufferCallbackVector;
 
 protected:
 	Buffer *_sendBuffers;
 	int  *_offsets;
+	SentBuffers _sentBuffers;
 
 public:
 	MPISendMessageBuffer(mpi::communicator &world, int messageSize) :
@@ -412,14 +512,15 @@ public:
 
 	MessageClass *bufferMessage(int rankDest, int tagDest) {
 		bool wasSent;
-		return bufferMessage(rankDest, tagDest, wasSent);
+		long messages = 0;
+		return bufferMessage(rankDest, tagDest, wasSent, messages);
 	}
 	// returns a pointer to the next message.  User can use this to create message
-	MessageClass *bufferMessage(int rankDest, int tagDest, bool &wasSent) {
+	MessageClass *bufferMessage(int rankDest, int tagDest, bool &wasSent, long &messages) {
 		int &offset = _offsets[rankDest];
 		wasSent = false;
 		while (offset + this->getMessageSize() > BufferBase::MESSAGE_BUFFER_SIZE) {
-			flushMessageBuffer(rankDest, tagDest);
+			messages += flushMessageBuffer(rankDest, tagDest);
 			wasSent = true;
 		}
 		Buffer &buffStart = getBuffer(rankDest);
@@ -446,11 +547,15 @@ public:
 		long newMessages = 0;
 
 		int &offsetLocation = _offsets[rankDest];
+		bool waitForSend = sendZeroMessage == true;
 
+		messages += checkSentBuffers( waitForSend );
 		while (sendZeroMessage && (offsetLocation > 0 || newMessages != 0) ) {
 			// flush all messages until there is nothing in the buffer
+			newMessages = 0;
 			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 			newMessages = flushMessageBuffer(rankDest, tagDest, false);
+			newMessages += checkSentBuffers( waitForSend );
 			messages += newMessages;
 		}
 
@@ -462,42 +567,70 @@ public:
 			int offset = offsetLocation;
 			offsetLocation = 0;
 
-			mpi::request request;
+			this->newMessageDelivery();
+			SentBuffer sent(buffer, rankDest, tagDest, offset, this->getNumDeliveries());
 			LOG_DEBUG(3, "sending message to " << rankDest << ", " << tagDest << " size " << offset);
 #ifdef OPENMP_CRITICAL_MPI
 #pragma omp critical (MPI_buffer)
 #endif
-			request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
-			this->newMessageDelivery();
-			long count = 0;
-			OptionalStatus optStatus = request.test();
-			while ( ! optStatus ) {
-				if (_RETRY_MESSAGES && ++count > _RETRY_THRESHOLD) {
-					request.cancel();
-					if ( ! request.test() ) {
-						request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
-						count = 0;
-						LOG_WARN(1, "Canceled and retried pending message to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries());
-					}
-				}
-				LOG_DEBUG(4, "waiting for send to finish to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries() << " attempt count " << count);
-				messages += this->receiveAllIncomingMessages();
-				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
-				optStatus = request.test();
-			}
-			mpi::status status = optStatus.get();
-			// hmmm looks like error is sometimes populated with junk...
-			//if (status.error() > 0)
-			//	LOG_WARN(1, "sending message returned an error: " << status.error());
-			LOG_DEBUG(4, "finished sending message to " << rankDest << ", " << tagDest << " size " << offset << " deliveryCount " << this->getNumDeliveries());
+			sent.request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
 
-			this->returnBuffer(buffer);
 			messages++;
+
+			recordSentBuffer(sent);
+
 		}
-		messages += this->receiveAllIncomingMessages();
+		messages += checkSentBuffers( waitForSend );
 		return messages;
 	}
 
+	void recordSentBuffer(SentBuffer &sent) {
+		#pragma omp critical (mpi_send_sent_buffers)
+		_sentBuffers.push_back(sent);
+	}
+	long checkSentBuffers(bool wait = false) {
+		long messages = 0;
+		long iterations = 0;
+		while (wait || iterations++ == 0) {
+			messages += this->receiveAllIncomingMessages();
+			for(SentBuffersIterator it = _sentBuffers.begin(); it != _sentBuffers.end(); it++) {
+				SentBuffer &sent = *it;
+
+				OptionalStatus optStatus = sent.request.test();
+
+				if ( _RETRY_MESSAGES && (!optStatus) && ++sent.pollCount > _RETRY_THRESHOLD) {
+					sent.request.cancel();
+					if ( ! sent.request.test() ) {
+						sent.request = this->getWorld().isend(sent.destRank, sent.destTag, sent.buffer, sent.size);
+						sent.pollCount = 0;
+						LOG_WARN(1, "Canceled and retried pending message to " << sent.destRank << ", " << sent.destTag << " size " << sent.size << " deliveryCount " << sent.deliveryNum);
+					}
+					optStatus = sent.request.test();
+				}
+
+				if (!!optStatus) {
+
+					mpi::status status = optStatus.get();
+					// hmmm looks like error is sometimes populated with junk...
+					//if (status.error() > 0)
+					//	LOG_WARN(1, "sending message returned an error: " << status.error());
+					LOG_DEBUG(4, "finished sending message to " << sent.destRank << ", " << sent.destTag << " size " << sent.size << " deliveryCount " << sent.deliveryNum);
+
+					this->returnBuffer(sent.buffer);
+					sent.reset();
+
+				}
+			}
+			#pragma omp critical (mpi_send_sent_buffers)
+			_sentBuffers.remove_if(SentBuffer());
+
+			if (wait) {
+				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+				wait = !_sentBuffers.empty();
+			}
+		}
+		return messages;
+	}
 	long flushAllMessageBuffers(int tagDest) {
 		return flushAllMessageBuffers(tagDest, false);
 	}
@@ -513,27 +646,28 @@ public:
 		while (messages != 0) {
 			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 			messages = flushAllMessageBuffers(tagDest);
+			messages += checkSentBuffers(true);
 		}
 
 	}
 	void finalize(int tagDest) {
-		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest << ": entering finalize()");
+		LOG_DEBUG_OPTIONAL(1, true, "Send " << tagDest << ": entering finalize()");
 
 		// first clear the buffer and in-flight messages
 		flushAllMessagesUntilEmpty(tagDest);
 
-		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest << ": entering finalize stage2()");
+		LOG_DEBUG_OPTIONAL(1, true,"Send " << tagDest << ": entering finalize stage2()");
 		// send zero-message as checkpoint signal to stop
 		flushAllMessageBuffers(tagDest, true);
 		boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 
-		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest << ": entering finalize stage3()");
+		LOG_DEBUG_OPTIONAL(1, true,"Send " << tagDest << ": entering finalize stage3()");
 		// now continue to flush until there is nothing left in the buffer;
 		flushAllMessagesUntilEmpty(tagDest);
 
-		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest << ": finished finalize()");
+		LOG_DEBUG_OPTIONAL(1, true,"Send " << tagDest << ": finished finalize()");
 
-		LOG_DEBUG(3, "Send " << tagDest << ": finished finalize()");
+		LOG_DEBUG(4, "Send " << tagDest << ": finished finalize()");
 	}
 };
 
