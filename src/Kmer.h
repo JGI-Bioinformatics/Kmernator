@@ -995,28 +995,83 @@ public:
 		unsetExclusiveLock();
 	}
 
+	static SequenceLengthType _numPermutations(SequenceLengthType len, short editDistance) {
+		SequenceLengthType s = 1;
+		if ((SequenceLengthType) editDistance > len)
+			editDistance = len;
+		for(short e = 0; e < editDistance && (SequenceLengthType) e != len ; e++) {
+			s *= 3*(len-e);
+		}
+		for (short e = editDistance ; e > 1 ; e--) {
+			s /= e;
+		}
+		return s;
+	}
+	static void permuteBases(const Kmer &kmer, KmerArray &kmers, short editDistance, bool leastComplement = false) {
+		if ((SequenceLengthType) editDistance > KmerSizer::getSequenceLength())
+			editDistance = KmerSizer::getSequenceLength();
+
+		SequenceLengthType size = 0;
+		for(short e = 1 ; e <= editDistance; e++)
+			size += _numPermutations(KmerSizer::getSequenceLength(), e);
+		kmers.reset(false);
+		kmers.resize(size);
+		SequenceLengthType offset = 0;
+
+		offset = __permuteBases(kmer, kmers, offset, 0, editDistance, leastComplement);
+		if (offset != kmers.size()) {
+			LOG_WARN(1, "Mismatching permute bases size: " << offset << " vs " << kmers.size());
+			LOG_WARN(1, "permuteBases(" << kmer.toFasta() << ", " << editDistance << ", " << leastComplement << ")");
+			//for(SequenceLengthType i = 0; i < offset; i++)
+			//	LOG_WARN(1, kmers[i].toFasta());
+			kmers.resize(offset);
+		}
+	}
+	static SequenceLengthType __permuteBases(const Kmer &kmer, KmerArray &kmers, SequenceLengthType offset, SequenceLengthType startIdx, short editDistance, bool leastComplement = false) {
+		if (editDistance == 0) {
+			return offset;
+		} else {
+			for(SequenceLengthType baseIdx = startIdx; baseIdx < KmerSizer::getSequenceLength(); baseIdx++) {
+				Kmer &v1 = kmers[offset++];
+				Kmer &v2 = kmers[offset++];
+				Kmer &v3 = kmers[offset++];
+				TwoBitSequence::permuteBase(kmer.getTwoBitSequence(), v1.getTwoBitSequence(), v2.getTwoBitSequence(), v3.getTwoBitSequence(),
+						KmerSizer::getSequenceLength(), baseIdx);
+				if (editDistance > 1) {
+					offset = __permuteBases(v1, kmers, offset, baseIdx+1, editDistance-1, leastComplement);
+					offset = __permuteBases(v2, kmers, offset, baseIdx+1, editDistance-1, leastComplement);
+					offset = __permuteBases(v3, kmers, offset, baseIdx+1, editDistance-1, leastComplement);
+				}
+			}
+		}
+		return offset;
+	}
 	// return a KmerArray that has one entry for each possible single-base substitution
 	static KmerArray permuteBases(const Kmer &kmer, bool leastComplement = false) {
 		KmerArray kmers(KmerSizer::getSequenceLength() * 3);
+		_permuteBases(kmer, kmers, leastComplement);
+		return kmers;
+	}
+	static KmerArray permuteBases(const Kmer &kmer, const ValueType defaultValue, bool leastComplement = false) {
+		KmerArray kmers(KmerSizer::getSequenceLength() * 3);
+		_permuteBases(kmer, kmers, leastComplement);
+		for(SequenceLengthType idx = 0; idx < kmers.size(); idx++)
+			kmers.valueAt(idx) = defaultValue;
+		return kmers;
+	}
+	static void _permuteBases(const Kmer &kmer, KmerArray &kmers, bool leastComplement, SequenceLengthType offset = 0) {
 		TEMP_KMER(tmp);
 		for (SequenceLengthType baseIdx = 0; baseIdx < KmerSizer::getSequenceLength(); baseIdx++) {
-			TwoBitSequence::permuteBase(kmer.getTwoBitSequence(), kmers[baseIdx*3].getTwoBitSequence(), kmers[baseIdx*3+1].getTwoBitSequence(), kmers[baseIdx*3+2].getTwoBitSequence(),
+			TwoBitSequence::permuteBase(kmer.getTwoBitSequence(), kmers[offset+baseIdx*3].getTwoBitSequence(), kmers[offset+baseIdx*3+1].getTwoBitSequence(), kmers[offset+baseIdx*3+2].getTwoBitSequence(),
 					KmerSizer::getSequenceLength(), baseIdx);
 			if (leastComplement) {
 				for(int i = 0 ; i < 3; i++) {
-				   if (! kmers[baseIdx*3+i].buildLeastComplement(tmp) ) {
-				      kmers[baseIdx*3+i] = tmp;
+				   if (! kmers[offset+baseIdx*3+i].buildLeastComplement(tmp) ) {
+				      kmers[offset+baseIdx*3+i] = tmp;
 				   }
 				}
 			}
 		}
-		return kmers;
-	}
-	static KmerArray permuteBases(const Kmer &kmer, const ValueType defaultValue, bool leastComplement = false) {
-		KmerArray kmers = permuteBases(kmer, leastComplement);
-		for(SequenceLengthType idx = 0; idx < kmers.size(); idx++)
-			kmers.valueAt(idx) = defaultValue;
-		return kmers;
 	}
 
 		protected:
