@@ -471,6 +471,42 @@ void testKmerArray(SequenceLengthType size) {
 			}
 		}
 	}
+
+	//permuteBases(const Kmer &kmer, KmerArray &kmers, short editDistance, bool leastComplement = false)
+
+	for (Kmer::IndexType i = 0; i < kmersFloat.size() && i < 5; i++) {
+		KmerArray<float> permutations;
+		KmerArray<float>::permuteBases(	kmersFloat[i], permutations, 2);
+
+		//BOOST_MESSAGE( "start" );
+		//BOOST_MESSAGE( kmersFloat[i].toFasta() );
+		for (Kmer::IndexType j = 0; j < permutations.size(); j++) {
+			BOOST_CHECK_NE(kmersFloat[i].toFasta(), permutations[j].toFasta());
+			//BOOST_MESSAGE( permutations[j].toFasta() );
+			for (Kmer::IndexType k = 0; k < j; k++) {
+				BOOST_CHECK_NE(permutations[j].toFasta(),
+						permutations[k].toFasta());
+			}
+		}
+	}
+	for (Kmer::IndexType i = 0; i < kmersFloat.size() && i < 5; i++) {
+		KmerArray<float> permutations;
+		KmerArray<float>::permuteBases(	kmersFloat[i], permutations, 3);
+
+		//BOOST_MESSAGE( "start" );
+		//BOOST_MESSAGE( kmersFloat[i].toFasta() );
+		for (Kmer::IndexType j = 0; j < permutations.size(); j++) {
+			BOOST_CHECK_NE(kmersFloat[i].toFasta(), permutations[j].toFasta());
+			//BOOST_MESSAGE( permutations[j].toFasta() );
+			for (Kmer::IndexType k = 0; k < j; k++) {
+				BOOST_CHECK_NE(permutations[j].toFasta(),
+						permutations[k].toFasta());
+			}
+		}
+	}
+
+
+
 }
 
 class Tester {
