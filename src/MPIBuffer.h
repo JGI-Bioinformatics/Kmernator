@@ -49,6 +49,7 @@
 #include <vector>
 
 #define MPI_BUFFER_DEFAULT_SIZE (256 * 1024)
+#define WAIT_MS 10
 
 class _MPIMessageBufferBase
 {
@@ -86,12 +87,14 @@ public:
 		long count = 0;
 		for(unsigned int i = 0; i < _receiveAllCallbacks.size(); i++)
 			count += _receiveAllCallbacks[i].first->receiveAllIncomingMessages();
+		LOG_DEBUG(4, "receiveAll() with " << count);
 		return count;
 	}
 	long flushAll() {
 		long count = 0;
 		for(unsigned int i = 0; i < _flushAllCallbacks.size(); i++)
 			count += _flushAllCallbacks[i].first->flushAllMessageBuffers(_flushAllCallbacks[i].second);
+		LOG_DEBUG(4, "flushAll() with count " << count);
 		return count;
 	}
 	inline long getNumDeliveries() {
@@ -276,10 +279,10 @@ public:
 				mpi::status status = optionalStatus.get();
 				queueMessage(status, rankSource);
 				optionalRequest = irecv(rankSource);
-				processQueue();
 				returnValue = true;
 			}
 		}
+		processQueue();
 		return returnValue;
 	}
 	long receiveAllIncomingMessages() {
@@ -311,18 +314,19 @@ private:
 			messages += this->flushAll();
 			if (reachedCheckpoint(checkpointFactor) && messages != 0) {
 				LOG_DEBUG_OPTIONAL(1, true, "Recv " << _tag << ": Achieved checkpoint but more messages are pending");
-				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+				boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
 			}
 		} while (!reachedCheckpoint(checkpointFactor));
 		return messages;
 	}
 public:
 	void finalize(int checkpointFactor = 1) {
-		LOG_DEBUG_OPTIONAL(1, true, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints());
+		LOG_DEBUG_OPTIONAL(1, true, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints() << " out of " << (checkpointFactor*this->getWorld().size()));
 
 		long globalMessages = 1;
 		while(globalMessages != 0) {
 			long messages = _finalize(checkpointFactor);
+			LOG_DEBUG_OPTIONAL(1, true, "waiting for globalMessage to be 0: " << messages);
 			all_reduce(this->getWorld(), messages, globalMessages, mpi::maximum<long>());
 		}
 
@@ -553,7 +557,7 @@ public:
 		while (sendZeroMessage && (offsetLocation > 0 || newMessages != 0) ) {
 			// flush all messages until there is nothing in the buffer
 			newMessages = 0;
-			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+			boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
 			newMessages = flushMessageBuffer(rankDest, tagDest, false);
 			newMessages += checkSentBuffers( waitForSend );
 			messages += newMessages;
@@ -625,7 +629,7 @@ public:
 			_sentBuffers.remove_if(SentBuffer());
 
 			if (wait) {
-				boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+				boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
 				wait = !_sentBuffers.empty();
 			}
 		}
@@ -644,7 +648,7 @@ public:
 	void flushAllMessagesUntilEmpty(int tagDest) {
 		long messages = flushAllMessageBuffers(tagDest);
 		while (messages != 0) {
-			boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
+			boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
 			messages = flushAllMessageBuffers(tagDest);
 			messages += checkSentBuffers(true);
 		}
@@ -656,18 +660,20 @@ public:
 		// first clear the buffer and in-flight messages
 		flushAllMessagesUntilEmpty(tagDest);
 
-		LOG_DEBUG_OPTIONAL(1, true,"Send " << tagDest << ": entering finalize stage2()");
+		LOG_DEBUG_OPTIONAL(3, true,"Send " << tagDest << ": entering finalize stage2()");
 		// send zero-message as checkpoint signal to stop
 		flushAllMessageBuffers(tagDest, true);
 		boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 
-		LOG_DEBUG_OPTIONAL(1, true,"Send " << tagDest << ": entering finalize stage3()");
+		LOG_DEBUG_OPTIONAL(3, true,"Send " << tagDest << ": entering finalize stage3()");
 		// now continue to flush until there is nothing left in the buffer;
 		flushAllMessagesUntilEmpty(tagDest);
 
 		LOG_DEBUG_OPTIONAL(1, true,"Send " << tagDest << ": finished finalize()");
 
-		LOG_DEBUG(4, "Send " << tagDest << ": finished finalize()");
+	}
+	long processPending() {
+		return checkSentBuffers(false);
 	}
 };
 
