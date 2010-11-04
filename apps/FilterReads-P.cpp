@@ -182,10 +182,11 @@ int main(int argc, char *argv[]) {
 				OfstreamMap::getAppend() = true;
 
 			// let only one rank at a time write to the files
+			LOG_VERBOSE(1, "Writing Files");
 			int rank = 0;
 			while (rank < world.size()) {
 				if (rank == world.rank()) {
-					LOG_VERBOSE(1, "Writing files part " << (rank+1) << " of " << world.size());
+					LOG_VERBOSE_OPTIONAL(1, true, "Writing files part " << (rank+1) << " of " << world.size());
 					selectReads(thisDepth, reads, spectrum, selector, pickOutputFilename);
 				}
 				world.barrier();

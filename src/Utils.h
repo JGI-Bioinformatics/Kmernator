@@ -122,7 +122,7 @@ public:
 	}
 	void clear() {
 		for(Iterator it = _map.begin() ; it != _map.end(); it++) {
-			LOG_VERBOSE(1, "Closing " << it->first);
+			LOG_VERBOSE_OPTIONAL(1, true, "Closing " << it->first);
 			it->second->close();
 		}
 		_map.clear();
@@ -137,7 +137,7 @@ public:
 			{
 				it = _map.find(filename);
 				if (it == _map.end()) {
-					LOG_VERBOSE(1, "Writing to " << filename);
+					LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << filename);
 					std::ios_base::openmode mode = std::ios_base::out;
 					if (getAppend())
 						mode |= std::ios_base::app;
