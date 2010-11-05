@@ -102,7 +102,7 @@ public:
 			mpi::communicator &w = *((mpi::communicator*) world);
 			std::string out[w.size()];
 			if (!msg.empty())
-				msg = getStamp() + msg + "\n";
+				msg = getStamp("M-") + msg + "\n";
 			try {
 				mpi::gather(w, msg, out, 0);
 			} catch (...) {
@@ -169,8 +169,8 @@ public:
 	inline void unsetOstream() {
 		_os = NULL;
 	}
-	inline std::string getStamp() {
-		return getTime() + " " + _attribute + getThisLevel() + getRank() + getThread() + ": ";
+	inline std::string getStamp(std::string attribLabel = "") {
+		return getTime() + " " + _attribute + attribLabel + getThisLevel() + getRank() + getThread() + ": ";
 	}
 	template<typename T>
 	inline std::ostream &operator<<(T log) {
