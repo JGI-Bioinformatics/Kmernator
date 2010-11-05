@@ -1443,7 +1443,10 @@ public:
 	}
 	virtual void _preVariants(double variantSigmas, double minDepth) {}
 	virtual long _postVariants() { return 0; }
-	virtual void _variantSync() {}
+	virtual long _variantSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
+		LOG_DEBUG_OPTIONAL(1, true, "Purged " << purgedKmers << " variants below: " << maxDepth << " / " <<  threshold);
+		return remaining;
+	}
 
 	double getVariantThreshold(double count, double variantSigmas) {
 		return count - sqrt(count)*variantSigmas;
@@ -1468,25 +1471,28 @@ public:
 		// sweep through bottom up
 		double maxDepth = minDepth;
 		long remaining = 1;
+		long processed = 0;
 		while (remaining > 0) {
 			// increment maxDepth by a step
 			// quadratic equation solving maxDepth = newMaxDepth - variantSigmas * sqrt(newMaxDepth)
 			// 0 == newMaxDepth*newMaxDepth + (variantSigmas*variantSigmas - 2*maxDepth) + maxDepth*maxDepth
 			// a=1 b=(-variantsigmas**2 - 2*maxDepth) c=maxDepth**2
+			double lastDepth = maxDepth;
+			if (maxDepth > 100)
+				maxDepth *= 1.2; // give a small exponential boost
 			double a=1.0;
 			double b= 0.0 - variantSigmas*variantSigmas - 2.0 * maxDepth;
 			double c=maxDepth*maxDepth;
-			double lastDepth = maxDepth;
 			maxDepth = (-b + sqrt(b*b - 4*a*c)) / (2.0*a);
 			remaining = 0;
-			#pragma omp parallel reduction(+: purgedKmers)
+			processed = 0;
+			#pragma omp parallel reduction(+: purgedKmers) reduction(+: processed) reduction(+: remaining)
 			for(WeakIterator it = weak.beginThreaded(); it != weak.endThreaded(); it++) {
 				int threadId = omp_get_thread_num();
 				double count = it->value().getWeightedCount();
 				if (count <= lastDepth)
 					continue;
 				if (count > maxDepth) {
-					#pragma omp atomic
 					remaining++;
 					continue;
 				}
@@ -1495,9 +1501,11 @@ public:
 					LOG_DEBUG(3, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
 					purgedKmers += this->_purgeVariants(pointers[threadId], it->key(), variants[threadId], threshold, editDistance);
 				}
+				if (++processed % 10000 == 0)
+					LOG_DEBUG_OPTIONAL(1, threadId == 0, "thread0 progress processed " << processed);
 			}
-			LOG_DEBUG_OPTIONAL(1, true, "Purged variants below: " << maxDepth << " / " <<  getVariantThreshold(maxDepth, variantSigmas));
-			this->_variantSync();
+			LOG_DEBUG_OPTIONAL(1, true, "Processed " << processed);
+			remaining = this->_variantSync(remaining, purgedKmers, maxDepth, getVariantThreshold(maxDepth, variantSigmas));
 		}
 
 		purgedKmers += this->_postVariants();

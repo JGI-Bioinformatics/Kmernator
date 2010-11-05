@@ -338,12 +338,14 @@ public:
 			for(int destThread = 0; destThread < numThreads; destThread++) {
 				sendBuffers[threadId][destThread]->flushAllMessageBuffers(destThread);
 			}
-			LOG_DEBUG(2, "sending final messages")
+			recvBuffers[threadId]->receiveAllIncomingMessages();
 
+
+			LOG_DEBUG(2, "sending final messages")
 			stringstream ss;
 			for(int destThread = 0; destThread < numThreads; destThread++) {
 				sendBuffers[threadId][destThread]->finalize(destThread);
-				if (Log::isDebug(1))
+				if (Log::isDebug(2))
 					ss << "sendBuffers["<<threadId<<"]["<<destThread<<"] sent " << sendBuffers[threadId][destThread]->getNumDeliveries() << "/" << sendBuffers[threadId][destThread]->getNumMessages() << std::endl;
 				delete sendBuffers[threadId][destThread];
 			}
@@ -353,8 +355,10 @@ public:
 
 			std::string s = ss.str();
 
-			#pragma omp critical
-			LOG_DEBUG(1, std::endl << s << "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries() << "/" << recvBuffers[threadId]->getNumMessages());
+			if (Log::isDebug(2)) {
+				#pragma omp critical
+				LOG_DEBUG(2, std::endl << s << "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries() << "/" << recvBuffers[threadId]->getNumMessages());
+			}
 			delete recvBuffers[threadId];
 
 		} // omp parallel
@@ -568,12 +572,12 @@ private:
 	}
 
 	long _postVariants() {
-		this->_variantSync();
+		this->_variantSync(0, _purgedVariants, 0, 0);
 		#pragma omp parallel
 		{
 			int threadId = omp_get_thread_num();
 			int &numThreads = _variantNumThreads;
-			for (int t = 0 ; t < numThreads; t++) {
+			for(int t = 0 ; t<numThreads; t++) {
 				delete sendPurgeVariant[threadId*numThreads+t];
 			}
 			delete recvPurgeVariant[threadId];
@@ -582,23 +586,33 @@ private:
 		recvPurgeVariant.clear();
 		return _purgedVariants;
 	}
-	void _variantSync() {
+	long _variantSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
+		LOG_DEBUG_OPTIONAL(1, true, "Entering _variantSync: " << maxDepth);
 		#pragma omp parallel
 		{
 			int threadId = omp_get_thread_num();
 			int &numThreads = _variantNumThreads;
 			for (int t = 0 ; t < numThreads; t++) {
 				sendPurgeVariant[threadId*numThreads+t]->flushAllMessageBuffers(t);
-				sendPurgeVariant[threadId*numThreads+t]->checkSentBuffers(true);
+				LOG_DEBUG_OPTIONAL(1, true, "Flushed: " << t);
 			}
-			#pragma omp barrier
+			recvPurgeVariant[threadId]->receiveAllIncomingMessages();
+			LOG_DEBUG_OPTIONAL(1, true, "Received all incoming");
 			for (int t = 0 ; t < numThreads; t++) {
 				sendPurgeVariant[threadId*numThreads+t]->finalize(t);
 			}
 			recvPurgeVariant[threadId]->finalize(numThreads);
 		}
 
+		long allRemaining;
+		mpi::all_reduce(world, remaining, allRemaining, std::plus<long>());
+		if (threshold > 0.0) {
+			long allPurged;
+			mpi::reduce(world, purgedKmers+_purgedVariants, allPurged, std::plus<long>(), 0);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Purged " << allPurged << " variants below: " << maxDepth << " / " <<  threshold << ".  Remaining: " << allRemaining);
+		}
 		world.barrier();
+		return allRemaining;
 	}
 	// recursively purge kmers within editdistance
 	long _purgeVariants(DataPointers &pointers, const Kmer &kmer, WeakBucketType &variants, double threshold, short editDistance) {

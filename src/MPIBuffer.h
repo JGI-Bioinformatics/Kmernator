@@ -313,9 +313,10 @@ private:
 			messages += this->receiveAllIncomingMessages();
 			messages += this->flushAll();
 			if (reachedCheckpoint(checkpointFactor) && messages != 0) {
-				LOG_DEBUG_OPTIONAL(1, true, "Recv " << _tag << ": Achieved checkpoint but more messages are pending");
-				boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
+				LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag << ": Achieved checkpoint but more messages are pending");
 			}
+			if (messages == 0)
+				boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
 		} while (!reachedCheckpoint(checkpointFactor));
 		return messages;
 	}
@@ -326,11 +327,11 @@ public:
 		long globalMessages = 1;
 		while(globalMessages != 0) {
 			long messages = _finalize(checkpointFactor);
-			LOG_DEBUG_OPTIONAL(1, true, "waiting for globalMessage to be 0: " << messages);
+			LOG_DEBUG_OPTIONAL(2, true, "waiting for globalMessage to be 0: " << messages);
 			all_reduce(this->getWorld(), messages, globalMessages, mpi::maximum<long>());
 		}
 
-		LOG_DEBUG_OPTIONAL(1, true, "Recv " << _tag << ": Finished finalize checkpoint: " << getNumCheckpoints());
+		LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag << ": Finished finalize checkpoint: " << getNumCheckpoints());
 		_numCheckpoints = 0;
 	}
 
@@ -659,6 +660,7 @@ public:
 
 		// first clear the buffer and in-flight messages
 		flushAllMessagesUntilEmpty(tagDest);
+		receiveAllIncomingMessages();
 
 		LOG_DEBUG_OPTIONAL(3, true,"Send " << tagDest << ": entering finalize stage2()");
 		// send zero-message as checkpoint signal to stop
@@ -669,7 +671,7 @@ public:
 		// now continue to flush until there is nothing left in the buffer;
 		flushAllMessagesUntilEmpty(tagDest);
 
-		LOG_DEBUG_OPTIONAL(1, true,"Send " << tagDest << ": finished finalize()");
+		LOG_DEBUG_OPTIONAL(2, true,"Send " << tagDest << ": finished finalize()");
 
 	}
 	long processPending() {
