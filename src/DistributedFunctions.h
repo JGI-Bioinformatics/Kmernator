@@ -480,8 +480,8 @@ public:
 		double _variantSigmas, _minDepth;
 
 	public:
-		RecvPurgeVariantKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize, double variantSigmas, double minDepth)
-			: RecvPurgeVariantKmerMessageBufferBase(world, messageSize, 0), _spectrum(spectrum), _pointers(spectrum), _variantSigmas(variantSigmas), _minDepth(minDepth) {
+		RecvPurgeVariantKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize, int srcTag, double variantSigmas, double minDepth)
+			: RecvPurgeVariantKmerMessageBufferBase(world, messageSize, srcTag), _spectrum(spectrum), _pointers(spectrum), _variantSigmas(variantSigmas), _minDepth(minDepth) {
 		}
 		inline DataPointers &getDataPointer() {
 			return _pointers;
@@ -526,78 +526,101 @@ public:
 		void process(RecvPurgeVariantKmerMessageBufferBase *bufferCallback) {
 			RecvPurgeVariantKmerMessageBuffer *kbufferCallback = (RecvPurgeVariantKmerMessageBuffer*) bufferCallback;
 			LOG_DEBUG(4, "PurgeVariantKmerMessage: " << threshold << " " << getKmer()->toFasta());
-			double newThreshold;
-			bool wasPurged = kbufferCallback->getSpectrum()._setPurgeVariant(kbufferCallback->getDataPointer(), *getKmer(), threshold, kbufferCallback->getVariantSigmas(), newThreshold);
-			if (wasPurged)
-				kbufferCallback->getSpectrum().variantWasPurged();
-			if (wasPurged && newThreshold > kbufferCallback->getMinDepth())
-				kbufferCallback->getSpectrum()._purgeVariants(kbufferCallback->getDataPointer(), *getKmer(), newThreshold, kbufferCallback->getVariantSigmas(), kbufferCallback->getMinDepth());
+			DistributedKmerSpectrum &spectrum = kbufferCallback->getSpectrum();
+			DataPointers &pointers = kbufferCallback->getDataPointer();
+			double dummy;
+			bool purged = spectrum._setPurgeVariant(pointers, *getKmer(), threshold, dummy);
+
+			if (purged)
+				spectrum.variantWasPurged();
 		}
 	};
-	void variantWasPurged() {
+	void variantWasPurged(long count = 1) {
 		#pragma omp atomic
-		_purgedVariants++;
+		_purgedVariants += count;
 	}
 private:
-	SendPurgeVariantKmerMessageBuffer *sendPurgeVariant;
-	RecvPurgeVariantKmerMessageBuffer *recvPurgeVariant;
+	std::vector<SendPurgeVariantKmerMessageBuffer*> sendPurgeVariant;
+	std::vector<RecvPurgeVariantKmerMessageBuffer*> recvPurgeVariant;
 	long _purgedVariants;
 	double variantSigmas;
 	double minDepth;
+	int _variantNumThreads;
 
 	void _preVariants(double variantSigmas, double minDepth) {
 		_purgedVariants = 0;
 		long messageSize = sizeof(PurgeVariantKmerMessageHeader) + KmerSizer::getByteSize();
-		sendPurgeVariant = new SendPurgeVariantKmerMessageBuffer(world, *this, messageSize);
-		recvPurgeVariant = new RecvPurgeVariantKmerMessageBuffer(world, *this, messageSize, variantSigmas, minDepth);
 
-		sendPurgeVariant->addReceiveAllCallback( recvPurgeVariant );
+		int numThreads = _variantNumThreads = omp_get_max_threads();
+		sendPurgeVariant.resize(numThreads*numThreads, NULL);
+		recvPurgeVariant.resize(numThreads, NULL);
+		#pragma omp parallel
+		{
+			int threadId = omp_get_thread_num();
+			recvPurgeVariant[threadId] = new RecvPurgeVariantKmerMessageBuffer(world, *this, messageSize, threadId, variantSigmas, minDepth);
+			for (int t = 0 ; t < numThreads; t++) {
+				sendPurgeVariant[threadId*numThreads+t] = new SendPurgeVariantKmerMessageBuffer(world, *this, messageSize);
+				sendPurgeVariant[threadId*numThreads+t]->addReceiveAllCallback( recvPurgeVariant[threadId] );
+				recvPurgeVariant[threadId]->addFlushAllCallback( sendPurgeVariant[threadId*numThreads+t], threadId);
+			}
+		}
 		world.barrier();
 	}
 
 	long _postVariants() {
-
-		sendPurgeVariant->finalize(0);
-		recvPurgeVariant->finalize(1);
-
-		delete sendPurgeVariant;
-		delete recvPurgeVariant;
+		this->_variantSync();
+		#pragma omp parallel
+		{
+			int threadId = omp_get_thread_num();
+			int &numThreads = _variantNumThreads;
+			for (int t = 0 ; t < numThreads; t++) {
+				delete sendPurgeVariant[threadId*numThreads+t];
+			}
+			delete recvPurgeVariant[threadId];
+		}
+		sendPurgeVariant.clear();
+		recvPurgeVariant.clear();
 		return _purgedVariants;
 	}
+	void _variantSync() {
+		#pragma omp parallel
+		{
+			int threadId = omp_get_thread_num();
+			int &numThreads = _variantNumThreads;
+			for (int t = 0 ; t < numThreads; t++) {
+				sendPurgeVariant[threadId*numThreads+t]->flushAllMessageBuffers(t);
+				sendPurgeVariant[threadId*numThreads+t]->checkSentBuffers(true);
+			}
+			#pragma omp barrier
+			for (int t = 0 ; t < numThreads; t++) {
+				sendPurgeVariant[threadId*numThreads+t]->finalize(t);
+			}
+			recvPurgeVariant[threadId]->finalize(numThreads);
+		}
 
-	// recursively purge kmers of edit distance 1
-	long _purgeVariants(DataPointers &pointers, const Kmer &kmer, double threshold, double variantSigmas, double minDepth) {
+		world.barrier();
+	}
+	// recursively purge kmers within editdistance
+	long _purgeVariants(DataPointers &pointers, const Kmer &kmer, WeakBucketType &variants, double threshold, short editDistance) {
 		int rank = world.rank();
+		int threadId = omp_get_thread_num();
+		int &numThreads = _variantNumThreads;
+		if (editDistance == 0)
+			return 0;
 
-		WeakBucketType variants = WeakBucketType::permuteBases(kmer, true);
-		std::vector<double> wasPurged;
-		wasPurged.resize(variants.size(), 0.0);
+		WeakBucketType::permuteBases(kmer, variants, editDistance, true);
 
 		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
 			int rankDest, threadDest;
-			Kmer &kmer = variants[i];
-			this->solid.getThreadIds(kmer, threadDest, 1, rankDest, distributedThreadMask);
+			Kmer &varKmer = variants[i];
+			this->solid.getThreadIds(varKmer, threadDest, 1, rankDest, distributedThreadMask);
 
-			if (rankDest == rank) {
-				double newThreshold;
-				if (_setPurgeVariant(pointers, kmer, threshold, variantSigmas, newThreshold)) {
+			if (rankDest == rank && threadDest == threadId) {
+				double dummy;
+				if (this->_setPurgeVariant(pointers, varKmer, threshold, dummy))
 					variantWasPurged();
-
-					if (newThreshold > minDepth) {
-						wasPurged[i] = newThreshold;
-					}
-				}
-
 			} else {
-				sendPurgeVariant->bufferMessage(rankDest, 0)->set(threshold, kmer);
-			}
-		}
-
-		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
-			if (wasPurged[i] > minDepth) {
-				Kmer &kmer = variants[i];
-				double &newThreshold = wasPurged[i];
-				_purgedVariants += this->_purgeVariants(pointers, kmer, newThreshold, variantSigmas, minDepth);
+				sendPurgeVariant[threadId*numThreads+threadDest]->bufferMessage(rankDest, threadDest)->set(threshold, varKmer);
 			}
 		}
 		return 0;
@@ -741,7 +764,7 @@ done when empty cycle is received
 			LOG_DEBUG(4, "RequestKmerMessage: " << requestId << " " << getKmer()->toFasta());
 
 			ScoreType score = kbufferCallback->_readSelector.getValue( *getKmer() );
-			kbufferCallback->_sendResponse.bufferMessage(kbufferCallback->getSource(), kbufferCallback->getTag() + kbufferCallback->_numThreads)->set( requestId, score );
+			kbufferCallback->_sendResponse.bufferMessage(kbufferCallback->getRecvSource(), kbufferCallback->getRecvTag() + kbufferCallback->_numThreads)->set( requestId, score );
 		}
 	};
 
@@ -829,8 +852,7 @@ done when empty cycle is received
 			readIndexBuffer[threadId].resize(0);
 			readOffsetBuffer[threadId].resize(0);
 
-			if (_world.rank() == 0 && threadId == 0)
-				LOG_VERBOSE(1, "trimming batch: " << batchReadIdx * _world.size());
+			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0 && threadId == 0, "trimming batch: " << batchReadIdx * _world.size());
 
 			LOG_DEBUG(3, "Starting batch for kmer lookups: " << batchReadIdx);
 

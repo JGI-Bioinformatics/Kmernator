@@ -1403,46 +1403,57 @@ public:
 		}
 	}
 
-	bool _setPurgeVariant(DataPointers &pointers, const Kmer &kmer, double threshold, double variantSigmas, double &newThreshold) {
-		newThreshold = 0.0;
+	bool _setPurgeVariant(DataPointers &pointers, const Kmer &kmer, double threshold, double &v) {
 		bool returnValue = false;
 		pointers.set( kmer );
 		WeakElementType &w = pointers.weakElem;
 		if (w.isValid()) {
-			double v = w.value().getWeightedCount();
+			v = w.value().getWeightedCount();
 			if (v > 0.0 && v < threshold) {
 				w.value().reset();
 				LOG_DEBUG(4, "Purged Variant " << kmer.toFasta() << " " << v);
-				newThreshold = v - sqrt(v)*variantSigmas;
 				returnValue = true;
+			} else if (v < threshold) {
+				// already been visited
+				v = -1.0;
 			}
+		} else {
+			v = 0.0;
 		}
 		return returnValue;
 	}
-	// recursively purge kmers of edit distance 1
-	virtual long _purgeVariants(DataPointers &pointers, const Kmer &kmer, double threshold, double variantSigmas, double minDepth) {
-		WeakBucketType variants = WeakBucketType::permuteBases(kmer, true);
+
+	// recursively purge kmers within edit distance and below threshold
+	virtual long _purgeVariants(DataPointers &pointers, const Kmer &kmer, WeakBucketType &variants, double threshold, short editDistance) {
 		long purgedKmers = 0;
+
+		if (editDistance == 0)
+			return purgedKmers;
+
+		WeakBucketType::permuteBases(kmer, variants, editDistance, true);
+
 		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
-			Kmer &kmer = variants[i];
-			double newThreshold;
-			if (_setPurgeVariant(pointers, kmer, threshold, variantSigmas, newThreshold))
+			Kmer &varKmer = variants[i];
+			double dummy;
+			if (this->_setPurgeVariant(pointers, varKmer, threshold, dummy))
 				purgedKmers++;
-			if (newThreshold > minDepth) {
-				purgedKmers += this->_purgeVariants(pointers, kmer, newThreshold, variantSigmas, minDepth);
-			}
+			//purgedKmers += this->__purgeVariants(pointers, varKmer, threshold, variantSigmas, minDepth);
 		}
 		return purgedKmers;
 	}
 	virtual void _preVariants(double variantSigmas, double minDepth) {}
 	virtual long _postVariants() { return 0; }
+	virtual void _variantSync() {}
 
+	double getVariantThreshold(double count, double variantSigmas) {
+		return count - sqrt(count)*variantSigmas;
+	}
 
-	long purgeVariants(double variantSigmas = Options::getVariantSigmas()) {
+	long purgeVariants(double variantSigmas = Options::getVariantSigmas(), short editDistance = 2) {
 		if (variantSigmas < 0.0)
 			return 0;
 		long purgedKmers = 0;
-		LOG_VERBOSE(1, "Purging kmer variants that are >= " << variantSigmas << " sigmas below a more abundant version");
+		LOG_VERBOSE(1, "Purging kmer variants within " << editDistance << " edit distance which are >= " << variantSigmas << " sigmas less abundant than a more abundant version");
 
 		if (hasSolids) {
 			throw; // TODO unsupported
@@ -1450,16 +1461,43 @@ public:
 		double minDepth = Options::getMinDepth();
 		this->_preVariants(variantSigmas, minDepth);
 
-		DataPointers pointers(*this);
-		for(WeakIterator it = weak.begin(); it != weak.end(); it++) {
-			double count = it->value().getWeightedCount();
-			if (count <= minDepth)
-				continue;
-			double threshold = count - sqrt(count)*variantSigmas;
-			if (threshold > minDepth) {
-				LOG_DEBUG(3, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
-				purgedKmers += this->_purgeVariants(pointers, it->key(), threshold, variantSigmas, minDepth);
+		int numThreads = omp_get_max_threads();
+		std::vector<DataPointers> pointers(numThreads, DataPointers(*this));
+		std::vector<WeakBucketType> variants(numThreads);
+
+		// sweep through bottom up
+		double maxDepth = minDepth;
+		long remaining = 1;
+		while (remaining > 0) {
+			// increment maxDepth by a step
+			// quadratic equation solving maxDepth = newMaxDepth - variantSigmas * sqrt(newMaxDepth)
+			// 0 == newMaxDepth*newMaxDepth + (variantSigmas*variantSigmas - 2*maxDepth) + maxDepth*maxDepth
+			// a=1 b=(-variantsigmas**2 - 2*maxDepth) c=maxDepth**2
+			double a=1.0;
+			double b= 0.0 - variantSigmas*variantSigmas - 2.0 * maxDepth;
+			double c=maxDepth*maxDepth;
+			double lastDepth = maxDepth;
+			maxDepth = (-b + sqrt(b*b - 4*a*c)) / (2.0*a);
+			remaining = 0;
+			#pragma omp parallel reduction(+: purgedKmers)
+			for(WeakIterator it = weak.beginThreaded(); it != weak.endThreaded(); it++) {
+				int threadId = omp_get_thread_num();
+				double count = it->value().getWeightedCount();
+				if (count <= lastDepth)
+					continue;
+				if (count > maxDepth) {
+					#pragma omp atomic
+					remaining++;
+					continue;
+				}
+				double threshold = getVariantThreshold(count, variantSigmas);
+				if (threshold > minDepth) {
+					LOG_DEBUG(3, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
+					purgedKmers += this->_purgeVariants(pointers[threadId], it->key(), variants[threadId], threshold, editDistance);
+				}
 			}
+			LOG_DEBUG_OPTIONAL(1, true, "Purged variants below: " << maxDepth << " / " <<  getVariantThreshold(maxDepth, variantSigmas));
+			this->_variantSync();
 		}
 
 		purgedKmers += this->_postVariants();
