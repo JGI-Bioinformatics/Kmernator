@@ -48,8 +48,8 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
 
-#define MPI_BUFFER_DEFAULT_SIZE (256 * 1024)
-#define WAIT_MS 10
+#define MPI_BUFFER_DEFAULT_SIZE (512 * 1024)
+#define WAIT_MS 3
 
 class _MPIMessageBufferBase
 {
@@ -118,6 +118,7 @@ template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
 class MPIMessageBufferBase : public _MPIMessageBufferBase {
 public:
 	static const int MESSAGE_BUFFER_SIZE = BufferSize;
+	static const int BUFFER_QUEUE_SOFT_LIMIT = 5;
 	typedef C MessageClass;
 	typedef _MPIMessageBufferBase::OptionalRequest OptionalRequest;
 	typedef _MPIMessageBufferBase::OptionalStatus  OptionalStatus;
@@ -135,6 +136,7 @@ public:
 	: _world(world), _messageSize(messageSize) {
 		_message = new char[ getMessageSize() ];
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
+		freeBuffers.reserve(BUFFER_QUEUE_SOFT_LIMIT * _world.size() + 1);
 	}
 	~MPIMessageBufferBase() {
 		delete [] _message;
@@ -165,7 +167,7 @@ public:
 		}	
 	}
 	void returnBuffer(Buffer buf) {
-		if (freeBuffers.size() >= (size_t) (_world.size() * 3) ) {
+		if (freeBuffers.size() >= (size_t) (BUFFER_QUEUE_SOFT_LIMIT * _world.size()) ) {
 			delete [] buf;
 		} else {
 			#pragma omp critical (mpi_buffer_base_free_buffers)
@@ -313,7 +315,7 @@ private:
 			messages += this->receiveAllIncomingMessages();
 			messages += this->flushAll();
 			if (reachedCheckpoint(checkpointFactor) && messages != 0) {
-				LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag << ": Achieved checkpoint but more messages are pending");
+				LOG_DEBUG_OPTIONAL(3, true, "Recv " << _tag << ": Achieved checkpoint but more messages are pending");
 			}
 			if (messages == 0)
 				boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
@@ -322,23 +324,23 @@ private:
 	}
 public:
 	void finalize(int checkpointFactor = 1) {
-		LOG_DEBUG_OPTIONAL(1, true, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints() << " out of " << (checkpointFactor*this->getWorld().size()));
+		LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints() << " out of " << (checkpointFactor*this->getWorld().size()));
 
 		long globalMessages = 1;
 		while(globalMessages != 0) {
 			long messages = _finalize(checkpointFactor);
-			LOG_DEBUG_OPTIONAL(2, true, "waiting for globalMessage to be 0: " << messages);
+			LOG_DEBUG_OPTIONAL(3, true, "waiting for globalMessage to be 0: " << messages);
 			all_reduce(this->getWorld(), messages, globalMessages, mpi::maximum<long>());
 		}
 
-		LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag << ": Finished finalize checkpoint: " << getNumCheckpoints());
+		LOG_DEBUG_OPTIONAL(3, true, "Recv " << _tag << ": Finished finalize checkpoint: " << getNumCheckpoints());
 		_numCheckpoints = 0;
 	}
 
 	void checkpoint() {
 		#pragma omp atomic
 		_numCheckpoints++;
-		LOG_DEBUG(3, _tag << ": checkpoint received:" << _numCheckpoints);
+		LOG_DEBUG_OPTIONAL(3, true, _tag << ": checkpoint received:" << _numCheckpoints);
 	}
 	inline int getNumCheckpoints() const {
 		return _numCheckpoints;
@@ -585,7 +587,16 @@ public:
 			recordSentBuffer(sent);
 
 		}
-		messages += checkSentBuffers( waitForSend );
+
+		// do not let the sent queue get too large
+		newMessages = 0;
+		while (newMessages == 0 && _sentBuffers.size() >= (size_t) BufferBase::BUFFER_QUEUE_SOFT_LIMIT * this->getWorld().size()) {
+			if (newMessages != 0)
+				boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
+			newMessages = checkSentBuffers( true );
+			messages += newMessages;
+		}
+
 		return messages;
 	}
 
@@ -656,7 +667,7 @@ public:
 
 	}
 	void finalize(int tagDest) {
-		LOG_DEBUG_OPTIONAL(1, true, "Send " << tagDest << ": entering finalize()");
+		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest << ": entering finalize()");
 
 		// first clear the buffer and in-flight messages
 		flushAllMessagesUntilEmpty(tagDest);
@@ -671,7 +682,7 @@ public:
 		// now continue to flush until there is nothing left in the buffer;
 		flushAllMessagesUntilEmpty(tagDest);
 
-		LOG_DEBUG_OPTIONAL(2, true,"Send " << tagDest << ": finished finalize()");
+		LOG_DEBUG_OPTIONAL(3, true,"Send " << tagDest << ": finished finalize()");
 
 	}
 	long processPending() {
