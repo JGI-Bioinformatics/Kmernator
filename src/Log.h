@@ -102,7 +102,7 @@ public:
 			mpi::communicator &w = *((mpi::communicator*) world);
 			std::string out[w.size()];
 			if (!msg.empty())
-				msg = getStamp("M-") + msg + "\n";
+				msg = getStamp("M") + msg + "\n";
 			try {
 				mpi::gather(w, msg, out, 0);
 			} catch (...) {
@@ -170,7 +170,7 @@ public:
 		_os = NULL;
 	}
 	inline std::string getStamp(std::string attribLabel = "") {
-		return getTime() + " " + _attribute + attribLabel + getThisLevel() + getRank() + getThread() + ": ";
+		return getTime() + " " + _attribute + getThisLevel() + attribLabel + getRank() + getThread() + ": ";
 	}
 	template<typename T>
 	inline std::ostream &operator<<(T log) {
