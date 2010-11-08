@@ -2024,7 +2024,7 @@ public:
 
 	typedef std::pair<BucketsVectorIterator, BucketsVectorIterator> ThreadedBuckets;
 	ThreadedBuckets _getThreadedBuckets() {
-		long threads = omp_get_max_threads();
+		long threads = omp_get_num_threads();
 
 		if (threads == 1) {
 			return ThreadedBuckets(_buckets.begin(), _buckets.end());
