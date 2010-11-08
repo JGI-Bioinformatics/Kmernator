@@ -555,29 +555,29 @@ private:
 		_purgedVariants = 0;
 		long messageSize = sizeof(PurgeVariantKmerMessageHeader) + KmerSizer::getByteSize();
 
-		int numThreads = _variantNumThreads = omp_get_max_threads();
+		int &numThreads = _variantNumThreads = omp_get_max_threads();
 		sendPurgeVariant.resize(numThreads*numThreads, NULL);
 		recvPurgeVariant.resize(numThreads, NULL);
-		#pragma omp parallel
+		#pragma omp parallel num_threads(numThreads)
 		{
 			int threadId = omp_get_thread_num();
 			recvPurgeVariant[threadId] = new RecvPurgeVariantKmerMessageBuffer(world, *this, messageSize, threadId, variantSigmas, minDepth);
 			for (int t = 0 ; t < numThreads; t++) {
 				sendPurgeVariant[threadId*numThreads+t] = new SendPurgeVariantKmerMessageBuffer(world, *this, messageSize);
 				sendPurgeVariant[threadId*numThreads+t]->addReceiveAllCallback( recvPurgeVariant[threadId] );
-				recvPurgeVariant[threadId]->addFlushAllCallback( sendPurgeVariant[threadId*numThreads+t], threadId);
 			}
 		}
 		world.barrier();
 	}
 
 	long _postVariants() {
-		this->_variantSync(0, _purgedVariants, 0, 0);
-		#pragma omp parallel
+		LOG_VERBOSE_OPTIONAL(2, true, "_postVariants()");
+		int &numThreads = _variantNumThreads;
+		#pragma omp parallel num_threads(numThreads)
 		{
 			int threadId = omp_get_thread_num();
-			int &numThreads = _variantNumThreads;
-			for(int t = 0 ; t<numThreads; t++) {
+
+			for(int t = 0 ; t < numThreads; t++) {
 				delete sendPurgeVariant[threadId*numThreads+t];
 			}
 			delete recvPurgeVariant[threadId];
@@ -586,30 +586,36 @@ private:
 		recvPurgeVariant.clear();
 		return _purgedVariants;
 	}
-	long _variantSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
-		LOG_DEBUG_OPTIONAL(1, true, "Entering _variantSync: " << maxDepth);
-		#pragma omp parallel
-		{
-			int threadId = omp_get_thread_num();
-			int &numThreads = _variantNumThreads;
-			for (int t = 0 ; t < numThreads; t++) {
-				sendPurgeVariant[threadId*numThreads+t]->flushAllMessageBuffers(t);
-				LOG_DEBUG_OPTIONAL(1, true, "Flushed: " << t);
-			}
-			recvPurgeVariant[threadId]->receiveAllIncomingMessages();
-			LOG_DEBUG_OPTIONAL(1, true, "Received all incoming");
-			for (int t = 0 ; t < numThreads; t++) {
-				sendPurgeVariant[threadId*numThreads+t]->finalize(t);
-			}
-			recvPurgeVariant[threadId]->finalize(numThreads);
+	void _variantThreadSync(long processed, long remaining, double maxDepth) {
+		// call parent
+		this->KS::_variantThreadSync(processed, remaining, maxDepth);
+
+		int &numThreads = _variantNumThreads;
+		int threadId = omp_get_thread_num();
+		recvPurgeVariant[threadId]->receiveAllIncomingMessages();
+		for (int t = 0 ; t < numThreads; t++) {
+			sendPurgeVariant[threadId*numThreads+t]->flushAllMessageBuffers(t);
+			LOG_DEBUG_OPTIONAL(1, true, "Flushed: " << t);
 		}
+		recvPurgeVariant[threadId]->receiveAllIncomingMessages();
+		LOG_DEBUG_OPTIONAL(1, true, "Received all incoming");
+		for (int t = 0 ; t < numThreads; t++) {
+			sendPurgeVariant[threadId*numThreads+t]->finalize(t);
+		}
+		recvPurgeVariant[threadId]->finalize(numThreads);
+	}
+	long _variantBatchSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
+		// call parent
+		remaining = this->KS::_variantBatchSync(remaining, purgedKmers, maxDepth, threshold);
 
 		long allRemaining;
 		mpi::all_reduce(world, remaining, allRemaining, std::plus<long>());
 		if (threshold > 0.0) {
 			long allPurged;
 			mpi::reduce(world, purgedKmers+_purgedVariants, allPurged, std::plus<long>(), 0);
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Purged " << allPurged << " variants below: " << maxDepth << " / " <<  threshold << ".  Remaining: " << allRemaining);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << allPurged << " variants below: " << maxDepth << " / " <<  threshold << ".  Remaining: " << allRemaining);
+		} else {
+			LOG_DEBUG_OPTIONAL(1, true, "Final variant purge batch");
 		}
 		world.barrier();
 		return allRemaining;
@@ -629,7 +635,7 @@ private:
 			Kmer &varKmer = variants[i];
 			this->solid.getThreadIds(varKmer, threadDest, 1, rankDest, distributedThreadMask);
 
-			if (rankDest == rank && threadDest == threadId) {
+			if (rankDest == rank) {
 				double dummy;
 				if (this->_setPurgeVariant(pointers, varKmer, threshold, dummy))
 					variantWasPurged();
@@ -949,14 +955,14 @@ done when empty cycle is received
 			int threadId = omp_get_thread_num();
 			// initialize message buffers
 
-			LOG_DEBUG(2, "Releasing Request/Response message buffers");
-			LOG_DEBUG(1, "recvResp["<<threadId<<"] received " << recvResp[threadId]->getNumDeliveries() << "/" << recvResp[threadId]->getNumMessages());
-			LOG_DEBUG(1, "sendResp["<<threadId<<"] sent     " << sendResp[threadId]->getNumDeliveries() << "/" << sendResp[threadId]->getNumMessages());
+			LOG_DEBUG_OPTIONAL(2, true, "Releasing Request/Response message buffers");
+			LOG_DEBUG_OPTIONAL(2, true, "recvResp["<<threadId<<"] received " << recvResp[threadId]->getNumDeliveries() << "/" << recvResp[threadId]->getNumMessages());
+			LOG_DEBUG_OPTIONAL(2, true, "sendResp["<<threadId<<"] sent     " << sendResp[threadId]->getNumDeliveries() << "/" << sendResp[threadId]->getNumMessages());
 			delete recvResp[threadId];
 			delete sendResp[threadId];
 
-			LOG_DEBUG(1, "recvReq["<<threadId<<"] received " << recvReq[threadId]->getNumDeliveries() << "/" << recvReq[threadId]->getNumMessages());
-			LOG_DEBUG(1, "sendReq["<<threadId<<"] sent     " << sendReq[threadId]->getNumDeliveries() << "/" << sendReq[threadId]->getNumMessages());
+			LOG_DEBUG_OPTIONAL(2, true, "recvReq["<<threadId<<"] received " << recvReq[threadId]->getNumDeliveries() << "/" << recvReq[threadId]->getNumMessages());
+			LOG_DEBUG_OPTIONAL(2, true, "sendReq["<<threadId<<"] sent     " << sendReq[threadId]->getNumDeliveries() << "/" << sendReq[threadId]->getNumMessages());
 			delete recvReq[threadId];
 			delete sendReq[threadId];
 		}

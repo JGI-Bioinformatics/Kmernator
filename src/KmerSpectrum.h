@@ -316,7 +316,7 @@ public:
 	void migrateKmerData(const Kmer &srcKmer, const Kmer &dstKmer) {
 		bool trans = false;
 		{
-			LOG_DEBUG(2, "Merging kmers " << srcKmer.toFasta() << " to " << dstKmer.toFasta());
+			LOG_DEBUG(6, "Merging kmers " << srcKmer.toFasta() << " to " << dstKmer.toFasta());
 
 			if (hasSolids) {
 			    SolidElementType src = getIfExistsSolid(srcKmer);
@@ -622,7 +622,7 @@ public:
 			LOG_DEBUG(1, "There are no eligible kmers to promote");
 			return 0;
 		}
-		LOG_DEBUG(2, "Heap: " << weakHeap.size() << " " << weakHeap[0].value());
+		LOG_DEBUG(4, "Heap: " << weakHeap.size() << " " << weakHeap[0].value());
 
 		//heapify kmer counts
 		std::make_heap( weakHeap.begin(), weakHeap.end() );
@@ -1437,13 +1437,15 @@ public:
 			double dummy;
 			if (this->_setPurgeVariant(pointers, varKmer, threshold, dummy))
 				purgedKmers++;
-			//purgedKmers += this->__purgeVariants(pointers, varKmer, threshold, variantSigmas, minDepth);
 		}
 		return purgedKmers;
 	}
 	virtual void _preVariants(double variantSigmas, double minDepth) {}
 	virtual long _postVariants() { return 0; }
-	virtual long _variantSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
+	virtual void _variantThreadSync(long processed, long remaining, double maxDepth) {
+		LOG_DEBUG_OPTIONAL(1, true, "batch processed " << processed << " remaining: " << remaining << " threshold: " << maxDepth);
+	}
+	virtual long _variantBatchSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
 		LOG_DEBUG_OPTIONAL(1, true, "Purged " << purgedKmers << " variants below: " << maxDepth << " / " <<  threshold);
 		return remaining;
 	}
@@ -1452,6 +1454,16 @@ public:
 		return count - sqrt(count)*variantSigmas;
 	}
 
+	double getNewMaxDepth(double maxDepth, double variantSigmas) {
+		// quadratic equation solving maxDepth = newMaxDepth - variantSigmas * sqrt(newMaxDepth)
+		// 0 == newMaxDepth*newMaxDepth + (variantSigmas*variantSigmas - 2*maxDepth) + maxDepth*maxDepth
+		// a=1 b=(-variantsigmas**2 - 2*maxDepth) c=maxDepth**2
+		double a=1.0;
+		double b= 0.0 - variantSigmas*variantSigmas - 2.0 * maxDepth;
+		double c=maxDepth*maxDepth;
+		maxDepth = (-b + sqrt(b*b - 4*a*c)) / (2.0*a);
+		return maxDepth;
+	}
 	long purgeVariants(double variantSigmas = Options::getVariantSigmas(), short editDistance = 2) {
 		if (variantSigmas < 0.0)
 			return 0;
@@ -1462,54 +1474,55 @@ public:
 			throw; // TODO unsupported
 		}
 		double minDepth = Options::getMinDepth();
-		this->_preVariants(variantSigmas, minDepth);
-
 		int numThreads = omp_get_max_threads();
+		this->_preVariants(variantSigmas, minDepth);
+		LOG_DEBUG(1, "Purging with " << numThreads);
+
 		std::vector<DataPointers> pointers(numThreads, DataPointers(*this));
 		std::vector<WeakBucketType> variants(numThreads);
 
-		// sweep through bottom up
-		double maxDepth = minDepth;
+		// sweep through bottom up.  Start at first possible variant to compare at
+		double maxDepth = getNewMaxDepth(minDepth, variantSigmas);
 		long remaining = 1;
 		long processed = 0;
 		while (remaining > 0) {
-			// increment maxDepth by a step
-			// quadratic equation solving maxDepth = newMaxDepth - variantSigmas * sqrt(newMaxDepth)
-			// 0 == newMaxDepth*newMaxDepth + (variantSigmas*variantSigmas - 2*maxDepth) + maxDepth*maxDepth
-			// a=1 b=(-variantsigmas**2 - 2*maxDepth) c=maxDepth**2
 			double lastDepth = maxDepth;
-			if (maxDepth > 100)
-				maxDepth *= 1.2; // give a small exponential boost
-			double a=1.0;
-			double b= 0.0 - variantSigmas*variantSigmas - 2.0 * maxDepth;
-			double c=maxDepth*maxDepth;
-			maxDepth = (-b + sqrt(b*b - 4*a*c)) / (2.0*a);
+			// increment maxDepth by a step
+			maxDepth = getNewMaxDepth(maxDepth, variantSigmas);
+
 			remaining = 0;
 			processed = 0;
-			#pragma omp parallel reduction(+: purgedKmers) reduction(+: processed) reduction(+: remaining)
-			for(WeakIterator it = weak.beginThreaded(); it != weak.endThreaded(); it++) {
+			#pragma omp parallel num_threads(numThreads) reduction(+: purgedKmers) reduction(+: processed) reduction(+: remaining)
+			{
 				int threadId = omp_get_thread_num();
-				double count = it->value().getWeightedCount();
-				if (count <= lastDepth)
-					continue;
-				if (count > maxDepth) {
-					remaining++;
-					continue;
+
+				for(WeakIterator it = weak.beginThreaded(); it != weak.endThreaded(); it++) {
+					double count = it->value().getWeightedCount();
+					if (count <= lastDepth)
+						continue;
+					if (count > maxDepth) {
+						remaining++;
+						continue;
+					}
+					double threshold = getVariantThreshold(count, variantSigmas);
+					if (threshold > minDepth) {
+						LOG_DEBUG(3, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
+						purgedKmers += this->_purgeVariants(pointers[threadId], it->key(), variants[threadId], threshold, editDistance);
+					}
+					if (++processed % 100 == 0)
+						LOG_DEBUG_OPTIONAL(2, true | (threadId == 0), "progress processed " << processed);
 				}
-				double threshold = getVariantThreshold(count, variantSigmas);
-				if (threshold > minDepth) {
-					LOG_DEBUG(3, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
-					purgedKmers += this->_purgeVariants(pointers[threadId], it->key(), variants[threadId], threshold, editDistance);
-				}
-				if (++processed % 10000 == 0)
-					LOG_DEBUG_OPTIONAL(1, threadId == 0, "thread0 progress processed " << processed);
+				this->_variantThreadSync(processed, remaining, maxDepth);
 			}
-			LOG_DEBUG_OPTIONAL(1, true, "Processed " << processed);
-			remaining = this->_variantSync(remaining, purgedKmers, maxDepth, getVariantThreshold(maxDepth, variantSigmas));
+			remaining += this->_variantBatchSync(remaining, purgedKmers, maxDepth, getVariantThreshold(maxDepth, variantSigmas));
+			LOG_DEBUG_OPTIONAL(1, true, "Processed " << processed << " remaining: " << remaining << " threshold: " << maxDepth);
 		}
 
+		LOG_DEBUG_OPTIONAL(1, true, "Finished processing variants: " << purgedKmers << " waiting for _postVariants");
 		purgedKmers += this->_postVariants();
+		LOG_DEBUG_OPTIONAL(1, true, "Finished processing variants: " << purgedKmers);
 
+		LOG_DEBUG_OPTIONAL(2, true, "Purging to min depth");
 		this->purgeMinDepth(Options::getMinDepth());
 
 		LOG_VERBOSE(1, "Removed " << purgedKmers << " kmer-variants");
