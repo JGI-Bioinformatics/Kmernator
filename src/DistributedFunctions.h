@@ -595,14 +595,15 @@ private:
 		recvPurgeVariant[threadId]->receiveAllIncomingMessages();
 		for (int t = 0 ; t < numThreads; t++) {
 			sendPurgeVariant[threadId*numThreads+t]->flushAllMessageBuffers(t);
-			LOG_DEBUG_OPTIONAL(1, true, "Flushed: " << t);
+			LOG_DEBUG_OPTIONAL(3, true, "Flushed: " << t);
 		}
 		recvPurgeVariant[threadId]->receiveAllIncomingMessages();
-		LOG_DEBUG_OPTIONAL(1, true, "Received all incoming");
+		LOG_DEBUG_OPTIONAL(3, true, "Received all incoming");
 		for (int t = 0 ; t < numThreads; t++) {
 			sendPurgeVariant[threadId*numThreads+t]->finalize(t);
 		}
 		recvPurgeVariant[threadId]->finalize(numThreads);
+		LOG_DEBUG_OPTIONAL(2, true, "_variantThreadSync() finished:" << maxDepth <<std::endl);
 	}
 	long _variantBatchSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
 		// call parent
