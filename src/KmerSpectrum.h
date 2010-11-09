@@ -1275,7 +1275,14 @@ public:
 		if (size < batch) {
 		    batch = store.getSize() / 10 + 1;
 		}
-		long reservation = batch * (store.getMaxSequenceLength() - KmerSizer::getSequenceLength() + 1);
+
+		long reservation;
+		if (KmerSizer::getSequenceLength() > store.getMaxSequenceLength()) {
+			LOG_WARN(1, "KmerSize " << KmerSizer::getSequenceLength() << " is larger than your data set: " << store.getMaxSequenceLength());
+			reservation = batch * 2;
+		} else {
+			reservation = batch * (store.getMaxSequenceLength() - KmerSizer::getSequenceLength() + 1);
+		}
 		if (numThreads > 1)
 			reservation /= numThreads;
 
@@ -1443,10 +1450,10 @@ public:
 	virtual void _preVariants(double variantSigmas, double minDepth) {}
 	virtual long _postVariants() { return 0; }
 	virtual void _variantThreadSync(long processed, long remaining, double maxDepth) {
-		LOG_DEBUG_OPTIONAL(1, true, "batch processed " << processed << " remaining: " << remaining << " threshold: " << maxDepth);
+		LOG_DEBUG_OPTIONAL(2, true, "batch processed " << processed << " remaining: " << remaining << " threshold: " << maxDepth);
 	}
 	virtual long _variantBatchSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
-		LOG_DEBUG_OPTIONAL(1, true, "Purged " << purgedKmers << " variants below: " << maxDepth << " / " <<  threshold);
+		LOG_DEBUG_OPTIONAL(1, true, "Purged " << purgedKmers << " variants below: " << maxDepth << " / " <<  threshold << " with " << remaining << " remaining");
 		return remaining;
 	}
 
@@ -1476,7 +1483,7 @@ public:
 		double minDepth = Options::getMinDepth();
 		int numThreads = omp_get_max_threads();
 		this->_preVariants(variantSigmas, minDepth);
-		LOG_DEBUG(1, "Purging with " << numThreads);
+		LOG_DEBUG(1, "Purging with " << numThreads << " threads");
 
 		std::vector<DataPointers> pointers(numThreads, DataPointers(*this));
 		std::vector<WeakBucketType> variants(numThreads);
@@ -1492,6 +1499,7 @@ public:
 
 			remaining = 0;
 			processed = 0;
+			LOG_DEBUG_OPTIONAL(2, true, "Starting threaded kmer scan");
 			#pragma omp parallel num_threads(numThreads) reduction(+: purgedKmers) reduction(+: processed) reduction(+: remaining)
 			{
 				int threadId = omp_get_thread_num();
@@ -1510,12 +1518,12 @@ public:
 						purgedKmers += this->_purgeVariants(pointers[threadId], it->key(), variants[threadId], threshold, editDistance);
 					}
 					if (++processed % 100 == 0)
-						LOG_DEBUG_OPTIONAL(2, true | (threadId == 0), "progress processed " << processed);
+						LOG_DEBUG_OPTIONAL(2, true, "progress processed " << processed);
 				}
 				this->_variantThreadSync(processed, remaining, maxDepth);
 			}
-			remaining += this->_variantBatchSync(remaining, purgedKmers, maxDepth, getVariantThreshold(maxDepth, variantSigmas));
-			LOG_DEBUG_OPTIONAL(1, true, "Processed " << processed << " remaining: " << remaining << " threshold: " << maxDepth);
+			remaining = this->_variantBatchSync(remaining, purgedKmers, maxDepth, getVariantThreshold(maxDepth, variantSigmas));
+			LOG_VERBOSE_OPTIONAL(2, true, "Processed " << processed << " remaining: " << remaining << " threshold: " << maxDepth);
 		}
 
 		LOG_DEBUG_OPTIONAL(1, true, "Finished processing variants: " << purgedKmers << " waiting for _postVariants");
