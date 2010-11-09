@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
 	world.barrier();
 
 	MemoryUtils::getMemoryUsage();
-    std::string outputFilename = Options::getOutputFile();
+	std::string outputFilename = Options::getOutputFile();
 
 	ReadSet reads;
 	KmerSizer::set(Options::getKmerSize());
@@ -106,16 +106,22 @@ int main(int argc, char *argv[]) {
 		reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
 
-		LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
-		unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
+		if ( Options::getDeDupMode() > 0 && Options::getDeDupEditDistance() >= 0) {
+			if (world.size() == 1) {
+				LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
+				unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
 
-		LOG_VERBOSE(2, "filter removed duplicate fragment pair reads: " << duplicateFragments);
-		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+				LOG_VERBOSE(2, "filter removed duplicate fragment pair reads: " << duplicateFragments);
+				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-		unsigned long allDuplicateFragments;
-		reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
-
+				unsigned long allDuplicateFragments;
+				reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
+			} else {
+				LOG_WARN(1, "Distributed DuplicateFragmentPair Filter is not supported (yet)." << std::endl
+						<< "If you want this feature please run the non-MPI FilterReads");
+			}
+		}
 	}
 
 	long numBuckets = 0;
