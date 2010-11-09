@@ -48,8 +48,12 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
 
-#define MPI_BUFFER_DEFAULT_SIZE (512 * 1024)
-#define WAIT_MS 3
+#define MPI_BUFFER_DEFAULT_SIZE (128 * 1024)
+#define WAIT_MS 2
+#define WAIT_AND_WARN( iterations, warningMessage ) \
+	if ((iterations % (60000/WAIT_MS)) == 0) LOG_WARN(1, warningMessage << " waiting in loop: " << iterations);  \
+	boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
+
 
 class _MPIMessageBufferBase
 {
@@ -308,6 +312,7 @@ public:
 	}
 private:
 	long _finalize(int checkpointFactor) {
+		long iterations = 0;
 		long messages;
 		do {
 			messages = 0;
@@ -318,7 +323,7 @@ private:
 				LOG_DEBUG_OPTIONAL(3, true, "Recv " << _tag << ": Achieved checkpoint but more messages are pending");
 			}
 			if (messages == 0)
-				boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
+				WAIT_AND_WARN(++iterations, "_finalize(" << checkpointFactor << ") with messages: " << messages << " checkpoint: " << getNumCheckpoints());
 		} while (!reachedCheckpoint(checkpointFactor));
 		return messages;
 	}
@@ -326,15 +331,14 @@ public:
 	void finalize(int checkpointFactor = 1) {
 		LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag << ": Entering finalize checkpoint: " << getNumCheckpoints() << " out of " << (checkpointFactor*this->getWorld().size()));
 
-		long globalMessages = 1;
-		while(globalMessages != 0) {
-			long messages = _finalize(checkpointFactor);
-			LOG_DEBUG_OPTIONAL(3, true, "waiting for globalMessage to be 0: " << messages);
-			all_reduce(this->getWorld(), messages, globalMessages, mpi::maximum<long>());
-		}
+		long messages = 0;
+		do {
+			messages = _finalize(checkpointFactor);
+			LOG_DEBUG_OPTIONAL(3, true, "waiting for message to be 0: " << messages);
+		} while (messages != 0);
+		_numCheckpoints = 0;
 
 		LOG_DEBUG_OPTIONAL(3, true, "Recv " << _tag << ": Finished finalize checkpoint: " << getNumCheckpoints());
-		_numCheckpoints = 0;
 	}
 
 	void checkpoint() {
@@ -346,7 +350,7 @@ public:
 		return _numCheckpoints;
 	}
 	bool reachedCheckpoint(int checkpointFactor = 1) {
-		return _numCheckpoints == this->getWorld().size() * checkpointFactor;
+		return getNumCheckpoints() == this->getWorld().size() * checkpointFactor;
 	}
 private:
 	OptionalRequest irecv(int sourceRank) {
@@ -420,7 +424,7 @@ private:
 
 				if (bufferReceived.size == 0) {
 					checkpoint();
-					LOG_DEBUG(3, _tag << ": got checkpoint from " << bufferReceived.source << "/" << bufferReceived.tag << ": " << _numCheckpoints);
+					LOG_DEBUG(3, _tag << ": got checkpoint from " << bufferReceived.source << "/" << bufferReceived.tag << ": " << getNumCheckpoints());
 				} else {
 					processMessages(bufferReceived);
 				}
@@ -556,11 +560,12 @@ public:
 		int &offsetLocation = _offsets[rankDest];
 		bool waitForSend = sendZeroMessage == true;
 
+		long iterations = 0;
 		messages += checkSentBuffers( waitForSend );
 		while (sendZeroMessage && (offsetLocation > 0 || newMessages != 0) ) {
 			// flush all messages until there is nothing in the buffer
 			newMessages = 0;
-			boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
+			WAIT_AND_WARN(++iterations, "flushMessageBuffer(" << rankDest << ", " << tagDest << ", " << sendZeroMessage << ")");
 			newMessages = flushMessageBuffer(rankDest, tagDest, false);
 			newMessages += checkSentBuffers( waitForSend );
 			messages += newMessages;
@@ -589,10 +594,11 @@ public:
 		}
 
 		// do not let the sent queue get too large
+		iterations = 0;
 		newMessages = 0;
 		while (newMessages == 0 && _sentBuffers.size() >= (size_t) BufferBase::BUFFER_QUEUE_SOFT_LIMIT * this->getWorld().size()) {
 			if (newMessages != 0)
-				boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
+				WAIT_AND_WARN(++iterations, "flushMessageBuffer(" << rankDest << ", " << tagDest << ", " << sendZeroMessage << ") in checkSentBuffers loop");
 			newMessages = checkSentBuffers( true );
 			messages += newMessages;
 		}
@@ -641,7 +647,7 @@ public:
 			_sentBuffers.remove_if(SentBuffer());
 
 			if (wait) {
-				boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
+				WAIT_AND_WARN(iterations+1, "checkSentBuffers()" );
 				wait = !_sentBuffers.empty();
 			}
 		}
@@ -658,9 +664,11 @@ public:
 		return messages;
 	}
 	void flushAllMessagesUntilEmpty(int tagDest) {
-		long messages = flushAllMessageBuffers(tagDest);
-		while (messages != 0) {
-			boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
+		long messages = 0;
+		long iterations = 0;
+		while (iterations == 0 || messages != 0) {
+			if (iterations++ > 0 )
+				WAIT_AND_WARN(iterations, "flushAllMessageBuffersUntilEmpty(" << tagDest << ")");
 			messages = flushAllMessageBuffers(tagDest);
 			messages += checkSentBuffers(true);
 		}
@@ -676,7 +684,6 @@ public:
 		LOG_DEBUG_OPTIONAL(3, true,"Send " << tagDest << ": entering finalize stage2()");
 		// send zero-message as checkpoint signal to stop
 		flushAllMessageBuffers(tagDest, true);
-		boost::this_thread::sleep( boost::posix_time::milliseconds(2) );
 
 		LOG_DEBUG_OPTIONAL(3, true,"Send " << tagDest << ": entering finalize stage3()");
 		// now continue to flush until there is nothing left in the buffer;
