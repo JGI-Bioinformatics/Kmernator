@@ -106,22 +106,24 @@ int main(int argc, char *argv[]) {
 		reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
 
-		if ( Options::getDeDupMode() > 0 && Options::getDeDupEditDistance() >= 0) {
-			if (world.size() == 1) {
-				LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
-				unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
+	}
 
-				LOG_VERBOSE(2, "filter removed duplicate fragment pair reads: " << duplicateFragments);
-				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+	if ( Options::getDeDupMode() > 0 && Options::getDeDupEditDistance() >= 0) {
+		if (world.size() == 1) {
+			LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
+			unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
 
-				unsigned long allDuplicateFragments;
-				reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
-			} else {
-				LOG_WARN(1, "Distributed DuplicateFragmentPair Filter is not supported (yet)." << std::endl
-						<< "If you want this feature please run the non-MPI FilterReads");
-			}
+			LOG_VERBOSE(2, "filter removed duplicate fragment pair reads: " << duplicateFragments);
+			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+			unsigned long allDuplicateFragments;
+			reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
+		} else {
+			LOG_WARN(1, "Distributed DuplicateFragmentPair Filter is not supported (yet)." << std::endl
+					<< "If you want this feature please run the non-MPI FilterReads");
 		}
+
 	}
 
 	long numBuckets = 0;

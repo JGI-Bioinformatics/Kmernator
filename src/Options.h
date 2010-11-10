@@ -287,7 +287,7 @@ protected:
 		("format-output", po::value<unsigned int>()->default_value(formatOutput),
 				"0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
 
-	        ("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
+		("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
 		        "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
 
 		("filter-output", po::value<unsigned int>()->default_value(filterOutput),

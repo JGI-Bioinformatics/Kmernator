@@ -77,6 +77,8 @@ int main(int argc, char *argv[]) {
 	  LOG_VERBOSE(1, "filter affected (trimmed/removed) " << filtered << " Reads ");;
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
+	}
+	if (Options::getDeDupMode() > 0 && Options::getDeDupEditDistance() >= 0) {
 	  LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
 	  unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
 	  LOG_VERBOSE(1, "filter removed duplicate fragment pair reads: " << duplicateFragments);
