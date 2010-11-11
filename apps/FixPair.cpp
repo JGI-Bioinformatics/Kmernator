@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
 			    read2Label.erase( 0, pos +1);
 		}
 
-		reads.write(ofmap, pair, MAX_SEQUENCE_LENGTH, read1Label, MAX_SEQUENCE_LENGTH, read2Label, 2, true);
+		reads.write(ofmap, pair, 0, MAX_SEQUENCE_LENGTH, read1Label, 0, MAX_SEQUENCE_LENGTH, read2Label, 2, true);
 	}
 
 }

@@ -237,25 +237,25 @@ public:
 	static Read getConsensusRead(const ProbabilityBases &probs, std::string name);
 
 	inline std::ostream &write(std::ostream &os, ReadSetSizeType readIdx,
-			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
-		return getRead(readIdx).write(os, trimOffset, label, format);
+			SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
+		return getRead(readIdx).write(os, trimOffset, trimLength, label, format);
 	}
 	inline std::ostream &write(OfstreamMap &om, ReadSetSizeType readIdx,
-			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
-		return write(om.getOfstream( getReadFileNamePrefix(readIdx) ), readIdx, trimOffset, label, format);
+			SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
+		return write(om.getOfstream( getReadFileNamePrefix(readIdx) ), readIdx, trimOffset, trimLength, label, format);
 	}
 	inline std::ostream &write(OfstreamMap &om, const Pair &pair,
-			SequenceLengthType trimOffset1 = MAX_SEQUENCE_LENGTH, std::string label1 = "",
-			SequenceLengthType trimOffset2 = MAX_SEQUENCE_LENGTH, std::string label2 = "",
+			SequenceLengthType trimOffset1 = 0, SequenceLengthType trimLength1 = MAX_SEQUENCE_LENGTH, std::string label1 = "",
+			SequenceLengthType trimOffset2 = 0, SequenceLengthType trimLength2 = MAX_SEQUENCE_LENGTH, std::string label2 = "",
 			FormatOutput format = FormatOutput::getDefault(), bool forcePair = false) const {
 		std::ostream &os = om.getOfstream(getReadFileNamePrefix(pair));
 		if (isValidRead(pair.read1))
-			write(os, pair.read1, trimOffset1, label1, format);
+			write(os, pair.read1, trimOffset1, trimLength1, label1, format);
 		else if (forcePair)
 			fakePair(getRead(pair.read2)).write(os);
 
 		if (isValidRead(pair.read2))
-			write(os, pair.read2, trimOffset2, label2, format);
+			write(os, pair.read2, trimOffset2, trimLength2, label2, format);
 		else if (forcePair)
 			fakePair(getRead(pair.read1)).write(os);
 

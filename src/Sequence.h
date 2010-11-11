@@ -258,15 +258,8 @@ public:
 		return const_cast<RecordPtr> (constThis().getQualRecord());
 	}
 
-	std::string getFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
-	std::string getFasta(SequenceLengthType trimOffset, SequenceLengthType trimLength) const {
-		std::string fasta = getFasta(trimOffset+trimLength);
-		if (trimOffset > 0)
-			return fasta.substr(trimOffset, trimLength);
-		else
-			return fasta;
-	}
-	std::string getFastaNoMarkup(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH) const;
+	std::string getFasta(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH) const;
+	std::string getFastaNoMarkup(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH) const;
 
 	SequenceLengthType getMarkupBasesCount() const;
 	BaseLocationVectorType getMarkups() const;
@@ -396,18 +389,17 @@ public:
 	bool recordHasQuals() const ;
 
 	std::string getName() const;
-	std::string getQuals(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
+	std::string getQuals(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH,
 			bool forPrinting = false, bool unmasked = false) const;
 	void markupBases(SequenceLengthType offset, SequenceLengthType length, char mask = 'X');
 
-	std::string toFastq(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
+	std::string toFastq(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH,
 			std::string label = "", bool unmasked = false) const;
-	std::string toFasta(SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH,
+	std::string toFasta(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH,
 			std::string label = "", bool unmasked = false) const;
-	std::string toQual(SequenceLengthType trimOffset, std::string label) const;
+	std::string toQual(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label) const;
 
-	std::string getFormattedQuals(SequenceLengthType trimOffset =
-			MAX_SEQUENCE_LENGTH) const;
+	std::string getFormattedQuals(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH) const;
 
 	ProbabilityBases getProbabilityBases() const;
 	double scoreProbabilityBases(const ProbabilityBases &probs) const;
@@ -420,19 +412,19 @@ public:
 	// format == 2 fastq unmasked
 	// format == 3 fasta unmasked
 	inline static std::ostream &write(std::ostream &os, const Read &read,
-			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) {
+			SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) {
 		switch (format.getType()) {
-		case FormatOutput::FASTQ: os << read.toFastq(trimOffset, label); break;
-		case FormatOutput::FASTA: os << read.toFasta(trimOffset, label); break;
-		case FormatOutput::FASTQ_UNMASKED: os << read.toFastq(trimOffset, label, true) ; break;
-		case FormatOutput::FASTA_UNMASKED: os << read.toFasta(trimOffset, label, true); break;
+		case FormatOutput::FASTQ: os << read.toFastq(trimOffset, trimLength, label); break;
+		case FormatOutput::FASTA: os << read.toFasta(trimOffset, trimLength, label); break;
+		case FormatOutput::FASTQ_UNMASKED: os << read.toFastq(trimOffset, trimLength, label, true) ; break;
+		case FormatOutput::FASTA_UNMASKED: os << read.toFasta(trimOffset, trimLength, label, true); break;
 		default: throw std::invalid_argument("Invalid format");
 		}
 		return os;
 	}
 	inline std::ostream &write(std::ostream &os,
-			SequenceLengthType trimOffset = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
-		return write(os, *this, trimOffset, label, format);
+			SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
+		return write(os, *this, trimOffset, trimLength, label, format);
 	}
 
 	std::string toString() const;

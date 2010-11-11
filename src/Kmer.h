@@ -280,10 +280,10 @@ public:
 	}
 
 	std::string toFasta() const {
-		return TwoBitSequence::getFasta(getTwoBitSequence(), getLength());
+		return TwoBitSequence::getFasta(getTwoBitSequence(), 0, getLength());
 	}
 	std::string toFastaFull() const {
-		return TwoBitSequence::getFasta(getTwoBitSequence(), getTwoBitLength()
+		return TwoBitSequence::getFasta(getTwoBitSequence(), 0, getTwoBitLength()
 				* 4);
 	}
 	inline NumberType toNumber() const {

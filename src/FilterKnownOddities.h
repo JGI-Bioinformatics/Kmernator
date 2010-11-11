@@ -326,12 +326,12 @@ public:
 		            // always discard the read, as it contains some PhiX and was sorted
 					if (isRead1) {
 						Read &read = reads.getRead(readIdx1);
-						_writeFilterRead(os, read, read.getLength());
+						_writeFilterRead(os, read, 0, read.getLength());
 						read.discard();
 					}
 					if (isRead2) {
 						Read &read = reads.getRead(readIdx2);
-						_writeFilterRead(os, read, read.getLength());
+						_writeFilterRead(os, read, 0, read.getLength());
 						read.discard();
 					}
 				}
@@ -350,14 +350,14 @@ public:
 					if (isRead1 && results1.value != 0) {
 						if (results1.minAffected == 0 || results1.minAffected < recorder.minReadPos) {
 							Read &read = reads.getRead(readIdx1);
-							_writeFilterRead(os, read, read.getLength(), label1);
+							_writeFilterRead(os, read, 0, read.getLength(), label1);
 							read.discard();
 						}
 					}
 					if (isRead2 && results2.value != 0) {
 						if (results2.minAffected == 0 || results2.minAffected < recorder.minReadPos) {
 							Read &read = reads.getRead(readIdx2);
-							_writeFilterRead(os, read, read.getLength(), label2);
+							_writeFilterRead(os, read, 0, read.getLength(), label2);
 							read.discard();
 						}
 					}
@@ -463,8 +463,8 @@ public:
 		return affectedCount;
 	}
 
-	static void _writeFilterRead(ostream &os, Read  &read, SequenceLengthType readLength, std::string readLabel = "") {
-	    read.write(os, readLength, readLabel, FormatOutput::FASTQ_UNMASKED);
+	static void _writeFilterRead(ostream &os, Read  &read, SequenceLengthType readOffset, SequenceLengthType readLength, std::string readLabel = "") {
+	    read.write(os, readOffset, readLength, readLabel, FormatOutput::FASTQ_UNMASKED);
 	}
 
 	const ReadSet &getSequences() const {

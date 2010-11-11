@@ -136,7 +136,7 @@ public:
     static SequenceLengthType firstMarkupX(const BaseLocationVectorType &markups);
     static SequenceLengthType firstMarkupNorX(const BaseLocationVectorType &markups);
 
-    static std::string getFasta(const TwoBitEncoding *in, SequenceLengthType length);
+    static std::string getFasta(const TwoBitEncoding *in, SequenceLengthType offset, SequenceLengthType length);
     
     static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
 

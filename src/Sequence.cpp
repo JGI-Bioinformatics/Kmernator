@@ -316,7 +316,7 @@ void Sequence::setMarkups(MarkupElementSizeType markupElementSize, const BaseLoc
 	}
 }
 
-string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset) const {
+string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset, SequenceLengthType trimLength) const {
 	if ( !isValid() )
 	    return string("");
 
@@ -324,37 +324,40 @@ string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset) const {
 		string name, bases, quals;
 		readMmaped(name, bases, quals);
 		SequenceLengthType len = bases.length();
-		if (trimOffset < len)
-			return bases.substr(0,len);
+		assert(trimOffset <= len);
+		if (trimLength < len - trimOffset)
+			return bases.substr(trimOffset, trimLength);
 		else
-			return bases;
+			return bases.substr(trimOffset);
 	} else {
 		SequenceLengthType len = getLength();
-		if (trimOffset < len)
-			len = trimOffset;
-	    return TwoBitSequence::getFasta(getTwoBitSequence(), len);
+		assert(trimOffset <= len);
+		if (trimLength > len - trimOffset)
+			trimLength = len - trimOffset;
+		return TwoBitSequence::getFasta(getTwoBitSequence(), trimOffset, trimLength);
 	}
 }
-string Sequence::getFasta(SequenceLengthType trimOffset) const {
+string Sequence::getFasta(SequenceLengthType trimOffset, SequenceLengthType trimLength) const {
 	if ( !isValid() )
 		return string("");
-	if (isDiscarded() || trimOffset <= 1) {
+	if (isDiscarded() || trimLength <= 1) {
 		// to support printing paired reads where 1 read is trimmed to 0
 		return string(1, 'N');
 	}
 	string fasta;
 	if (isMmaped()) {
 		SequencePtr sequencePtr = getCache();
-		fasta = sequencePtr->getFasta(trimOffset);
+		fasta = sequencePtr->getFasta(trimOffset, trimLength);
 	} else {
 	    SequenceLengthType len = getLength();
-	    if (trimOffset < len)
-		    len = trimOffset;
-	    if (len <= 1) {
+	    assert(trimOffset <= len);
+	    if (trimLength > len - trimOffset)
+	    	trimLength = len - trimOffset;
+	    if (trimLength <= 1) {
 		    // to support printing paired reads where 1 read is trimmed to 0
 		    return string(1, 'N');
 	    }
-	    fasta = TwoBitSequence::getFasta(getTwoBitSequence(), len);
+	    fasta = TwoBitSequence::getFasta(getTwoBitSequence(), trimOffset, trimLength);
 	}
 	BaseLocationVectorType markups = getMarkups();
 	TwoBitSequence::applyMarkup(fasta, markups);
@@ -782,94 +785,101 @@ string Read::getName() const {
 	}
 }
 
-string Read::getQuals(SequenceLengthType trimOffset, bool forPrinting, bool unmasked) const {
-  if ((isDiscarded() || trimOffset <= 1) && !unmasked) {
-	  // to support printing paired reads where 1 read is trimmed to 0
-	  return string(1, FASTQ_START_CHAR+1);
-  }
-  if (isMmaped()) {
-	string name, bases, quals;
-	Sequence::readMmaped(name, bases, quals);
-	SequenceLengthType len = bases.length();
-	len = (trimOffset <= len ? trimOffset : len);
+string Read::getQuals(SequenceLengthType trimOffset, SequenceLengthType trimLength, bool forPrinting, bool unmasked) const {
+	if ((isDiscarded() || trimLength <= 1) && !unmasked) {
+		// to support printing paired reads where 1 read is trimmed to 0
+		return string(1, FASTQ_START_CHAR+1);
+	}
+	if (isMmaped()) {
+		string name, bases, quals;
+		Sequence::readMmaped(name, bases, quals);
+		SequenceLengthType len = bases.length();
+		assert(trimOffset <= len);
+		if (trimLength > len - trimOffset)
+			trimLength = len - trimOffset;
 
-	if (len > 0) {
-		  if ( (!hasQuals()) || quals[0] == REF_QUAL) {
-			if (forPrinting)
-				return string(len, PRINT_REF_QUAL);
-			else
-				return string(len, REF_QUAL);
-		  } else {
-		      return quals.substr(0,len);
-		  }
+		if (trimLength > 0) {
+			if ( (!hasQuals()) || quals[0] == REF_QUAL) {
+				if (forPrinting)
+					return string(trimLength, PRINT_REF_QUAL);
+				else
+					return string(trimLength, REF_QUAL);
+			} else {
+				return quals.substr(trimOffset, trimLength);
+			}
+		} else {
+			// to support printing paired reads where 1 read is trimmed to 0
+			return string(1, FASTQ_START_CHAR+1);
+		}
 	} else {
-		// to support printing paired reads where 1 read is trimmed to 0
-		return string(1, FASTQ_START_CHAR+1);
-	}
-  } else {
-	SequenceLengthType len = getLength();
-	const char * qualPtr = NULL;
-	len = (trimOffset <= len ? trimOffset : len);
-	if (len > 0) {
-	  qualPtr = _getQual();
+		SequenceLengthType len = getLength();
+		const char * qualPtr = NULL;
+		assert(trimOffset <= len);
+		if (trimLength > len - trimOffset)
+			trimLength = len - trimOffset;
 
-	  if ( (!hasQuals()) || *qualPtr == REF_QUAL) {
-		if (forPrinting)
-			return string(len, PRINT_REF_QUAL);
-		else
-			return string(len, REF_QUAL);
-	  } else {
-		return string(qualPtr, len);
-	  }
-	} else if (_getData() == NULL) {
-		// This is an invalid / empty sequence...
-	    return string("");
-    } else {
-		// to support printing paired reads where 1 read is trimmed to 0
-		return string(1, FASTQ_START_CHAR+1);
+		if (trimLength > 0) {
+			qualPtr = _getQual() + trimOffset;
+
+			if ( (!hasQuals()) || *qualPtr == REF_QUAL) {
+				if (forPrinting)
+					return string(trimLength, PRINT_REF_QUAL);
+				else
+					return string(trimLength, REF_QUAL);
+			} else {
+				return string(qualPtr, trimLength);
+			}
+		} else if (_getData() == NULL) {
+			// This is an invalid / empty sequence...
+			return string("");
+		} else {
+			// to support printing paired reads where 1 read is trimmed to 0
+			return string(1, FASTQ_START_CHAR+1);
+		}
 	}
-  }
 }
 
-string Read::toFastq(SequenceLengthType trimOffset, std::string label, bool unmasked) const {
+string Read::toFastq(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label, bool unmasked) const {
 	std::string fasta;
 	if (unmasked)
-		fasta = getFastaNoMarkup(trimOffset);
+		fasta = getFastaNoMarkup(trimOffset, trimLength);
 	else
-		fasta = getFasta(trimOffset);
+		fasta = getFasta(trimOffset, trimLength);
 	return string('@' + getName() + (label.length() > 0 ? " " + label : "")
 			+ "\n" + fasta + "\n+\n"
-			+ getQuals(trimOffset, true, unmasked) + "\n");
+			+ getQuals(trimOffset, trimLength, true, unmasked) + "\n");
 }
-string Read::toFasta(SequenceLengthType trimOffset, std::string label, bool unmasked) const {
+string Read::toFasta(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label, bool unmasked) const {
 	std::string fasta;
 	if (unmasked)
-		fasta = getFastaNoMarkup(trimOffset);
+		fasta = getFastaNoMarkup(trimOffset, trimLength);
 	else
-		fasta = getFasta(trimOffset);
+		fasta = getFasta(trimOffset, trimLength);
 	return string('>' + getName() + (label.length() > 0 ? " " + label : "")
 			+ "\n" + fasta + "\n");
 }
-string Read::toQual(SequenceLengthType trimOffset, std::string label) const {
+string Read::toQual(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label) const {
 	return string('>' + getName() + (label.length() > 0 ? " " + label : "")
-			+ "\n" + getFormattedQuals(trimOffset) + "\n");
+			+ "\n" + getFormattedQuals(trimOffset, trimLength) + "\n");
 }
 
 // TODO format with linebreaks
-string Read::getFormattedQuals(SequenceLengthType trimOffset) const {
-	string quals = getQuals(trimOffset, true);
+string Read::getFormattedQuals(SequenceLengthType trimOffset, SequenceLengthType trimLength) const {
+	string quals = getQuals(trimOffset, trimLength, true);
 	stringstream ss;
 	SequenceLengthType len = quals.length();
-	if (trimOffset < len)
-		len = trimOffset;
-	for (SequenceLengthType i = 0; i < len; i++) {
-		ss << (int) quals[i] - 64 << ' ';
+	assert(trimOffset < len);
+	if (trimLength > len - trimOffset)
+		trimLength = len - trimOffset;
+
+	for (SequenceLengthType i = trimOffset; i < trimOffset+trimLength; i++) {
+		ss << (int) (quals[i] - FASTQ_START_CHAR) << ' ';
 	}
 	return ss.str();
 }
 
 std::string Read::toString() const {
-	return getFastaNoMarkup() + "\t" + getQuals(MAX_SEQUENCE_LENGTH, true, true) + "\t" + getName();
+	return getFastaNoMarkup() + "\t" + getQuals(0, MAX_SEQUENCE_LENGTH, true, true) + "\t" + getName();
 }
 
 
