@@ -462,10 +462,12 @@ public:
 	void trimReadByMinimumKmerScore(double minimumKmerScore, ReadTrimType &trim, U buffBegin, U buffEnd) {
 
 		ReadTrimType test, best;
-
+		std::stringstream ss;
 		U it = buffBegin;
 		while (it != buffEnd) {
 			ScoreType score = *(it++);
+			if (Log::isDebug(2))
+				ss << (score > 1 ? (int) log(score) : (int) 0) << " ";
 			if (score >= minimumKmerScore) {
 				test.trimLength++;
 				test.score += score;
@@ -474,13 +476,15 @@ public:
 					best = test;
 				}
 				test.score = 0;
-				test.trimOffset = test.trimLength;
+				test.trimOffset += test.trimLength + 1;
 				test.trimLength = 0;
 			}
 		}
 		if (test.score > best.score) {
 			best = test;
 		}
+		if (Log::isDebug(2))
+			trim.label += ss.str();
 
 		if (best.trimLength >= 3 && _bimodalSigmas >= 0.0) {
 			Statistics::MeanStdCount f, s;
@@ -565,10 +569,10 @@ public:
 			if(score >= minimumKmerScore)
 				kmers.valueAt(j) = score;
 			else
-				break;
+				kmers.valueAt(j) = 0.0;
 		}
 
-		trimReadByMinimumKmerScore(minimumKmerScore, trim, kmers.beginValue(), kmers.beginValue() + j);
+		trimReadByMinimumKmerScore(minimumKmerScore, trim, kmers.beginValue(), kmers.beginValue() + numKmers);
 	}
 
 	virtual void scoreAndTrimReads(ScoreType minimumKmerScore) {
@@ -624,7 +628,7 @@ public:
 		return _writePickRead(os, readIdx, trim, format);
 	}
 	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, const ReadTrimType &trim, int format = 0) const {
-		return _reads.write(os, readIdx, trim.trimLength, trim.label, format);
+		return _reads.write(os, readIdx, trim.trimOffset, trim.trimLength, trim.label, format);
 	}
 	std::ostream &writePick(std::ostream &os, ReadSetSizeType pickIdx, int format = 0) const {
 		Pair &pair = _picks[pickIdx];
