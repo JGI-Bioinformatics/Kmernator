@@ -41,6 +41,7 @@ int main(int argc, char *argv[]) {
 
 	// assign defaults
 	Options::getMmapInput() = 0;
+	Options::getVerbosity() = 2;
 
 	int threadSupport = MPI::Init_thread(MPI_THREAD_MULTIPLE);
 	mpi::environment env(argc, argv);

@@ -1448,12 +1448,15 @@ public:
 		return purgedKmers;
 	}
 	virtual void _preVariants(double variantSigmas, double minDepth) {}
-	virtual long _postVariants() { return 0; }
+	virtual long _postVariants(long purgedKmers) {
+		LOG_VERBOSE(1, "Removed " << purgedKmers << " kmer-variants");
+		return purgedKmers;
+	}
 	virtual void _variantThreadSync(long processed, long remaining, double maxDepth) {
-		LOG_DEBUG_OPTIONAL(2, true, "batch processed " << processed << " remaining: " << remaining << " threshold: " << maxDepth);
+		LOG_DEBUG(2, "Batch processed " << processed << " remaining: " << remaining << " threshold: " << maxDepth);
 	}
 	virtual long _variantBatchSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
-		LOG_DEBUG_OPTIONAL(1, true, "Purged " << purgedKmers << " variants below: " << maxDepth << " / " <<  threshold << " with " << remaining << " remaining");
+		LOG_DEBUG(2, "Purged " << purgedKmers << " variants below: " << maxDepth << " / " <<  threshold << " with " << remaining << " remaining");
 		return remaining;
 	}
 
@@ -1523,17 +1526,14 @@ public:
 				this->_variantThreadSync(processed, remaining, maxDepth);
 			}
 			remaining = this->_variantBatchSync(remaining, purgedKmers, maxDepth, getVariantThreshold(maxDepth, variantSigmas));
-			LOG_VERBOSE_OPTIONAL(2, true, "Processed " << processed << " remaining: " << remaining << " threshold: " << maxDepth);
 		}
 
-		LOG_DEBUG_OPTIONAL(1, true, "Finished processing variants: " << purgedKmers << " waiting for _postVariants");
-		purgedKmers += this->_postVariants();
-		LOG_DEBUG_OPTIONAL(1, true, "Finished processing variants: " << purgedKmers);
+		LOG_DEBUG(3, "Finished processing variants: " << purgedKmers << " waiting for _postVariants");
+		purgedKmers = this->_postVariants(purgedKmers);
 
-		LOG_DEBUG_OPTIONAL(2, true, "Purging to min depth");
+		LOG_DEBUG(1, "Purging to min depth: " << Options::getMinDepth());
 		this->purgeMinDepth(Options::getMinDepth());
 
-		LOG_VERBOSE(1, "Removed " << purgedKmers << " kmer-variants");
 		return purgedKmers;
 	}
 

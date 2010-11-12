@@ -581,8 +581,8 @@ private:
 		world.barrier();
 	}
 
-	long _postVariants() {
-		LOG_VERBOSE_OPTIONAL(2, true, "_postVariants()");
+	long _postVariants(long purgedKmers) {
+		_purgedVariants += this->KS::_postVariants(purgedKmers);
 		int &numThreads = _variantNumThreads;
 		#pragma omp parallel num_threads(numThreads)
 		{
@@ -595,7 +595,12 @@ private:
 		}
 		sendPurgeVariant.clear();
 		recvPurgeVariant.clear();
-		return _purgedVariants;
+
+		long allPurged;
+		mpi::all_reduce(world, _purgedVariants, allPurged, std::plus<long>());
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << allPurged << " kmer-variants");
+
+		return allPurged;
 	}
 	void _variantThreadSync(long processed, long remaining, double maxDepth) {
 		// call parent
@@ -625,7 +630,7 @@ private:
 		if (threshold > 0.0) {
 			long allPurged;
 			mpi::reduce(world, purgedKmers+_purgedVariants, allPurged, std::plus<long>(), 0);
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << allPurged << " variants below: " << maxDepth << " / " <<  threshold << ".  Remaining: " << allRemaining);
+			LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Distributed Purged " << allPurged << " variants below: " << maxDepth << " / " <<  threshold << ".  Remaining: " << allRemaining);
 		} else {
 			LOG_DEBUG(2, "Final variant purge batch");
 		}
