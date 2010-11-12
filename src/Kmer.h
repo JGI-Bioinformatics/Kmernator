@@ -1269,7 +1269,7 @@ public:
 				return affected;
 			}
 
-			std::string toString() {
+			std::string toString() const {
 				setSharedLock();
 				std::stringstream ss;
 				ss << "{";
@@ -1697,7 +1697,7 @@ public:
 		return size;
 	}
 
-	std::string toString() {
+	std::string toString() const {
 		std::stringstream ss;
 		ss << this << "[";
 		IndexType idx=0;
