@@ -1517,7 +1517,7 @@ public:
 						LOG_DEBUG(3, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
 						purgedKmers += this->_purgeVariants(pointers[threadId], it->key(), variants[threadId], threshold, editDistance);
 					}
-					if (++processed % 100 == 0)
+					if (++processed % 10000 == 0)
 						LOG_DEBUG_OPTIONAL(2, true, "progress processed " << processed);
 				}
 				this->_variantThreadSync(processed, remaining, maxDepth);
