@@ -97,13 +97,14 @@ private:
 	unsigned int buildPartitions;
 	unsigned int gcHeatMap;
 	unsigned int gatheredLogs;
+	unsigned int batchSize;
 
 	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10),
 	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
-	mmapInput(1), buildPartitions(0), gcHeatMap(1), gatheredLogs(1)
+	mmapInput(1), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000)
 	{
 	}
 
@@ -210,6 +211,9 @@ public:
 	}
 	static inline unsigned int &getGatheredLogs() {
 		return getOptions().gatheredLogs;
+	}
+	static inline unsigned int &getBatchSize() {
+		return getOptions().batchSize;
 	}
 	const static unsigned int MAX_INT = (unsigned int) -1;
 
@@ -370,6 +374,9 @@ protected:
 
 		("gathered-logs", po::value<unsigned int>()->default_value(gatheredLogs),
 				"If set and MPI is enabled, VERBOSE1, VERBOSE2 and DEBUG1 logs will be gathered to the master before being output.")
+
+		("batch-size", po::value<unsigned int>()->default_value(batchSize),
+				"default size of batches (reads, kmers, MPI, etc)")
 
 		;
 
@@ -566,6 +573,8 @@ public:
 			setOpt<unsigned int>("gc-heat-map", getGCHeatMap(), print);
 
 			setOpt<unsigned int>("gathered-logs", getGatheredLogs(), print);
+
+			setOpt<unsigned int>("batch-size", getBatchSize(), print);
 
 
 		} catch (std::exception& e) {

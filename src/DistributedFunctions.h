@@ -863,7 +863,7 @@ done when empty cycle is received
 		NumberType distributedThreadBitMask = _world.size() - 1;
 
 		ReadSetSizeType readsSize = this->_reads.getSize();
-		ReadSetSizeType batchSize = 1000000;
+		ReadSetSizeType batchSize = Options::getBatchSize();
 		ReadSetSizeType batchReadIdx = 0;
 		int maxKmers = std::max(1, (int) this->_reads.getMaxSequenceLength() - (int) KmerSizer::getSequenceLength());
 		int reserveBB = ((batchSize * maxKmers) / numThreads) + 1;

@@ -1386,7 +1386,7 @@ public:
 
 		long purgeEvery = Options::getPeriodicSingletonPurge();
 		long purgeCount = 0;
-		long batch = 1000000;
+		long batch = Options::getBatchSize();
 
 		if (omp_get_max_threads() > 1) {
 #ifdef _USE_OPENMP
@@ -1517,7 +1517,7 @@ public:
 						purgedKmers += this->_purgeVariants(pointers[threadId], it->key(), variants[threadId], threshold, editDistance);
 					}
 					if (++processed % 10000 == 0)
-						LOG_DEBUG_OPTIONAL(2, true, "progress processed " << processed);
+						LOG_DEBUG(2, "progress processed " << processed);
 				}
 				this->_variantThreadSync(processed, remaining, maxDepth);
 			}

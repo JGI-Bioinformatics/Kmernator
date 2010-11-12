@@ -132,15 +132,17 @@ public:
 protected:
 	mpi::communicator _world;
 	int _messageSize;
+	int _softMaxBufferSize;
 	Buffer _message;
 	FreeBufferCache freeBuffers;
 
 public:
 	MPIMessageBufferBase(mpi::communicator &world, int messageSize)
-	: _world(world), _messageSize(messageSize) {
+	: _world(world), _messageSize(messageSize), _softMaxBufferSize(MESSAGE_BUFFER_SIZE) {
 		_message = new char[ getMessageSize() ];
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
 		freeBuffers.reserve(BUFFER_QUEUE_SOFT_LIMIT * _world.size() + 1);
+		setSoftMaxBufferSize( Options::getBatchSize() * messageSize );
 	}
 	~MPIMessageBufferBase() {
 		delete [] _message;
@@ -153,6 +155,15 @@ public:
 	}
 	inline int getMessageSize() {
 		return _messageSize;
+	}
+	inline int getMaxBufferSize() const {
+		return MESSAGE_BUFFER_SIZE;
+	}
+	inline int getSoftMaxBufferSize() const {
+		return _softMaxBufferSize;
+	}
+	void setSoftMaxBufferSize(int size) {
+		_softMaxBufferSize = std::max(getMessageSize(), std::min(size, getMaxBufferSize()));
 	}
 	MessageClass *getTmpMessage() {
 		return (MessageClass*) this->_message;
@@ -515,19 +526,15 @@ public:
 		return buf;
 	}
 
-	MessageClass *bufferMessage(int rankDest, int tagDest) {
+	MessageClass *bufferMessage(int rankDest, int tagDest, int trailingBytes = 0) {
 		bool wasSent;
 		long messages = 0;
-		return bufferMessage(rankDest, tagDest, wasSent, messages);
+		return bufferMessage(rankDest, tagDest, wasSent, messages, trailingBytes);
 	}
 	// returns a pointer to the next message.  User can use this to create message
-	MessageClass *bufferMessage(int rankDest, int tagDest, bool &wasSent, long &messages) {
+	MessageClass *bufferMessage(int rankDest, int tagDest, bool &wasSent, long &messages, int trailingBytes = 0) {
 		int &offset = _offsets[rankDest];
-		wasSent = false;
-		while (offset + this->getMessageSize() > BufferBase::MESSAGE_BUFFER_SIZE) {
-			messages += flushMessageBuffer(rankDest, tagDest);
-			wasSent = true;
-		}
+		wasSent = flushIfFull(rankDest, tagDest, messages, trailingBytes);
 		Buffer &buffStart = getBuffer(rankDest);
 		assert(buffStart != NULL);
 		MessageClass *buf = (MessageClass *) (buffStart+offset);
@@ -537,8 +544,8 @@ public:
 		return buf;
 	}
 	// copies msg as the next message in the buffer
-	void bufferMessage(int rankDest, int tagDest, MessageClass *msg) {
-		char *buf = (char *) bufferMessage(rankDest, tagDest);
+	void bufferMessage(int rankDest, int tagDest, MessageClass *msg, int trailingBytes = 0) {
+		char *buf = (char *) bufferMessage(rankDest, tagDest, trailingBytes);
 		memcpy(buf, (char *) msg, this->getMessageSize());
 	}
 
@@ -546,7 +553,20 @@ public:
 		return this->receiveAll();
 	}
 
-public:
+	long flushIfFull(int rankDest, int tagDest, int trailingBytes = 0) {
+		long messages = 0;
+		flushIfFull(rankDest, tagDest, messages, trailingBytes);
+		return messages;
+	}
+	bool flushIfFull(int rankDest, int tagDest, long &messages, int trailingBytes) {
+		bool wasSent = false;
+		int &offset = _offsets[rankDest];
+		while (offset != 0 && offset + this->getMessageSize() + trailingBytes >= this->getSoftMaxBufferSize()) {
+			messages += flushMessageBuffer(rankDest, tagDest);
+			wasSent = true;
+		}
+		return wasSent;
+	}
 	long flushMessageBuffer(int rankDest, int tagDest, bool sendZeroMessage = false) {
 		long messages = 0;
 		long newMessages = 0;
