@@ -48,8 +48,8 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
 
-#define MPI_BUFFER_DEFAULT_SIZE (128 * 1024)
-#define WAIT_MS 2
+#define MPI_BUFFER_DEFAULT_SIZE (512 * 1024)
+#define WAIT_MS 1
 #define WAIT_AND_WARN( iterations, warningMessage ) \
 	if ((iterations % (60000/WAIT_MS)) == 0) LOG_WARN(1, warningMessage << " waiting in loop: " << iterations);  \
 	boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
@@ -162,11 +162,8 @@ public:
 			return new char[ MESSAGE_BUFFER_SIZE ];
 		} else {
 			Buffer buf;
-			#pragma omp critical (mpi_buffer_base_free_buffers)
-			{
-				buf = freeBuffers.back();
-				freeBuffers.pop_back();
-			}
+			buf = freeBuffers.back();
+			freeBuffers.pop_back();
 			return buf;
 		}	
 	}
@@ -174,7 +171,6 @@ public:
 		if (freeBuffers.size() >= (size_t) (BUFFER_QUEUE_SOFT_LIMIT * _world.size()) ) {
 			delete [] buf;
 		} else {
-			#pragma omp critical (mpi_buffer_base_free_buffers)
 			freeBuffers.push_back(buf);
 		}
 	}
@@ -399,7 +395,6 @@ private:
 			bufLoc = NULL;
 			BufferReceived bufferReceived( buf, size, source, tag );
 
-			#pragma omp critical (mpi_recv_buffer_process_queue)
 			_processBufferQueue.push_back( bufferReceived );
 
 			this->newMessageDelivery();
@@ -419,7 +414,6 @@ private:
 			while( !_processBufferQueue.empty() ) {
 				BufferReceived bufferReceived = _processBufferQueue.front();
 
-				#pragma omp critical (mpi_recv_buffer_process_queue)
 				_processBufferQueue.pop_front();
 
 				if (bufferReceived.size == 0) {
@@ -607,7 +601,6 @@ public:
 	}
 
 	void recordSentBuffer(SentBuffer &sent) {
-		#pragma omp critical (mpi_send_sent_buffers)
 		_sentBuffers.push_back(sent);
 	}
 	long checkSentBuffers(bool wait = false) {
@@ -643,7 +636,6 @@ public:
 
 				}
 			}
-			#pragma omp critical (mpi_send_sent_buffers)
 			_sentBuffers.remove_if(SentBuffer());
 
 			if (wait) {
