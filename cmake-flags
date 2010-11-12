@@ -12,6 +12,18 @@ libdir=$(dirname $(g++-${ver} --print-file-name=libstdc++.so))
 CXX=g++-${ver} \
 $CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall  -Wl,-rpath,${libdir}"
 
+# for NERSC hopper.nersc.gov: gcc compilers and MPICH2 xt-mpt, threaded MPI
+module load cmake
+module swap PrgEnv-pgi PrgEnv-gnu 
+export OMP_NUM_THREADS=4
+export MPICH_MAX_THREAD_SAFETY=multiple
+module swap  xt-libsci/10.4.3 xt-libsci/10.4.0
+CC=cc CXX=CC \
+cmake $Kmernator \
+    -DMPI_INCLUDE_PATH=${MPICH_DIR}/include    \
+    -DMPI_LIBRARY="libc.a" -DMPI_LINK_FLAGS="-lmpich_threadm"  \
+    -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
+
 # for static build
 $CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
 
