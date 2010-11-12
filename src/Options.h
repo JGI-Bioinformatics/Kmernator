@@ -96,13 +96,15 @@ private:
 	unsigned int mmapInput;
 	unsigned int buildPartitions;
 	unsigned int gcHeatMap;
+	unsigned int gatheredLogs;
 
 	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10),
 	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
-	mmapInput(1), buildPartitions(0), gcHeatMap(1) {
+	mmapInput(1), buildPartitions(0), gcHeatMap(1), gatheredLogs(1)
+	{
 	}
 
 public:
@@ -206,6 +208,9 @@ public:
 	static inline unsigned int &getGCHeatMap() {
 		return getOptions().gcHeatMap;
 	}
+	static inline unsigned int &getGatheredLogs() {
+		return getOptions().gatheredLogs;
+	}
 	const static unsigned int MAX_INT = (unsigned int) -1;
 
 	static std::string &getInputFileSubstring(unsigned int fileIdx) {
@@ -233,6 +238,7 @@ public:
 	static void validateOMPThreads() {
 #ifdef _USE_OPENMP
 		int maxThreads = omp_get_max_threads();
+		LOG_DEBUG(2, "validating OpenMP threads: " << maxThreads);
 
 		if (getMaxThreads() > maxThreads) {
 			LOG_DEBUG(2, "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads);
@@ -360,7 +366,12 @@ protected:
 				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.  Must be a power of 2")
 
 		("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap),
-				"If set, a GC Heat map will be output (requires --output)")					;
+				"If set, a GC Heat map will be output (requires --output)")
+
+		("gathered-logs", po::value<unsigned int>()->default_value(gatheredLogs),
+				"If set and MPI is enabled, VERBOSE1, VERBOSE2 and DEBUG1 logs will be gathered to the master before being output.")
+
+		;
 
 	}
 
@@ -437,9 +448,9 @@ public:
 #ifdef _USE_OPENMP
 
 			setOpt<int>("threads", getMaxThreads(), print);
-			validateOMPThreads();
 
 #endif
+			validateOMPThreads();
 
 			if (vm.count("reference-file")) {
 				if (print)
@@ -553,6 +564,9 @@ public:
 			setOpt<unsigned int>("build-partitions", getBuildPartitions(), print);
 
 			setOpt<unsigned int>("gc-heat-map", getGCHeatMap(), print);
+
+			setOpt<unsigned int>("gathered-logs", getGatheredLogs(), print);
+
 
 		} catch (std::exception& e) {
 			LOG_ERROR(1,"Exception processing options" << std::endl << getDesc() << std::endl << e.what() << std::endl << "Exception processing options!" );

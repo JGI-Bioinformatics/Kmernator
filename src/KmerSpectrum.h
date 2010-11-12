@@ -619,7 +619,7 @@ public:
 		}
 
 		if (weakHeap.size() == 0) {
-			LOG_DEBUG(1, "There are no eligible kmers to promote");
+			LOG_DEBUG(2, "There are no eligible kmers to promote");
 			return 0;
 		}
 		LOG_DEBUG(4, "Heap: " << weakHeap.size() << " " << weakHeap[0].value());
@@ -780,7 +780,7 @@ public:
 		MeanVectorType rates;
 		for(size_t i = 0; i< accumulators.size(); i++) {
 			rates.push_back( MeanType(mean(accumulators[i]), sqrt( variance(accumulators[i]) ) ) );
-			LOG_DEBUG(1, "Error Rate for pos " << i << ", " << std::fixed << std::setprecision(6) << rates[i].first << " +/- " << std::fixed << std::setprecision(6) << rates[i].second );
+			LOG_DEBUG(2, "Error Rate for pos " << i << ", " << std::fixed << std::setprecision(6) << rates[i].first << " +/- " << std::fixed << std::setprecision(6) << rates[i].second );
 		}
 		return rates;
 	}
@@ -1288,14 +1288,10 @@ public:
 
 		#pragma omp parallel num_threads(numThreads)
 		{
-			int threadId = omp_get_thread_num();
 			if (numThreads != omp_get_num_threads())
-			throw "OMP thread count mis-match";
-
-			if (threadId == 0)
-				LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads);
-
+				throw "OMP thread count mis-match";
 		}
+		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads);
 
 		while (batchIdx < (long) store.getSize())
 		{

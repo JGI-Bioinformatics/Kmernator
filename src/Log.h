@@ -59,11 +59,13 @@ class Logger
 	std::string _attribute;
 	unsigned int _level;
 	int _thisLevel;
-	static void *world;
+	static void *_world;
+	static bool _debugGather;
+
 	inline std::string getRank() {
 #ifdef _USE_MPI
-		if (world != NULL)
-			return " R" + boost::lexical_cast<std::string>( ((mpi::communicator*)world)->rank() );
+		if (_world != NULL)
+			return " R" + boost::lexical_cast<std::string>( ((mpi::communicator*)_world)->rank() );
 		else
 #endif
 			return std::string();
@@ -92,17 +94,21 @@ public:
 	Logger(const Logger &copy) {
 		*this = copy;
 	}
-	static void setWorld(void *_w) {
-		world = _w;
+	static void setWorld(void *_w, bool debugGather = false) {
+		_world = _w;
+		_debugGather = debugGather;
 	}
 #ifdef _USE_MPI
 	std::string gatherMessages(std::string msg) {
-		if (world != NULL) {
-			//*_os << getStamp() << "Entering gatherMessages: " << msg << std::endl;
-			mpi::communicator &w = *((mpi::communicator*) world);
+		if (_world != NULL ) {
+			mpi::communicator &w = *((mpi::communicator*) _world);
 			std::string out[w.size()];
-			if (!msg.empty())
+			if (!msg.empty()) {
 				msg = getStamp("M") + msg + "\n";
+				if (_debugGather)
+					*_os << "--DEBUG-GATHER--" << msg << std::endl;
+			}
+
 			try {
 				mpi::gather(w, msg, out, 0);
 			} catch (...) {
@@ -114,7 +120,7 @@ public:
 				ss << out[i];
 			msg = ss.str();
 			if (!msg.empty() && w.rank() == 0)
-				return "MPI Gathered Log Entries:\n" + msg;
+				return "\tMPI Gathered Log Entries:\n" + msg;
 			else
 				return std::string();
 		} else {
@@ -131,11 +137,11 @@ public:
 		return *this;
 	}
 	static inline bool isMaster() {
-		if (world == NULL)
+		if (_world == NULL)
 			return true;
 		else
 #ifdef  _USE_MPI
-			return ((mpi::communicator*)world)->rank() == 0;
+			return ((mpi::communicator*)_world)->rank() == 0;
 #else
 			return true;
 #endif

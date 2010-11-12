@@ -58,7 +58,8 @@ void reduceOMPThreads(mpi::communicator &world) {
 }
 
 void validateMPIWorld(mpi::communicator &world, int threadSupport) {
-	Logger::setWorld(&world);
+	if (Options::getGatheredLogs())
+		Logger::setWorld(&world, Options::getDebug() >= 2);
 	if ((world.size() & (world.size()-1)) != 0) {
 		throw std::invalid_argument(
 				(std::string("The number of mpi processes must be a power-of-two.\nPlease adjust the number of processes. ")
@@ -79,6 +80,7 @@ ReadSet::ReadSetSizeType setGlobalReadSetOffset(mpi::communicator &world, ReadSe
 	long readSetSizes[ world.size() ];
 	for(int i = 0; i < world.size(); i++)
 		readSetSizesInput[i] = i == world.rank() ? readSetSize : 0;
+	LOG_DEBUG(2, "setGlobalReadSetOffset: all_reduce:" << readSetSize);
 	mpi::all_reduce(world, (long*) readSetSizesInput, world.size(), (long*) readSetSizes, mpi::maximum<long>());
 	long globalReadSetOffset = 0;
 	for(int i = 0; i < world.rank(); i++)
@@ -130,6 +132,7 @@ public:
 		for(IndexType i = 0 ; i < numBuckets; i++)
 			mySizeCounts[i] = kmerMap.getBucketByIdx(i).size();
 		NumberType *ourSizeCounts = new NumberType[ numBuckets ];
+		LOG_DEBUG(2, "writeKmerMap(): all_reduce() " << numBuckets << ", " << ourSizeCounts[0] << " " << ourSizeCounts[1] << " " << ourSizeCounts[2] << " " << ourSizeCounts[3]);
 		all_reduce(world, mySizeCounts, numBuckets, ourSizeCounts, std::plus<NumberType>());
 		LOG_DEBUG(3, "Distributed Size Counts: " << ourSizeCounts[0] << " " << ourSizeCounts[1] << " " << ourSizeCounts[2] << " " << ourSizeCounts[3]);
 
@@ -160,8 +163,10 @@ public:
 				*(numbers++) = offsetArray[i];
 			}
 			msync(mmap.data(), (char*) numbers - mmap.data(), MS_SYNC);
+			LOG_DEBUG(2, "writeKmerMap(): barrier");
 			world.barrier();
 		} else {
+			LOG_DEBUG(2, "writeKmerMap(): barrier");
 			world.barrier();
 			mmap = MmapFile(filepath, std::ios_base::in | std::ios_base::out, totalMmapSize);
 			NumberType *numbers = (NumberType *) mmap.data();
@@ -184,6 +189,7 @@ public:
 		}
 
 		delete [] mySizeCounts;	// aka offsetArray
+		LOG_DEBUG(2, "writeKmerMap(): barrier2");
 		world.barrier();
 
 		// swap memory maps
@@ -290,6 +296,7 @@ public:
 		ReadSetSizeType globalReadSetOffset = store.getGlobalOffset();
 		assert( world.rank() == 0 ? (globalReadSetOffset == 0) : (globalReadSetOffset > 0) );
 
+		std::stringstream ss;
 		#pragma omp parallel num_threads(numThreads)
 		{
 			int threadId = omp_get_thread_num();
@@ -300,9 +307,11 @@ public:
 				sendBuffers[threadId][recvThread]->addReceiveAllCallback( recvBuffers[threadId] );
 			}
 
-			LOG_DEBUG(2, "message buffers ready");
 			#pragma omp master
-			world.barrier();
+			{
+				LOG_DEBUG(2, "message buffers ready");
+				world.barrier();
+			}
 			#pragma omp barrier
 
 			for(long readIdx = threadId ; readIdx < readSetSize; readIdx+=numThreads)
@@ -335,8 +344,12 @@ public:
 				}
 
 				if (threadId == 0 && readIdx % 1000000 == 0) {
-					LOG_DEBUG(2, "local processed: " << readIdx << " reads");
-					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed processing " << (readIdx * world.size()) << " reads");
+					if (world.rank() == 0) {
+						LOG_VERBOSE_OPTIONAL(1, true, "distributed processing " << (readIdx * world.size()) << " reads");
+					} else {
+						LOG_DEBUG(2, "local processed: " << readIdx << " reads");
+					}
+
 				}
 			}
 
@@ -354,25 +367,31 @@ public:
 
 
 			LOG_DEBUG(3, "sending final messages")
-			stringstream ss;
+
 			for(int destThread = 0; destThread < numThreads; destThread++) {
 				sendBuffers[threadId][destThread]->finalize(destThread);
-				if (Log::isDebug(2))
-					ss << "sendBuffers["<<threadId<<"]["<<destThread<<"] sent " << sendBuffers[threadId][destThread]->getNumDeliveries() << "/" << sendBuffers[threadId][destThread]->getNumMessages() << std::endl;
-				delete sendBuffers[threadId][destThread];
 			}
-
 			LOG_DEBUG(3, "receiving final messages");
 			recvBuffers[threadId]->finalize(numThreads);
 
-			std::string s = ss.str();
-
-			LOG_DEBUG(2, std::endl << s << "recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries() << "/" << recvBuffers[threadId]->getNumMessages());
-
+			#pragma omp critical
+			{
+				if (Log::isDebug(2)) {
+					for(int destThread = 0; destThread < numThreads; destThread++)
+						ss << "R" << world.rank() << ": sendBuffers["<<threadId<<"]["<<destThread<<"] sent " << sendBuffers[threadId][destThread]->getNumDeliveries() << "/" << sendBuffers[threadId][destThread]->getNumMessages() << std::endl;
+					ss  << "R" << world.rank() << ":recvBuffers["<<threadId<<"] received " << recvBuffers[threadId]->getNumDeliveries() << "/" << recvBuffers[threadId]->getNumMessages() << std::endl;
+				}
+			}
+			for(int destThread = 0; destThread < numThreads; destThread++) {
+				delete sendBuffers[threadId][destThread];
+			}
 			delete recvBuffers[threadId];
 
 		} // omp parallel
 
+		std::string s = ss.str();
+		LOG_DEBUG(1, s);
+		LOG_DEBUG(2, "_buildKmerSpectrumMPI() final barrier");
 		world.barrier();
 		LOG_DEBUG(1, "finished _buildKmerSpectrumMPI");
 	}
@@ -391,6 +410,7 @@ public:
 			double *inbuffer_d = new double[this->buckets.size()];
 			double *outbuffer_d = new double[this->buckets.size()];
 
+			LOG_DEBUG(2, "MPIHistogram::reduce() all_reduce");
 			for(unsigned int i = 0; i < copy.size(); i++) {
 				inbuffer[i] = this->buckets[i].visits;
 			}
@@ -428,6 +448,7 @@ public:
 
 		std::string hist = getHistogram(isSolid);
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective raw histogram\n" << hist);
+		LOG_DEBUG(2, "buildKmerSpectrum() barrier");
 		world.barrier();
 
 		// purge low counts
@@ -459,7 +480,7 @@ public:
 	Kmernator::MmapFileVector writeKmerMaps(string fileprefix = Options::getOutputFile()) {
 		// communicate sizes and allocate permanent file
 		LOG_VERBOSE(2, "Merging partial spectrums" );
-		LOG_DEBUG(2, MemoryUtils::getMemoryUsage() );
+		LOG_DEBUG(3, MemoryUtils::getMemoryUsage() );
 		Kmernator::MmapFileVector ourSpectrum(3);
 		if (this->hasSolids){
 			ourSpectrum[0] = this->writeKmerMap(this->solid, fileprefix + "-kmer-mmap");
@@ -578,6 +599,7 @@ private:
 				sendPurgeVariant[threadId*numThreads+t]->addReceiveAllCallback( recvPurgeVariant[threadId] );
 			}
 		}
+		LOG_DEBUG(2, "_preVariants(): barrier");
 		world.barrier();
 	}
 
@@ -597,6 +619,7 @@ private:
 		recvPurgeVariant.clear();
 
 		long allPurged;
+		LOG_DEBUG(2, "_postVariants(): all_reduce");
 		mpi::all_reduce(world, _purgedVariants, allPurged, std::plus<long>());
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << allPurged << " kmer-variants");
 
@@ -626,13 +649,12 @@ private:
 		remaining = this->KS::_variantBatchSync(remaining, purgedKmers, maxDepth, threshold);
 
 		long allRemaining;
+		LOG_DEBUG(2, "_variantBatchSync(): all_reduce + barrier");
 		mpi::all_reduce(world, remaining, allRemaining, std::plus<long>());
 		if (threshold > 0.0) {
 			long allPurged;
 			mpi::reduce(world, purgedKmers+_purgedVariants, allPurged, std::plus<long>(), 0);
 			LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Distributed Purged " << allPurged << " variants below: " << maxDepth << " / " <<  threshold << ".  Remaining: " << allRemaining);
-		} else {
-			LOG_DEBUG(2, "Final variant purge batch");
 		}
 		world.barrier();
 		return allRemaining;
@@ -862,8 +884,9 @@ done when empty cycle is received
 		RecvRespondKmerMessageBuffer *recvResp[numThreads];
 		SendRespondKmerMessageBuffer *sendResp[numThreads];
 
+		LOG_DEBUG(2, "scoreAndTrimReads(): all_reduce: " << readsSize);
 		ReadSetSizeType mostReads = mpi::all_reduce(_world, readsSize, mpi::maximum<ReadSetSizeType>());
-		LOG_DEBUG(2, "Largest number of reads to batch: " << mostReads);
+		LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "Largest number of reads to batch: " << mostReads);
 
 		#pragma omp parallel num_threads(numThreads)
 		{
@@ -883,7 +906,7 @@ done when empty cycle is received
 			recvReq[threadId]->addFlushAllCallback( sendResp[threadId], threadId + numThreads);
 		}
 
-		LOG_DEBUG(2, "message buffers ready");
+		LOG_DEBUG(2, "scoreAndTrimReads(): barrier. message buffers ready");
 		_world.barrier();
 
 		#pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
@@ -977,26 +1000,32 @@ done when empty cycle is received
 			// local & world threads are okay to start without sync
 		}
 
-		LOG_DEBUG(1, "Finished trimming, waiting for remote processes");
+		LOG_DEBUG(2, "scoreAndTrimReads(): barrier.  Finished trimming, waiting for remote processes");
 		_world.barrier();
 
+		std::stringstream ss;
 		#pragma omp parallel num_threads(numThreads)
 		{
 			int threadId = omp_get_thread_num();
 			// initialize message buffers
 
 			LOG_DEBUG(2, "Releasing Request/Response message buffers");
-			LOG_DEBUG(2, "recvResp["<<threadId<<"] received " << recvResp[threadId]->getNumDeliveries() << "/" << recvResp[threadId]->getNumMessages());
-			LOG_DEBUG(2, "sendResp["<<threadId<<"] sent     " << sendResp[threadId]->getNumDeliveries() << "/" << sendResp[threadId]->getNumMessages());
+			#pragma omp critical
+			{
+				ss		<< "recvResp["<<threadId<<"] received " << recvResp[threadId]->getNumDeliveries() << "/" << recvResp[threadId]->getNumMessages()
+						<< "sendResp["<<threadId<<"] sent     " << sendResp[threadId]->getNumDeliveries() << "/" << sendResp[threadId]->getNumMessages()
+						<< "recvReq["<<threadId<<"] received " << recvReq[threadId]->getNumDeliveries() << "/" << recvReq[threadId]->getNumMessages()
+						<< "sendReq["<<threadId<<"] sent     " << sendReq[threadId]->getNumDeliveries() << "/" << sendReq[threadId]->getNumMessages() << std::endl;
+			}
 			delete recvResp[threadId];
 			delete sendResp[threadId];
 
-			LOG_DEBUG(2, "recvReq["<<threadId<<"] received " << recvReq[threadId]->getNumDeliveries() << "/" << recvReq[threadId]->getNumMessages());
-			LOG_DEBUG(2, "sendReq["<<threadId<<"] sent     " << sendReq[threadId]->getNumDeliveries() << "/" << sendReq[threadId]->getNumMessages());
 			delete recvReq[threadId];
 			delete sendReq[threadId];
 		}
-		LOG_DEBUG(1, "Finished scoreAndTrimReadsMPI");
+		std::string s = ss.str();
+		LOG_DEBUG(1, s);
+		LOG_DEBUG(2, "scoreAndTrimReads(): barrier.  Finished scoreAndTrimReadsMPI");
 		_world.barrier();
 	}
 
