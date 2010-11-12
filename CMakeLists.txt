@@ -101,7 +101,6 @@ endif()
 
 include_directories( src )
 add_subdirectory( src )
-link_directories( src )
 
 add_subdirectory( test )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
