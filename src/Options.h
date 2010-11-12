@@ -98,7 +98,7 @@ private:
 	unsigned int gcHeatMap;
 
 	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10),
-	minQuality(5), minDepth(2), depthRange(2), minReadLength(22), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
+	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
@@ -503,6 +503,10 @@ public:
 			setOpt<double>("bimodal-sigmas", getBimodalSigmas(), print);
 			setOpt<double>("variant-sigmas", getVariantSigmas(), print);
 
+			if (getBimodalSigmas() >= 0 && (getMinReadLength() < getKmerSize() + 2)) {
+				if(Logger::isMaster())
+					LOG_WARN(1, "Bimodal Read Detection does not work unless min-read-length >= 2 + kmer-size");
+			}
 			// set the ignore quality value
 			setOpt<unsigned int>("ignore-quality", getIgnoreQual(), print);
 
