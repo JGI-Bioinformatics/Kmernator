@@ -37,8 +37,6 @@ typedef TrackingDataWithDirection DataType;
 typedef DistributedKmerSpectrum<DataType, DataType> KS;
 typedef DistributedReadSelector<DataType> RS;
 
-#include "FilterReadsTemplate.h"
-
 int main(int argc, char *argv[]) {
 
 	// assign defaults
@@ -54,6 +52,9 @@ int main(int argc, char *argv[]) {
 
 		if (!FilterReadsOptions::parseOpts(argc, argv))
 			throw std::invalid_argument("Please fix the command line arguments");
+
+		if (FilterReadsOptions::getMaxKmerDepth() > 0 && world.size() > 1)
+			throw std::invalid_argument("Distributed version does not support max-kmer-output-depth option");
 
 	} catch (...) {
 		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
@@ -120,7 +121,8 @@ int main(int argc, char *argv[]) {
 			reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
 		} else {
-			LOG_WARN(1, "Distributed DuplicateFragmentPair Filter is not supported (yet)." << std::endl
+			if (world.rank() == 0)
+				LOG_WARN(1, "Distributed DuplicateFragmentPair Filter is not supported (yet)." << std::endl
 					<< "If you want this feature please run the non-MPI FilterReads");
 		}
 
@@ -195,7 +197,7 @@ int main(int argc, char *argv[]) {
 			while (rank < world.size()) {
 				if (rank == world.rank()) {
 					LOG_VERBOSE_OPTIONAL(1, true, "Writing files part " << (rank+1) << " of " << world.size());
-					selectReads(thisDepth, reads, spectrum, selector, pickOutputFilename);
+					selectReads(thisDepth, reads, selector, pickOutputFilename);
 				}
 				world.barrier();
 				rank++;

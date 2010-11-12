@@ -35,9 +35,6 @@ typedef TrackingDataWithDirection DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 typedef ReadSelector<DataType> RS;
 
-#include "FilterReadsTemplate.h"
-
-
 int main(int argc, char *argv[]) {
 
 	try {
@@ -142,7 +139,7 @@ int main(int argc, char *argv[]) {
 			RS selector(reads, spectrum.weak);
 			selector.scoreAndTrimReads(minDepth);
 
-			selectReads(thisDepth, reads, spectrum, selector, pickOutputFilename);
+			selectReads(thisDepth, reads, selector, pickOutputFilename);
 		}
 	}
 
