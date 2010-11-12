@@ -98,13 +98,14 @@ private:
 	unsigned int gcHeatMap;
 	unsigned int gatheredLogs;
 	unsigned int batchSize;
+	unsigned int separateOutputs;
 
 	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10),
 	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
-	mmapInput(1), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000)
+	mmapInput(1), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
 	{
 	}
 
@@ -214,6 +215,9 @@ public:
 	}
 	static inline unsigned int &getBatchSize() {
 		return getOptions().batchSize;
+	}
+	static inline unsigned int &getSeparateOutputs() {
+		return getOptions().separateOutputs;
 	}
 	const static unsigned int MAX_INT = (unsigned int) -1;
 
@@ -377,6 +381,9 @@ protected:
 
 		("batch-size", po::value<unsigned int>()->default_value(batchSize),
 				"default size of batches (reads, kmers, MPI, etc)")
+
+		("separate-outputs", po::value<unsigned int>()->default_value(separateOutputs),
+				"If set, each input (plus consensus) will generate a new outputfile.  If set to 0, all input files will be merged into one output file.")
 
 		;
 
@@ -576,6 +583,7 @@ public:
 
 			setOpt<unsigned int>("batch-size", getBatchSize(), print);
 
+			setOpt<unsigned int>("separate-outputs", getSeparateOutputs(), print);
 
 		} catch (std::exception& e) {
 			LOG_ERROR(1,"Exception processing options" << std::endl << getDesc() << std::endl << e.what() << std::endl << "Exception processing options!" );
