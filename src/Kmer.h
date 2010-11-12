@@ -75,12 +75,13 @@ private:
 	static KmerSizer singleton;
 
 	KmerSizer() :
-		_sequenceLength(21) {
+		_sequenceLength(0) {
 		_set(_sequenceLength);
 	}
 
 	void _set(SequenceLengthType sequenceLength) {
-		_verifyThreads();
+		if (sequenceLength > 0)
+			_verifyThreads();
 		_sequenceLength = sequenceLength;
 		_twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(_sequenceLength);
 		_totalSize = _twoBitLength;
