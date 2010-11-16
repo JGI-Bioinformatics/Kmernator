@@ -181,11 +181,14 @@ public:
 		return getKmersForRead(read);
 	}
 	inline KA getKmersForTrimmedRead(ReadSetSizeType readIdx) {
+		if (_trims[readIdx].trimLength < KmerSizer::getSequenceLength())
+			return KA();
 		KA kmers(_reads.getRead(readIdx).getTwoBitSequence(), _trims[readIdx].trimOffset + _trims[readIdx].trimLength, true);
 		if (_trims[readIdx].trimOffset > 0) {
-			kmers = kmers.copyRange(_trims[readIdx].trimOffset, _trims[readIdx].trimLength);
+			return kmers.copyRange(_trims[readIdx].trimOffset, _trims[readIdx].trimLength - KmerSizer::getSequenceLength() + 1);
+		} else {
+			return kmers;
 		}
-		return kmers;
 	}
 
 protected:
@@ -310,8 +313,7 @@ public:
 		return picked;
 	}
 
-	bool rescoreByBestCoveringSubset(ReadSetSizeType readIdx, unsigned char maxPickedKmerDepth) {
-		ReadTrimType &trim = _trims[readIdx];
+	bool rescoreByBestCoveringSubset(ReadSetSizeType readIdx, unsigned char maxPickedKmerDepth, ReadTrimType &trim) {
 		KA kmers = getKmersForTrimmedRead(readIdx);
 		ScoreType score = 0.0;
 		for(SequenceLengthType j = 0; j < kmers.size(); j++) {
@@ -329,7 +331,7 @@ public:
 			}
 		}
 
-		bool hasNotChanged = (score >= trim.score);
+		bool hasNotChanged = (score > 0) && ( (score * 1.0001) >= trim.score);
 		trim.score = score;
 		return hasNotChanged;
 	}
@@ -338,12 +340,22 @@ public:
 		score = 0.0;
 		bool hasNotChanged = true;
 		if (_reads.isValidRead(pair.read1)) {
-			hasNotChanged &= rescoreByBestCoveringSubset(pair.read1, maxPickedKmerDepth);
-			score += _trims[pair.read1].score;
+			ReadTrimType &trim = _trims[pair.read1];
+			hasNotChanged &= rescoreByBestCoveringSubset(pair.read1, maxPickedKmerDepth, trim);
+			if (trim.score > 0)
+				score += trim.score;
+			else
+				score = trim.score;
 		}
 		if (_reads.isValidRead(pair.read2)) {
-			hasNotChanged &= rescoreByBestCoveringSubset(pair.read2, maxPickedKmerDepth);
-			score += _trims[pair.read2].score;
+			ReadTrimType &trim = _trims[pair.read2];
+			hasNotChanged &= rescoreByBestCoveringSubset(pair.read2, maxPickedKmerDepth, trim);
+			if (score > 0) {
+				if (trim.score > 0)
+					score += trim.score;
+				else
+					score = trim.score;
+			}
 		}
 		return hasNotChanged;
 	}
@@ -364,7 +376,7 @@ public:
 			ScoreType score;
 			if (isPairAvailable(pair, bothPass)) {
 				rescoreByBestCoveringSubset(pair, maxPickedKmerDepth, score);
-				if (isPassingPair(pair, minimumScore, minimumLength, bothPass)) {
+				if (score > minimumScore && isPassingPair(pair, minimumScore, minimumLength, bothPass)) {
 					heapedPairs.push_back( PairScore( pair, score ) );
 				}
 			}
@@ -374,24 +386,31 @@ public:
 
 		std::make_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
 
-		LOG_VERBOSE(1,  "picking pairs: ");
+		LOG_VERBOSE(1,  "picking pairs at depth: " << (int) maxPickedKmerDepth);
 
 		// pick pairs
 		while (heapedPairs.begin() != heapedPairs.end()) {
+			LOG_DEBUG(3, "heap " << heapedPairs.size());
 			PairScore &pairScore = heapedPairs.front();
 			std::pop_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
 			heapedPairs.pop_back();
 
 			if ( rescoreByBestCoveringSubset(pairScore.pair, maxPickedKmerDepth, pairScore.score) ) {
-				pickIfNew(pairScore.pair) && picked++;
+				if (pickIfNew(pairScore.pair)) {
+					picked++;
+					LOG_DEBUG(4, "Selected pair: " << pairScore.pair.read1 << " " << pairScore.pair.read2);
+				}
 			} else {
-				if (pairScore.score > 0.0) {
+				if (pairScore.score > minimumScore && isPassingPair(pairScore.pair, minimumScore, minimumLength, bothPass)) {
+					LOG_DEBUG(4, "replacing Pair(" << pairScore.pair.read1 << ", " << pairScore.pair.read2 << "): "
+							<< pairScore.score << " " << (isPassingRead(pairScore.pair.read1) ? _trims[pairScore.pair.read1].score : -2.0) << " "
+							<< (isPassingRead(pairScore.pair.read2) ? _trims[pairScore.pair.read2].score : -2.0));
 					heapedPairs.push_back(pairScore);
 					std::push_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
 				}
 			}
 		}
-		LOG_VERBOSE(1,  picked);
+		LOG_VERBOSE(1, "Picked " << picked);
 		optimizePickOrder();
 		return picked;
 	}
@@ -406,7 +425,7 @@ public:
 		for(ReadSetSizeType readIdx = 0; readIdx < _reads.getSize(); readIdx++) {
 			ReadTrimType &trim = _trims[readIdx];
 			if (trim.isAvailable) {
-				rescoreByBestCoveringSubset(readIdx, maxPickedKmerDepth);
+				rescoreByBestCoveringSubset(readIdx, maxPickedKmerDepth, trim);
 				if (isPassingRead(readIdx, minimumScore, minimumLength)) {
 					heapedReads.push_back(readIdx);
 				}
@@ -423,10 +442,11 @@ public:
 			std::pop_heap(heapedReads.begin(), heapedReads.end(), ScoreCompare(this));
 			heapedReads.pop_back();
 
-			if ( rescoreByBestCoveringSubset(readIdx, maxPickedKmerDepth) ) {
+			ReadTrimType &trim = _trims[readIdx];
+			if ( rescoreByBestCoveringSubset(readIdx, maxPickedKmerDepth, trim) ) {
 				pickIfNew(readIdx) && picked++;
 			} else {
-				if (_trims[readIdx].score > 0.0) {
+				if (trim.score > 0.0) {
 					heapedReads.push_back(readIdx);
 					std::push_heap(heapedReads.begin(), heapedReads.end(), ScoreCompare(this));
 				}
