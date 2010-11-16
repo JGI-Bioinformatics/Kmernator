@@ -374,8 +374,9 @@ public:
 		public:
 			unsigned long visits;
 			unsigned long visitedCount;
+			unsigned long cumulativeVisits;
 			double visitedWeight;
-			HistogramElement() : visits(0), visitedCount(0), visitedWeight(0.0) {}
+			HistogramElement() : visits(0), visitedCount(0), cumulativeVisits(0), visitedWeight(0.0) {}
 			HistogramElement &operator+(const HistogramElement rh) {
 				visits += rh.visits;
 				visitedCount += rh.visitedCount;
@@ -446,13 +447,16 @@ public:
 		}
 		void finish() {
 			resetTotals();
-			for(size_t i = 0; i<buckets.size(); i++) {
+			if (buckets.size() == 0)
+				return;
+			for(int i = buckets.size() - 1; i >= 0; i--) {
 				HistogramElement &elem = buckets[ i ];
+				elem.cumulativeVisits = count += elem.visits;
 				if (elem.visits > 0) {
-					count += elem.visits;
 					totalCount += elem.visitedCount;
 					totalWeightedCount += elem.visitedWeight;
-					lastBucket = i;
+					if ((unsigned int) i > lastBucket)
+						lastBucket = i;
 				}
 			}
 		}
@@ -467,16 +471,17 @@ public:
 			<< "\t" << (totalCount/count)
 			<< "\t" << std::endl;
 
-			ss << "Weights:\t" << totalWeightedCount
+			ss << "Weights:\t" << count << "\t" << totalWeightedCount
 			<< "\t" << (totalWeightedCount/count)
 			<< "\t" << (totalWeightedCount/totalCount)
 			<< std::endl;
 
 			ss << std::endl;
 
-			ss << "Bucket\tUnique\t%Unique\tCount\t%Count\tWeight\tQualProb\t%Weight" << std::endl;
+			ss << "Bucket\tCumulative\tUnique\t%Unique\tCount\t%Count\tWeight\tQualProb\t%Weight" << std::endl;
 			for (unsigned int i=1; i < lastBucket+1; i++) {
 				ss << getBucketValue(i) << "\t";
+				ss << buckets[i].cumulativeVisits << "\t";
 				ss << buckets[i].visits << "\t";
 				ss << 100.0 * buckets[i].visits / count << "\t";
 				ss << buckets[i].visitedCount << "\t";
