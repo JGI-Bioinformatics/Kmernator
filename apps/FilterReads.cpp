@@ -134,8 +134,11 @@ int main(int argc, char *argv[]) {
 			std::string pickOutputFilename = outputFilename;
 			if (Options::getKmerSize() > 0) {
 				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
+				LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
+			} else {
+				LOG_VERBOSE(1, "Trimming reads that pass Artifact Filter with length: " << Options::getMinReadLength());
 			}
-			LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
+
 			RS selector(reads, spectrum.weak);
 			selector.scoreAndTrimReads(minDepth);
 

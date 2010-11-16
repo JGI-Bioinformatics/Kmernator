@@ -48,6 +48,7 @@ int main(int argc, char *argv[]) {
 	mpi::communicator world;
 
 	try {
+		Logger::setWorld(world);
 
 		validateMPIWorld(world, threadSupport);
 
@@ -56,6 +57,9 @@ int main(int argc, char *argv[]) {
 
 		if (FilterReadsOptions::getMaxKmerDepth() > 0 && world.size() > 1)
 			throw std::invalid_argument("Distributed version does not support max-kmer-output-depth option");
+
+		if (Options::getGatheredLogs())
+			Logger::setWorld(&world, Options::getDebug() >= 2);
 
 	} catch (...) {
 		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
@@ -181,8 +185,10 @@ int main(int argc, char *argv[]) {
 			std::string pickOutputFilename = outputFilename;
 			if (Options::getKmerSize() > 0) {
 				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << thisDepth);
+			} else {
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << Options::getMinReadLength());
 			}
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << thisDepth);
 			RS selector(world, reads, spectrum.weak);
 			selector.scoreAndTrimReads(minDepth);
 

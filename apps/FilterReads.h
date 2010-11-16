@@ -102,7 +102,7 @@ template<typename _ReadSelector>
 long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector, std::string outputFilename)
 {
 
-	LOG_VERBOSE_OPTIONAL(1, true, "selectReads with minDepth " << minDepth << ": " << reads.getSize());
+	LOG_VERBOSE_OPTIONAL(1, true, "selectReads with minDepth " << minDepth << ", minLength " << Options::getMinReadLength() << ": " << reads.getSize());
 	LOG_DEBUG_OPTIONAL(1, true, MemoryUtils::getMemoryUsage());
 
 	long oldPicked = 0;
