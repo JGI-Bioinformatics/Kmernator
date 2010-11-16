@@ -585,11 +585,11 @@ public:
 	}
 
 	KmerArray copyRange(SequenceLengthType offset, SequenceLengthType length) {
-		assert(offset+length < _size);
+		assert(offset+length <= _size);
 		if (offset == 0 && length == _size)
 			return KmerArray(*this);
 		KmerArray splice(length);
-		splice._copyRange(_begin, getValueStart(), offset, offset, length, false);
+		splice._copyRange(_begin, getValueStart(), 0, offset, length, false);
 		return splice;
 	}
 
