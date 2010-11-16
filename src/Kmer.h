@@ -1653,7 +1653,7 @@ public:
 		return getElementIfExists(key, getBucket(key));
 	}
 
-	ElementType getOrSetElement(const KeyType &key, BucketType &bucket, ValueType &value) {
+	ElementType getOrSetElement(const KeyType &key, BucketType &bucket, ValueType value) {
 		IndexType existingIdx;
 		ElementType element;
 		bucket.setExclusiveLock();
@@ -1665,7 +1665,7 @@ public:
 		bucket.unsetExclusiveLock();
 		return element;
 	}
-	ElementType getOrSetElement(const KeyType &key, ValueType &value) {
+	ElementType getOrSetElement(const KeyType &key, ValueType value) {
 		return getOrSetElement(key, getBucket(key), value);
 	}
 	ElementType getElement(const KeyType &key, BucketType &bucket) {
