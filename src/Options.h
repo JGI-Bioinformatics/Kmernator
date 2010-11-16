@@ -484,8 +484,7 @@ public:
 			if (vm.count("kmer-size")) {
 				setOpt<unsigned int>("kmer-size", getKmerSize(), print);
 			} else {
-				LOG_ERROR(1, "There was no kmer size specified!");
-				return false;
+				LOG_WARN(1, "There was no kmer size specified!");
 			}
 			if (vm.count("input-file")) {
 				if (print) {
@@ -499,9 +498,9 @@ public:
 					*output << std::endl;
 				}
 			} else  {
-				LOG_ERROR(1, "There were no input files specified!" << std::endl << desc << std::endl << "There were no input files specified!");
-				return false;
+				LOG_WARN(1, "There were no input files specified!");
 			}
+
 			setOpt<std::string>("output-file", getOutputFile(), print);
 
 			setOpt<std::string>("temp-dir", getTmpDir(), print);
@@ -567,7 +566,7 @@ public:
 			setOpt<unsigned int>("dedup-start-offset", getDeDupStartOffset(), print);
 			setOpt<unsigned int>("dedup-length", getDeDupLength(), print);
 			if (getDeDupStartOffset() % 4 != 0 || getDeDupLength() % 4 != 0) {
-				LOG_ERROR(1, "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl << desc << std::endl << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!");
+				LOG_ERROR(1, "Unsupported option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl << desc << std::endl << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!");
 				return false;
 			}
 
