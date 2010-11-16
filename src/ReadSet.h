@@ -89,6 +89,9 @@ public:
 		inline bool operator==(const Pair &other) const {
 			return (read1 == other.read1) && (read2 == other.read2);
 		}
+		inline bool operator!=(const Pair & other) const {
+			return !(*this == other);
+		}
 		inline bool operator<(const Pair &other) const {
 			return lesser() < other.lesser();
 		}
