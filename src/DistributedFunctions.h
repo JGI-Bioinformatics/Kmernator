@@ -58,8 +58,6 @@ void reduceOMPThreads(mpi::communicator &world) {
 }
 
 void validateMPIWorld(mpi::communicator &world, int threadSupport) {
-	if (Options::getGatheredLogs())
-		Logger::setWorld(&world, Options::getDebug() >= 2);
 	if ((world.size() & (world.size()-1)) != 0) {
 		throw std::invalid_argument(
 				(std::string("The number of mpi processes must be a power-of-two.\nPlease adjust the number of processes. ")
@@ -270,10 +268,11 @@ public:
 			weight = _weight;
 			*(getKmer()) = _kmer;
 		}
-		void process(RecvStoreKmerMessageBufferBase *bufferCallback) {
+		int process(RecvStoreKmerMessageBufferBase *bufferCallback) {
 			RecvStoreKmerMessageBuffer *kbufferCallback = (RecvStoreKmerMessageBuffer*) bufferCallback;
 			LOG_DEBUG(4, "StoreKmerMessage: " << readIdx << " " << readPos << " " << weight << " " << getKmer()->toFasta());
 			kbufferCallback->getSpectrum().append(kbufferCallback->getDataPointer(), *getKmer(), weight, readIdx, readPos, kbufferCallback->isSolid());
+			return 0;
 		}
 	};
 
@@ -559,7 +558,7 @@ public:
 			threshold = _threshold;
 			*(getKmer()) = _kmer;
 		}
-		void process(RecvPurgeVariantKmerMessageBufferBase *bufferCallback) {
+		int process(RecvPurgeVariantKmerMessageBufferBase *bufferCallback) {
 			RecvPurgeVariantKmerMessageBuffer *kbufferCallback = (RecvPurgeVariantKmerMessageBuffer*) bufferCallback;
 			LOG_DEBUG(4, "PurgeVariantKmerMessage: " << threshold << " " << getKmer()->toFasta());
 			DistributedKmerSpectrum &spectrum = kbufferCallback->getSpectrum();
@@ -569,6 +568,7 @@ public:
 
 			if (purged)
 				spectrum.variantWasPurged();
+			return 0;
 		}
 	};
 	void variantWasPurged(long count = 1) {
@@ -618,12 +618,7 @@ private:
 		sendPurgeVariant.clear();
 		recvPurgeVariant.clear();
 
-		long allPurged;
-		LOG_DEBUG(2, "_postVariants(): all_reduce");
-		mpi::all_reduce(world, _purgedVariants, allPurged, std::plus<long>());
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << allPurged << " kmer-variants");
-
-		return allPurged;
+		return _purgedVariants;
 	}
 	void _variantThreadSync(long processed, long remaining, double maxDepth) {
 		// call parent
@@ -798,10 +793,11 @@ done when empty cycle is received
 			score = _score;
 		}
 		// store response in kmer value vector
-		void process(RecvRespondKmerMessageBufferBase *bufferCallback) {
+		int process(RecvRespondKmerMessageBufferBase *bufferCallback) {
 			RecvRespondKmerMessageBuffer *kbufferCallback = (RecvRespondKmerMessageBuffer*) bufferCallback;
 			LOG_DEBUG(4, "RespondKmerMessage: " << requestId << " " << score);
 			kbufferCallback->_kmerValues[requestId] = score;
+			return 0;
 		}
 	};
 
@@ -820,7 +816,7 @@ done when empty cycle is received
 			*(getKmer()) = _kmer;
 		}
 		// lookup kmer in map and build response message
-		void process(RecvRequestKmerMessageBufferBase *bufferCallback) {
+		int process(RecvRequestKmerMessageBufferBase *bufferCallback) {
 			RecvRequestKmerMessageBuffer *kbufferCallback = (RecvRequestKmerMessageBuffer*) bufferCallback;
 			int destSource = kbufferCallback->getRecvSource();
 			int destTag = kbufferCallback->getRecvTag() + kbufferCallback->_numThreads;
@@ -829,6 +825,7 @@ done when empty cycle is received
 			ScoreType score = kbufferCallback->_readSelector->getValue( *getKmer() );
 			kbufferCallback->_sendResponse.bufferMessage(destSource, destTag)->set( requestId, score );
 			LOG_DEBUG(4, "RequestKmerMessage: " << getKmer()->toFasta() << " " << requestId << " " << score);
+			return 0;
 		}
 	};
 
