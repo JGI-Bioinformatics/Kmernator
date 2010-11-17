@@ -473,9 +473,9 @@ public:
 			while (allAreDone < numThreads) {
 				if (threadId == 0) {
 					if (++iterations % 1000 == 0) {
-						LOG_VERBOSE_OPTIONAL(1, true, "Processing heap size" << heapSize << " picked " << picked);
+						LOG_VERBOSE_OPTIONAL(1, true, "Processing heap size " << heapSize << " picked " << picked);
 					} else {
-						LOG_DEBUG(3, "heap " << heapSize);
+						LOG_DEBUG(3, "heap size " << heapSize << " picked " << picked);
 					}
 				}
 
@@ -501,11 +501,12 @@ public:
 						// spin until all threads are ready
 						bestPairs[threadId] = pairScore;
 						PairScore bestPair = fauxPairScore;
+						LOG_DEBUG(4, "chose " << pairScore.pair.read1 << ", " << pairScore.pair.read2 << ": " << pairScore.score);
 
 						#pragma omp barrier
 
 						for(int i = 0 ; i < numThreads; i++) {
-							if (bestPairs[i] < bestPair) {
+							if (bestPair < bestPairs[i] ) {
 								bestPair = bestPairs[i];
 							}
 						}

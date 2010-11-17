@@ -102,7 +102,7 @@ template<typename _ReadSelector>
 long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector, std::string outputFilename)
 {
 
-	LOG_VERBOSE_OPTIONAL(1, true, "selectReads with minDepth " << minDepth << ", minLength " << Options::getMinReadLength() << ": " << reads.getSize());
+	LOG_VERBOSE_OPTIONAL(1, true, "selectReads with minDepth " << minDepth << ", minLength " << Options::getMinReadLength() << ": " << reads.getSize() << " reads");
 	LOG_DEBUG_OPTIONAL(1, true, MemoryUtils::getMemoryUsage());
 
 	long oldPicked = 0;
@@ -113,7 +113,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 	OfstreamMap ofmap(outputFilename, ".fastq");
 
 	if (maximumKmerDepth > 0) {
-		for (int depth = 1; depth < maximumKmerDepth; depth++) {
+		for (int depth = 1; depth <= maximumKmerDepth; depth++) {
 			LOG_VERBOSE_OPTIONAL(2, true, "Picking depth " << depth << " layer of reads");
 			if (reads.hasPairs())
 				picked += selector.pickBestCoveringSubsetPairs(depth,
