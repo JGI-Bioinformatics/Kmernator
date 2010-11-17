@@ -46,6 +46,7 @@
 #include "ReadSet.h"
 #include "KmerReadUtils.h"
 #include "KmerSpectrum.h"
+#include "Options.h"
 #include "Log.h"
 
 class FilterKnownOddities {
@@ -266,7 +267,7 @@ public:
 			value = getPhiXReadIdx();
 		} else if (isSimpleRepeat(value)) {
 			// allow simple repeats in the middle of a read with good edges
-			if (minAffected > recorder.minReadPos && seqLen - maxAffected >= length) {
+			if (minAffected >= length && (seqLen - maxAffected) >= length) {
 				value = 0;
 				minAffected = 0;
 				maxAffected = 0;
@@ -348,15 +349,15 @@ public:
 				{
 					ostream &os = recorder.omArtifact->getOfstream( fileSuffix );
 					if (isRead1 && results1.value != 0) {
-						if (results1.minAffected == 0 || results1.minAffected < recorder.minReadPos) {
-							Read &read = reads.getRead(readIdx1);
+						Read &read = reads.getRead(readIdx1);
+						if (results1.minAffected == 0 || !PASSES_LENGTH(results1.minAffected, read.getLength(), recorder.minReadPos)) {
 							_writeFilterRead(os, read, 0, read.getLength(), label1);
 							read.discard();
 						}
 					}
 					if (isRead2 && results2.value != 0) {
-						if (results2.minAffected == 0 || results2.minAffected < recorder.minReadPos) {
-							Read &read = reads.getRead(readIdx2);
+						Read &read = reads.getRead(readIdx2);
+						if (results2.minAffected == 0 || !PASSES_LENGTH(results2.minAffected, read.getLength(), recorder.minReadPos)) {
 							_writeFilterRead(os, read, 0, read.getLength(), label2);
 							read.discard();
 						}

@@ -44,6 +44,8 @@ namespace po = boost::program_options;
 #include "config.h"
 #include "Log.h"
 
+#define PASSES_LENGTH(length, readLength, minimumLength) ((minimumLength == MAX_SEQUENCE_LENGTH) ? (length == readLength) : (length >= minimumLength))
+
 // put common, universal options in this class
 // extend the class for specific options for each application
 class Options {
@@ -219,7 +221,6 @@ public:
 	static inline unsigned int &getSeparateOutputs() {
 		return getOptions().separateOutputs;
 	}
-	const static unsigned int MAX_INT = (unsigned int) -1;
 
 	static std::string &getInputFileSubstring(unsigned int fileIdx) {
 		if (getOptions().inputFilePrefixes.empty()) {
@@ -521,7 +522,7 @@ public:
 			// set read length
 			setOpt<unsigned int>("min-read-length", getMinReadLength(), print);
 			if (getMinReadLength() == 1) {
-				getMinReadLength() = MAX_INT;
+				getMinReadLength() = MAX_SEQUENCE_LENGTH;
 			}
 
 			setOpt<double>("bimodal-sigmas", getBimodalSigmas(), print);
