@@ -80,6 +80,15 @@ public:
 		PairScore(const PairScore &copy) :
 			pair(copy.pair), score(copy.score) {
 		}
+		bool operator<(const PairScore &cmp) const {
+			if (score < cmp.score) {
+				return true;
+			} else if (score == cmp.score && pair.read1 < cmp.pair.read1) {
+				return true;
+			} else {
+				return false;
+			}
+		}
 	};
 	typedef M DataType;
     typedef typename DataType::ReadPositionWeightVector ReadPositionWeightVector;
@@ -168,7 +177,7 @@ public:
 	}
 	void setNeedDuplicateCheck() {
 		if (_needDuplicateCheck)
-		return;
+			return;
 		_needDuplicateCheck = true;
 	}
 
@@ -197,15 +206,29 @@ protected:
 		if (!_reads.isValidRead(readIdx))
 			return false;
 		std::string str = _reads.getRead(readIdx).getFasta( _trims[readIdx].trimOffset, _trims[readIdx].trimLength );
-		DuplicateSet::iterator test = _duplicateSet.find(str);
-		if (test == _duplicateSet.end()) {
-			_duplicateSet.insert(str);
-		} else {
+		DuplicateSet::iterator test;
+		test = _duplicateSet.find(str);
+
+		if (test != _duplicateSet.end()) {
 			_trims[readIdx].isAvailable = false;
 			isGood = false;
 		}
 		return isGood;
 	}
+	// Make sure only one thread can call this at a time
+	bool _addDup(ReadSetSizeType readIdx) {
+
+		bool isGood = _testDup(readIdx);
+		if (! isGood )
+			return false;
+
+		std::string str = _reads.getRead(readIdx).getFasta( _trims[readIdx].trimOffset, _trims[readIdx].trimLength );
+
+		_duplicateSet.insert(str);
+
+		return true;
+	}
+	// Make sure only one thread can call this at a time
 	void _storeCounts(ReadSetSizeType readIdx) {
 		if (!_reads.isValidRead(readIdx))
 			return;
@@ -216,7 +239,7 @@ protected:
 	}
 
 public:
-	bool pickIfNew(ReadSetSizeType readIdx1, ReadSetSizeType readIdx2 = ReadSet::MAX_READ_IDX) {
+	bool isNew(ReadSetSizeType readIdx1, ReadSetSizeType readIdx2 = ReadSet::MAX_READ_IDX) {
 		// check readIdx1
 		if (readIdx1 != ReadSet::MAX_READ_IDX ) {
 			if (! (_reads.isValidRead(readIdx1) && _trims[readIdx1].isAvailable)) {
@@ -245,6 +268,27 @@ public:
 				}
 			}
 
+			return true;
+
+		} else {
+			return false;
+		}
+	}
+	bool isNew(const ReadSet::Pair &pair) {
+		return isNew(pair.read1,pair.read2);
+	}
+
+	bool pickIfNew(ReadSetSizeType readIdx1, ReadSetSizeType readIdx2 = ReadSet::MAX_READ_IDX) {
+		if (isNew(readIdx1, readIdx2)) {
+
+			if (_needDuplicateCheck) {
+
+				if (_addDup(readIdx1) && (readIdx2 == ReadSet::MAX_READ_IDX || _addDup(readIdx2))) {
+
+				} else
+					return false;
+			}
+
 			// pick the read
 			_picks.push_back(Pair(readIdx1,readIdx2));
 			_trims[readIdx1].isAvailable = false;
@@ -258,8 +302,10 @@ public:
 				_storeCounts(readIdx2);
 			}
 			return true;
-		} else
-		return false;
+
+		} else {
+			return false;
+		}
 	}
 	bool pickIfNew(const ReadSet::Pair &pair) {
 		return pickIfNew(pair.read1,pair.read2);
@@ -319,7 +365,14 @@ public:
 		for(SequenceLengthType j = 0; j < kmers.size(); j++) {
 			ScoreType contribution = getValue(kmers[j]);
 			if (contribution > 0) {
-				int pickedCount = _counts[kmers[j]];
+				KmerCountMap::ValueType pickedCount = 0;
+				if (!_counts.getValueIfExists(kmers[j], pickedCount)) {
+					#pragma omp critical (ReadSelector_counts)
+					{
+						pickedCount =  _counts.getOrSetElement(kmers[j], pickedCount).value();
+					}
+				}
+
 				if ( pickedCount >= maxPickedKmerDepth ) {
 					trim.score = -1.0;
 					return false;
@@ -332,31 +385,34 @@ public:
 		}
 
 		bool hasNotChanged = (score > 0) && ( (score * 1.0001) >= trim.score);
-		trim.score = score;
+		trim.score = score / (double) trim.trimLength;
 		return hasNotChanged;
 	}
 
 	bool rescoreByBestCoveringSubset(const ReadSet::Pair &pair, unsigned char maxPickedKmerDepth, ScoreType &score) {
 		score = 0.0;
 		bool hasNotChanged = true;
+		double len = 0;
 		if (_reads.isValidRead(pair.read1)) {
 			ReadTrimType &trim = _trims[pair.read1];
 			hasNotChanged &= rescoreByBestCoveringSubset(pair.read1, maxPickedKmerDepth, trim);
-			if (trim.score > 0)
-				score += trim.score;
-			else
-				score = trim.score;
+			score = trim.score * trim.trimLength;
+			len = trim.trimLength;
 		}
 		if (_reads.isValidRead(pair.read2)) {
 			ReadTrimType &trim = _trims[pair.read2];
 			hasNotChanged &= rescoreByBestCoveringSubset(pair.read2, maxPickedKmerDepth, trim);
 			if (score > 0) {
-				if (trim.score > 0)
-					score += trim.score;
-				else
+				if (trim.score > 0) {
+					score += trim.score * trim.trimLength;
+					len += trim.trimLength;
+				} else {
 					score = trim.score;
+				}
 			}
 		}
+		if (len > 0.0)
+			score /= len;
 		return hasNotChanged;
 	}
 
@@ -366,56 +422,134 @@ public:
 		setNeedDuplicateCheck();
 	}
 
-	ReadSetSizeType pickBestCoveringSubsetPairs(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength(), bool bothPass = false) {
+	ReadSetSizeType pickBestCoveringSubsetPairs(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = Options::getMinReadLength(), bool bothPass = false) {
 		_initPickBestCoveringSubset();
 		ReadSetSizeType picked = 0;
 
-		PairScoreVector heapedPairs;
-		for(ReadSetSizeType pairIdx = 0; pairIdx < _reads.getPairSize(); pairIdx++) {
-			const ReadSet::Pair &pair = _reads.getPair(pairIdx);
-			ScoreType score;
-			if (isPairAvailable(pair, bothPass)) {
-				rescoreByBestCoveringSubset(pair, maxPickedKmerDepth, score);
-				if (score > minimumScore && isPassingPair(pair, minimumScore, minimumLength, bothPass)) {
-					heapedPairs.push_back( PairScore( pair, score ) );
+		int numThreads = omp_get_max_threads();
+
+		PairScore bestPairs[numThreads];
+		Pair fauxPair(ReadSet::MAX_READ_IDX, ReadSet::MAX_READ_IDX);
+		PairScore fauxPairScore( fauxPair, -2.0);
+
+
+		PairScoreVector heapedPairs[numThreads];
+		long heapSize = 0;
+		int allAreDone = 0;
+
+		long pairsSize = _reads.getPairSize();
+		#pragma omp parallel
+		{
+			int threadId = omp_get_thread_num();
+
+			bestPairs[threadId].score = -3.0;
+			heapedPairs[threadId].resize(0);
+			heapedPairs[threadId].reserve(pairsSize / numThreads / 10);
+
+			for(long pairIdx = threadId; pairIdx < pairsSize; pairIdx += numThreads) {
+				const ReadSet::Pair &pair = _reads.getPair(pairIdx);
+				ScoreType score;
+				if (isPairAvailable(pair, bothPass)) {
+					rescoreByBestCoveringSubset(pair, maxPickedKmerDepth, score);
+					if (score > minimumScore && isPassingPair(pair, minimumScore, minimumLength, bothPass)) {
+						heapedPairs[threadId].push_back( PairScore( pair, score ) );
+					}
 				}
 			}
-		}
 
-		LOG_VERBOSE(1, "building heap out of " << heapedPairs.size() << " pairs" );
+			#pragma omp atomic
+			heapSize += heapedPairs[threadId].size();
 
-		std::make_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
+			#pragma omp barrier
+			LOG_VERBOSE_OPTIONAL(1, threadId == 0, "building heap out of " << heapSize << " pairs" );
 
-		LOG_VERBOSE(1,  "picking pairs at depth: " << (int) maxPickedKmerDepth);
+			std::make_heap(heapedPairs[threadId].begin(), heapedPairs[threadId].end(), PairScoreCompare(this));
 
-		// pick pairs
-		while (heapedPairs.begin() != heapedPairs.end()) {
-			LOG_DEBUG(3, "heap " << heapedPairs.size());
-			PairScore &pairScore = heapedPairs.front();
-			std::pop_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
-			heapedPairs.pop_back();
+			LOG_VERBOSE_OPTIONAL(1, threadId == 0, "picking pairs at depth: " << (int) maxPickedKmerDepth);
 
-			if ( rescoreByBestCoveringSubset(pairScore.pair, maxPickedKmerDepth, pairScore.score) ) {
-				if (pickIfNew(pairScore.pair)) {
-					picked++;
-					LOG_DEBUG(4, "Selected pair: " << pairScore.pair.read1 << " " << pairScore.pair.read2);
+			// pick pairs
+			long iterations = 0;
+			bool threadIsDone = false;
+			while (allAreDone < numThreads) {
+				if (threadId == 0) {
+					if (++iterations % 1000 == 0) {
+						LOG_VERBOSE_OPTIONAL(1, true, "Processing heap size" << heapSize << " picked " << picked);
+					} else {
+						LOG_DEBUG(3, "heap " << heapSize);
+					}
 				}
-			} else {
-				if (pairScore.score > minimumScore && isPassingPair(pairScore.pair, minimumScore, minimumLength, bothPass)) {
-					LOG_DEBUG(4, "replacing Pair(" << pairScore.pair.read1 << ", " << pairScore.pair.read2 << "): "
-							<< pairScore.score << " " << (isPassingRead(pairScore.pair.read1) ? _trims[pairScore.pair.read1].score : -2.0) << " "
-							<< (isPassingRead(pairScore.pair.read2) ? _trims[pairScore.pair.read2].score : -2.0));
-					heapedPairs.push_back(pairScore);
-					std::push_heap(heapedPairs.begin(), heapedPairs.end(), PairScoreCompare(this));
+
+				PairScore pairScore;
+				bool isEmpty = false;
+				if (!heapedPairs[threadId].empty()) {
+					pairScore = heapedPairs[threadId].front();
+					std::pop_heap(heapedPairs[threadId].begin(), heapedPairs[threadId].end(), PairScoreCompare(this));
+					heapedPairs[threadId].pop_back();
+
+					#pragma omp atomic
+					heapSize--;
+
+				} else {
+					pairScore = fauxPairScore;
+					isEmpty = true;
 				}
+
+
+				if ( isEmpty || rescoreByBestCoveringSubset(pairScore.pair, maxPickedKmerDepth, pairScore.score) ) {
+					if ( isEmpty || isNew(pairScore.pair)) {
+
+						// spin until all threads are ready
+						bestPairs[threadId] = pairScore;
+						PairScore bestPair = fauxPairScore;
+
+						#pragma omp barrier
+
+						for(int i = 0 ; i < numThreads; i++) {
+							if (bestPairs[i] < bestPair) {
+								bestPair = bestPairs[i];
+							}
+						}
+
+						if (bestPair.pair == pairScore.pair && bestPair.pair != fauxPair && !isEmpty) {
+
+							pickIfNew(pairScore.pair);
+							#pragma omp atomic
+							picked++;
+							LOG_DEBUG(4, "Selected pair: " << pairScore.pair.read1 << " " << pairScore.pair.read2);
+
+						}
+
+						if (isEmpty && !threadIsDone ) {
+							#pragma omp atomic
+							allAreDone++;
+							threadIsDone = true;
+						}
+
+						#pragma omp barrier
+
+					} else {
+						if (pairScore.score > minimumScore && isPassingPair(pairScore.pair, minimumScore, minimumLength, bothPass)) {
+							LOG_DEBUG(4, "replacing Pair(" << pairScore.pair.read1 << ", " << pairScore.pair.read2 << "): "
+									<< pairScore.score << " " << (isPassingRead(pairScore.pair.read1) ? _trims[pairScore.pair.read1].score : -2.0) << " "
+									<< (isPassingRead(pairScore.pair.read2) ? _trims[pairScore.pair.read2].score : -2.0));
+							#pragma omp atomic
+							heapSize++;
+
+							heapedPairs[threadId].push_back(pairScore);
+							std::push_heap(heapedPairs[threadId].begin(), heapedPairs[threadId].end(), PairScoreCompare(this));
+						}
+					}
+				}
+
 			}
+			LOG_DEBUG(3, "Finished picking: " << allAreDone);
 		}
 		LOG_VERBOSE(1, "Picked " << picked);
 		optimizePickOrder();
 		return picked;
 	}
 
-	ReadSetSizeType pickBestCoveringSubsetReads(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
+	ReadSetSizeType pickBestCoveringSubsetReads(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = Options::getMinReadLength()) {
 		_initPickBestCoveringSubset();
 		ReadSetSizeType picked = 0;
 
@@ -446,7 +580,7 @@ public:
 			if ( rescoreByBestCoveringSubset(readIdx, maxPickedKmerDepth, trim) ) {
 				pickIfNew(readIdx) && picked++;
 			} else {
-				if (trim.score > 0.0) {
+				if (trim.score > minimumScore) {
 					heapedReads.push_back(readIdx);
 					std::push_heap(heapedReads.begin(), heapedReads.end(), ScoreCompare(this));
 				}
