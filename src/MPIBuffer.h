@@ -139,7 +139,7 @@ protected:
 public:
 	MPIMessageBufferBase(mpi::communicator &world, int messageSize)
 	: _world(world), _messageSize(messageSize), _softMaxBufferSize(MESSAGE_BUFFER_SIZE) {
-		_message = new char[ getMessageSize() ];
+		_message = new char[ MESSAGE_BUFFER_SIZE ];
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
 		freeBuffers.reserve(BUFFER_QUEUE_SOFT_LIMIT * _world.size() + 1);
 		setSoftMaxBufferSize( Options::getBatchSize() * messageSize );
@@ -372,17 +372,17 @@ private:
 		return oreq;
 	}
 	int processMessages(BufferReceived bufferReceived) {
-		Buffer msg, end, start = bufferReceived.buffer;
+		Buffer msg, start = bufferReceived.buffer;
 		this->_recvSize = bufferReceived.size;
 		this->_recvSource = bufferReceived.source;
 		this->_recvTag = bufferReceived.tag;
 
-		msg = start;
-		end = (start+bufferReceived.size);
 		int count = 0;
-		while (msg != end) {
-			((MessageClass*) msg)->process(this);
-			msg += this->getMessageSize();
+		int offset = 0;
+		while (offset < bufferReceived.size) {
+			msg = start + offset;
+			int trailingBytes = ((MessageClass*) msg)->process(this);
+			offset += this->getMessageSize() + trailingBytes;
 			this->newMessage();
 			count++;
 		}
@@ -538,7 +538,7 @@ public:
 		Buffer &buffStart = getBuffer(rankDest);
 		assert(buffStart != NULL);
 		MessageClass *buf = (MessageClass *) (buffStart+offset);
-		offset += this->getMessageSize();
+		offset += this->getMessageSize() + trailingBytes;
 		this->newMessage();
 
 		return buf;
@@ -546,7 +546,7 @@ public:
 	// copies msg as the next message in the buffer
 	void bufferMessage(int rankDest, int tagDest, MessageClass *msg, int trailingBytes = 0) {
 		char *buf = (char *) bufferMessage(rankDest, tagDest, trailingBytes);
-		memcpy(buf, (char *) msg, this->getMessageSize());
+		memcpy(buf, (char *) msg, this->getMessageSize() + trailingBytes);
 	}
 
 	long receiveAllIncomingMessages() {
