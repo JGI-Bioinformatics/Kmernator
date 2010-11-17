@@ -123,6 +123,20 @@ target_link_libraries( UtilTest
                                    )
 add_test( UtilTest UtilTest )
 
+add_executable( TestMPI TestMPI )
+set_source_files_properties( TestMPI
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+set_target_properties( TestMPI
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       )
+target_link_libraries (TestMPI
+                            Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+
+
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 # v2.8: file(COPY test/500.fasta test/500.qual DESTINATION test)
