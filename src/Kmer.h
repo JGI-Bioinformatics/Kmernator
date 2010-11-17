@@ -858,6 +858,10 @@ public:
 		void *oldBegin = _begin;
 		IndexType oldSize = _size;
 		IndexType oldCapacity = _capacity;
+
+		void *newBegin = oldBegin;
+		IndexType newCapacity = oldCapacity;
+
 		IndexType lesserSize = std::min(size, oldSize);
 		ValueType *oldValueStart = NULL;
 		if (oldCapacity > 0) {
@@ -867,44 +871,48 @@ public:
 		bool memChanged = false;
 		if (size == 0) {
 			// ignore reserveExtra for zero resize
-			if (_capacity > 0) {
-				_capacity = 0;
-				_begin = NULL;
+			if (oldCapacity > 0) {
+				newCapacity = 0;
+				newBegin = NULL;
 				memChanged = true;
 			}
-		} else if ((size > _capacity) || (_capacity > size && !reserveExtra)) {
+		} else if ((size > oldCapacity) || (oldCapacity > size && !reserveExtra)) {
 			// allocate new memory
 			if (reserveExtra)
-				_capacity = std::max((IndexType) (size * 1.2),
+				newCapacity = std::max((IndexType) (size * 1.2),
 						(IndexType) (size + 10));
 			else
-				_capacity = size;
-			void *memory = std::malloc(_capacity * getElementByteSize());
-			if (memory == NULL) {
-				LOG_ERROR(0, "Attempt to malloc " << _capacity
+				newCapacity = size;
+
+			newBegin = std::malloc(newCapacity * getElementByteSize());
+			if (newBegin == NULL) {
+				LOG_ERROR(0, "Attempt to malloc " << newCapacity
 						* getElementByteSize());
 				throw std::runtime_error(
 						"Could not allocate memory in KmerArray _setMemory()");
 			}
-			_begin = memory;
+
 			memChanged = true;
 		}
 
-		_size = size;
-
-		if (memChanged && _begin != NULL) {
-			// construct all values that are newly allocated
-			for (IndexType i = 0; i < _capacity; i++)
-				::new ((void*) (getValueStart() + i)) Value();
+		ValueType *newValueStart = NULL;
+		if (newCapacity > 0) {
+			newValueStart = (ValueType*) _add(newBegin, newCapacity);
 		}
 
-		if (_begin != NULL && oldBegin != NULL && oldValueStart != NULL
+		if (memChanged && newBegin != NULL) {
+			// construct all values that are newly allocated
+			for (IndexType i = 0; i < newCapacity; i++)
+				::new ((void*) (newValueStart + i)) Value();
+		}
+
+		if (newBegin != NULL && oldBegin != NULL && oldValueStart != NULL
 				&& lesserSize > 0) {
 			// copy the old contents
 			if (idx == MAX_INDEX || idx >= lesserSize) {
 				if (memChanged) {
 					// copy all records in order (default ; end is trimmed or expanded)
-					_copyRange(oldBegin, oldValueStart, 0, 0, lesserSize);
+					_copyRange(newBegin, newValueStart, oldBegin, oldValueStart, 0, 0, lesserSize);
 				} else {
 					// noop
 				}
@@ -913,25 +921,36 @@ public:
 
 				if (memChanged && idx > 0) {
 					// the first record(s) leading to idx will be copied
-					_copyRange(oldBegin, oldValueStart, 0, 0, idx);
+					_copyRange(newBegin, newValueStart, oldBegin, oldValueStart, 0, 0, idx);
 				}
 
 				if (lesserSize == size) {
 					// shrink: skipping the old record at idx
 					if (idx < size) {
-						_copyRange(oldBegin, oldValueStart, idx, idx + 1,
+						_copyRange(newBegin, newValueStart, oldBegin, oldValueStart, idx, idx + 1,
 								lesserSize - idx, !memChanged);
 					}
 				} else {
 					// expand: leaving new (uninitialized/unchanged) record at idx
 					if (idx < oldSize) {
-						_copyRange(oldBegin, oldValueStart, idx + 1, idx,
+						_copyRange(newBegin, newValueStart, oldBegin, oldValueStart, idx + 1, idx,
 								lesserSize - idx, !memChanged);
 					}
 				}
 			}
 		}
 
+		if (memChanged) {
+			if (newCapacity > oldCapacity) {
+				_begin = newBegin;
+				_capacity = newCapacity;
+			} else {
+				_size = size;
+				_capacity = newCapacity;
+				_begin = newBegin;
+			}
+		}
+		_size = size;
 		if (memChanged && oldBegin != NULL) {
 			// destruct old Values
 			for (IndexType i = 0; i < oldCapacity; i++)
@@ -1109,14 +1128,14 @@ public:
 					mid = (min+max) / 2;
 					comp = target.compare(get(mid));
 					if (comp > 0)
-					min = mid+1;
+						min = mid+1;
 					else if (comp < 0)
-					max = mid-1;
-				}while (comp != 0 && max != MAX_INDEX && min <= max);
+						max = mid-1;
+				} while (comp != 0 && max != MAX_INDEX && min <= max);
 				if (comp == 0)
-				targetIsFound = true;
+					targetIsFound = true;
 				else
-				targetIsFound = false;
+					targetIsFound = false;
 
 				return mid + (comp>0 && size()>mid?1:0);
 			}
@@ -1623,6 +1642,20 @@ public:
 	}
 	bool exists(const KeyType &key) const {
 		return exists(key, getBucket(key));
+	}
+
+	const bool getValueIfExists(const KeyType &key, ValueType &value) const {
+		return getValueIfExists(key, value, getBucket(key));
+	}
+	const bool getValueIfExists(const KeyType &key, ValueType &value, const BucketType &bucket) const {
+		bool isFound;
+		IndexType existingIndex;
+		bucket.setSharedLock();
+		existingIndex = bucket.findSorted(key, isFound);
+		if (isFound)
+			value = bucket.valueAt(existingIndex);
+		bucket.unsetSharedLock();
+		return isFound;
 	}
 
 	const ElementType getElementIfExists(const KeyType &key, const BucketType &bucket) const {
