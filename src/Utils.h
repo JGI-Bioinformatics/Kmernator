@@ -104,15 +104,17 @@ public:
 	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
 	typedef boost::unordered_map< std::string, OStreamPtr > Map;
 	typedef Map::iterator Iterator;
+	typedef boost::shared_ptr< Map > MapPtr;
 private:
-    Map _map;
+    MapPtr _map;
     std::string _outputFilePathPrefix;
     std::string _suffix;
     bool _append;
 
 public:
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
-	 : _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {}
+	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {
+	}
 	~OfstreamMap() {
         clear();
 	}
@@ -121,22 +123,27 @@ public:
 		return _append;
 	}
 	void clear() {
-		for(Iterator it = _map.begin() ; it != _map.end(); it++) {
+		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
 			LOG_VERBOSE_OPTIONAL(1, true, "Closing " << it->first);
 			it->second->close();
 		}
-		_map.clear();
+		_map->clear();
 	}
 
 	std::ofstream &getOfstream(std::string key) {
 		std::string filename = _outputFilePathPrefix + key + _suffix;
-		Iterator it = _map.find(filename);
-		if (it == _map.end()) {
+		// lockless lookup
+		MapPtr thisMap = _map;
+		Iterator it = thisMap->find(filename);
+		if (it == thisMap->end()) {
 
+			// lock if not found and map needs to be updated
 			#pragma omp critical (ofStreamMap)
 			{
-				it = _map.find(filename);
-				if (it == _map.end()) {
+				// recheck map
+				thisMap = _map;
+				it = thisMap->find(filename);
+				if (it == thisMap->end()) {
 					LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << filename);
 					std::ios_base::openmode mode = std::ios_base::out;
 					if (getAppend())
@@ -144,10 +151,12 @@ public:
 					else
 						mode |= std::ios_base::trunc;
 					OStreamPtr osp(new std::ofstream(filename.c_str(), mode));
-					if(  osp->fail() )
+					if( osp->fail() )
 						throw std::runtime_error((std::string("Could not open file for writing: ") + filename).c_str());
 
-					it = _map.insert( it, Map::value_type(filename, osp) );
+					MapPtr copy = MapPtr(new Map(*thisMap));
+					it = copy->insert( it, Map::value_type(filename, osp) );
+					_map = copy;
 				}
 			}
 		}
