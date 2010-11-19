@@ -54,7 +54,7 @@
 using namespace std;
 
 // TODO add outputformat of fasta
-class FilterReadsOptions : Options {
+class FilterReadsOptions : public Options {
 public:
 	static int getMaxKmerDepth() {
 		return getVarMap()["max-kmer-output-depth"].as<int> ();
@@ -92,6 +92,11 @@ public:
 			if (Options::getOutputFile().empty() && Logger::isMaster())
 			{
 				LOG_WARN(1, "no output file specified... This is a dry run!");
+			}
+
+			if (Options::getInputFiles().empty() && Logger::isMaster()) {
+				LOG_ERROR(1, "Please specify at least one input file");
+				ret = false;
 			}
 		}
 		return ret;

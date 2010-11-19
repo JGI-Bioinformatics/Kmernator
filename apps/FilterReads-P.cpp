@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
 	mpi::communicator world;
 
 	try {
-		Logger::setWorld(world);
+		Logger::setWorld(&world);
 
 		validateMPIWorld(world, threadSupport);
 
@@ -62,6 +62,7 @@ int main(int argc, char *argv[]) {
 			Logger::setWorld(&world, Options::getDebug() >= 2);
 
 	} catch (...) {
+		std::cerr << FilterReadsOptions::getDesc() << std::endl;
 		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
 		exit(1);
 	}

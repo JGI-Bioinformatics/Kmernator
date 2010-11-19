@@ -39,9 +39,10 @@ int main(int argc, char *argv[]) {
 
 	try {
 		if (!FilterReadsOptions::parseOpts(argc, argv))
-			throw std::invalid_argument("Please fix the command line arguments");
+			throw invalid_argument("Please fix the command line arguments");
 	} catch (...) {
-		std::cerr << std::endl << "Please fix the options OpenMP environment" << std::endl;
+		std::cerr << FilterReadsOptions::getDesc() << std::endl << std::endl;
+		std::cerr << "Please fix the command line arguments and/or OpenMP environment" << std::endl;
 		exit(1);
 	}
 
