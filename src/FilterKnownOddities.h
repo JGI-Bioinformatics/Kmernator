@@ -55,6 +55,7 @@ public:
 	typedef KmerMap<unsigned short> KM;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 	typedef std::vector< ReadSetSizeType > SequenceCounts;
+	typedef std::vector< long > BaseCounts;
 
 private:
 	ReadSet sequences;
@@ -152,21 +153,65 @@ public:
 	public:
 		OfstreamMap *omPhiX;
 		OfstreamMap *omArtifact;
-		SequenceCounts *threadCounts;
+		SequenceCounts readCounts;
+		SequenceCounts discardedCounts;
+		BaseCounts baseCounts;
 		SequenceLengthType minReadPos;
-		Recorder() : omPhiX(NULL), omArtifact(NULL), threadCounts(NULL), minReadPos(0) {}
+		Recorder(const FilterKnownOddities &filter) : omPhiX(NULL), omArtifact(NULL), minReadPos(0) {
+			const ReadSet &reads = filter.getSequences();
+			readCounts.resize(reads.getSize() + 1);
+			discardedCounts.resize(reads.getSize() + 1);
+			baseCounts.resize(reads.getSize() + 1);
+		}
+		void recordDiscard(int value, Read &read, std::ostream *os, std::string label = "") {
+			read.discard();
+			#pragma omp atomic
+			discardedCounts[value]++;
+			SequenceLengthType len = read.getLength();
+			#pragma omp atomic
+			baseCounts[value] += len;
+			if (os != NULL) {
+				FilterKnownOddities::_writeFilterRead(*os, read, 0, len, label);
+			}
+		}
+		void recordTrim(int value, long length) {
+			#pragma omp atomic
+			readCounts[value]++;
+			#pragma omp atomic
+			baseCounts[value] += length;
+		}
+		long getDiscardedReads() const {
+			long reads = 0;
+			for(unsigned int i = 0; i < discardedCounts.size(); i++)
+				reads += discardedCounts[i];
+			return reads;
+		}
+		long getTrimmedReads() const {
+			long reads = 0;
+			for(unsigned int i = 0; i < readCounts.size(); i++)
+				reads += readCounts[i];
+			return reads;
+		}
+		long getTrimmedBases() const {
+			long reads = 0;
+			for(unsigned int i = 0; i < baseCounts.size(); i++)
+				reads += baseCounts[i];
+			return reads;
+		}
+
+
 	};
 
-	FilterResults applyFilterToPair(ReadSet &reads, long pairIdx, SequenceCounts *threadCounts, Recorder &recorder) {
+	FilterResults applyFilterToPair(ReadSet &reads, long pairIdx, Recorder &recorder) {
 		ReadSet::Pair &pair = reads.getPair(pairIdx);
 		FilterResults results1, results2;
 
 		bool isRead1 = reads.isValidRead(pair.read1);
 		bool isRead2 = reads.isValidRead(pair.read2);
 		if (isRead1)
-			results1 = applyFilterToRead(reads, pair.read1, threadCounts, recorder);
+			results1 = applyFilterToRead(reads, pair.read1, recorder);
 		if (isRead2)
-			results2 = applyFilterToRead(reads, pair.read2, threadCounts, recorder);
+			results2 = applyFilterToRead(reads, pair.read2, recorder);
 
 		FilterResults results;
 		if (isRead1 && isRead2) {
@@ -185,7 +230,7 @@ public:
 		return results;
 	}
 
-	FilterResults applyFilterToRead(ReadSet &reads, long readIdx, SequenceCounts *threadCounts, Recorder &recorder, bool recordEffects = false) {
+	FilterResults applyFilterToRead(ReadSet &reads, long readIdx, Recorder &recorder, bool recordEffects = false) {
 
 		Read &read = reads.getRead(readIdx);
 		FilterResults results;
@@ -302,8 +347,6 @@ public:
 		bool wasAffected = (results1.value != 0) | (results2.value != 0);
 		bool wasPhiX = isPhiX(results1.value) | isPhiX(results2.value);
 
-		int threadNum = omp_get_thread_num();
-
 		if (wasAffected) {
 
 			if (wasPhiX) {
@@ -313,53 +356,56 @@ public:
 			bool isRead1Affected = isRead1 && results1.value != 0;
 			bool isRead2Affected = isRead2 && results2.value != 0;
 
-			if (isRead1Affected)
-				recorder.threadCounts[threadNum][ results1.value ]++;
-			if (isRead2Affected)
-				recorder.threadCounts[threadNum][ results2.value ]++;
+			if (wasPhiX) {
 
-			if (wasPhiX && recorder.omPhiX != NULL) {
-
-				std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx1);
+				ostream *os = NULL;
+				if (recorder.omPhiX != NULL) {
+					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx1);
+					os = & (recorder.omPhiX->getOfstream( fileSuffix ) );
+				}
 				#pragma omp critical (writePhix)
 				{
-					ostream &os = recorder.omPhiX->getOfstream( fileSuffix );
-		            // always discard the read, as it contains some PhiX and was sorted
+					// always discard the read, as it contains some PhiX even if not output to a discard file
 					if (isRead1) {
 						Read &read = reads.getRead(readIdx1);
-						_writeFilterRead(os, read, 0, read.getLength());
-						read.discard();
+						recorder.recordDiscard(results1.value, read, os);
 					}
 					if (isRead2) {
 						Read &read = reads.getRead(readIdx2);
-						_writeFilterRead(os, read, 0, read.getLength());
-						read.discard();
+						recorder.recordDiscard(results2.value, read, os);
 					}
 				}
-			} else if ( (!wasPhiX) && recorder.omArtifact != NULL) {
 
-				std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix( isRead1 ? readIdx1 : readIdx2);
+			} else {
+
+				ostream *os = NULL;
 				std::string label1, label2;
-				if (isRead1Affected)
-					label1 = getFilterName(results1.value);
-				if (isRead2Affected)
-					label2 = getFilterName(results2.value);
+				if (recorder.omArtifact != NULL) {
+					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix( isRead1 ? readIdx1 : readIdx2);
+
+					if (isRead1Affected)
+						label1 = getFilterName(results1.value);
+					if (isRead2Affected)
+						label2 = getFilterName(results2.value);
+					os = & (recorder.omArtifact->getOfstream( fileSuffix ) );
+				}
 
 				#pragma omp critical (writeFilter)
 				{
-					ostream &os = recorder.omArtifact->getOfstream( fileSuffix );
 					if (isRead1 && results1.value != 0) {
 						Read &read = reads.getRead(readIdx1);
 						if (results1.minAffected == 0 || !PASSES_LENGTH(results1.minAffected, read.getLength(), recorder.minReadPos)) {
-							_writeFilterRead(os, read, 0, read.getLength(), label1);
-							read.discard();
+							recorder.recordDiscard(results1.value, read, os, label1);
+						} else {
+							recorder.recordTrim(results1.value, results1.minAffected);
 						}
 					}
 					if (isRead2 && results2.value != 0) {
 						Read &read = reads.getRead(readIdx2);
 						if (results2.minAffected == 0 || !PASSES_LENGTH(results2.minAffected, read.getLength(), recorder.minReadPos)) {
-							_writeFilterRead(os, read, 0, read.getLength(), label2);
-							read.discard();
+							recorder.recordDiscard(results2.value, read, os, label2);
+						} else {
+							recorder.recordTrim(results2.value, results2.minAffected);
 						}
 					}
 				}
@@ -388,7 +434,7 @@ public:
 		unsigned long oldKmerLength = KmerSizer::getSequenceLength();
 		KmerSizer::set(length);
 
-		Recorder recorder;
+		Recorder recorder( *this );
 		unsigned long affectedCount = 0;
 
 		OfstreamMap _omPhiX(Options::getOutputFile(), "-PhiX.fastq");
@@ -406,16 +452,6 @@ public:
 			minReadPos -= 1;
 		}
 
-		int numThreads = omp_get_max_threads();
-		SequenceCounts     threadCounts[numThreads];
-		recorder.threadCounts = threadCounts;
-
-        for (int i = 0; i < numThreads; i++) {
-            threadCounts[i].resize( sequences.getSize() + 1 );
-        }
-		// start with any existing state
-		counts.swap(threadCounts[0]);
-
 		bool byPair = reads.hasPairs();
 		long size = reads.getSize();
 		if (byPair)
@@ -427,33 +463,27 @@ public:
 			LOG_DEBUG(5, "filtering read " << (byPair ? "pair " : "" ) << idx);
 
 			if (byPair)
-				applyFilterToPair(reads, idx, threadCounts, recorder);
+				applyFilterToPair(reads, idx, recorder);
 			else {
-				applyFilterToRead(reads, idx, threadCounts, recorder, true);
+				applyFilterToRead(reads, idx, recorder, true);
 			}
 		}
 
-		// consolidate threaded instances of global variables
-		for(int i = 1 ; i < numThreads; i++) {
-			for(ReadSetSizeType j = 0 ; j < threadCounts[i].size(); j++) {
-				if (threadCounts[0].size() <= j)
-					threadCounts[0].resize(threadCounts[i].size());
-				threadCounts[0][j] += threadCounts[i][j];
-			}
-		}
-
-		// restore state
-		counts.swap(threadCounts[0]);
-		for(ReadSetSizeType j = 0 ; j < counts.size() ; j++)
-			affectedCount += counts[j];
+		for(ReadSetSizeType j = 0 ; j < recorder.readCounts.size() ; j++)
+			affectedCount += recorder.readCounts[j];
 
 		if (Log::isVerbose(1)) {
 			std::stringstream ss ;
 			ss << "Final Filter Matches to reads: " << affectedCount << std::endl;
+			ss << "Discarded Reads: " << recorder.getDiscardedReads() << std::endl;
+			ss << "Trimmed Reads: " << recorder.getTrimmedReads() << std::endl;
+			ss << "Discarded/Trimmed Bases: " << recorder.getTrimmedBases() << std::endl;
+			ss << std::endl;
+			ss << "\tDiscarded\tAffected\tBasesRemoved\tMatch" << std::endl;
 			// TODO sort
-			for(unsigned long idx = 0 ; idx < counts.size(); idx++) {
-				if (counts[idx] > 0) {
-					ss << "\t" << counts[idx] << "\t" << getFilterName(idx) << std::endl;
+			for(unsigned long idx = 0 ; idx < recorder.readCounts.size(); idx++) {
+				if (recorder.baseCounts[idx] > 0) {
+					ss << "\t" <<  recorder.discardedCounts[idx] << "\t" << recorder.readCounts[idx] << "\t" << recorder.baseCounts[idx] << "\t" << getFilterName(idx) << std::endl;
 				}
 			}
 			std::string s = ss.str();
