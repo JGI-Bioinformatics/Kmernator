@@ -197,19 +197,13 @@ int main(int argc, char *argv[]) {
 
 			// rank 0 will overwrite, all others will append
 			if (world.rank() != 0)
-				OfstreamMap::getAppend() = true;
+				OfstreamMap::getDefaultAppend() = true;
 
 			// let only one rank at a time write to the files
 			LOG_VERBOSE(1, "Writing Files");
-			int rank = 0;
-			while (rank < world.size()) {
-				if (rank == world.rank()) {
-					LOG_VERBOSE_OPTIONAL(1, true, "Writing files part " << (rank+1) << " of " << world.size());
-					selectReads(thisDepth, reads, selector, pickOutputFilename);
-				}
-				world.barrier();
-				rank++;
-			}
+
+			selectReads(thisDepth, reads, selector, pickOutputFilename);
+
 		}
 	}
 

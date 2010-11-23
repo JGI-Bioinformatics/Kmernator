@@ -156,7 +156,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 				tmpMinDepth = 0;
 				depth = 0;
 			}
-			LOG_VERBOSE_OPTIONAL(1, true, "Selecting reads over depth: " << depth << " (" << tmpMinDepth << ") ");
+			LOG_VERBOSE(1, "Selecting reads over depth: " << depth << " (" << tmpMinDepth << ") ");
 
 			if (reads.hasPairs()) {
 				picked = selector.pickAllPassingPairs(tmpMinDepth,
@@ -166,12 +166,12 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 				picked = selector.pickAllPassingReads(tmpMinDepth,
 						Options::getMinReadLength());
 			}
-			LOG_VERBOSE_OPTIONAL(2, true, "At or above coverage: " << depth << " Picked " << picked
+			LOG_VERBOSE(2, "At or above coverage: " << depth << " Picked " << picked
 			<< " / " << reads.getSize() << " reads");
-			LOG_DEBUG_OPTIONAL(1, true, MemoryUtils::getMemoryUsage());
+			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			if (picked > 0 && !outputFilename.empty()) {
-				LOG_VERBOSE_OPTIONAL(1, true, "Writing " << picked << " reads  to output files");
+				LOG_VERBOSE(1, "Writing " << picked << " reads  to output files");
 				selector.writePicks(ofmap, oldPicked);
 			}
 			oldPicked += picked;
@@ -182,7 +182,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 		}
 	}
 	ofmap.clear();
-	LOG_VERBOSE_OPTIONAL(1, true, "Done.  Cleaning up. " << MemoryUtils::getMemoryUsage());
+	LOG_VERBOSE(1, "Done.  Cleaning up. " << MemoryUtils::getMemoryUsage());
 
 	return oldPicked;
 };

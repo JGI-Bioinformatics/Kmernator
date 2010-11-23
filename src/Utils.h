@@ -112,22 +112,30 @@ private:
     bool _append;
 
 public:
+	static bool &getDefaultAppend() {
+		static bool _defaultAppend = false;
+		return _defaultAppend;
+	}
+
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
 	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {
+		_append = getDefaultAppend();
 	}
 	~OfstreamMap() {
         clear();
 	}
-	static bool &getAppend() {
-		static bool _append = false;
+	bool &getAppend() {
 		return _append;
 	}
 	void clear() {
+		close();
+		_map->clear();
+	}
+	void close() {
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
 			LOG_VERBOSE_OPTIONAL(1, true, "Closing " << it->first);
 			it->second->close();
 		}
-		_map->clear();
 	}
 
 	std::ofstream &getOfstream(std::string key) {

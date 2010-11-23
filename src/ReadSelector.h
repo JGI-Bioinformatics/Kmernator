@@ -786,7 +786,7 @@ public:
 		return _reads.write(os, readIdx, trim.trimOffset, trim.trimLength, trim.label, format);
 	}
 	std::ostream &writePick(std::ostream &os, ReadSetSizeType pickIdx, int format = Options::getFormatOutput()) const {
-		Pair &pair = _picks[pickIdx];
+		const Pair &pair = _picks[pickIdx];
 		_writePickRead(os, pair.read1, format);
 		_writePickRead(os, pair.read2, format);
 		return os;
@@ -794,7 +794,7 @@ public:
 	std::ostream &writePicks(std::ostream &os, ReadSetSizeType offset = 0, int format = Options::getFormatOutput()) const {
 		return writePicks(os, offset, _picks.size() - offset, format);
 	}
-	std::ostream &writePicks(std::ostream &os, ReadSetSizeType offset, ReadSetSizeType length, int format = Options::getFormatOutput()) const {
+	virtual std::ostream &_writePicks(std::ostream &os, ReadSetSizeType offset, ReadSetSizeType length, int format) const {
 		for(ReadSetSizeType i = offset; i < length + offset; i++) {
 			writePick(os, i, format);
 		}
@@ -802,9 +802,9 @@ public:
 	}
 
 	void writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = (Options::getSeparateOutputs() == 1), int format = Options::getFormatOutput() ) const {
-		writePicks(ofstreamMap, offset, _picks.size() - offset, byInputFile, format);
+		_writePicks(ofstreamMap, offset, _picks.size() - offset, byInputFile, format);
 	}
-	void writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile = (Options::getSeparateOutputs() == 1), int format = Options::getFormatOutput()) const {
+	virtual void _writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, int format) const {
 		for(ReadSetSizeType pickIdx = offset; pickIdx < length + offset; pickIdx++) {
 			const Pair &pair = _picks[pickIdx];
 			writePick(ofstreamMap, pair.read1, byInputFile, format);
