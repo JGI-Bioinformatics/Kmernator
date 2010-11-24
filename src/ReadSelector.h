@@ -776,6 +776,9 @@ public:
 		_lastSortedPick = _picks.size();
 	}
 
+	long _intendedWriteSize(ReadSetSizeType readIdx, const ReadTrimType &trim, int format = Options::getFormatOutput()) const {
+		return _reads.getRead(readIdx).getIntendedWriteSize(trim.trimLength, trim.label, format);
+	}
 	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, int format = Options::getFormatOutput()) const {
 		if (readIdx == ReadSet::MAX_READ_IDX)
 			return os;
@@ -789,15 +792,6 @@ public:
 		const Pair &pair = _picks[pickIdx];
 		_writePickRead(os, pair.read1, format);
 		_writePickRead(os, pair.read2, format);
-		return os;
-	}
-	std::ostream &writePicks(std::ostream &os, ReadSetSizeType offset = 0, int format = Options::getFormatOutput()) const {
-		return writePicks(os, offset, _picks.size() - offset, format);
-	}
-	virtual std::ostream &_writePicks(std::ostream &os, ReadSetSizeType offset, ReadSetSizeType length, int format) const {
-		for(ReadSetSizeType i = offset; i < length + offset; i++) {
-			writePick(os, i, format);
-		}
 		return os;
 	}
 

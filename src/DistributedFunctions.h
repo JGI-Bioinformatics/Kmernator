@@ -1039,18 +1039,6 @@ done when empty cycle is received
 			rank++;
 		}
 	}
-	std::ostream &_writePicks(std::ostream &os, ReadSetSizeType offset, ReadSetSizeType length, int format) const {
-		int rank = 0;
-		while (rank < _world.size()) {
-			if (rank == _world.rank()) {
-				LOG_VERBOSE_OPTIONAL(1, true, "Writing files part " << (rank+1) << " of " << _world.size());
-				this->RS::_writePicks(os, offset, length, format);
-			}
-			_world.barrier();
-			rank++;
-		}
-		return os;
-	}
 
 	// TODO
 	// rescoreByBestCoveringSubset*

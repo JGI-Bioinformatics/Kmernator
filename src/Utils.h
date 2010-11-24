@@ -110,6 +110,9 @@ private:
     std::string _outputFilePathPrefix;
     std::string _suffix;
     bool _append;
+#ifdef _USE_MPI
+    mpi::communicator *_world;
+#endif
 
 public:
 	static bool &getDefaultAppend() {
@@ -120,15 +123,40 @@ public:
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
 	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {
 		_append = getDefaultAppend();
+#ifdef _USE_MPI
+		_world = NULL;
+#endif
 	}
 	~OfstreamMap() {
         clear();
+	}
+#ifdef _USE_MPI
+	void setWorld(mpi::communicator &world) {
+		_world = &world;
+	}
+#endif
+	std::string getRank() const {
+#ifdef _USE_MPI
+		return (_world == NULL ? std::string() : std::string("--MPIRANK-") + boost::lexical_cast<std::string>(_world->rank()) );
+#else
+		return std::string();
+#endif
+	}
+	void concatenateMPI(std::string rank) {
+		if (rank.empty())
+			return;
+		// TODO
+		// gather all filenames and sizes to master
+		// for each filename
+		//   master sends filename, total size, offset to others
+		//   each open, set_view, opens own piece (if applicable), copies, closes
 	}
 	bool &getAppend() {
 		return _append;
 	}
 	void clear() {
 		close();
+		concatenateMPI(getRank());
 		_map->clear();
 	}
 	void close() {
@@ -137,9 +165,11 @@ public:
 			it->second->close();
 		}
 	}
-
+	std::string getFilename(std::string key) const {
+		return _outputFilePathPrefix + key + _suffix + getRank();
+	}
 	std::ofstream &getOfstream(std::string key) {
-		std::string filename = _outputFilePathPrefix + key + _suffix;
+		std::string filename = getFilename(key);
 		// lockless lookup
 		MapPtr thisMap = _map;
 		Iterator it = thisMap->find(filename);

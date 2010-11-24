@@ -427,6 +427,21 @@ public:
 		return write(os, *this, trimOffset, trimLength, label, format);
 	}
 
+	static long getIntendedWriteSize(const Read &read, SequenceLengthType sequenceLength, std::string label = "", FormatOutput format = FormatOutput::getDefault()) {
+		long length = 0;
+		switch (format.getType()) {
+		case FormatOutput::FASTQ: length += 2 + 4 + sequenceLength*2 + read.getName().length() + (label.length() > 0 ? 1 + label.length() : 0); break;
+		case FormatOutput::FASTA: length += 1 + 2 + sequenceLength   + read.getName().length() + (label.length() > 0 ? 1 + label.length() : 0); break;
+		case FormatOutput::FASTQ_UNMASKED: length += 2 + 4 + read.getLength()*2 + read.getName().length() + (label.length() > 0 ? 1 + label.length() : 0); break;
+		case FormatOutput::FASTA_UNMASKED: length += 1 + 2 + read.getLength()   + read.getName().length() + (label.length() > 0 ? 1 + label.length() : 0); break;
+		default: throw std::invalid_argument("Invalid format");
+		}
+		return length;
+	}
+	long getIntendedWriteSize(SequenceLengthType sequenceLength, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
+		return getIntendedWriteSize(*this, sequenceLength, label, format);
+	}
+
 	std::string toString() const;
 
 };
