@@ -289,7 +289,7 @@ protected:
 
 #ifdef _USE_OPENMP
 		("threads", po::value<int>()->default_value(maxThreads),
-				"maximum number of threads. This must be a power of 2")
+				"maximum number of threads")
 #endif
 		("reference-file", po::value<FileListType>(), "set reference file(s)")
 
@@ -372,7 +372,7 @@ protected:
 				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
 
 		("build-partitions", po::value<unsigned int>()->default_value(buildPartitions),
-				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.  Must be a power of 2")
+				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.")
 
 		("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap),
 				"If set, a GC Heat map will be output (requires --output)")

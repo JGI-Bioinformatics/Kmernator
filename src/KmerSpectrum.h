@@ -1018,8 +1018,8 @@ public:
 		return header.str();
 	}
 
-	inline void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false, NumberType partIdx = 0, NumberType partBitMask = 0) {
-		return append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, partBitMask);
+	inline void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false, NumberType partIdx = 0, NumberType numParts = 1) {
+		return append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, numParts);
 	}
 
 	inline void append(DataPointers &pointers, Kmer &least, WeightType &weight, ReadSetSizeType &readIdx, PositionType &readPos, bool isSolid = false) {
@@ -1074,14 +1074,14 @@ public:
 		}
 
 	}
-	void append( KmerWeights &kmers, ReadSetSizeType readIdx, bool isSolid, ReadSetSizeType kmerIdx, PositionType kmerLen, int partIdx, NumberType partBitMask ) {
+	void append( KmerWeights &kmers, ReadSetSizeType readIdx, bool isSolid, ReadSetSizeType kmerIdx, PositionType kmerLen, int partIdx, NumberType numParts ) {
 
 		DataPointers pointers(*this);
 
 		for(PositionType readPos=0; readPos < kmerLen; readPos++)
 		{
 			Kmer &least = kmers[kmerIdx+readPos];
-			if (partBitMask > 1 && getDMPThread(least, partBitMask, true) != partIdx)
+			if (numParts > 1 && getDMPThread(least, numParts, true) != partIdx)
 				continue;
 			WeightType weight = kmers.valueAt(kmerIdx+readPos);
 			append(pointers, least, weight, readIdx, readPos, isSolid);
@@ -1133,13 +1133,13 @@ public:
 		    return solid.getLocalThreadId(tmp, numThreads);
 		}
 	}
-	inline int getDMPThread( Kmer &kmer, NumberType threadBitMask, bool isLeastComplement = false ) {
+	inline int getDMPThread( Kmer &kmer, NumberType numThreads, bool isLeastComplement = false ) {
 		if (isLeastComplement) {
-			return solid.getDistributedThreadId(kmer, threadBitMask);
+			return solid.getDistributedThreadId(kmer, numThreads);
 		} else {
 		    TEMP_KMER(tmp);
 		    kmer.buildLeastComplement(tmp);
-		    return solid.getDistributedThreadId(tmp, threadBitMask);
+		    return solid.getDistributedThreadId(tmp, numThreads);
 		}
 	}
 
@@ -1165,7 +1165,7 @@ public:
 	// important! returned memory maps must remain in scope!
 	Kmernator::MmapFileVector buildKmerSpectrumInParts(ReadSet &store, NumberType numParts) {
 		bool isSolid = false; // not supported for references...
-		if (numParts == 0) {
+		if (numParts == 1) {
 			buildKmerSpectrum(store, isSolid);
 
 			// purge
@@ -1173,7 +1173,7 @@ public:
 			return Kmernator::MmapFileVector();
 		}
 
-		assert((numParts & (numParts-1)) == 0); // numParts must be a power of 2
+		assert(numParts > 1);
 		Kmernator::MmapFileVector mmaps(numParts*2);
 
 		// build each part of the spectrum
@@ -1250,14 +1250,14 @@ public:
 		}
 
 	}
-	void _buildKmerSpectrumSerial(ReadSet &store, bool isSolid, NumberType partIdx, NumberType partBitMask, long batch, long purgeEvery, long &purgeCount) {
+	void _buildKmerSpectrumSerial(ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts, long batch, long purgeEvery, long &purgeCount) {
 		for (long batchIdx=0; batchIdx < (long) store.getSize(); batchIdx++)
 		{
 			const Read &read = store.getRead( batchIdx );
 			if ( !read.isDiscarded() ) {
 				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
 
-				append(kmers, batchIdx, isSolid, partIdx, partBitMask);
+				append(kmers, batchIdx, isSolid, partIdx, numParts);
 			}
 
 			if (batchIdx % batch == 0) {
@@ -1266,7 +1266,7 @@ public:
 		}
 
 	}
-	void _buildKmerSpectrumParallel(ReadSet &store, bool isSolid, NumberType partIdx, NumberType partBitMask, long batch, long purgeEvery, long &purgeCount) {
+	void _buildKmerSpectrumParallel(ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts, long batch, long purgeEvery, long &purgeCount) {
 
 		long numThreads = omp_get_max_threads();
 		long batchIdx = 0;
@@ -1328,7 +1328,7 @@ public:
 				startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 				for (IndexType j = 0; j < kmers.size(); j++) {
 					int smpThreadId;
-					if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, partBitMask, true) )
+					if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, numParts, true) )
 					    kmerBuffers[ omp_get_thread_num() ][ smpThreadId ].append(kmers[j], kmers.valueAt(j));
 				}
 			}
@@ -1354,7 +1354,7 @@ public:
 						}
 						if (len > 0) {
 							// do not include partIdx or partBitmMask , as getSMPThread() already accounted for partitioning
-						    append(kmerBuffers[threads][ threadId ], readPos.first, isSolid, startIdx, len, 0, 0);
+						    append(kmerBuffers[threads][ threadId ], readPos.first, isSolid, startIdx, len, 0, 1);
 						}
 					}
 				}
@@ -1375,9 +1375,7 @@ public:
 	}
 	void buildKmerSpectrum( ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts)
 	{
-		assert( numParts != 0 && (numParts & (numParts-1)) == 0); // numParts must be a power of 2
 		assert(partIdx < numParts);
-		NumberType partBitMask = numParts-1;
 
 		solid.reset(false);
 		if (isSolid) {
@@ -1395,10 +1393,10 @@ public:
 
 		if (omp_get_max_threads() > 1) {
 #ifdef _USE_OPENMP
-			_buildKmerSpectrumParallel(store, isSolid, partIdx, partBitMask, batch, purgeEvery, purgeCount);
+			_buildKmerSpectrumParallel(store, isSolid, partIdx, numParts, batch, purgeEvery, purgeCount);
 #endif
 		} else {
-			_buildKmerSpectrumSerial  (store, isSolid, partIdx, partBitMask, batch, purgeEvery, purgeCount);
+			_buildKmerSpectrumSerial  (store, isSolid, partIdx, numParts, batch, purgeEvery, purgeCount);
 		}
 
 		if (Log::isVerbose(2)) {

@@ -80,22 +80,10 @@ private:
 	}
 
 	void _set(SequenceLengthType sequenceLength) {
-		if (sequenceLength > 0)
-			_verifyThreads();
 		_sequenceLength = sequenceLength;
 		_twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(_sequenceLength);
 		_totalSize = _twoBitLength;
 	}
-
-	static void _verifyThreads() {
-		int maxThreads = omp_get_max_threads();
-		if ((maxThreads & (maxThreads-1)) != 0) {
-			throw std::invalid_argument(
-					(std::string("The maximum number of threads must be a power-of-two.\nPlease adjust the OMP_NUM_THREADS environmental variable. ")
-					 + boost::lexical_cast<std::string>(maxThreads)).c_str());
-		}
-	}
-
 
 public:
 
@@ -1528,25 +1516,20 @@ public:
 	inline int getLocalThreadId(const KeyType &key, int numThreads) const {
 		return getLocalThreadId(key.hash(), numThreads);
 	}
-	inline int getDistributedThreadId(NumberType hash, NumberType threadBitMask) const {
-		assert( ((threadBitMask+1) & threadBitMask) == 0 ); // number of threads must be a power of 2
-
+	inline int getDistributedThreadId(NumberType hash, NumberType numDistributedThreads) const {
 		// stripe within the contiguous blocks for the local thread
-		return (hash & threadBitMask);
-
-		// use top bits of hash (unused to sort by bucket)
-		//return (hash >> 32 & BUCKET_MASK) & threadBitMask;
+		return (hash % numDistributedThreads);
 	}
-	inline int getDistributedThreadId(const KeyType &key, NumberType threadBitMask) const {
-		return getDistributedThreadId(key.hash(), threadBitMask);
+	inline int getDistributedThreadId(const KeyType &key, NumberType numDistributedThreads) const {
+		return getDistributedThreadId(key.hash(), numDistributedThreads);
 	}
 
 	// optimized to look at both possible thread partitions
 	// if this is the correct distributed thread, return true and set the proper localThread
 	// otherwise return false
-	inline bool getLocalThreadId(const KeyType &key, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType distributedThreadBitMask) const {
+	inline bool getLocalThreadId(const KeyType &key, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
 		NumberType hash = key.hash();
-		if (distributedThreadBitMask == 0 || getDistributedThreadId(hash, distributedThreadBitMask) == distributedThreadId) {
+		if (numDistributedThreads == 1 || getDistributedThreadId(hash, numDistributedThreads) == distributedThreadId) {
 			localThreadId = getLocalThreadId(hash, numLocalThreads);
 			return true;
 		} else {
@@ -1554,9 +1537,9 @@ public:
 		}
 	}
 
-	inline void getThreadIds(const KeyType &key, int &localThreadId, int numLocalThreads, int &distributedThreadId, NumberType distributedThreadBitMask) const {
+	inline void getThreadIds(const KeyType &key, int &localThreadId, int numLocalThreads, int &distributedThreadId, NumberType numThreads) const {
 		NumberType hash = key.hash();
-		distributedThreadId = getDistributedThreadId(hash, distributedThreadBitMask);
+		distributedThreadId = getDistributedThreadId(hash, numThreads);
 		localThreadId = getLocalThreadId(hash, numLocalThreads);
 	}
 
@@ -2064,7 +2047,7 @@ public:
 			return ThreadedBuckets(_buckets.begin(), _buckets.end());
 		} else {
 			long threadNum = omp_get_thread_num();
-			long step = _buckets.size() / threads;
+			long step = (_buckets.size() / threads) + 1;
 			if (step == 0)
 				step = 1;
 			BucketsVectorIterator begin = _buckets.begin() + step*threadNum;

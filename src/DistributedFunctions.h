@@ -58,11 +58,6 @@ void reduceOMPThreads(mpi::communicator &world) {
 }
 
 void validateMPIWorld(mpi::communicator &world, int threadSupport) {
-	if ((world.size() & (world.size()-1)) != 0) {
-		throw std::invalid_argument(
-				(std::string("The number of mpi processes must be a power-of-two.\nPlease adjust the number of processes. ")
-		+ boost::lexical_cast<std::string>(world.size())).c_str());
-	}
 	if (threadSupport != MPI_THREAD_MULTIPLE) {
 		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE, reducing OpenMP threads to 1")
 		omp_set_num_threads(1);
@@ -106,14 +101,10 @@ public:
 
 protected:
 	mpi::communicator world;
-	NumberType distributedThreadMask;
 
 public:
 	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long buckets = 0, bool separateSingletons = true)
 	: KS(buckets, separateSingletons), world(_world) {
-		NumberType numParts = world.size();
-		distributedThreadMask = numParts - 1;
-		assert((numParts & (distributedThreadMask)) == 0); // numParts must be a power of 2
 	}
 	~DistributedKmerSpectrum() {
 	}
@@ -279,6 +270,7 @@ public:
 	void _buildKmerSpectrumMPI(ReadSet &store, bool isSolid) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
+		int worldSize = world.size();
 
 		int messageSize = sizeof(StoreKmerMessageHeader) + KmerSizer::getTwoBitLength();
 
@@ -332,7 +324,7 @@ public:
 						LOG_DEBUG(4, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << kmers[readPos].toFasta());
 					} else {
 
-						this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, distributedThreadMask);
+						this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize);
 
 						if (rankDest == rank && threadDest == threadId) {
 							this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos, isSolid);
@@ -657,6 +649,7 @@ private:
 	// recursively purge kmers within editdistance
 	long _purgeVariants(DataPointers &pointers, const Kmer &kmer, WeakBucketType &variants, double threshold, short editDistance) {
 		int rank = world.rank();
+		int worldSize = world.size();
 		int threadId = omp_get_thread_num();
 		int &numThreads = _variantNumThreads;
 		if (editDistance == 0)
@@ -667,7 +660,7 @@ private:
 		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
 			int rankDest, threadDest;
 			Kmer &varKmer = variants[i];
-			this->solid.getThreadIds(varKmer, threadDest, 1, rankDest, distributedThreadMask);
+			this->solid.getThreadIds(varKmer, threadDest, 1, rankDest, worldSize);
 
 			if (rankDest == rank) {
 				double dummy;
@@ -829,7 +822,7 @@ done when empty cycle is received
 		}
 	};
 
-	int _batchKmerLookup(const Read &read, SequenceLengthType markupLength, ReadSetSizeType offset, KmerValueVector &batchBuffer, SendRequestKmerMessageBuffer &sendReq, int &thisThreadId, int &numThreads, NumberType &distributedThreadBitMask) {
+	int _batchKmerLookup(const Read &read, SequenceLengthType markupLength, ReadSetSizeType offset, KmerValueVector &batchBuffer, SendRequestKmerMessageBuffer &sendReq, int &thisThreadId, int &numThreads, int &rank, int &worldSize) {
 		KA kmers = this->getKmersForRead(read);
 		SequenceLengthType numKmers = kmers.size();
 
@@ -842,8 +835,8 @@ done when empty cycle is received
 
 		for(SequenceLengthType kmerIdx = 0; kmerIdx < numKmers; kmerIdx++) {
 			int localThreadId, distributedThreadId;
-			this->_map.getThreadIds(kmers[kmerIdx], localThreadId, numThreads, distributedThreadId, distributedThreadBitMask);
-			if (distributedThreadId == _world.rank()) {
+			this->_map.getThreadIds(kmers[kmerIdx], localThreadId, numThreads, distributedThreadId, worldSize);
+			if (distributedThreadId == rank) {
 				// handle this directly
 				batchBuffer[offset + kmerIdx] = this->getValue(kmers[kmerIdx]);
 			} else {
@@ -857,7 +850,8 @@ done when empty cycle is received
 		bool useKmers = Options::getKmerSize() != 0;
 
 		int numThreads = omp_get_max_threads();
-		NumberType distributedThreadBitMask = _world.size() - 1;
+		int rank = _world.rank();
+		int worldSize = _world.size();
 
 		ReadSetSizeType readsSize = this->_reads.getSize();
 		ReadSetSizeType batchSize = Options::getBatchSize();
@@ -939,7 +933,7 @@ done when empty cycle is received
 				SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 
 				if (useKmers) {
-					_batchKmerLookup(read, markupLength, offset, batchBuffer[threadId], *sendReq[threadId], threadId, numThreads, distributedThreadBitMask);
+					_batchKmerLookup(read, markupLength, offset, batchBuffer[threadId], *sendReq[threadId], threadId, numThreads, rank, worldSize);
 				} else {
 					this->trimReadByMarkupLength(read, this->_trims[readIdx], markupLength);
 				}
