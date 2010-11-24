@@ -253,25 +253,6 @@ public:
 			LOG_DEBUG(2, "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads);
 			getMaxThreads() = maxThreads;
 		}
-		if ((getMaxThreads() & (getMaxThreads()-1)) != 0) {
-			int start = getMaxThreads();
-			int t = getMaxThreads();
-			if (t > 32) {
-				t=32;
-			} else if (t > 16) {
-				t=16;
-			} else if (t > 8) {
-				t=8;
-			} else if (t > 4) {
-				t=4;
-			} else if (t > 2) {
-				t=2;
-			} else {
-				t=1;
-			}
-			getMaxThreads() = t;
-			LOG_DEBUG(2, "Reducing the number of threads from " << start << " to " << t );
-		}
 		omp_set_num_threads(getMaxThreads());
 #endif
 	}
