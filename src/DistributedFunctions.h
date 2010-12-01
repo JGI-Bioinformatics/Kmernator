@@ -58,7 +58,7 @@ void reduceOMPThreads(mpi::communicator &world) {
 }
 
 void validateMPIWorld(mpi::communicator &world, int threadSupport) {
-	if (threadSupport != MPI_THREAD_MULTIPLE) {
+	if (threadSupport != MPI_THREAD_MULTIPLE && omp_get_max_threads() > 1) {
 		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE, reducing OpenMP threads to 1")
 		omp_set_num_threads(1);
 	}

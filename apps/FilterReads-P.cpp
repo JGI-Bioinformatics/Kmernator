@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
 	Options::getMmapInput() = 0;
 	Options::getVerbosity() = 2;
 
-	int threadSupport = MPI::Init_thread(MPI_THREAD_MULTIPLE);
+	int threadSupport = MPI::Init_thread( (omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_MULTIPLE) );
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
 
@@ -163,8 +163,10 @@ int main(int argc, char *argv[]) {
 
 		}
 
-		spectrumMmaps = spectrum.writeKmerMaps(Options::getOutputFile() + "-mmap");
-		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+                if (!outputFilename.empty()) {
+		  spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
+		  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+                }
 
 		if (Options::getMinDepth() > 1) {
 			LOG_DEBUG(1, "Clearing singletons from memory");

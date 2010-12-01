@@ -1163,8 +1163,9 @@ public:
 	}
 
 	// important! returned memory maps must remain in scope!
-	Kmernator::MmapFileVector buildKmerSpectrumInParts(ReadSet &store, NumberType numParts) {
+	Kmernator::MmapFileVector buildKmerSpectrumInParts(ReadSet &store, NumberType numParts, std::string mmapFileNamePrefix = Options::getOutputFile()) {
 		bool isSolid = false; // not supported for references...
+
 		if (numParts == 1) {
 			buildKmerSpectrum(store, isSolid);
 
@@ -1186,10 +1187,9 @@ public:
 			// purge
 			purgeMinDepth(Options::getMinDepth());
 
-			// store
-			mmaps[partIdx] = weak.store("WeakKmer");
+			mmaps[partIdx] = weak.store(mmapFileNamePrefix + "-WeakKmer");
 			if (Options::getMinDepth() <= 1)
-				mmaps[partIdx + numParts] = singleton.store("SingletonKmer");
+				mmaps[partIdx + numParts] = singleton.store(mmapFileNamePrefix + "-SingletonKmer");
 			else if (Options::getVerbosity())
 				LOG_VERBOSE(1, "Not storing singletons which would have been this size: " << singleton.getSizeToStore() );
 
