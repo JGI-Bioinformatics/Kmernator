@@ -84,13 +84,13 @@ public:
 		flushAll( );
 		assert(flushAllBuffer->getNumDeliveries() == 0);
 	}
-	virtual long receiveAllIncomingMessages() { return 0; }
+	virtual long receiveAllIncomingMessages(bool untilFlushed = true) { return 0; }
 	virtual long flushAllMessageBuffers(int tagDest) { return 0; }
 
-	long receiveAll() {
+	long receiveAll(bool untilFlushed = true) {
 		long count = 0;
 		for(unsigned int i = 0; i < _receiveAllCallbacks.size(); i++)
-			count += _receiveAllCallbacks[i].first->receiveAllIncomingMessages();
+			count += _receiveAllCallbacks[i].first->receiveAllIncomingMessages(untilFlushed);
 		LOG_DEBUG(4, "receiveAll() with " << count);
 		return count;
 	}
@@ -298,8 +298,8 @@ public:
 		processQueue();
 		return returnValue;
 	}
-	long receiveAllIncomingMessages() {
-		long messages = this->receiveAll();
+	long receiveAllIncomingMessages(bool untilFlushed = true) {
+		long messages = this->receiveAll(untilFlushed);
 
 		LOG_DEBUG(4, _tag << ": receiving all messages for tag. cp: " << getNumCheckpoints() << " msgCount: " << this->getNumDeliveries());
 		bool mayHavePending = true;
@@ -311,6 +311,7 @@ public:
 					mayHavePending = true;
 				}
 			}
+			mayHavePending &= untilFlushed;
 		}
 		if (messages > 0)
 			LOG_DEBUG(4, _tag << ": processed messages: " << messages);
@@ -549,8 +550,8 @@ public:
 		memcpy(buf, (char *) msg, this->getMessageSize() + trailingBytes);
 	}
 
-	long receiveAllIncomingMessages() {
-		return this->receiveAll();
+	long receiveAllIncomingMessages(bool untilFlushed = true) {
+		return this->receiveAll(untilFlushed);
 	}
 
 	long flushIfFull(int rankDest, int tagDest, int trailingBytes = 0) {
@@ -623,38 +624,42 @@ public:
 	void recordSentBuffer(SentBuffer &sent) {
 		_sentBuffers.push_back(sent);
 	}
+	void checkSent(SentBuffer &sent) {
+
+		OptionalStatus optStatus = sent.request.test();
+
+		if ( _RETRY_MESSAGES && (!optStatus) && ++sent.pollCount > _RETRY_THRESHOLD) {
+			sent.request.cancel();
+			if ( ! sent.request.test() ) {
+				sent.request = this->getWorld().isend(sent.destRank, sent.destTag, sent.buffer, sent.size);
+				sent.pollCount = 0;
+				LOG_WARN(1, "Canceled and retried pending message to " << sent.destRank << ", " << sent.destTag << " size " << sent.size << " deliveryCount " << sent.deliveryNum);
+			}
+			optStatus = sent.request.test();
+		}
+
+		if (!!optStatus) {
+
+			mpi::status status = optStatus.get();
+			// hmmm looks like error is sometimes populated with junk...
+			//if (status.error() > 0)
+			//	LOG_WARN(1, "sending message returned an error: " << status.error());
+			LOG_DEBUG(4, "finished sending message to " << sent.destRank << ", " << sent.destTag << " size " << sent.size << " deliveryCount " << sent.deliveryNum);
+
+			this->returnBuffer(sent.buffer);
+			sent.reset();
+
+		}
+
+	}
 	long checkSentBuffers(bool wait = false) {
 		long messages = 0;
 		long iterations = 0;
 		while (wait || iterations++ == 0) {
-			messages += this->receiveAllIncomingMessages();
+			messages += this->receiveAllIncomingMessages(wait);
 			for(SentBuffersIterator it = _sentBuffers.begin(); it != _sentBuffers.end(); it++) {
 				SentBuffer &sent = *it;
-
-				OptionalStatus optStatus = sent.request.test();
-
-				if ( _RETRY_MESSAGES && (!optStatus) && ++sent.pollCount > _RETRY_THRESHOLD) {
-					sent.request.cancel();
-					if ( ! sent.request.test() ) {
-						sent.request = this->getWorld().isend(sent.destRank, sent.destTag, sent.buffer, sent.size);
-						sent.pollCount = 0;
-						LOG_WARN(1, "Canceled and retried pending message to " << sent.destRank << ", " << sent.destTag << " size " << sent.size << " deliveryCount " << sent.deliveryNum);
-					}
-					optStatus = sent.request.test();
-				}
-
-				if (!!optStatus) {
-
-					mpi::status status = optStatus.get();
-					// hmmm looks like error is sometimes populated with junk...
-					//if (status.error() > 0)
-					//	LOG_WARN(1, "sending message returned an error: " << status.error());
-					LOG_DEBUG(4, "finished sending message to " << sent.destRank << ", " << sent.destTag << " size " << sent.size << " deliveryCount " << sent.deliveryNum);
-
-					this->returnBuffer(sent.buffer);
-					sent.reset();
-
-				}
+				checkSent(sent);
 			}
 			_sentBuffers.remove_if(SentBuffer());
 
