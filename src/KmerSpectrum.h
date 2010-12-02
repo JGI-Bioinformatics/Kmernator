@@ -170,10 +170,8 @@ public:
 			kmersPerRead = 1;
 
 		unsigned long rawKmers = kmersPerRead * store.getSize();
-		// assume 1% error rate
-		unsigned long estimatedUniqueKmers = rawKmers * (unsigned long) ( std::max(pow(1.01, KmerSizer::getSequenceLength()),2.0) - 1.0 );
-		unsigned long targetBuckets = estimatedUniqueKmers / targetKmersPerBucket;
-		unsigned long maxBuckets = 128*1024*1024;
+		unsigned long targetBuckets = rawKmers / targetKmersPerBucket;
+		unsigned long maxBuckets = 256*1024*1024;
 		unsigned long minBuckets = 128;
 		return std::max( std::min(targetBuckets,maxBuckets), minBuckets );
 	}
