@@ -163,10 +163,10 @@ int main(int argc, char *argv[]) {
 
 		}
 
-                if (!outputFilename.empty()) {
+		if (!outputFilename.empty()) {
 		  spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
 		  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
-                }
+        }
 
 		if (Options::getMinDepth() > 1) {
 			LOG_DEBUG(1, "Clearing singletons from memory");
