@@ -60,7 +60,7 @@ public:
 int main(int argc, char **argv)
 {
   int provided;
-  provided = MPI::Init_thread(MPI_THREAD_MULTIPLE);
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
   mpi::environment env(argc, argv);
   mpi::communicator world;
 
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 
   Options::parseOpts(argc, argv);
 
-  printf("Hello World from Node %d\n", world.rank());
+  printf("Hello World from Node %d, mpi support %d\n", world.rank(), provided);
 
   int numThreads = omp_get_max_threads();
   RecvTextMessageBuffer *recv[numThreads];
@@ -134,7 +134,7 @@ int main(int argc, char **argv)
   double rate = (double) mb*numThreads / (double) elapsed.total_milliseconds() * 1000.0;
   LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
 
-  MPI::Finalize();
+  MPI_Finalize();
   return 0;
 }
 

@@ -43,14 +43,13 @@ int main(int argc, char *argv[]) {
 	Options::getMmapInput() = 0;
 	Options::getVerbosity() = 2;
 
-	int threadSupport = MPI::Init_thread( (omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_MULTIPLE) );
+	int threadProvided;
+	MPI_Init_thread(&argc, &argv, (omp_get_max_threads() = 1 ? MPI_THREAD_SINGLE : MPI_THREAD_MULTIPLE), &threadProvided);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
 
 	try {
 		Logger::setWorld(&world);
-
-		validateMPIWorld(world, threadSupport);
 
 		if (!FilterReadsOptions::parseOpts(argc, argv))
 			throw std::invalid_argument("Please fix the command line arguments");
@@ -60,6 +59,8 @@ int main(int argc, char *argv[]) {
 
 		if (Options::getGatheredLogs())
 			Logger::setWorld(&world, Options::getDebug() >= 2);
+
+		validateMPIWorld(world);
 
 	} catch (...) {
 		std::cerr << FilterReadsOptions::getDesc() << std::endl;
@@ -216,7 +217,7 @@ int main(int argc, char *argv[]) {
 	world.barrier();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 
-	MPI::Finalize();
+	MPI_Finalize();
 
 	return 0;
 }

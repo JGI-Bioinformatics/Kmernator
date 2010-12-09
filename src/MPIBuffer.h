@@ -276,7 +276,10 @@ public:
 		if (!!optionalRequest) {
 			++_requestAttempts[rankSource];
 			bool retry = _RETRY_MESSAGES && _requestAttempts[rankSource] > _RETRY_THRESHOLD;
-
+#ifdef OPENMP_CRITICAL_MPI
+#pragma omp critical (MPIBUFFER_RECV_REQUEST_TEST)
+#endif
+			{
 			optionalStatus = optionalRequest.get().test();
 			if (retry && !optionalStatus) {
 				LOG_WARN(1, "Canceling pending request that looks to be stuck tag: " << _tag);
@@ -287,7 +290,7 @@ public:
 					optionalStatus = optionalRequest.get().test();
 				}
 			}
-
+			}
 			if (!!optionalStatus) {
 				mpi::status status = optionalStatus.get();
 				queueMessage(status, rankSource);
@@ -365,7 +368,7 @@ private:
 		OptionalRequest oreq;
 		LOG_DEBUG(5, "Starting irecv for " << sourceRank << "," << _tag);
 #ifdef OPENMP_CRITICAL_MPI
-#pragma omp critical (MPI_buffer)
+#pragma omp critical (MPI_buffer_irecv)
 #endif
 		oreq = this->getWorld().irecv(sourceRank, _tag, getBuffer(sourceRank), BufferBase::MESSAGE_BUFFER_SIZE);
 		assert(!!oreq);
@@ -598,7 +601,7 @@ public:
 			SentBuffer sent(buffer, rankDest, tagDest, offset, this->getNumDeliveries());
 			LOG_DEBUG(3, "sending message to " << rankDest << ", " << tagDest << " size " << offset);
 #ifdef OPENMP_CRITICAL_MPI
-#pragma omp critical (MPI_buffer)
+#pragma omp critical (MPI_buffer_send)
 #endif
 			sent.request = this->getWorld().isend(rankDest, tagDest, buffer, offset);
 
@@ -626,7 +629,12 @@ public:
 	}
 	void checkSent(SentBuffer &sent) {
 
-		OptionalStatus optStatus = sent.request.test();
+		OptionalStatus optStatus;
+#ifdef OPENMP_CRITICAL_MPI
+#pragma omp critical (MPI_BUFFER_SEND_REQUEST_TEST)
+#endif
+		{
+		optStatus = sent.request.test();
 
 		if ( _RETRY_MESSAGES && (!optStatus) && ++sent.pollCount > _RETRY_THRESHOLD) {
 			sent.request.cancel();
@@ -636,6 +644,7 @@ public:
 				LOG_WARN(1, "Canceled and retried pending message to " << sent.destRank << ", " << sent.destTag << " size " << sent.size << " deliveryCount " << sent.deliveryNum);
 			}
 			optStatus = sent.request.test();
+		}
 		}
 
 		if (!!optStatus) {

@@ -51,15 +51,17 @@
 
 void reduceOMPThreads(mpi::communicator &world) {
 	Options::validateOMPThreads();
-	int numThreads = Options::getMaxThreads();
+	int numThreads = omp_get_max_threads();
 	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
 	omp_set_num_threads(numThreads);
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
 }
 
-void validateMPIWorld(mpi::communicator &world, int threadSupport) {
-	if (threadSupport != MPI_THREAD_MULTIPLE && omp_get_max_threads() > 1) {
-		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE, reducing OpenMP threads to 1")
+void validateMPIWorld(mpi::communicator &world) {
+	int provided;
+	MPI_Query_thread(&provided);
+	if (provided != MPI_THREAD_MULTIPLE && omp_get_max_threads() > 1) {
+		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE (" << MPI::Query_thread() << "), reducing OpenMP threads to 1")
 		omp_set_num_threads(1);
 	}
 	reduceOMPThreads(world);

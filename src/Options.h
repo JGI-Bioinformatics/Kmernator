@@ -418,14 +418,7 @@ public:
 
 
 			setOpt<unsigned int>("verbose", getVerbosity());
-			{
-				char hostname[128];
-				gethostname(hostname, 128);
-				LOG_VERBOSE(1, "Starting on " << hostname);
-			}
-
 			setOpt<unsigned int>("debug", getDebug());
-
 			setOpt<std::string>("log-file", getLogFile(), false);
 			if ( ! getLogFile().empty() ) {
 				getOptions().logFileStream.reset( new std::ofstream(getLogFile().c_str(), std::ios_base::out | std::ios_base::ate) );
@@ -434,8 +427,14 @@ public:
 				LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "log-file is: " << getLogFile().c_str());
 			}
 
-
+			if (getVerbosity() > 0)
+			{
+				char hostname[128];
+				gethostname(hostname, 128);
+				LOG_VERBOSE(1, "Starting on " << hostname);
+			}
 			bool print = Logger::isMaster() && ((Log::isVerbose(1) || Log::isDebug(1)));
+
 			std::ostream *output = NULL;
 			if (print) {
 				output = Log::Verbose("Options Set").getOstreamPtr();
