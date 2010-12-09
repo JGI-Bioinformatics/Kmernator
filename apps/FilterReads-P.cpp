@@ -44,7 +44,8 @@ int main(int argc, char *argv[]) {
 	Options::getVerbosity() = 2;
 
 	int threadProvided;
-	MPI_Init_thread(&argc, &argv, (omp_get_max_threads() = 1 ? MPI_THREAD_SINGLE : MPI_THREAD_MULTIPLE), &threadProvided);
+	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_MULTIPLE;
+	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
 
