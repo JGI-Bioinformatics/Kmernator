@@ -168,9 +168,9 @@ public:
 	MessageClass *getTmpMessage() {
 		return (MessageClass*) this->_message;
 	}
-	Buffer getNewBuffer() {
+	Buffer getNewBuffer(int numLinearBuffers = 1) {
 		if (freeBuffers.empty()) {
-			return new char[ MESSAGE_BUFFER_SIZE ];
+			return new char[ MESSAGE_BUFFER_SIZE * numLinearBuffers ];
 		} else {
 			Buffer buf;
 			buf = freeBuffers.back();

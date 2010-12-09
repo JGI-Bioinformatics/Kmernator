@@ -24,7 +24,7 @@ cmake $Kmernator \
     -DMPI_LIBRARY="libc.a" -DMPI_LINK_FLAGS="-lmpich_threadm"  \
     -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
 
-# for static build
+# for static build -- BROKEN if MPI support is requested!
 $CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
 
 # for debug

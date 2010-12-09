@@ -107,7 +107,7 @@ int main(int argc, char **argv)
 		  send[threadId]->bufferMessage(destRank % world.size(), threadId, msgSize)->set(spam, msgSize);
 	  }
 	  send[threadId]->flushAllMessageBuffers(threadId);
-	  send[threadId]->checkSentBuffers(true);
+	  send[threadId]->checkSentBuffers();
 	  LOG_VERBOSE_OPTIONAL(1, true, "sent " << send[threadId]->getNumDeliveries());
   }
 
