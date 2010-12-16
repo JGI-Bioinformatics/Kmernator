@@ -261,7 +261,7 @@ public:
 			weight = _weight;
 			*(getKmer()) = _kmer;
 		}
-		int process(RecvStoreKmerMessageBufferBase *bufferCallback) {
+		int process(StoreKmerMessageBuffersBase *bufferCallback) {
 			RecvStoreKmerMessageBuffer *kbufferCallback = (RecvStoreKmerMessageBuffer*) bufferCallback;
 			LOG_DEBUG(4, "StoreKmerMessage: " << readIdx << " " << readPos << " " << weight << " " << getKmer()->toFasta());
 			kbufferCallback->getSpectrum().append(kbufferCallback->getDataPointer(), *getKmer(), weight, readIdx, readPos, kbufferCallback->isSolid());
@@ -552,7 +552,7 @@ public:
 			threshold = _threshold;
 			*(getKmer()) = _kmer;
 		}
-		int process(RecvPurgeVariantKmerMessageBufferBase *bufferCallback) {
+		int process(PurgeVariantKmerMessageBuffersBase *bufferCallback) {
 			RecvPurgeVariantKmerMessageBuffer *kbufferCallback = (RecvPurgeVariantKmerMessageBuffer*) bufferCallback;
 			LOG_DEBUG(4, "PurgeVariantKmerMessage: " << threshold << " " << getKmer()->toFasta());
 			DistributedKmerSpectrum &spectrum = kbufferCallback->getSpectrum();
@@ -788,7 +788,7 @@ done when empty cycle is received
 			score = _score;
 		}
 		// store response in kmer value vector
-		int process(RecvRespondKmerMessageBufferBase *bufferCallback) {
+		int process(RespondKmerMessageBuffersBase *bufferCallback) {
 			RecvRespondKmerMessageBuffer *kbufferCallback = (RecvRespondKmerMessageBuffer*) bufferCallback;
 			LOG_DEBUG(4, "RespondKmerMessage: " << requestId << " " << score);
 			kbufferCallback->_kmerValues[requestId] = score;
@@ -811,7 +811,7 @@ done when empty cycle is received
 			*(getKmer()) = _kmer;
 		}
 		// lookup kmer in map and build response message
-		int process(RecvRequestKmerMessageBufferBase *bufferCallback) {
+		int process(RequestKmerMessageBuffersBase *bufferCallback) {
 			RecvRequestKmerMessageBuffer *kbufferCallback = (RecvRequestKmerMessageBuffer*) bufferCallback;
 			int destSource = kbufferCallback->getRecvSource();
 			int destTag = kbufferCallback->getRecvTag() + kbufferCallback->_numThreads;

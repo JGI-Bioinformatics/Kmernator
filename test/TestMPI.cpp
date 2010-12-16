@@ -20,7 +20,7 @@
 #endif
 
 class TextMessage;
-typedef MPIMessageBufferBase< TextMessage > TextMessageBuffersBase;
+typedef MPIMessageBufferBase< TextMessage > TextMessageBufferBase;
 typedef MPIRecvMessageBuffer< TextMessage > RecvTextMessageBufferBase;
 typedef MPISendMessageBuffer< TextMessage > SendTextMessageBufferBase;
 
@@ -28,7 +28,7 @@ class RecvTextMessageBuffer : public RecvTextMessageBufferBase
 {
 public:
 	RecvTextMessageBuffer(mpi::communicator &world, int messageSize, int tag) : RecvTextMessageBufferBase(world, messageSize, tag) {}
-	virtual void processMessage(const char *text, int length) {
+	virtual void processTextMessage(const char *text, int length) {
 		LOG_DEBUG(4, "Recv: " << std::string(text, length));
 	}
 };
@@ -49,9 +49,9 @@ public:
 	char *getText() {
 		return (char*) (((char*)this)+sizeof(*this));
 	}
-	int process(RecvTextMessageBufferBase *_bufferCallback) {
+	int process(TextMessageBufferBase *_bufferCallback) {
 		RecvTextMessageBuffer *bufferCallback = (RecvTextMessageBuffer *) _bufferCallback;
-		bufferCallback->processMessage(getText(), length);
+		bufferCallback->processTextMessage(getText(), length);
 		LOG_DEBUG(4, "process(): length: " << length << " recvSize: " << bufferCallback->getRecvSize() << " msg#: " << bufferCallback->getNumMessages() << " deliver#: " << bufferCallback->getNumDeliveries() << " " << std::string(getText(), length))
 		return length;
 	}
@@ -83,7 +83,7 @@ int main(int argc, char **argv)
 	  send[threadId]->addReceiveAllCallback(recv[threadId]);
   }
 
-  int spamMax = TextMessageBuffersBase::MESSAGE_BUFFER_SIZE;
+  int spamMax = TextMessageBufferBase::MESSAGE_BUFFER_SIZE;
   char spam[spamMax];
 
   #pragma omp parallel for
