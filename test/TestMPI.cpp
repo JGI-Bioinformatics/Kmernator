@@ -19,10 +19,32 @@
 #error "mpi is required for this library"
 #endif
 
-class TextMessage;
-typedef MPIMessageBufferBase< TextMessage > TextMessageBufferBase;
-typedef MPIRecvMessageBuffer< TextMessage > RecvTextMessageBufferBase;
-typedef MPISendMessageBuffer< TextMessage > SendTextMessageBufferBase;
+class TextMessage {
+public:
+	int length;
+	void set(const char *_data, int _length) {
+		memcpy(getText(), _data, _length);
+		LOG_DEBUG(5, "TextMessage::set(): " << std::string(getText(), _length));
+		length = _length;
+	}
+	// THIS IS DANGEROUS unless allocated extra bytes!
+	char *getText() {
+		return (char*) (((char*)this)+sizeof(*this));
+	}
+};
+
+class TextMessageProcessor;
+typedef MPIMessageBuffer< TextMessage, TextMessageProcessor > TextMessageBufferBase;
+class TextMessageProcessor {
+public:
+	long process(TextMessage *msg, TextMessageBufferBase *_bufferCallback) {
+		LOG_DEBUG(4, "TextMessageProcessor::process(): length: " << msg->length << " recvSize: " << _bufferCallback->getRecvSize() << " msg#: " << _bufferCallback->getNumMessages() << " deliver#: " << _bufferCallback->getNumDeliveries() << " " << std::string(msg->getText(), msg->length))
+		return msg->length;
+	}
+};
+typedef MPIRecvMessageBuffer< TextMessage, TextMessageProcessor > RecvTextMessageBufferBase;
+typedef MPISendMessageBuffer< TextMessage, TextMessageProcessor > SendTextMessageBufferBase;
+typedef MPIAllToAllMessageBuffer< TextMessage, TextMessageProcessor > A2ABufferBase;
 
 class RecvTextMessageBuffer : public RecvTextMessageBufferBase
 {
@@ -36,25 +58,6 @@ class SendTextMessageBuffer : public SendTextMessageBufferBase
 {
 public:
 	SendTextMessageBuffer(mpi::communicator &world, int messageSize) : SendTextMessageBufferBase(world, messageSize) {}
-};
-class TextMessage {
-public:
-	int length;
-	void set(const char *_data, int _length) {
-		memcpy(getText(), _data, _length);
-		LOG_DEBUG(5, "TextMessage::set(): " << std::string(getText(), _length));
-		length = _length;
-	}
-	// THIS IS DANGEROUS unless allocated extra bytes!
-	char *getText() {
-		return (char*) (((char*)this)+sizeof(*this));
-	}
-	int process(TextMessageBufferBase *_bufferCallback) {
-		RecvTextMessageBuffer *bufferCallback = (RecvTextMessageBuffer *) _bufferCallback;
-		bufferCallback->processTextMessage(getText(), length);
-		LOG_DEBUG(4, "process(): length: " << length << " recvSize: " << bufferCallback->getRecvSize() << " msg#: " << bufferCallback->getNumMessages() << " deliver#: " << bufferCallback->getNumDeliveries() << " " << std::string(getText(), length))
-		return length;
-	}
 };
 
 int main(int argc, char **argv)
@@ -71,11 +74,15 @@ int main(int argc, char **argv)
   printf("Hello World from Node %d, mpi support %d\n", world.rank(), provided);
 
   int numThreads = omp_get_max_threads();
+  int stdNumThreads = numThreads;
+  if (!MPIMessageBufferBase::isThreadSafe())
+	  stdNumThreads = 1;
+
   RecvTextMessageBuffer *recv[numThreads];
   SendTextMessageBuffer *send[numThreads];
+  A2ABufferBase a2a(world, sizeof(TextMessage));
 
-
-#pragma omp parallel num_threads(numThreads)
+#pragma omp parallel num_threads(stdNumThreads)
   {
 	  int threadId = omp_get_thread_num();
 	  recv[threadId] = new RecvTextMessageBuffer(world, sizeof(TextMessage), threadId);
@@ -92,47 +99,81 @@ int main(int argc, char **argv)
   }
 
   int mb = 1024;
-  LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Send/Recv " << (mb*numThreads) << "MB per node");
+  LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Send/Recv " << (mb) << "MB per rank");
   world.barrier();
   boost::posix_time::ptime start = boost::posix_time::microsec_clock::local_time();
+  int msgSize = 16*1024 - sizeof(TextMessage);
+  int msgPerMb = 1024*1024 / msgSize;
 
-  #pragma omp parallel num_threads(numThreads)
+
+
+  #pragma omp parallel num_threads(stdNumThreads)
   {
 	  int threadId = omp_get_thread_num();
-	  int msgSize = 16*1024 - sizeof(TextMessage);
-	  int msgPerMb = 1024*1024 / msgSize;
-	  int destRank = threadId;
-	  for(int i = 0; i < msgPerMb * mb; i++) {
-		  while (++destRank % world.size() == world.rank());
-		  send[threadId]->bufferMessage(destRank % world.size(), threadId, msgSize)->set(spam, msgSize);
+	  for(int i = 0; i < msgPerMb * mb / stdNumThreads / world.size(); i++) {
+		  for(int w=0; w < world.size() ; w++) {
+			  send[threadId]->bufferMessage(w, threadId, msgSize)->set(spam, msgSize);
+		  }
 	  }
-	  send[threadId]->flushAllMessageBuffers(threadId);
-	  send[threadId]->checkSentBuffers();
-	  LOG_VERBOSE_OPTIONAL(1, true, "sent " << send[threadId]->getNumDeliveries());
-  }
-
-  std::stringstream ss;
-  #pragma omp parallel num_threads(numThreads)
-  {
-	  int threadId = omp_get_thread_num();
 	  send[threadId]->finalize(threadId);
 	  recv[threadId]->finalize();
 
-	  #pragma omp critical
-	  {
-		  ss << threadId << " " << send[threadId]->getNumMessages()
-		     << " " << recv[threadId]->getNumMessages() << std::endl;
-	  }
 	  delete recv[threadId];
 	  delete send[threadId];
   }
+
   boost::posix_time::ptime end = boost::posix_time::microsec_clock::local_time();
   boost::posix_time::time_duration elapsed = end - start;
 
-  std::string s = ss.str();
-  LOG_VERBOSE_OPTIONAL(1, true, s);
-  double rate = (double) mb*numThreads / (double) elapsed.total_milliseconds() * 1000.0;
-  LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
+  double rate = (double) mb  / (double) elapsed.total_milliseconds() * 1000.0;
+  LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "MPIMessagBuffer: " << rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
+
+
+  world.barrier();
+  start = boost::posix_time::microsec_clock::local_time();
+
+  #pragma omp parallel num_threads(numThreads)
+  {
+	  int threadId = omp_get_thread_num();
+	  for(int i = 0; i < msgPerMb * mb / numThreads / world.size(); i++) {
+		  for(int w=0; w < world.size() ; w++) {
+			  a2a.bufferMessage(w, threadId, msgSize)->set(spam, msgSize);
+		  }
+	  }
+	  a2a.finalize();
+  }
+
+  end = boost::posix_time::microsec_clock::local_time();
+  elapsed = end - start;
+  rate = (double) mb / (double) elapsed.total_milliseconds() * 1000.0;
+  LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "MPI all2all messagebuffer: " << rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
+
+  char in[spamMax * world.size()], out[spamMax * world.size()];
+  int inSize[world.size()], outSize[world.size()], inDisp[world.size()], outDisp[world.size()];
+
+  world.barrier();
+  start = boost::posix_time::microsec_clock::local_time();
+
+  for(int i = 0; i < mb*1024*1024 / TextMessageBufferBase::MESSAGE_BUFFER_SIZE / world.size(); i++) {
+	  for(int w = 0 ; w < world.size(); w++) {
+		  inSize[w] = outSize[w] = TextMessageBufferBase::MESSAGE_BUFFER_SIZE;
+		  inDisp[w] = outDisp[w] = TextMessageBufferBase::MESSAGE_BUFFER_SIZE * w;
+		  memcpy(out + outDisp[w], spam, TextMessageBufferBase::MESSAGE_BUFFER_SIZE);
+	  }
+	  LOG_DEBUG_OPTIONAL(2, world.rank() == 0, "All2All: " << i);
+	  MPI_Alltoallv(out, outSize, outDisp, MPI_BYTE, in, inSize, inDisp, MPI_BYTE, world);
+	  for(int w = 0 ; w < world.size(); w++) {
+		  if (memcmp(out + outDisp[w], in + inDisp[w], inSize[w]) != 0)
+			  LOG_ERROR(1, "invalid transfer: " << w);
+	  }
+  }
+
+  end = boost::posix_time::microsec_clock::local_time();
+  elapsed = end - start;
+  rate = (double) mb / (double) elapsed.total_milliseconds() * 1000.0;
+  LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "MPI all2all: " << rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
+
+
 
   MPI_Finalize();
   return 0;

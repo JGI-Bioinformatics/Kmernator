@@ -204,45 +204,6 @@ public:
 	 * readIdx, readPos, weight (rc if neg) + kmer
 	 *
 	 */
-	class StoreKmerMessageHeader;
-
-	typedef MPIMessageBufferBase< StoreKmerMessageHeader > StoreKmerMessageBuffersBase;
-	typedef MPIRecvMessageBuffer< StoreKmerMessageHeader > RecvStoreKmerMessageBufferBase;
-	typedef MPISendMessageBuffer< StoreKmerMessageHeader > SendStoreKmerMessageBufferBase;
-
-	class RecvStoreKmerMessageBuffer : public RecvStoreKmerMessageBufferBase
-	{
-		DistributedKmerSpectrum &_spectrum;
-		DataPointers _pointers;
-		bool _isSolid;
-
-	public:
-		RecvStoreKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize, int tag, bool isSolid = false)
-			: RecvStoreKmerMessageBufferBase(world, messageSize, tag), _spectrum(spectrum), _pointers(spectrum), _isSolid(isSolid) {
-		}
-		inline DataPointers &getDataPointer() {
-			return _pointers;
-		}
-		inline DistributedKmerSpectrum &getSpectrum() {
-			return _spectrum;
-		}
-		inline bool isSolid() const {
-			return _isSolid;
-		}
-	};
-	class SendStoreKmerMessageBuffer : public SendStoreKmerMessageBufferBase
-	{
-		DistributedKmerSpectrum &_spectrum;
-
-	public:
-		SendStoreKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize)
-			: SendStoreKmerMessageBufferBase(world, messageSize), _spectrum(spectrum) {
-		}
-		inline DistributedKmerSpectrum &getSpectrum() {
-			return _spectrum;
-		}
-	};
-
 	class StoreKmerMessageHeader {
 	public:
 		ReadSetSizeType readIdx;
@@ -261,13 +222,32 @@ public:
 			weight = _weight;
 			*(getKmer()) = _kmer;
 		}
-		int process(StoreKmerMessageBuffersBase *bufferCallback) {
-			RecvStoreKmerMessageBuffer *kbufferCallback = (RecvStoreKmerMessageBuffer*) bufferCallback;
-			LOG_DEBUG(4, "StoreKmerMessage: " << readIdx << " " << readPos << " " << weight << " " << getKmer()->toFasta());
-			kbufferCallback->getSpectrum().append(kbufferCallback->getDataPointer(), *getKmer(), weight, readIdx, readPos, kbufferCallback->isSolid());
+	};
+	class StoreKmerMessageHeaderProcessor;
+	typedef MPIMessageBuffer< StoreKmerMessageHeader, StoreKmerMessageHeaderProcessor > StoreKmerMessageBuffersBase;
+	class  StoreKmerMessageHeaderProcessor {
+	public:
+		DistributedKmerSpectrum &_spectrum;
+		DataPointers _pointers;
+		StoreKmerMessageHeaderProcessor(DistributedKmerSpectrum &spectrum, bool isSolid = false) : _spectrum(spectrum), _pointers(spectrum), _isSolid(isSolid) {}
+		inline DataPointers &getDataPointer() {
+			return _pointers;
+		}
+		inline DistributedKmerSpectrum &getSpectrum() {
+			return _spectrum;
+		}
+		inline bool isSolid() const {
+			return _isSolid;
+		}
+		bool _isSolid;		int process(StoreKmerMessageHeader *msg, StoreKmerMessageBuffersBase *bufferCallback) {
+			LOG_DEBUG(4, "StoreKmerMessage: " << msg->readIdx << " " << msg->readPos << " " << msg->weight << " " << msg->getKmer()->toFasta());
+			getSpectrum().append(getDataPointer(), *msg->getKmer(), msg->weight, msg->readIdx, msg->readPos, isSolid());
 			return 0;
 		}
 	};
+
+	typedef MPIRecvMessageBuffer< StoreKmerMessageHeader, StoreKmerMessageHeaderProcessor > RecvStoreKmerMessageBuffer;
+	typedef MPISendMessageBuffer< StoreKmerMessageHeader, StoreKmerMessageHeaderProcessor > SendStoreKmerMessageBuffer;
 
 	void _buildKmerSpectrumMPI(ReadSet &store, bool isSolid) {
 		int numThreads = omp_get_max_threads();
@@ -294,9 +274,9 @@ public:
 		{
 			int threadId = omp_get_thread_num();
 			LOG_DEBUG(3, "allocating buffers for thread");
-			recvBuffers[threadId] = new RecvStoreKmerMessageBuffer(world, *this, messageSize, threadId, isSolid);
+			recvBuffers[threadId] = new RecvStoreKmerMessageBuffer(world, messageSize, threadId, StoreKmerMessageHeaderProcessor(*this,isSolid));
 			for(int recvThread = 0 ; recvThread < numThreads; recvThread++) {
-				sendBuffers[threadId][recvThread] = new SendStoreKmerMessageBuffer(world, *this, messageSize);
+				sendBuffers[threadId][recvThread] = new SendStoreKmerMessageBuffer(world, messageSize, StoreKmerMessageHeaderProcessor(*this,isSolid));
 				sendBuffers[threadId][recvThread]->addReceiveAllCallback( recvBuffers[threadId] );
 			}
 
@@ -315,6 +295,7 @@ public:
 				if (read.isDiscarded())
 					continue;
 
+				DataPointers pointers(*this);
 				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
 				ReadSetSizeType globalReadIdx = readIdx + globalReadSetOffset;
 				LOG_DEBUG(3, "Read " << readIdx << " (" << globalReadIdx << ") " << kmers.size() );
@@ -329,7 +310,7 @@ public:
 						this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize);
 
 						if (rankDest == rank && threadDest == threadId) {
-							this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos, isSolid);
+							this->append(pointers, kmers[readPos], weight, globalReadIdx, readPos, isSolid);
 						} else {
 							sendBuffers[ threadId ][ threadDest ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
 						}
@@ -496,48 +477,6 @@ public:
 	 * threshold + kmer
 	 *
 	 */
-	class PurgeVariantKmerMessageHeader;
-
-	typedef MPIMessageBufferBase< PurgeVariantKmerMessageHeader > PurgeVariantKmerMessageBuffersBase;
-	typedef MPIRecvMessageBuffer< PurgeVariantKmerMessageHeader > RecvPurgeVariantKmerMessageBufferBase;
-	typedef MPISendMessageBuffer< PurgeVariantKmerMessageHeader > SendPurgeVariantKmerMessageBufferBase;
-
-	class RecvPurgeVariantKmerMessageBuffer : public RecvPurgeVariantKmerMessageBufferBase
-	{
-		DistributedKmerSpectrum &_spectrum;
-		DataPointers _pointers;
-		double _variantSigmas, _minDepth;
-
-	public:
-		RecvPurgeVariantKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize, int srcTag, double variantSigmas, double minDepth)
-			: RecvPurgeVariantKmerMessageBufferBase(world, messageSize, srcTag), _spectrum(spectrum), _pointers(spectrum), _variantSigmas(variantSigmas), _minDepth(minDepth) {
-		}
-		inline DataPointers &getDataPointer() {
-			return _pointers;
-		}
-		inline DistributedKmerSpectrum &getSpectrum() {
-			return _spectrum;
-		}
-		inline double getVariantSigmas() {
-			return _variantSigmas;
-		}
-		inline double getMinDepth() {
-			return _minDepth;
-		}
-	};
-	class SendPurgeVariantKmerMessageBuffer : public SendPurgeVariantKmerMessageBufferBase
-	{
-		DistributedKmerSpectrum &_spectrum;
-
-	public:
-		SendPurgeVariantKmerMessageBuffer(mpi::communicator &world, DistributedKmerSpectrum &spectrum, int messageSize)
-			: SendPurgeVariantKmerMessageBufferBase(world, messageSize), _spectrum(spectrum) {
-		}
-		inline DistributedKmerSpectrum &getSpectrum() {
-			return _spectrum;
-		}
-	};
-
 	class PurgeVariantKmerMessageHeader {
 	public:
 		float threshold;
@@ -552,19 +491,48 @@ public:
 			threshold = _threshold;
 			*(getKmer()) = _kmer;
 		}
-		int process(PurgeVariantKmerMessageBuffersBase *bufferCallback) {
-			RecvPurgeVariantKmerMessageBuffer *kbufferCallback = (RecvPurgeVariantKmerMessageBuffer*) bufferCallback;
-			LOG_DEBUG(4, "PurgeVariantKmerMessage: " << threshold << " " << getKmer()->toFasta());
-			DistributedKmerSpectrum &spectrum = kbufferCallback->getSpectrum();
-			DataPointers &pointers = kbufferCallback->getDataPointer();
+
+	};
+	class PurgeVariantKmerMessageHeaderProcessor;
+
+	typedef MPIMessageBuffer< PurgeVariantKmerMessageHeader, PurgeVariantKmerMessageHeaderProcessor > PurgeVariantKmerMessageBuffersBase;
+	class PurgeVariantKmerMessageHeaderProcessor {
+	public:
+		DistributedKmerSpectrum &_spectrum;
+		DataPointers _pointers;
+		double _variantSigmas, _minDepth;
+		PurgeVariantKmerMessageHeaderProcessor(DistributedKmerSpectrum &spectrum,  double variantSigmas, double minDepth)
+		: _spectrum(spectrum), _pointers(spectrum), _variantSigmas(variantSigmas), _minDepth(minDepth) {
+		}
+		inline DataPointers &getDataPointer() {
+			return _pointers;
+		}
+		inline DistributedKmerSpectrum &getSpectrum() {
+			return _spectrum;
+		}
+		inline double getVariantSigmas() {
+			return _variantSigmas;
+		}
+		inline double getMinDepth() {
+			return _minDepth;
+		}
+		int process(PurgeVariantKmerMessageHeader *msg, PurgeVariantKmerMessageBuffersBase *bufferCallback) {
+			LOG_DEBUG(4, "PurgeVariantKmerMessage: " << msg->threshold << " " << msg->getKmer()->toFasta());
+			DistributedKmerSpectrum &spectrum = getSpectrum();
+			DataPointers &pointers = getDataPointer();
 			double dummy;
-			bool purged = spectrum._setPurgeVariant(pointers, *getKmer(), threshold, dummy);
+			bool purged = spectrum._setPurgeVariant(pointers, *msg->getKmer(), msg->threshold, dummy);
 
 			if (purged)
 				spectrum.variantWasPurged();
 			return 0;
 		}
 	};
+
+	typedef MPIRecvMessageBuffer< PurgeVariantKmerMessageHeader, PurgeVariantKmerMessageHeaderProcessor > RecvPurgeVariantKmerMessageBuffer;
+	typedef MPISendMessageBuffer< PurgeVariantKmerMessageHeader, PurgeVariantKmerMessageHeaderProcessor > SendPurgeVariantKmerMessageBuffer;
+
+
 	void variantWasPurged(long count = 1) {
 		#pragma omp atomic
 		_purgedVariants += count;
@@ -587,9 +555,9 @@ private:
 		#pragma omp parallel num_threads(numThreads)
 		{
 			int threadId = omp_get_thread_num();
-			recvPurgeVariant[threadId] = new RecvPurgeVariantKmerMessageBuffer(world, *this, messageSize, threadId, variantSigmas, minDepth);
+			recvPurgeVariant[threadId] = new RecvPurgeVariantKmerMessageBuffer(world, messageSize, threadId, PurgeVariantKmerMessageHeaderProcessor(*this, variantSigmas, minDepth));
 			for (int t = 0 ; t < numThreads; t++) {
-				sendPurgeVariant[threadId*numThreads+t] = new SendPurgeVariantKmerMessageBuffer(world, *this, messageSize);
+				sendPurgeVariant[threadId*numThreads+t] = new SendPurgeVariantKmerMessageBuffer(world, messageSize, PurgeVariantKmerMessageHeaderProcessor(*this, variantSigmas, minDepth));
 				sendPurgeVariant[threadId*numThreads+t]->addReceiveAllCallback( recvPurgeVariant[threadId] );
 			}
 		}
@@ -733,69 +701,6 @@ done when empty cycle is received
 	 *
 	 */
 
-	class RequestKmerMessageHeader;
-	class RespondKmerMessageHeader;
-
-	typedef MPIMessageBufferBase< RequestKmerMessageHeader > RequestKmerMessageBuffersBase;
-	typedef MPIRecvMessageBuffer< RequestKmerMessageHeader > RecvRequestKmerMessageBufferBase;
-	typedef MPISendMessageBuffer< RequestKmerMessageHeader > SendRequestKmerMessageBufferBase;
-
-	typedef MPIMessageBufferBase< RespondKmerMessageHeader > RespondKmerMessageBuffersBase;
-	typedef MPIRecvMessageBuffer< RespondKmerMessageHeader > RecvRespondKmerMessageBufferBase;
-	typedef MPISendMessageBuffer< RespondKmerMessageHeader > SendRespondKmerMessageBufferBase;
-
-	class RecvRespondKmerMessageBuffer : public RecvRespondKmerMessageBufferBase
-	{
-	public:
-		KmerValueVector &_kmerValues;
-		RecvRespondKmerMessageBuffer(mpi::communicator &world, int messageSize, int tag, KmerValueVector &kmerValues)
-			: RecvRespondKmerMessageBufferBase(world, messageSize, tag), _kmerValues(kmerValues) {
-		}
-	};
-	class SendRespondKmerMessageBuffer : public SendRespondKmerMessageBufferBase
-	{
-	public:
-		SendRespondKmerMessageBuffer(mpi::communicator &world, int messageSize)
-			: SendRespondKmerMessageBufferBase(world, messageSize) {
-		}
-	};
-
-	class RecvRequestKmerMessageBuffer : public RecvRequestKmerMessageBufferBase
-	{
-	public:
-		SendRespondKmerMessageBuffer &_sendResponse;
-		RS *_readSelector;
-		int _numThreads;
-		RecvRequestKmerMessageBuffer(mpi::communicator &world, int messageSize, int tag, SendRespondKmerMessageBuffer &sendResponse, RS &readSelector, int numThreads)
-			: RecvRequestKmerMessageBufferBase(world, messageSize, tag), _sendResponse(sendResponse), _readSelector(&readSelector), _numThreads(numThreads) {
-		}
-	};
-	class SendRequestKmerMessageBuffer : public SendRequestKmerMessageBufferBase
-	{
-	public:
-		SendRequestKmerMessageBuffer(mpi::communicator &world,int messageSize)
-			: SendRequestKmerMessageBufferBase(world, messageSize) {
-		}
-	};
-
-	class RespondKmerMessageHeader {
-	public:
-		long requestId;
-		ScoreType score;
-
-		void set(long _requestId, ScoreType _score) {
-			requestId = _requestId;
-			score = _score;
-		}
-		// store response in kmer value vector
-		int process(RespondKmerMessageBuffersBase *bufferCallback) {
-			RecvRespondKmerMessageBuffer *kbufferCallback = (RecvRespondKmerMessageBuffer*) bufferCallback;
-			LOG_DEBUG(4, "RespondKmerMessage: " << requestId << " " << score);
-			kbufferCallback->_kmerValues[requestId] = score;
-			return 0;
-		}
-	};
-
 	class RequestKmerMessageHeader {
 	public:
 		long requestId;
@@ -810,19 +715,65 @@ done when empty cycle is received
 			requestId = _requestId;
 			*(getKmer()) = _kmer;
 		}
-		// lookup kmer in map and build response message
-		int process(RequestKmerMessageBuffersBase *bufferCallback) {
-			RecvRequestKmerMessageBuffer *kbufferCallback = (RecvRequestKmerMessageBuffer*) bufferCallback;
-			int destSource = kbufferCallback->getRecvSource();
-			int destTag = kbufferCallback->getRecvTag() + kbufferCallback->_numThreads;
-			assert(destTag == omp_get_thread_num() + kbufferCallback->_numThreads);
+	};
 
-			ScoreType score = kbufferCallback->_readSelector->getValue( *getKmer() );
-			kbufferCallback->_sendResponse.bufferMessage(destSource, destTag)->set( requestId, score );
-			LOG_DEBUG(4, "RequestKmerMessage: " << getKmer()->toFasta() << " " << requestId << " " << score);
+	class RespondKmerMessageHeader {
+	public:
+		long requestId;
+		ScoreType score;
+
+		void set(long _requestId, ScoreType _score) {
+			requestId = _requestId;
+			score = _score;
+		}
+	};
+
+
+	class RequestKmerMessageHeaderProcessor;
+	class RespondKmerMessageHeaderProcessor;
+
+	typedef MPIMessageBuffer< RequestKmerMessageHeader, RequestKmerMessageHeaderProcessor > RequestKmerMessageBuffersBase;
+	typedef MPIMessageBuffer< RespondKmerMessageHeader, RespondKmerMessageHeaderProcessor > RespondKmerMessageBuffersBase;
+
+
+	class RespondKmerMessageHeaderProcessor {
+	public:
+		KmerValueVector &_kmerValues;
+		RespondKmerMessageHeaderProcessor(KmerValueVector &kmerValues): _kmerValues(kmerValues) {}
+		// store response in kmer value vector
+		int process(RespondKmerMessageHeader *msg, RespondKmerMessageBuffersBase *bufferCallback) {
+			LOG_DEBUG(4, "RespondKmerMessage: " << msg->requestId << " " << msg->score);
+			_kmerValues[msg->requestId] = msg->score;
 			return 0;
 		}
 	};
+
+	typedef MPIRecvMessageBuffer< RespondKmerMessageHeader, RespondKmerMessageHeaderProcessor  > RecvRespondKmerMessageBuffer;
+	typedef MPISendMessageBuffer< RespondKmerMessageHeader, RespondKmerMessageHeaderProcessor  > SendRespondKmerMessageBuffer;
+
+	class RequestKmerMessageHeaderProcessor {
+	public:
+		SendRespondKmerMessageBuffer &_sendResponse;
+		RS *_readSelector;
+		int _numThreads;
+		RequestKmerMessageHeaderProcessor(SendRespondKmerMessageBuffer &sendResponse, RS &readSelector, int numThreads) :
+			_sendResponse(sendResponse), _readSelector(&readSelector), _numThreads(numThreads) {}
+		// lookup kmer in map and build response message
+		int process(RequestKmerMessageHeader *msg, RequestKmerMessageBuffersBase *bufferCallback) {
+			int destSource = bufferCallback->getRecvSource();
+			int destTag = bufferCallback->getRecvTag() + _numThreads;
+			assert(destTag == omp_get_thread_num() + _numThreads);
+
+			ScoreType score = _readSelector->getValue( *msg->getKmer() );
+			_sendResponse.bufferMessage(destSource, destTag)->set(msg->requestId, score );
+			LOG_DEBUG(4, "RequestKmerMessage: " << msg->getKmer()->toFasta() << " " << msg->requestId << " " << score);
+			return 0;
+		}
+	};
+
+
+	typedef MPIRecvMessageBuffer< RequestKmerMessageHeader, RequestKmerMessageHeaderProcessor > RecvRequestKmerMessageBuffer;
+	typedef MPISendMessageBuffer< RequestKmerMessageHeader, RequestKmerMessageHeaderProcessor > SendRequestKmerMessageBuffer;
 
 	int _batchKmerLookup(const Read &read, SequenceLengthType markupLength, ReadSetSizeType offset, KmerValueVector &batchBuffer, SendRequestKmerMessageBuffer &sendReq, int &thisThreadId, int &numThreads, int &rank, int &worldSize) {
 		KA kmers = this->getKmersForRead(read);
@@ -887,12 +838,12 @@ done when empty cycle is received
 
 			// initialize message buffers
 
-			recvResp[threadId] = new RecvRespondKmerMessageBuffer(_world, respondMessageSize, threadId + numThreads, batchBuffer[threadId]);
-			sendResp[threadId] = new SendRespondKmerMessageBuffer(_world, respondMessageSize);
+			recvResp[threadId] = new RecvRespondKmerMessageBuffer(_world, respondMessageSize, threadId + numThreads, RespondKmerMessageHeaderProcessor( batchBuffer[threadId] ));
+			sendResp[threadId] = new SendRespondKmerMessageBuffer(_world, respondMessageSize, RespondKmerMessageHeaderProcessor( batchBuffer[threadId] ));
 			sendResp[threadId]->addReceiveAllCallback( recvResp[threadId] );
 
-			recvReq[threadId] = new RecvRequestKmerMessageBuffer(_world, requestMessageSize, threadId, *sendResp[threadId], *this, numThreads);
-			sendReq[threadId] = new SendRequestKmerMessageBuffer(_world, requestMessageSize);
+			recvReq[threadId] = new RecvRequestKmerMessageBuffer(_world, requestMessageSize, threadId, RequestKmerMessageHeaderProcessor(*sendResp[threadId], *this, numThreads));
+			sendReq[threadId] = new SendRequestKmerMessageBuffer(_world, requestMessageSize, RequestKmerMessageHeaderProcessor(*sendResp[threadId], *this, numThreads));
 			sendReq[threadId]->addReceiveAllCallback( recvReq[threadId] );
 			sendReq[threadId]->addReceiveAllCallback( recvResp[threadId] );
 

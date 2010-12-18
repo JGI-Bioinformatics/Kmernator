@@ -55,12 +55,12 @@
 	boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
 
 
-class _MPIMessageBufferBase
+class MPIMessageBufferBase
 {
 public:
 	typedef boost::optional< mpi::request > OptionalRequest;
 	typedef boost::optional< mpi::status > OptionalStatus;
-	typedef std::pair< _MPIMessageBufferBase*, int> CallbackBase;
+	typedef std::pair< MPIMessageBufferBase*, int> CallbackBase;
 	typedef std::vector< CallbackBase > CallbackVector;
 
 protected:
@@ -71,21 +71,26 @@ protected:
 	long _numMessages;
 
 public:
-	_MPIMessageBufferBase() : _deliveries(0), _numMessages(0) {}
-	virtual ~_MPIMessageBufferBase() {}
+	MPIMessageBufferBase() : _deliveries(0), _numMessages(0) {}
+	virtual ~MPIMessageBufferBase() {}
+	static bool isThreadSafe() {
+		int threadlevel;
+		MPI_Query_thread(&threadlevel);
+		return threadlevel >= MPI_THREAD_FUNNELED;
+	}
 
 	// receive buffers to flush before and/or during send
-	void addReceiveAllCallback( _MPIMessageBufferBase *receiveAllBuffer ) {
+	void addReceiveAllCallback( MPIMessageBufferBase *receiveAllBuffer ) {
 		_receiveAllCallbacks.push_back( CallbackBase(receiveAllBuffer, -1) );
 		receiveAll();
 		assert(receiveAllBuffer->getNumDeliveries() == 0);
 	}
-	void addFlushAllCallback( _MPIMessageBufferBase *flushAllBuffer, int tagDest ) {
+	void addFlushAllCallback( MPIMessageBufferBase *flushAllBuffer, int tagDest ) {
 		_flushAllCallbacks.push_back( CallbackBase(flushAllBuffer, tagDest) );
 		flushAll( );
 		assert(flushAllBuffer->getNumDeliveries() == 0);
 	}
-	void addSendReceiveCallback( _MPIMessageBufferBase *sendReceiveBuffer ) {
+	void addSendReceiveCallback( MPIMessageBufferBase *sendReceiveBuffer ) {
 		_sendReceiveCallbacks.push_back( CallbackBase(sendReceiveBuffer, -1) );
 	}
 	virtual long receiveAllIncomingMessages(bool untilFlushed = true) { return 0; }
@@ -131,14 +136,21 @@ public:
 
 };
 
-template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
-class MPIMessageBufferBase : public _MPIMessageBufferBase {
+template <typename C, typename B = MPIMessageBufferBase>
+class DummyProcessor {
+public:
+	int process(C *msg, B *buffer) { return 0; }
+};
+template <typename C, typename CProcessor = DummyProcessor<C>, int BufferSize = MPI_BUFFER_DEFAULT_SIZE >
+class MPIMessageBuffer : public MPIMessageBufferBase {
 public:
 	static const int MESSAGE_BUFFER_SIZE = BufferSize;
 	static const int BUFFER_QUEUE_SOFT_LIMIT = 5;
+
 	typedef C MessageClass;
-	typedef _MPIMessageBufferBase::OptionalRequest OptionalRequest;
-	typedef _MPIMessageBufferBase::OptionalStatus  OptionalStatus;
+	typedef CProcessor MessageClassProcessor;
+	typedef MPIMessageBufferBase::OptionalRequest OptionalRequest;
+	typedef MPIMessageBufferBase::OptionalStatus  OptionalStatus;
 	typedef char * Buffer;
 	typedef std::vector< Buffer > FreeBufferCache;
 	typedef std::vector< FreeBufferCache > ThreadedFreeBufferCache;
@@ -155,6 +167,7 @@ public:
 protected:
 	mpi::communicator _world;
 	int _messageSize;
+	MessageClassProcessor _processor;
 	int _softMaxBufferSize;
 	int _numCheckpoints;
 	Buffer _message;
@@ -168,12 +181,14 @@ protected:
 	int _recvSize;
 
 public:
-	MPIMessageBufferBase(mpi::communicator &world, int messageSize)
-	: _world(world), _messageSize(messageSize), _softMaxBufferSize(MESSAGE_BUFFER_SIZE), _numCheckpoints(0), _bufferSize(MESSAGE_BUFFER_SIZE), _recvSource(mpi::any_source), _recvTag(mpi::any_tag), _recvSize(0)  {
+	MPIMessageBuffer(mpi::communicator &world, int messageSize, MessageClassProcessor processor = MessageClassProcessor())
+	: _world(world), _messageSize(messageSize), _processor(processor), _softMaxBufferSize(MESSAGE_BUFFER_SIZE), _numCheckpoints(0), _bufferSize(MESSAGE_BUFFER_SIZE), _recvSource(mpi::any_source), _recvTag(mpi::any_tag), _recvSize(0)  {
 		_message = new char[ MESSAGE_BUFFER_SIZE ];
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
-		assert(!omp_in_parallel());
-		_numThreads = omp_get_max_threads();
+		if (omp_in_parallel())
+			_numThreads = omp_get_num_threads();
+		else
+			_numThreads = omp_get_max_threads();
 		_worldSize = _world.size();
 		_numWorldThreads = _worldSize * _numThreads;
 		_freeBuffers.resize(_numThreads);
@@ -181,7 +196,7 @@ public:
 			_freeBuffers[threadId].reserve(BUFFER_QUEUE_SOFT_LIMIT * _numWorldThreads + 1);
 		setSoftMaxBufferSize( Options::getBatchSize() * messageSize );
 	}
-	~MPIMessageBufferBase() {
+	~MPIMessageBuffer() {
 		delete [] _message;
 		for(ThreadedFreeBufferCache::iterator it = _freeBuffers.begin(); it != _freeBuffers.end(); it++)
 			for(FreeBufferCache::iterator it2 = it->begin(); it2 != it->end() ; it2++)
@@ -211,6 +226,12 @@ public:
 	}
 	inline int &getRecvSize() {
 		return _recvSize;
+	}
+	inline MessageClassProcessor &getProcessor() {
+		return _processor;
+	}
+	void setMessageProcessor(MessageClassProcessor processor) {
+		_processor = processor;
 	}
 	inline int getMaxBufferSize() const {
 		return MESSAGE_BUFFER_SIZE;
@@ -246,23 +267,25 @@ public:
 			_freeBuffers[threadId].push_back(buf);
 		}
 	}
-	int processMessages(MessagePackage MessagePackage) {
+
+	long processMessagePackage(MessagePackage MessagePackage) {
 		Buffer msg, start = MessagePackage.buffer;
 		this->_recvSize = MessagePackage.size;
 		this->_recvSource = MessagePackage.source;
 		this->_recvTag = MessagePackage.tag;
 
-		int count = 0;
+		long count = 0;
 		int offset = 0;
 		while (offset < MessagePackage.size) {
 			msg = start + offset;
-			int trailingBytes = ((MessageClass*) msg)->process(this);
+			int trailingBytes = _processor.process((MessageClass*) msg, this);
 			offset += this->getMessageSize() + trailingBytes;
 			this->newMessage();
 			count++;
 		}
 		return count;
 	}
+
 	inline int getNumCheckpoints() {
 		return _numCheckpoints;
 	}
@@ -280,17 +303,19 @@ public:
 
 };
 
-template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
-class MPIAllToAllMessageBuffer : public MPIMessageBufferBase<C, BufferSize> {
+template <typename C, typename CProcessor, int BufferSize = MPI_BUFFER_DEFAULT_SIZE >
+class MPIAllToAllMessageBuffer : public MPIMessageBuffer<C, CProcessor, BufferSize> {
 public:
-	typedef MPIMessageBufferBase<C, BufferSize> BufferBase;
+	typedef MPIMessageBuffer<C, CProcessor, BufferSize> BufferBase;
 	typedef typename BufferBase::Buffer Buffer;
 	typedef typename BufferBase::MessagePackage MessagePackage;
 	typedef typename BufferBase::MessagePackageQueue MessagePackageQueue;
 	typedef C MessageClass;
+	typedef CProcessor MessageClassProcessor;
+
 	class MessageHeader {
 	public:
-		int offset, threadSource, tag;
+		int offset, threadSource, tag, dummy;
 		MessageHeader() : offset(0), threadSource(0), tag(0) {}
 		MessageHeader(const MessageHeader &copy) : offset(copy.offset) , threadSource(copy.threadSource), tag(copy.tag) {}
 		MessageHeader &operator=(const MessageHeader &other) {
@@ -311,12 +336,12 @@ public:
 	public:
 		Buffer buffer;
 		MessageHeader header;
-		BuildBuffer() : buffer(NULL) {}
+		BuildBuffer() : buffer(NULL), header(MessageHeader()) {}
 		~BuildBuffer() {
 			reset();
 		}
 		void reset() {
-			header->reset();
+			header.reset();
 			if (buffer != NULL)
 				delete [] buffer;
 		}
@@ -328,34 +353,38 @@ private:
 	std::vector< std::vector< std::vector<BuildBuffer> > > buildsTWT;
 	int threadsSending;
 	int buildSize;
+	int inoutDataSize;
 
 public:
-	MPIAllToAllMessageBuffer(mpi::communicator &world, int messageSize) : BufferBase(world, messageSize), threadsSending(0) {
+	MPIAllToAllMessageBuffer(mpi::communicator &world, int messageSize, MessageClassProcessor processor = MessageClassProcessor())
+	: BufferBase(world, messageSize, processor), threadsSending(0) {
 		assert(!omp_in_parallel());
 		int worldSize = this->getWorldSize();
 		int numThreads = this->getNumThreads();
-		int numWorldThreads = this->getNumWorldThreads();
-		int allBufferSize = numThreads * numWorldThreads * (BufferSize + headerSize);
-		int inoutSize = allBufferSize + worldSize * sizeof(int) * 2;
+
+		inoutDataSize = sizeof(int) + numThreads * numThreads * (headerSize + BufferSize);
+		int inoutSize = worldSize * sizeof(int) * 2 + worldSize * inoutDataSize;
 		buildsTWT.resize(numThreads);
 		for(int threadId = 0 ; threadId < numThreads; threadId++) {
 			buildsTWT[threadId].resize(worldSize);
 		}
-		out =   new Buffer[ inoutSize ];
-		in =    new Buffer[ inoutSize ];
+		out =   new char[ inoutSize ];
+		in =    new char[ inoutSize ];
 		for(int rankDest = 0 ; rankDest < worldSize ; rankDest++) {
 			for(int threadId = 0 ; threadId < numThreads; threadId++) {
-				buildsTWT[threadId][rankDest].resize(numThreads);
+				buildsTWT[threadId][rankDest].resize(numThreads, BuildBuffer());
 				for(int threadDest = 0; threadDest < numThreads; threadDest++) {
 					BuildBuffer &bb = buildsTWT[threadId][rankDest][threadDest];
 					bb.header.reset(threadId,threadDest);
 					bb.buffer = this->getNewBuffer();
 				}
 			}
-			// set out sizes to 0
+			// set in/out
 			getInOutSize(rankDest, out) = 0;
-			// out displacements do not change
-			getInOutOffset(rankDest, out) = rankDest * numWorldThreads * (BufferSize + headerSize);
+			getInOutSize(rankDest, in) = inoutDataSize;
+			// in/out displacements do not change
+			getInOutOffset(rankDest, out) = rankDest * inoutDataSize;
+			getInOutOffset(rankDest, in)  = rankDest * inoutDataSize;
 		}
 		buildSize = 0;
 	}
@@ -367,42 +396,32 @@ public:
 	inline int getJump(int rank, int thread, int threadId = 0) {
 		return threadId * this->getNumWorldThreads() + rank * this->getNumThreads() + thread;
 	}
-	/*
-
-	inline MessageHeader *_getHeader(int rankDest, int threadDest, int threadId = omp_get_thread_num(), Buffer buf = build) {
-		return (MessageHeader*) (buf + (getJump(rankDest, threadDest, threadId) * (BufferSize + headerSize)));
-	}
-	inline int &getSize(int rankDest, int threadDest, int threadId = omp_get_thread_num(), Buffer buf = build) {
-		return _getHeader(rankDest, threadDest, threadId, buf)->size;
-	}
-	inline int &getOffset(int rankDest, int threadDest, int threadId = omp_get_thread_num(), Buffer buf = build) {
-		return _getHeader(rankDest, threadDest, threadId, buf)->offset;
-	}
-	inline Buffer getBuffer(int rankDest, int threadDest, int threadId = omp_get_thread_num(), Buffer buf = build) {
-		return (Buffer) (_getHeader(rankDest, threadDest, threadId, buf) + 1);
-	}
-*/
 
 	inline int &getInOutSize(int rankDest, Buffer buf) {
 		int *o = (int*) buf;
 		return *(o + rankDest);
 	}
 	inline int &getInOutOffset(int rankDest, Buffer buf) {
-		int *out = (int*) buf;
-		return *(out + this->getWorldSize() + rankDest);
+		int *o = (int*) buf;
+		return *(o + this->getWorldSize() + rankDest);
+	}
+	inline int &getInOutDataSize(int rankDest, Buffer buf) {
+		int *o = (int*) buf;
+		buf = (Buffer) (o + this->getWorldSize() * 2);
+		return *((int*) (buf + rankDest * inoutDataSize));
 	}
 	inline Buffer getInOutBuffer(int rankDest, Buffer buf) {
-		return (Buffer) buf + this->getWorldSize()*2*sizeof(int) + getInOutOffset(rankDest, buf);
+		return (Buffer) (&getInOutDataSize(rankDest, buf)+1);
 	}
-	int sendReceive(bool isFinalized = false) {
-		assert(omp_in_parallel());
+	long sendReceive(bool isFinalized) {
+		assert(omp_get_max_threads() == 1 || omp_in_parallel());
 		int threadId = omp_get_thread_num();
-		int numThreads = this->getNimThreads();
+		int numThreads = this->getNumThreads();
 		int worldSize = this->getWorldSize();
 		int numWorldThreads = this->getNumWorldThreads();
 
-		Buffer outBuffers[numWorldThreads];
-		int numReceived = 0;
+		Buffer outBuffers[numThreads * numWorldThreads];
+		long numReceived = 0;
 
 #pragma omp atomic
 		threadsSending++;
@@ -445,11 +464,20 @@ public:
 #pragma omp master
 		{
 			if (isFinalized && buildSize == 0) {
-				for(int destRank = 0; destRank < worldSize ; destRank++)
-					getInOutSize(destRank,out) = 0;
+				for(int destRank = 0; destRank < worldSize ; destRank++) {
+					getInOutDataSize(destRank, out) = 0;
+					getInOutSize(destRank,out) = sizeof(int);
+				}
+			} else {
+				// set transmitted sizes
+				for(int destRank = 0; destRank < worldSize ; destRank++) {
+					getInOutDataSize(destRank, out) = getInOutSize(destRank,out);
+					getInOutSize(destRank,out) += sizeof(int);
+				}
 			}
 			// mpi_alltoall
-			MPI_ALLTOALLV(getInOutBuffer(0,out), &getInOutSize(0,out), &getInOutOffset(0, out), MPI_BYTE, in+worldSize*2*sizeof(int), &getInOutSize(0,in), &getInOutOffset(0,in), MPI_BYTE, this->getWorld());
+			MPI_Alltoallv(out+worldSize*2*sizeof(int), &getInOutSize(0,out), &getInOutOffset(0, out), MPI_BYTE, in+worldSize*2*sizeof(int), &getInOutSize(0,in), &getInOutOffset(0,in), MPI_BYTE, this->getWorld());
+
 			// reset out sizes
 			for(int destRank = 0; destRank < worldSize ; destRank++)
 				getInOutSize(destRank,out) = 0;
@@ -460,20 +488,22 @@ public:
 #pragma omp barrier
 
 		for(int sourceRank = 0 ; sourceRank < worldSize ; sourceRank++) {
-			int &size = getInOutSize(sourceRank, in);
+			int &size = getInOutDataSize(sourceRank, in);
+			assert(size >= 0);
+			if (size == 0) {
+				this->checkpoint();
+				continue;
+			}
 			Buffer buf = getInOutBuffer(sourceRank, in);
 			Buffer begin = buf;
-			Buffer end = buf + size;
-			while (begin != end) {
+			Buffer end = buf + size;			while (begin != end) {
 				assert(begin < end);
 				MessageHeader *header = (MessageHeader*) begin;
 				if (threadId == header->tag) {
-					if (header->offset == 0)
-						this->checkpoint();
-					else
+					if (header->offset > 0)
 						numReceived += processMessages(sourceRank, header);
 				}
-				begin = ((Buffer)(header+1)) + header->offset;
+				begin = ((Buffer)(header)) + headerSize + header->offset;
 			}
 		}
 #pragma omp barrier
@@ -484,13 +514,14 @@ public:
 	}
 
 	int processMessages(int sourceRank, MessageHeader *header) {
-		Buffer buf = (Buffer) header+1;
+		Buffer buf = (Buffer) (header+1);
 		MessagePackage msgPkg(buf, header->offset, sourceRank, header->tag);
-		return this->processMessages(msgPkg);
+		return this->processMessagePackage(msgPkg);
 	}
 
 	void finalize() {
-		while (!this->checkpointReached(this->getNumThreads())) {
+		LOG_DEBUG(2, "Entering finalize()");
+		while (!this->reachedCheckpoint(this->getNumThreads())) {
 			sendReceive(true);
 		}
 	}
@@ -527,16 +558,18 @@ public:
 
 };
 
-template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
-class MPIRecvMessageBuffer: public MPIMessageBufferBase<C, BufferSize> {
+template <typename C, typename CProcessor, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
+class MPIRecvMessageBuffer: public MPIMessageBuffer<C, CProcessor, BufferSize> {
 public:
-	typedef MPIMessageBufferBase<C, BufferSize> BufferBase;
+	typedef MPIMessageBuffer<C, CProcessor, BufferSize> BufferBase;
+
 	typedef typename BufferBase::OptionalRequest OptionalRequest;
 	typedef typename BufferBase::OptionalStatus OptionalStatus;
 	typedef typename BufferBase::Buffer Buffer;
 	typedef typename BufferBase::MessagePackage MessagePackage;
 	typedef typename BufferBase::MessagePackageQueue MessagePackageQueue;
 	typedef C MessageClass;
+	typedef CProcessor MessageClassProcessor;
 
 protected:
 	Buffer *_recvBuffers;
@@ -547,8 +580,8 @@ protected:
 	bool _isProcessing;
 
 public:
-	MPIRecvMessageBuffer(mpi::communicator &world, int messageSize, int tag = mpi::any_tag) :
-		BufferBase(world, messageSize), _tag(tag), _isProcessing(false) {
+	MPIRecvMessageBuffer(mpi::communicator &world, int messageSize, int tag = mpi::any_tag, MessageClassProcessor processor = MessageClassProcessor())
+	: BufferBase(world, messageSize, processor), _tag(tag), _isProcessing(false) {
 		_recvBuffers = new Buffer[ this->getWorld().size() ];
 		_requests = new OptionalRequest[ this->getWorld().size() ];
 		_requestAttempts.resize(this->getWorld().size(), 0);
@@ -728,7 +761,7 @@ private:
 					this->checkpoint();
 					LOG_DEBUG(3, _tag << ": got checkpoint from " << MessagePackage.source << "/" << MessagePackage.tag << ": " << this->getNumCheckpoints());
 				} else {
-					this->processMessages(MessagePackage);
+					this->processMessagePackage(MessagePackage);
 				}
 				this->returnBuffer(MessagePackage.buffer);
 				processCount++;
@@ -743,11 +776,11 @@ private:
 };
 
 
-template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
-class MPISendMessageBuffer: public MPIMessageBufferBase<C, BufferSize> {
+template <typename C, typename CProcessor, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
+class MPISendMessageBuffer: public MPIMessageBuffer<C, CProcessor, BufferSize> {
 public:
-	typedef MPIMessageBufferBase<C, BufferSize> BufferBase;
-	typedef MPIRecvMessageBuffer<C, BufferSize> RecvBuffer;
+	typedef MPIMessageBuffer<C, CProcessor, BufferSize> BufferBase;
+	typedef MPIRecvMessageBuffer<C, CProcessor, BufferSize> RecvBuffer;
 	typedef typename BufferBase::OptionalRequest OptionalRequest;
 	typedef typename BufferBase::OptionalStatus OptionalStatus;
 	typedef typename BufferBase::Buffer Buffer;
@@ -787,7 +820,8 @@ public:
 	typedef std::list< SentBuffer > SentBuffers;
 	typedef typename SentBuffers::iterator SentBuffersIterator;
 	typedef C MessageClass;
-	typedef std::vector< _MPIMessageBufferBase* > RecvBufferCallbackVector;
+	typedef CProcessor MessageClassProcessor;
+	typedef std::vector< MPIMessageBufferBase* > RecvBufferCallbackVector;
 
 protected:
 	Buffer *_sendBuffers;
@@ -795,8 +829,8 @@ protected:
 	SentBuffers _sentBuffers;
 
 public:
-	MPISendMessageBuffer(mpi::communicator &world, int messageSize) :
-		BufferBase(world, messageSize) {
+	MPISendMessageBuffer(mpi::communicator &world, int messageSize, MessageClassProcessor processor = MessageClassProcessor()) :
+		BufferBase(world, messageSize, processor) {
 		_sendBuffers = new Buffer[ world.size() ];
 		_offsets = new int[ this->getWorld().size() ];
 		for(int destRank = 0; destRank < this->getWorld().size(); destRank++) {
