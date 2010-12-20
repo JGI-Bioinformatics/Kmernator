@@ -35,7 +35,7 @@
 
 // Unpack the source into a directory
 // create a build directory
-// execute cmake
+// execute cmake (>= 2.6.4)
 // execute make
 
 mkdir Kmernator-src
@@ -43,7 +43,7 @@ cd Kmernator-src
 git pull hit+ssh://git@codaset.com:rsegan/kmernator.git
 mkdir build
 cd build
-cmake .. -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
+cmake .. -DCMAKE_CXX_FLAGS="-O3 -g -Wall"
 make
 make test
 
