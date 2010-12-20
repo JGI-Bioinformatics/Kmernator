@@ -129,6 +129,14 @@ target_link_libraries(        FixPair
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
+add_executable( SplitSequenceOnTheFly SplitSequenceOnTheFly )
+target_link_libraries(        SplitSequenceOnTheFly
+                              Sequence
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              )
+
 
 #
 # $Log: CMakeLists.txt,v $

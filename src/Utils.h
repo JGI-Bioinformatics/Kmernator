@@ -110,6 +110,7 @@ private:
     std::string _outputFilePathPrefix;
     std::string _suffix;
     bool _append;
+    bool _isStdout;
 #ifdef _USE_MPI
     mpi::communicator *_world;
 #endif
@@ -121,8 +122,12 @@ public:
 	}
 
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
-	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {
+	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix), _append(false), _isStdout(false) {
 		_append = getDefaultAppend();
+		if (Options::getOutputFile() == std::string("-")) {
+			_isStdout = true;
+			LOG_VERBOSE_OPTIONAL(1, true, "Writing output(s) to stdout");
+		}
 #ifdef _USE_MPI
 		_world = NULL;
 #endif
@@ -168,7 +173,9 @@ public:
 	std::string getFilename(std::string key) const {
 		return _outputFilePathPrefix + key + _suffix + getRank();
 	}
-	std::ofstream &getOfstream(std::string key) {
+	std::ostream &getOfstream(std::string key) {
+		if (_isStdout)
+			return std::cout;
 		std::string filename = getFilename(key);
 		// lockless lookup
 		MapPtr thisMap = _map;
@@ -176,7 +183,9 @@ public:
 		if (it == thisMap->end()) {
 
 			// lock if not found and map needs to be updated
+#ifdef _USE_OPENMP
 			#pragma omp critical (ofStreamMap)
+#endif
 			{
 				// recheck map
 				thisMap = _map;

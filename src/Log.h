@@ -221,7 +221,9 @@ class Log
 			msg = log.gatherMessages(msg);
 #endif
 		if (!msg.empty()) {
+#ifdef _USE_OPENMP
 			#pragma omp critical(Log)
+#endif
 			{
 				log << msg << std::endl;
 			}
