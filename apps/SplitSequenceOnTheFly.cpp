@@ -69,13 +69,12 @@ public:
 
 
 int main(int argc, char *argv[]) {
+	Options::getVerbosity() = 0;
 	if (!SSOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
 	Options::FileListType inputs = Options::getInputFiles();
-	std::string outputFilename = Options::getOutputFile();
-	if (outputFilename.empty())
-		throw std::invalid_argument("Please specify an --ouput-file");
+
 	ReadSet reads;
 	LOG_VERBOSE(1, "Reading Input Files");
 	reads.appendAllFiles(inputs, SSOptions::getFileNum(), SSOptions::getNumFiles());
