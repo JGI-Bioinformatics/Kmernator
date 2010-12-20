@@ -1164,7 +1164,7 @@ public:
 	Kmernator::MmapFileVector buildKmerSpectrumInParts(ReadSet &store, NumberType numParts, std::string mmapFileNamePrefix = Options::getOutputFile()) {
 		bool isSolid = false; // not supported for references...
 
-		if (numParts == 1) {
+		if (numParts <= 1) {
 			buildKmerSpectrum(store, isSolid);
 
 			// purge
