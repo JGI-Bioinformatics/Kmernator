@@ -38,7 +38,7 @@ IF(CXX_FLAGS)
   SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
 ENDIF(CXX_FLAGS)
 
-SET(CMAKE_CXX_FLAGS "-fno-strict-aliasing ${CMAKE_CXX_FLAGS}")
+SET(CMAKE_CXX_FLAGS "-fno-strict-aliasing ${BIT_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 set_source_files_properties( CompareSpectrums
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
@@ -67,6 +67,7 @@ target_link_libraries( FilterReads
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
+if( FOUND_MPI )
 set_source_files_properties( FilterReads-P
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
@@ -82,6 +83,7 @@ target_link_libraries( FilterReads-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+endif()
                            
 set_source_files_properties( TnfDistance
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}

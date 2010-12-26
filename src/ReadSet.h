@@ -58,7 +58,7 @@ public:
 	static const ReadSetSizeType MAX_READ_IDX = MAX_READ_SET_SIZE;
 
 	static MmapSourceVector mmapSources;
-    static void madviseMmaps(int advise);
+        static void madviseMmaps(int advise);
 	static void madviseMmapsRandom() {
 		madviseMmaps(MADV_RANDOM);
 	}

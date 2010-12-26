@@ -47,8 +47,9 @@ public:
 		if (!paired)
 			bytes *= 2;
 		SequenceLengthType sequenceLength = bytes * 4;
+                long skipped = 0;
 
-	    #pragma omp parallel for
+	    #pragma omp parallel for reduction(+:skipped)
 		for(long pairIdx = 0; pairIdx < pairSize; pairIdx++) {
 			Pair &pair = reads.getPair(pairIdx);
 			int threadNum = omp_get_thread_num();
@@ -59,8 +60,10 @@ public:
 				if(reads.isValidRead(pair.read1) && reads.isValidRead(pair.read2)) {
 					const Read &read1 = reads.getRead(pair.read1);
 					const Read &read2 = reads.getRead(pair.read2);
-					if (read1.isDiscarded() || read2.isDiscarded())
+					if (read1.isDiscarded() || read2.isDiscarded()) {
+						skipped++;
 						continue;
+					}
 
 					// create read1 + the reverse complement of read2 (1:rev2)
 					// when useReverseComplement, it is represented as a kmer, and the leastcomplement of 1:rev2 and 2:rev1 will be stored
@@ -70,12 +73,14 @@ public:
 					if (TwoBitSequence::firstMarkupX(markups) + startOffset < sequenceLength) {
 						memcpy(kmer.getTwoBitSequence()       , read1.getTwoBitSequence() + (startOffset/4), bytes);
 					} else {
+						skipped++;
 						continue;
 					}
 					markups = read2.getMarkups();
 					if (TwoBitSequence::firstMarkupX(markups) + startOffset < sequenceLength) {
 						TwoBitSequence::reverseComplement( read2.getTwoBitSequence() + (startOffset/4), kmer.getTwoBitSequence() + bytes, sequenceLength);
 					} else {
+						skipped++;
 						continue;
 					}
 
@@ -95,12 +100,15 @@ public:
 				ReadSetSizeType readIdx = pair.lesser();
 				if (reads.isValidRead(readIdx)) {
 					const Read &read1 = reads.getRead(readIdx);
-					if (read1.isDiscarded())
+					if (read1.isDiscarded()) {
+						skipped++;
 						continue;
+					}
 					Sequence::BaseLocationVectorType markups = read1.getMarkups();
 					if (TwoBitSequence::firstMarkupX(markups) + startOffset < sequenceLength) {
 						memcpy(kmer.getTwoBitSequence()        , read1.getTwoBitSequence() + (startOffset/4), bytes);
 					} else {
+						skipped++;
 						continue;
 					}
 					// store the readIdx (not the pairIdx)
@@ -117,6 +125,7 @@ public:
 			LOG_VERBOSE(2, "merging duplicate fragment spectrums" );
 		}
 
+		LOG_VERBOSE(1, "Duplicate Detection skipped: " << skipped);
 		KS::mergeVector(ksv, 1);
 	}
 

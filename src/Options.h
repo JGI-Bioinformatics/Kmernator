@@ -347,7 +347,7 @@ protected:
 				"de-duplication start offset to find unique fragments, must be multiple of 4")
 
 		("dedup-length", po::value<unsigned int>()->default_value(deDupLength),
-				"de-duplication length to find unique fragments, must be multiple of 4 (doubled when in single-end mode)")
+				"de-duplication length to find unique fragments, must be multiple of 4 (length on each read of a paired fragment or doubled when in single-end mode)")
 
 		("mmap-input", po::value<unsigned int>()->default_value(mmapInput),
 				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")

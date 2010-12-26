@@ -40,7 +40,7 @@ IF(CXX_FLAGS)
   SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
 ENDIF(CXX_FLAGS)
 
-SET(CMAKE_CXX_FLAGS "-fno-strict-aliasing ${CMAKE_CXX_FLAGS}")
+SET(CMAKE_CXX_FLAGS "-fno-strict-aliasing ${BIT_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 set_source_files_properties( TwoBitSequenceTest
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
@@ -123,6 +123,7 @@ target_link_libraries( UtilTest
                                    )
 add_test( UtilTest UtilTest )
 
+if( MPI_FOUND )
 add_executable( TestMPI TestMPI )
 set_source_files_properties( TestMPI
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
@@ -136,6 +137,7 @@ target_link_libraries (TestMPI
                               ${KMERNATOR_P_LIBS}
                               )
 
+endif()
 
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 

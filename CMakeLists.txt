@@ -37,6 +37,10 @@ set(Boost_USE_SHARED_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_SINGLETHREADED OFF)
 
+if(SIZEOF_VOID_P EQUALS 8)
+  set(BIT_CXX_FLAGS "-DIS_64_BIT")
+endif()
+
 #
 # OpenMP
 #

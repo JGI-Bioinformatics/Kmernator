@@ -79,7 +79,7 @@ private:
 			return _vec[omp_get_thread_num()];
 		}
 	public:
-		static const long size = 511;
+		static const unsigned long size = 511;
 		DataPtrListVector() : _isValid(false) {
 			_vec = _DataPtrListVector(omp_get_max_threads(), DataPtrList());
 			_isValid = true;

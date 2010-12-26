@@ -112,8 +112,15 @@ namespace Kmernator {
    #define MAX_I32  2147483647
    #define MAX_UI32 4294967295u
 
+   #ifdef IS_64_BIT
    #define MAX_I64  9223372036854775807
    #define MAX_UI64 18446744073709551615u
+   #else
+   #error "only 64-bit environments are supported"
+   #define MAX_I64  MAX_I32
+   #define MAX_UI64 MAX_UI32
+   #endif
+
 
    typedef UI32 SequenceLengthType;
    #define MAX_SEQUENCE_LENGTH MAX_UI32
@@ -121,6 +128,7 @@ namespace Kmernator {
    typedef UI16 SequenceLengthType2;
 
    typedef UI64 ReadSetSizeType;
+   
    #define MAX_READ_SET_SIZE   MAX_UI64
 
    typedef UI64  KmerNumberType;
