@@ -117,7 +117,7 @@ public:
 		setParser(mmap1,mmap2);
 	}
 	void setParser(istream &fs1) {
-		if (!fs1.good())
+		if (fs1.fail() || !fs1.good())
 			throw;
 		setParser(fs1, fs1.peek());
 	}
@@ -134,7 +134,7 @@ public:
 		return _parser;
 	}
 	void setParser(istream &fs1, istream &fs2) {
-		if (!fs2.good()) {
+		if (fs2.fail() || !fs2.good()) {
 			setParser(fs1);
 		} else {
 			_parser = SequenceStreamParserPtr(new FastaQualStreamParser(fs1, fs2));
@@ -245,6 +245,9 @@ public:
 		return getFileSize(ifs);
 	}
 	static unsigned long getFileSize(ifstream &ifs) {
+		assert( !ifs.eof() );
+		assert( ifs.is_open() && ifs.good() );
+		assert( !ifs.fail() );
 		ifstream::streampos current = ifs.tellg();
 		ifs.seekg(0, ios_base::end);
 		unsigned long size = ifs.tellg();
@@ -261,7 +264,10 @@ public:
 	}
 
 	void seekToNextRecord(unsigned long minimumPos) {
-		_parser->seekToNextRecord(minimumPos);
+		return seekToNextRecord(minimumPos, true);
+	}
+	void seekToNextRecord(unsigned long minimumPos, bool byPair) {
+		_parser->seekToNextRecord(minimumPos, byPair);
 	}
 	int getType() const {
 		return _parser->getType();
@@ -441,9 +447,9 @@ public:
 		virtual RecordPtr getStreamQualRecordPtr() const = 0;
 		virtual RecordPtr getLastQualRecordPtr() const = 0;
 
-		virtual void seekToNextRecord(unsigned long minimumPos) {
+		virtual void seekToNextRecord(unsigned long minimumPos, bool byPair) {
 			int threadNum = omp_get_thread_num();
-			LOG_DEBUG(2, "seekToNextRecord(" << minimumPos << ")");
+			LOG_DEBUG(2, "seekToNextRecord(" << minimumPos << ", " << byPair << ")");
 			// get to the first line after the pos
 			if (minimumPos > 0) {
 				seekg(minimumPos - 1);
@@ -487,40 +493,44 @@ public:
 				return;
 			}
 
-			// now verify that we have not split a sequential pair
-			unsigned long here1 = tellg();
-			readRecord();
-			string name1 = getName();
-			if (name1.empty() || endOfStream()) {
-				LOG_DEBUG(3, "Found endofstream 0 records in leaving at eof to preserve pair");
-				return;
-			}
+			if (byPair) {
+				// now verify that we have not split a sequential pair
+				unsigned long here1 = tellg();
+				readRecord();
+				string name1 = getName();
+				if (name1.empty() || endOfStream()) {
+					LOG_DEBUG(3, "Found endofstream 0 records in leaving at eof to preserve pair");
+					return;
+				} else {
+					LOG_DEBUG(3, "Checking pairing against " << name1);
+				}
 
-			unsigned long here2 = tellg();
-			readRecord();
-			string name2 = getName();
-			if (name2.empty() || endOfStream()) {
-				LOG_DEBUG(3, "Found endofstream 1 record in leaving at eof to preserve pair" << name1);
-				return;
-			}
+				unsigned long here2 = tellg();
+				readRecord();
+				string name2 = getName();
+				if (name2.empty() || endOfStream()) {
+					LOG_DEBUG(3, "Found endofstream 1 record in leaving at eof to preserve pair" << name1);
+					return;
+				}
 
-			readRecord();
-			string name3 = getName();
-			if (name3.empty() || endOfStream()) {
-				seekg(here1);
-				LOG_DEBUG(3, "Found endofstream two records in, rewinding to initial boundary: " << name1 << " & " << name2);
-				return;
-			}
+				readRecord();
+				string name3 = getName();
+				if (name3.empty() || endOfStream()) {
+					seekg(here1);
+					LOG_DEBUG(3, "Found endofstream two records in, rewinding to initial boundary: " << name1 << " & " << name2);
+					return;
+				}
 
-			if (SequenceRecordParser::isPair(name1,name2)) {
-				seekg(here1);
-				LOG_DEBUG(3, "Found natural pair at boundary, rewinding");
-			} else if (SequenceRecordParser::isPair(name2, name3)) {
-				seekg(here2);
-				LOG_DEBUG(3, "Found split pair at boundary, incrementing one record");
-			} else {
-				LOG_DEBUG(3, "Found no pairs at boundary, rewinding");
-				seekg(here1);
+				if (SequenceRecordParser::isPair(name1,name2)) {
+					seekg(here1);
+					LOG_DEBUG(3, "Found natural pair at boundary, rewinding");
+				} else if (SequenceRecordParser::isPair(name2, name3)) {
+					seekg(here2);
+					LOG_DEBUG(3, "Found split pair at boundary, incrementing one record");
+				} else {
+					LOG_DEBUG(3, "Found no pairs at boundary, rewinding");
+					seekg(here1);
+				}
 			}
 		}
 

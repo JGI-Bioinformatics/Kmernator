@@ -129,6 +129,16 @@ target_link_libraries(        FixPair
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
+set_source_files_properties( RandomlySample
+                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
+add_executable( RandomlySample RandomlySample )
+target_link_libraries(        RandomlySample
+                              Sequence
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              )
 
 #
 # $Log: CMakeLists.txt,v $
