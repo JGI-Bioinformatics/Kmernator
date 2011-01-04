@@ -128,11 +128,11 @@ int main(int argc, char *argv[]) {
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	if (refReads.getSize() > 0) {
-		cerr << "Getting real error rate" << endl;
-		spectrum.getErrorRates(refSpectrum.solid);
+		//cerr << "Getting real error rate" << endl;
+		//spectrum.getErrorRates(refSpectrum.solid);
 	}
 
-	unsigned long promoted = spectrum.autoPromote();//spectrum.promote( Options::getSolidQuantile() );
+	unsigned long promoted = 0; //spectrum.autoPromote();//spectrum.promote( Options::getSolidQuantile() );
 
 	cerr << "Promoted " << promoted << " kmers" << endl;
 

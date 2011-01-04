@@ -24,6 +24,22 @@ cmake $Kmernator \
     -DMPI_LIBRARY="libc.a" -DMPI_LINK_FLAGS="-lmpich_threadm"  \
     -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
 
+# for NERSC hopp2.nersc.gov:
+module load cmake
+module swap PrgEnv-pgi PrgEnv-gnu
+module swap xt-mpt xt-mpich2
+CC=cc CXX=CC cmake $Kmernator \
+    -DMPI_INCLUDE_PATH=${MPICH_DIR}/include  \
+    -DMPI_LIBRARY="libc.a"  -DMPI_LINK_FLAGS="-lmpich" \
+    -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
+
+# for NERSC carver
+module unload pgi
+module unload openmpi
+module load gcc
+module load openmpi-gnu
+cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -Wall -g"
+
 # for static build -- BROKEN if MPI support is requested!
 $CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
 

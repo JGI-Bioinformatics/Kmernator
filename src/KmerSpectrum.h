@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <sys/mman.h>
 
+/*
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/variance.hpp>
@@ -54,6 +55,7 @@
 #include <boost/accumulators/statistics/weighted_p_square_quantile.hpp>
 
 using namespace boost::accumulators;
+*/
 
 #include "config.h"
 #include "TwoBitSequence.h"
@@ -106,12 +108,13 @@ public:
 	typedef std::vector< KmerSpectrum > Vector;
 
 	typedef Kmer::NumberType NumberType;
-
+/*
 	typedef accumulator_set<double,
 	stats< tag::variance(lazy),
 	tag::mean
 	>
 	> StdAccumulatorType;
+*/
 
 public:
 	SolidMapType solid;
@@ -600,7 +603,7 @@ public:
 			hm.addRecord( it->key(), data.getCount(), data.getWeightedCount() );
 		}
 	}
-
+/*
 	unsigned long autoPromote(unsigned int minKmerCount = 3, double minKmerWeightedCount = 0.0,
 			double minWeakRatio = 0.50, double minSolidRatio = 0.05)
 	{
@@ -660,7 +663,7 @@ public:
 		weak.remove( it->key() );
 		return promoted;
 	}
-
+*/
 	bool shouldBeSolid( WeakElementType &weakElement, double minWeakRatio, double minSolidRatio ) {
 		Kmer &kmer = weakElement.key();
 		WeakDataType &data = weakElement.value();
@@ -693,7 +696,7 @@ public:
 
 	// then check permutations of kmers with ratios > thresholdMax
 
-
+/*
 	unsigned long promote(double probabilityQuantile) {
 		unsigned long promoted = 0;
 
@@ -768,7 +771,8 @@ public:
 
 		return promoted;
 	}
-
+*/
+/*
 	MeanVectorType getErrorRates( SolidMapType &solidReference, bool useWeighted = false ) {
 
 		std::vector< StdAccumulatorType > accumulators;
@@ -787,7 +791,7 @@ public:
 		}
 		return rates;
 	}
-
+*/
 	std::vector< double > getErrorRatios(const Kmer &kmer, bool useWeighted = false) {
 		std::vector< double > errorRatios;
 		double baseValue;
@@ -1533,7 +1537,7 @@ public:
 
 		return purgedKmers;
 	}
-
+/*
 	static void experimentOnSpectrum( ostream &os, KmerSpectrum &spectrum ) {
 		KmerSpectrum everything(spectrum);
 
@@ -1560,6 +1564,7 @@ public:
 			everything.contrastSpectrums(os, spectrum, minDepth);
 		}
 	}
+*/
 
 	void analyseSingletons(ostream &os)
 	{
@@ -1665,7 +1670,7 @@ public:
 	 }
 	 return true;
 	 }*/
-
+/*
 	void calcWeightStats(double &mean, double &deviation)
 	{
 
@@ -1682,6 +1687,7 @@ public:
 		deviation = sqrt( boost::accumulators::variance(weightAcc));
 
 	}
+
 
 	unsigned long filter(ostream &os, KmerSpectrum &reference)
 	{
@@ -1755,6 +1761,7 @@ public:
 
 		return promoted;
 	}
+*/
 
 	void static mergeVector(Vector &vec, int minimumCount = 2) {
 		// solid
