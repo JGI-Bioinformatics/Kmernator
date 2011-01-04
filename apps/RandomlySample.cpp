@@ -99,10 +99,11 @@ int main(int argc, char *argv[]) {
 	LOG_DEBUG(1, "FileSize of " << file << " is " << fileSize);
 	unsigned long minBytes = RSOptions::getMinBytesPerRecord();
 	unsigned long numSamples = RSOptions::getNumSamples();
+	fileSize -= minBytes;
 	std::vector<unsigned long> positions;
 	positions.reserve(numSamples);
 	unsigned long attempts = 0;
-	while (positions.size() < numSamples && attempts++ < numSamples ) {
+	while (positions.size() < numSamples && attempts++ < 5 * (numSamples / (fileSize/minBytes + 1) + 1) ) {
 		long newSamples = numSamples - positions.size();
 		for(long i = 0; i < newSamples; i++)
 			positions.push_back( longRand() % fileSize);
