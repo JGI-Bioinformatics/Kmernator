@@ -139,6 +139,13 @@ target_link_libraries(        SplitSequenceOnTheFly
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
+add_executable( RandomlySample RandomlySample )
+target_link_libraries(        RandomlySample
+                              Sequence
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              )
 
 #
 # $Log: CMakeLists.txt,v $
