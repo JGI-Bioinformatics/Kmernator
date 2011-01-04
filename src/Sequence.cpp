@@ -61,7 +61,7 @@ Sequence::CachedSequences &Sequence::getCachedSequencesForThread() {
 	return threadCacheSequences[threadNum];
 }
 
-void Sequence::setThreadCache(Sequence::Sequence &mmapedSequence, Sequence::SequencePtr &expandedSequence) {
+void Sequence::setThreadCache(Sequence &mmapedSequence, SequencePtr &expandedSequence) {
 	mmapedSequence.setCache(expandedSequence);
 }
 
@@ -134,7 +134,7 @@ Sequence::Sequence() : _flags(0) {
 	reset(0);
 }
 
-Sequence::Sequence(const Sequence::Sequence &copy)  {
+Sequence::Sequence(const Sequence &copy)  {
 	*this = copy;
 }
 Sequence::Sequence(std::string fasta, bool usePreAllocation) :
@@ -147,7 +147,7 @@ Sequence::Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart) :
 	setSequence(mmapRecordStart, mmapQualRecordStart);
 }
 
-Sequence::Sequence &Sequence::operator=(const Sequence::Sequence &other) {
+Sequence &Sequence::operator=(const Sequence &other) {
 	if (this == &other)
 		return *this;
 	_flags = other._flags;
@@ -155,7 +155,7 @@ Sequence::Sequence &Sequence::operator=(const Sequence::Sequence &other) {
 	return *this;
 }
 
-Sequence::Sequence Sequence::clone() const {
+Sequence Sequence::clone() const {
 	return Sequence(getFasta());
 }
 
