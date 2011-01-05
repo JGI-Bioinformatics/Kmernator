@@ -264,6 +264,11 @@ public:
 	SequenceLengthType getMarkupBasesCount() const;
 	BaseLocationVectorType getMarkups() const;
 
+	SequenceLengthType getFirstMarkupLength() const;
+	SequenceLengthType getFirstMarkupNLength() const;
+	SequenceLengthType getFirstMarkupXLength() const;
+	SequenceLengthType getFirstMarkupNorXLength() const;
+
 	SequenceLengthType getTwoBitEncodingSequenceLength() const;
 	inline TwoBitEncoding *getTwoBitSequence() { return _getTwoBitSequence(); }
 	inline const TwoBitEncoding *getTwoBitSequence() const { return _getTwoBitSequence(); }

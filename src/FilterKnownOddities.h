@@ -323,7 +323,7 @@ public:
 			if (maxAffected == 0) {
 				maxAffected = seqLen;
 			}
-			LOG_DEBUG(1, "Quality trim " << minAffected << "-" << maxAffected << "\n" << read.toFastq());
+			LOG_DEBUG(6, "Quality trim " << minAffected << "-" << maxAffected << "\n" << read.toFastq());
 		}
 		if (value > 0) {
 			read.markupBases(minAffected , maxAffected - minAffected, 'X');
