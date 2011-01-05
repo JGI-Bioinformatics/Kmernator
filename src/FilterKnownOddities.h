@@ -323,6 +323,7 @@ public:
 			if (maxAffected == 0) {
 				maxAffected = seqLen;
 			}
+			LOG_DEBUG(1, "Quality trim " << minAffected << "-" << maxAffected << "\n" << read.toFastq());
 		}
 		if (value > 0) {
 			read.markupBases(minAffected , maxAffected - minAffected, 'X');
@@ -394,18 +395,20 @@ public:
 				{
 					if (isRead1 && results1.value != 0) {
 						Read &read = reads.getRead(readIdx1);
-						if (results1.minAffected == 0 || !PASSES_LENGTH(results1.minAffected, read.getLength(), recorder.minReadPos)) {
+						SequenceLengthType len = read.getLength();
+						if (results1.minAffected == 0 || !PASSES_LENGTH(results1.minAffected, len, recorder.minReadPos)) {
 							recorder.recordDiscard(results1.value, read, os, label1);
 						} else {
-							recorder.recordTrim(results1.value, results1.minAffected);
+							recorder.recordTrim(results1.value, len - results1.minAffected);
 						}
 					}
 					if (isRead2 && results2.value != 0) {
 						Read &read = reads.getRead(readIdx2);
-						if (results2.minAffected == 0 || !PASSES_LENGTH(results2.minAffected, read.getLength(), recorder.minReadPos)) {
+						SequenceLengthType len = read.getLength();
+						if (results2.minAffected == 0 || !PASSES_LENGTH(results2.minAffected, len, recorder.minReadPos)) {
 							recorder.recordDiscard(results2.value, read, os, label2);
 						} else {
-							recorder.recordTrim(results2.value, results2.minAffected);
+							recorder.recordTrim(results2.value, len - results2.minAffected);
 						}
 					}
 				}

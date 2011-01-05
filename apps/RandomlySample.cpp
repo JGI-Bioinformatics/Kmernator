@@ -99,6 +99,7 @@ int main(int argc, char *argv[]) {
 	LOG_DEBUG(1, "FileSize of " << file << " is " << fileSize);
 	unsigned long minBytes = RSOptions::getMinBytesPerRecord();
 	unsigned long numSamples = RSOptions::getNumSamples();
+
 	if ( (numSamples * 2) > fileSize / minBytes ) {
 		minBytes = 1.1 * fileSize / (numSamples * 2);
 		LOG_DEBUG(1, "File seems small, resetting minBytesPerRecord to " << minBytes);
@@ -165,12 +166,14 @@ int main(int argc, char *argv[]) {
 			Read read2(name, bases, quals);
 			read2.write(std::cout);
 		}
+
 		numRecords++;
 	}
 
 	if (numRecords < numSamples) {
 		LOG_WARN(1, "Only " << numRecords << " " << (byPair?"pairs":"reads") << " were selected, perhaps the input file was too small or irregular?");
 	}
+
 }
 
 // $Log: FixPair.cpp,v $
