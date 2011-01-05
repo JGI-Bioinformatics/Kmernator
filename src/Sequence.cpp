@@ -481,6 +481,41 @@ SequenceLengthType Sequence::getLength() const {
 		return *_getLength();
 	}
 }
+SequenceLengthType Sequence::getFirstMarkupLength() const {
+	BaseLocationVectorType markups = getMarkups();
+	SequenceLengthType markupLen = TwoBitSequence::firstMarkup(markups);
+	if (markupLen == 0)
+		return getLength();
+	else
+		return markupLen - 1;
+}
+SequenceLengthType Sequence::getFirstMarkupNLength() const {
+	BaseLocationVectorType markups = getMarkups();
+	SequenceLengthType markupLen = TwoBitSequence::firstMarkupN(markups);
+	if (markupLen == 0)
+		return getLength();
+	else
+		return markupLen - 1;
+}
+
+SequenceLengthType Sequence::getFirstMarkupXLength() const {
+	BaseLocationVectorType markups = getMarkups();
+	SequenceLengthType markupLen = TwoBitSequence::firstMarkupX(markups);
+	if (markupLen == 0)
+		return getLength();
+	else
+		return markupLen - 1;
+}
+
+SequenceLengthType Sequence::getFirstMarkupNorXLength() const {
+	BaseLocationVectorType markups = getMarkups();
+	SequenceLengthType markupLen = TwoBitSequence::firstMarkupNorX(markups);
+	if (markupLen == 0)
+		return getLength();
+	else
+		return markupLen - 1;
+}
+
 
 SequenceLengthType Sequence::getTwoBitEncodingSequenceLength() const {
 	// does not need to be valid, yet, but at least _getLength() needs to be initialized

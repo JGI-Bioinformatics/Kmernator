@@ -47,8 +47,9 @@ public:
 		if (!paired)
 			bytes *= 2;
 		SequenceLengthType sequenceLength = bytes * 4;
+		long skippedDiscard = 0, skippedInvalid = 0, skippedTooShort = 0, skippedUnpaired = 0;
 
-	    #pragma omp parallel for
+	    #pragma omp parallel for reduction(+:skippedDiscard) reduction(+:skippedTooShort) reduction(+:skippedUnpaired) reduction(+:skippedInvalid)
 		for(long pairIdx = 0; pairIdx < pairSize; pairIdx++) {
 			Pair &pair = reads.getPair(pairIdx);
 			int threadNum = omp_get_thread_num();
@@ -59,23 +60,32 @@ public:
 				if(reads.isValidRead(pair.read1) && reads.isValidRead(pair.read2)) {
 					const Read &read1 = reads.getRead(pair.read1);
 					const Read &read2 = reads.getRead(pair.read2);
-					if (read1.isDiscarded() || read2.isDiscarded())
+					if (read1.isDiscarded() || read2.isDiscarded()) {
+						skippedDiscard++;
+						LOG_DEBUG(6, "Skipped Discarded Reads: \n" << read1.toFastq() << read2.toFastq());
 						continue;
+					}
 
 					// create read1 + the reverse complement of read2 (1:rev2)
 					// when useReverseComplement, it is represented as a kmer, and the leastcomplement of 1:rev2 and 2:rev1 will be stored
 					// and properly account for duplicate fragment pairs
 
-					Sequence::BaseLocationVectorType markups = read1.getMarkups();
-					if (TwoBitSequence::firstMarkupX(markups) + startOffset < sequenceLength) {
+					SequenceLengthType readLength;
+					readLength = read1.getFirstMarkupXLength();
+					if (readLength >= sequenceLength + startOffset) {
 						memcpy(kmer.getTwoBitSequence()       , read1.getTwoBitSequence() + (startOffset/4), bytes);
 					} else {
+						skippedTooShort++;
+						LOG_DEBUG(6, "Skipped Read1 TooShort: \n" << read1.toFastq() << read2.toFastq());
 						continue;
 					}
-					markups = read2.getMarkups();
-					if (TwoBitSequence::firstMarkupX(markups) + startOffset < sequenceLength) {
+
+					readLength = read2.getFirstMarkupXLength();
+					if (readLength >= sequenceLength + startOffset) {
 						TwoBitSequence::reverseComplement( read2.getTwoBitSequence() + (startOffset/4), kmer.getTwoBitSequence() + bytes, sequenceLength);
 					} else {
+						skippedTooShort++;
+						LOG_DEBUG(6, "Skipped Read2 TooShort: \n" << read1.toFastq() << read2.toFastq());
 						continue;
 					}
 
@@ -90,22 +100,40 @@ public:
 					}
 					// store the pairIdx (not readIdx)
 					ksv[threadNum].append(kmerWeights, myPairIdx);
+				} else {
+					skippedInvalid++;
+					LOG_DEBUG(6, "Skipped Read(s) invalid");
+					continue;
 				}
 			} else if ( pair.isSingle() && (!paired) ) {
 				ReadSetSizeType readIdx = pair.lesser();
 				if (reads.isValidRead(readIdx)) {
 					const Read &read1 = reads.getRead(readIdx);
-					if (read1.isDiscarded())
+					if (read1.isDiscarded()) {
+						skippedDiscard++;
+						LOG_DEBUG(6, "Skipped (single) Discarded : \n" << read1.toFastq());
 						continue;
-					Sequence::BaseLocationVectorType markups = read1.getMarkups();
-					if (TwoBitSequence::firstMarkupX(markups) + startOffset < sequenceLength) {
+					}
+
+					SequenceLengthType readLength = read1.getFirstMarkupXLength();
+					if (readLength >= sequenceLength + startOffset) {
 						memcpy(kmer.getTwoBitSequence()        , read1.getTwoBitSequence() + (startOffset/4), bytes);
 					} else {
+						skippedTooShort++;
+						LOG_DEBUG(6, "Skipped (single) TooShort: \n" << read1.toFastq());
 						continue;
 					}
 					// store the readIdx (not the pairIdx)
 					ksv[threadNum].append(kmerWeights, readIdx);
+				} else {
+					skippedInvalid++;
+					LOG_DEBUG(6, "Skipped Read(s) invalid");
+					continue;
 				}
+			} else {
+				LOG_DEBUG(6, "Skipped Unpaired: " << pairIdx);
+				skippedUnpaired++;
+				continue;
 			}
 		}
 		if (Log::isDebug(3)) {
@@ -117,6 +145,8 @@ public:
 			LOG_VERBOSE(2, "merging duplicate fragment spectrums" );
 		}
 
+		LOG_VERBOSE(1, "Duplicate Detection skipped " << (paired?"pairs":"reads") << ": " << (skippedDiscard + skippedInvalid + skippedTooShort + skippedUnpaired) << "\n"
+				<< "\tDiscarded " << skippedDiscard << " TooShort " << skippedTooShort << " UnPaired " << skippedUnpaired << " Invalid " << skippedInvalid);
 		KS::mergeVector(ksv, 1);
 	}
 

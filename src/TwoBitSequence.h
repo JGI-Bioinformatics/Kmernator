@@ -131,9 +131,13 @@ public:
     static void applyMarkup(std::string &bases, const BaseLocationVectorType &markupBases);
     static void applyMarkup(std::string &bases, SequenceLengthType markupBasesSize, const BaseLocationType *markupBases);
 
+    // returns 0 if no markup otherwise the base position (1+)
     static SequenceLengthType firstMarkup(const BaseLocationVectorType &markups);
+    // returns 0 if no markup otherwise the base position (1+)
     static SequenceLengthType firstMarkupN(const BaseLocationVectorType &markups);
+    // returns 0 if no markup otherwise the base position (1+)
     static SequenceLengthType firstMarkupX(const BaseLocationVectorType &markups);
+    // returns 0 if no markup otherwise the base position (1+)
     static SequenceLengthType firstMarkupNorX(const BaseLocationVectorType &markups);
 
     static std::string getFasta(const TwoBitEncoding *in, SequenceLengthType offset, SequenceLengthType length);
