@@ -263,11 +263,11 @@ public:
 		return _parser->getPos();
 	}
 
-	void seekToNextRecord(unsigned long minimumPos) {
+	bool seekToNextRecord(unsigned long minimumPos) {
 		return seekToNextRecord(minimumPos, true);
 	}
-	void seekToNextRecord(unsigned long minimumPos, bool byPair) {
-		_parser->seekToNextRecord(minimumPos, byPair);
+	bool seekToNextRecord(unsigned long minimumPos, bool byPair) {
+		return _parser->seekToNextRecord(minimumPos, byPair);
 	}
 	int getType() const {
 		return _parser->getType();
@@ -447,21 +447,21 @@ public:
 		virtual RecordPtr getStreamQualRecordPtr() const = 0;
 		virtual RecordPtr getLastQualRecordPtr() const = 0;
 
-		virtual void seekToNextRecord(unsigned long minimumPos, bool byPair) {
+		virtual bool seekToNextRecord(unsigned long minimumPos, bool byPair) {
 			int threadNum = omp_get_thread_num();
 			LOG_DEBUG(2, "seekToNextRecord(" << minimumPos << ", " << byPair << ")");
 			// get to the first line after the pos
 			if (minimumPos > 0) {
 				seekg(minimumPos - 1);
 				if (endOfStream())
-					return;
+					return false;
 				if (peek() == '\n') {
 					seekg(minimumPos);
 				} else
 					nextLine();
 			} else {
 				seekg(0);
-				return;
+				return true;
 			}
 			LOG_DEBUG(2, "seeked to " << tellg() );
 
@@ -490,7 +490,7 @@ public:
 
 			if (endOfStream()) {
 				LOG_DEBUG(3, "At endofstream already");
-				return;
+				return false;
 			}
 
 			if (byPair) {
@@ -500,7 +500,7 @@ public:
 				string name1 = getName();
 				if (name1.empty() || endOfStream()) {
 					LOG_DEBUG(3, "Found endofstream 0 records in leaving at eof to preserve pair");
-					return;
+					return false;
 				} else {
 					LOG_DEBUG(3, "Checking pairing against " << name1);
 				}
@@ -510,7 +510,7 @@ public:
 				string name2 = getName();
 				if (name2.empty() || endOfStream()) {
 					LOG_DEBUG(3, "Found endofstream 1 record in leaving at eof to preserve pair" << name1);
-					return;
+					return false;
 				}
 
 				readRecord();
@@ -518,7 +518,7 @@ public:
 				if (name3.empty() || endOfStream()) {
 					seekg(here1);
 					LOG_DEBUG(3, "Found endofstream two records in, rewinding to initial boundary: " << name1 << " & " << name2);
-					return;
+					return true;
 				}
 
 				if (SequenceRecordParser::isPair(name1,name2)) {
@@ -531,6 +531,9 @@ public:
 					LOG_DEBUG(3, "Found no pairs at boundary, rewinding");
 					seekg(here1);
 				}
+				return true;
+			} else {
+				return true;
 			}
 		}
 

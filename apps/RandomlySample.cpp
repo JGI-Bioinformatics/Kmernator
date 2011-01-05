@@ -99,11 +99,15 @@ int main(int argc, char *argv[]) {
 	LOG_DEBUG(1, "FileSize of " << file << " is " << fileSize);
 	unsigned long minBytes = RSOptions::getMinBytesPerRecord();
 	unsigned long numSamples = RSOptions::getNumSamples();
-	fileSize -= minBytes;
+	if ( (numSamples * 2) > fileSize / minBytes ) {
+		minBytes = 1.1 * fileSize / (numSamples * 2);
+		LOG_DEBUG(1, "File seems small, resetting minBytesPerRecord to " << minBytes);
+	}
+	fileSize -= minBytes * 2;
 	std::vector<unsigned long> positions;
 	positions.reserve(numSamples);
 	unsigned long attempts = 0;
-	while (positions.size() < numSamples && attempts++ < 5 * (numSamples / (fileSize/minBytes + 1) + 1) ) {
+	while (positions.size() < numSamples && attempts++ < numSamples) {
 		long newSamples = numSamples - positions.size();
 		for(long i = 0; i < newSamples; i++)
 			positions.push_back( longRand() % fileSize);
@@ -124,6 +128,10 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	if (positions.size() < numSamples) {
+		LOG_WARN(1, "Could not find " << numSamples << ", attempting only " << positions.size());
+	}
+
 	if (Log::isDebug(1)) {
 		std::stringstream ss;
 		for(long i = 0 ; i < (long) positions.size(); i++)
@@ -135,12 +143,18 @@ int main(int argc, char *argv[]) {
 	bool byPair = (RSOptions::getByPair() == 1);
 	LOG_DEBUG(1, "detecting by pair: " << byPair);
 
+	unsigned long numRecords = 0;
 	unsigned long lastPos = fileSize;
 	for(long i = 0; i < (long) positions.size(); i++) {
-		rfr.seekToNextRecord(positions[i], byPair);
-		if (lastPos == rfr.getPos()) {
-			rfr.seekToNextRecord(rfr.getPos(), byPair);
+		if (!rfr.seekToNextRecord(positions[i], byPair)) {
+			break;
 		}
+		if (numRecords > 0 && lastPos >= rfr.getPos()) {
+			if (!rfr.seekToNextRecord(std::max(rfr.getPos(), lastPos+1), byPair)) {
+				break;
+			}
+		}
+
 		lastPos = rfr.getPos();
 		std::string name, bases, quals;
 		rfr.nextRead(name, bases, quals);
@@ -151,8 +165,12 @@ int main(int argc, char *argv[]) {
 			Read read2(name, bases, quals);
 			read2.write(std::cout);
 		}
+		numRecords++;
 	}
 
+	if (numRecords < numSamples) {
+		LOG_WARN(1, "Only " << numRecords << " " << (byPair?"pairs":"reads") << " were selected, perhaps the input file was too small or irregular?");
+	}
 }
 
 // $Log: FixPair.cpp,v $
