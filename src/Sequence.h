@@ -406,7 +406,7 @@ public:
 
 	std::string getFormattedQuals(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH) const;
 
-	ProbabilityBases getProbabilityBases() const;
+	ProbabilityBases getProbabilityBases(unsigned char minQual = Options::getMinQuality()) const;
 	double scoreProbabilityBases(const ProbabilityBases &probs) const;
 
 	static double qualityToProbability[256];

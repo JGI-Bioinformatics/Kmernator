@@ -258,6 +258,7 @@ public:
 		for(unsigned int i = 0 ; i < quals.size() ; i++) {
 			if (quals[i] < minQual) {
 				minAffected = maxQualityPass = i;
+				LOG_DEBUG(6, "QualityFilter(" << minQual << ") hit baseIdx: " << i << "(" << quals[i] << ")\t" << read.toString());
 				break;
 			}
 		}
@@ -312,7 +313,9 @@ public:
 			value = getPhiXReadIdx();
 		} else if (isSimpleRepeat(value)) {
 			// allow simple repeats in the middle of a read with good edges
-			if (minAffected >= length && (seqLen - maxAffected) >= length) {
+			long goodLength = std::min(maxQualityPass, seqLen);
+			if (minAffected >= length && (goodLength - maxAffected) >= (long) length) {
+				LOG_DEBUG(6, "Allowing simple repeat in middle: " << minAffected << "-" << maxAffected << "!" << maxQualityPass << "\t" << read.toString());
 				value = 0;
 				minAffected = 0;
 				maxAffected = 0;
@@ -320,7 +323,10 @@ public:
 		}
 		if (value == 0 && maxQualityPass != MAX_SEQUENCE_LENGTH) {
 			value = sequences.getSize();
-			if (maxAffected == 0) {
+			if (minAffected == 0 || minAffected > maxQualityPass) {
+				minAffected = maxQualityPass;
+			}
+			if (maxAffected < seqLen) {
 				maxAffected = seqLen;
 			}
 			LOG_DEBUG(6, "Quality trim " << minAffected << "-" << maxAffected << "\n" << read.toFastq());
@@ -420,13 +426,15 @@ public:
 					  read = reads.getRead(readIdx1);
 					  LOG_DEBUG(5, "FilterMatch1 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
-							  << wasPhiX << " " << getFilterName(results1.value));
+							  << wasPhiX << " " << results1.minAffected << "-" << results1.maxAffected
+							  << ":" << getFilterName(results1.value));
 				  }
 				  if (isRead2Affected) {
 					  read = reads.getRead(readIdx2);
 					  LOG_DEBUG(5, "FilterMatch2 to " << read.getName() << " "
 						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
-							  << wasPhiX << " " << getFilterName(results2.value));
+							  << wasPhiX << " "  << results2.minAffected << "-" << results2.maxAffected
+							  << ":"<< getFilterName(results2.value));
 
 				  }
 			}

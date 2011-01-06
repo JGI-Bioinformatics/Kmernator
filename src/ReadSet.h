@@ -233,10 +233,10 @@ public:
 
 	const ReadIdxVector getReadIdxVector() const;
 
-	ProbabilityBases getProbabilityBases() const;
+	ProbabilityBases getProbabilityBases(unsigned char minQual = Options::getMinQuality()) const;
 	ReadSetSizeType getCentroidRead() const;
 	ReadSetSizeType getCentroidRead(const ProbabilityBases &probs) const;
-	Read getConsensusRead() const;
+	Read getConsensusRead(unsigned char minQual = Options::getMinQuality()) const;
 	static Read getConsensusRead(const ProbabilityBases &probs, std::string name);
 
 	inline std::ostream &write(std::ostream &os, ReadSetSizeType readIdx,

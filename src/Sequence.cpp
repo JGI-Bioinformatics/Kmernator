@@ -674,12 +674,15 @@ bool Read::recordHasQuals() const {
 	    return *getRecord() == '@'; // FASTQ
 }
 
-ProbabilityBases Read::getProbabilityBases() const {
+ProbabilityBases Read::getProbabilityBases(unsigned char minQuality) const {
 	std::string fasta = getFasta();
 	std::string quals = getQuals();
 	ProbabilityBases probs(fasta.length());
 	for(int i = 0; i < (int) fasta.length(); i++) {
-		double prob = qualityToProbability[ (unsigned char) quals[i] ];
+		unsigned char q = quals[i];
+		if (q < minQuality + Read::FASTQ_START_CHAR)
+			break;
+		double prob = qualityToProbability[ q ];
 		if (prob < 0.2501) {
 			prob = 0.2501; // slightly better than random...
 		}
@@ -920,32 +923,17 @@ std::string Read::toString() const {
 
 /*------------------------------------ BaseQual ----------------------------------------*/
 
+char probToQual(double prob) {
+	return (char) (-10. * std::log10(1.0-prob));
+}
+
 char BaseQual::getQualChar(double prob, bool ignoreLow) {
-	if (prob > 0.999) {
-		return Sequence::FASTQ_START_CHAR + 30;
-	} else if (prob > 0.99) {
-		return Sequence::FASTQ_START_CHAR + 20;
-	} else if (prob > 0.9) {
-		return Sequence::FASTQ_START_CHAR + 10;
-	} else if (!ignoreLow) {
-		return Sequence::FASTQ_START_CHAR + 1;
+	if (prob >= 0.9999) {
+		return Sequence::FASTQ_START_CHAR + 40;
+	} else if (ignoreLow && prob <= 0.25) {
+		return ' ';
 	} else {
-		if (prob>=.7)
-			return '7';
-		else if (prob>=.6)
-			return '6';
-		else if (prob>=.5)
-			return '5';
-		else if (prob >= .4)
-			return '4';
-		else if (prob >= .3)
-			return '3';
-		else if (prob >= .2)
-			return '2';
-		else if (prob >= .1)
-			return '1';
-		else
-			return ' ';
+		return Sequence::FASTQ_START_CHAR + probToQual(prob);
 	}
 }
 
