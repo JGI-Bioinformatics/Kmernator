@@ -8,6 +8,8 @@
 #ifndef DUPLICATEFRAGMENTFILTER_H_
 #define DUPLICATEFRAGMENTFILTER_H_
 
+#include "FilterKnownOddities.h"
+#include "Options.h"
 
 // NOTE
 //
@@ -211,6 +213,8 @@ public:
 		LOG_VERBOSE(1, "Building consensus reads. ");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
+		unsigned char minQual = Options::getMinQuality();
+
 		ReadSetSizeType affectedCount = 0;
 
 		#pragma omp parallel reduction(+:affectedCount)
@@ -229,7 +233,7 @@ public:
 
 		    	}
 
-		    	Read consensus1 = tmpReadSet1.getConsensusRead();
+		    	Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
 
 		    	#pragma omp critical (BCUR_newReads)
 		    	{
@@ -258,6 +262,8 @@ public:
 		ReadSet::madviseMmapsRandom();
 		LOG_VERBOSE(1, "Building consensus reads. ");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+		unsigned char minQual = Options::getMinQuality();
 
 		ReadSetSizeType affectedCount = 0;
 		ReadSetSizeType pairSize = reads.getPairSize();
@@ -293,8 +299,8 @@ public:
 
 		    	}
 
-		    	Read consensus1 = tmpReadSet1.getConsensusRead();
-		    	Read consensus2 = tmpReadSet2.getConsensusRead();
+		    	Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
+		    	Read consensus2 = tmpReadSet2.getConsensusRead(minQual);
 
 		    	threadNewReads.append(consensus1);
 		    	threadNewReads.append(consensus2);
@@ -356,6 +362,25 @@ public:
 		} else {
 			affectedCount += _buildConsensusUnPairedReads(ks, reads, newReads, cutoffThreshold);
 		}
+
+		if (Options::getSkipArtifactFilter() == 0) {
+			LOG_VERBOSE(1, "Preparing artifact filter on new consensus reads: ");
+			FilterKnownOddities filter;
+			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+			// ignore user settings for outputing any filtered new consensus reads
+			int oldFilterOutput = Options::getFilterOutput();
+			Options::getFilterOutput() = 0;
+
+			LOG_VERBOSE(2, "Applying sequence artifact filter to new consensus reads");
+			unsigned long filtered = filter.applyFilter(newReads);
+			LOG_VERBOSE(1, "filter affected (trimmed/removed) " << filtered << " Reads ");;
+			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+			// reset user settings
+			Options::getFilterOutput() = oldFilterOutput;
+		}
+
 		reads.append(newReads);
 
 		// force release all memory before KmerSizer is called

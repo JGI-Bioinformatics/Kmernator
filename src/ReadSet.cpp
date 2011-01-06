@@ -648,11 +648,11 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	return _pairs.size();
 }
 
-ProbabilityBases ReadSet::getProbabilityBases() const {
+ProbabilityBases ReadSet::getProbabilityBases(unsigned char minQual) const {
 	ProbabilityBases probs(0);
 	for(ReadSetSizeType readIdx = 0 ; readIdx < getSize(); readIdx++) {
 	    const Read &read = getRead(readIdx);
-		probs += read.getProbabilityBases();
+		probs += read.getProbabilityBases(minQual);
     }
 	return probs;
 }
@@ -675,24 +675,26 @@ ReadSet::ReadSetSizeType ReadSet::getCentroidRead(const ProbabilityBases &probs)
 	return bestRead;
 }
 
-Read ReadSet::getConsensusRead() const {
-	ProbabilityBases probs = getProbabilityBases();
-    Read consensus = getConsensusRead(probs, string("C") + boost::lexical_cast<std::string>(getSize()) + string("-") + getRead(0).getName());
-    if (Log::isDebug(2)) {
+Read ReadSet::getConsensusRead(unsigned char minQual) const {
+	ProbabilityBases probs = getProbabilityBases(minQual);
+	std::string consensusName = string("C") + boost::lexical_cast<std::string>(getSize()) + string("-") + getRead(0).getName();
+	Read consensus = getConsensusRead(probs, consensusName);
+	if (Log::isDebug(2)) {
 
-    	{
-    		std::stringstream ss;
-    		for(ReadVector::const_iterator it = _reads.begin(); it != _reads.end(); it++) {
-    			ss << it->toString() << std::endl;
-    		}
-    		ss << consensus.toString() << std::endl;
-    		ss << probs.toString() << std::endl;
+		{
+			std::stringstream ss;
+			ss << "Consensus details for: " << consensusName << std::endl;
+			for(ReadVector::const_iterator it = _reads.begin(); it != _reads.end(); it++) {
+				ss << it->toString() << std::endl;
+			}
+			ss << consensus.toString() << std::endl;
+			ss << probs.toString() << std::endl;
 
-    		std::string s = ss.str();
-    		LOG_DEBUG(2, s);
-    	}
-    }
-    return consensus;
+			std::string s = ss.str();
+			LOG_DEBUG(2, s);
+		}
+	}
+	return consensus;
 }
 Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) {
     std::string fasta(probs.size(), ' ');
