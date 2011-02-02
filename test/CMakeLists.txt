@@ -137,6 +137,19 @@ target_link_libraries (TestMPI
                               ${KMERNATOR_P_LIBS}
                               )
 
+add_executable( SaturateMPI SaturateMPI )
+set_source_files_properties( SaturateMPI
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+set_target_properties( SaturateMPI
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       )
+target_link_libraries (SaturateMPI
+                            Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+
 endif()
 
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )

@@ -98,7 +98,7 @@ int main(int argc, char **argv)
 	  spam[i] = 'a' + (i%26);
   }
 
-  int mb = 1024;
+  int mb = 1;
   LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Send/Recv " << (mb) << "MB per rank");
   world.barrier();
   boost::posix_time::ptime start = boost::posix_time::microsec_clock::local_time();

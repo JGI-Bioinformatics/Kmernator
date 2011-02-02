@@ -32,9 +32,8 @@
 #ifndef MPIBUFFER_H_
 #define MPIBUFFER_H_
 
-#ifndef ENABLE_MPI
-#error "mpi is required for this library"
-#endif
+#include "config.h"
+#include "MPIBase.h"
 
 #ifdef _USE_OPENMP
 #define X_OPENMP_CRITICAL_MPI
@@ -43,23 +42,13 @@
 #define _RETRY_MESSAGES false
 #define _RETRY_THRESHOLD 10000
 
-#include "boost/optional.hpp"
-#include <boost/thread/thread.hpp>
-#include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
 
 #define MPI_BUFFER_DEFAULT_SIZE (512 * 1024)
-#define WAIT_MS 1
-#define WAIT_AND_WARN( iterations, warningMessage ) \
-	if ((iterations % (60000/WAIT_MS)) == 0) LOG_WARN(1, warningMessage << " waiting in loop: " << iterations);  \
-	boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
-
 
 class MPIMessageBufferBase
 {
 public:
-	typedef boost::optional< mpi::request > OptionalRequest;
-	typedef boost::optional< mpi::status > OptionalStatus;
 	typedef std::pair< MPIMessageBufferBase*, int> CallbackBase;
 	typedef std::vector< CallbackBase > CallbackVector;
 
@@ -149,8 +138,6 @@ public:
 
 	typedef C MessageClass;
 	typedef CProcessor MessageClassProcessor;
-	typedef MPIMessageBufferBase::OptionalRequest OptionalRequest;
-	typedef MPIMessageBufferBase::OptionalStatus  OptionalStatus;
 	typedef char * Buffer;
 	typedef std::vector< Buffer > FreeBufferCache;
 	typedef std::vector< FreeBufferCache > ThreadedFreeBufferCache;
@@ -563,8 +550,6 @@ class MPIRecvMessageBuffer: public MPIMessageBuffer<C, CProcessor, BufferSize> {
 public:
 	typedef MPIMessageBuffer<C, CProcessor, BufferSize> BufferBase;
 
-	typedef typename BufferBase::OptionalRequest OptionalRequest;
-	typedef typename BufferBase::OptionalStatus OptionalStatus;
 	typedef typename BufferBase::Buffer Buffer;
 	typedef typename BufferBase::MessagePackage MessagePackage;
 	typedef typename BufferBase::MessagePackageQueue MessagePackageQueue;
@@ -573,7 +558,7 @@ public:
 
 protected:
 	Buffer *_recvBuffers;
-	OptionalRequest *_requests;
+	MPIOptionalRequest *_requests;
 	int _tag;
 	std::vector<int> _requestAttempts;
 	MessagePackageQueue _MessagePackageQueue;
@@ -583,7 +568,7 @@ public:
 	MPIRecvMessageBuffer(mpi::communicator &world, int messageSize, int tag = mpi::any_tag, MessageClassProcessor processor = MessageClassProcessor())
 	: BufferBase(world, messageSize, processor), _tag(tag), _isProcessing(false) {
 		_recvBuffers = new Buffer[ this->getWorld().size() ];
-		_requests = new OptionalRequest[ this->getWorld().size() ];
+		_requests = new MPIOptionalRequest[ this->getWorld().size() ];
 		_requestAttempts.resize(this->getWorld().size(), 0);
 		for(int destRank = 0; destRank < this->getWorld().size(); destRank++) {
 			_recvBuffers[destRank] = NULL;
@@ -606,41 +591,41 @@ public:
 		for(int source = 0 ; source < this->getWorld().size() ; source++) {
 			if (!!_requests[source]) {
 				_requests[source].get().cancel();
-				_requests[source] = OptionalRequest();
+				_requests[source] = MPIOptionalRequest();
 			}
 		}
 	}
 	bool receiveIncomingMessage(int rankSource) {
 		bool returnValue = false;
-		OptionalStatus optionalStatus;
-		OptionalRequest &optionalRequest = _requests[rankSource];
+		MPIOptionalStatus MPIOptionalStatus;
+		MPIOptionalRequest &MPIOptionalRequest = _requests[rankSource];
 
-		if (!optionalRequest) {
+		if (!MPIOptionalRequest) {
 			LOG_WARN(1, "Detected non-pending request for tag: " << _tag);
-			optionalRequest = irecv(rankSource);
+			MPIOptionalRequest = irecv(rankSource);
 		}
-		if (!!optionalRequest) {
+		if (!!MPIOptionalRequest) {
 			++_requestAttempts[rankSource];
 			bool retry = _RETRY_MESSAGES && _requestAttempts[rankSource] > _RETRY_THRESHOLD;
 #ifdef OPENMP_CRITICAL_MPI
 #pragma omp critical (MPIBUFFER_RECV_REQUEST_TEST)
 #endif
 			{
-			optionalStatus = optionalRequest.get().test();
-			if (retry && !optionalStatus) {
+			MPIOptionalStatus = MPIOptionalRequest.get().test();
+			if (retry && !MPIOptionalStatus) {
 				LOG_WARN(1, "Canceling pending request that looks to be stuck tag: " << _tag);
-				optionalRequest.get().cancel();
-				optionalStatus = optionalRequest.get().test();
-				if (!optionalStatus) {
-					optionalRequest = irecv(rankSource);
-					optionalStatus = optionalRequest.get().test();
+				MPIOptionalRequest.get().cancel();
+				MPIOptionalStatus = MPIOptionalRequest.get().test();
+				if (!MPIOptionalStatus) {
+					MPIOptionalRequest = irecv(rankSource);
+					MPIOptionalStatus = MPIOptionalRequest.get().test();
 				}
 			}
 			}
-			if (!!optionalStatus) {
-				mpi::status status = optionalStatus.get();
+			if (!!MPIOptionalStatus) {
+				mpi::status status = MPIOptionalStatus.get();
 				queueMessage(status, rankSource);
-				optionalRequest = irecv(rankSource);
+				MPIOptionalRequest = irecv(rankSource);
 				returnValue = true;
 			}
 		}
@@ -707,8 +692,8 @@ public:
 
 
 private:
-	OptionalRequest irecv(int sourceRank) {
-		OptionalRequest oreq;
+	MPIOptionalRequest irecv(int sourceRank) {
+		MPIOptionalRequest oreq;
 		LOG_DEBUG(5, "Starting irecv for " << sourceRank << "," << _tag);
 #ifdef OPENMP_CRITICAL_MPI
 #pragma omp critical (MPI_buffer_irecv)
@@ -781,8 +766,6 @@ class MPISendMessageBuffer: public MPIMessageBuffer<C, CProcessor, BufferSize> {
 public:
 	typedef MPIMessageBuffer<C, CProcessor, BufferSize> BufferBase;
 	typedef MPIRecvMessageBuffer<C, CProcessor, BufferSize> RecvBuffer;
-	typedef typename BufferBase::OptionalRequest OptionalRequest;
-	typedef typename BufferBase::OptionalStatus OptionalStatus;
 	typedef typename BufferBase::Buffer Buffer;
 	class SentBuffer {
 	public:
@@ -957,7 +940,7 @@ public:
 	}
 	void checkSent(SentBuffer &sent) {
 
-		OptionalStatus optStatus;
+		MPIOptionalStatus optStatus;
 #ifdef OPENMP_CRITICAL_MPI
 #pragma omp critical (MPI_BUFFER_SEND_REQUEST_TEST)
 #endif
