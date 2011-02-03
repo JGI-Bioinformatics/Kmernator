@@ -136,6 +136,16 @@ int main(int argc, char **argv)
 	int maxCycles = 100;
 	if (argc > 1)
 		maxCycles = atoi(argv[1]);
+	int maxMessageSize = 1024*1024*256;
+	if (argc > 2)
+		maxMessageSize = atoi(argv[2]) * 1024;
+	int maxNumMessages = 1024*1024*256;
+	if (argc > 3)
+		maxNumMessages = atoi(argv[3]);
+	int maxDataSize = 1024*1024*256;
+	if (argc > 4)
+		maxDataSize = atoi(argv[4])*1024;
+
 
 	//Options::getDebug() = 2;
 	Logger::setWorld(&world);
@@ -146,14 +156,12 @@ int main(int argc, char **argv)
 	}
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Starting with " << maxCycles << " cycles");
 
-	int messageSize = 1024*1024*256;
-	int numMessages = 1024*1024*256;
 
 	for(int cycle = 0 ; cycle < maxCycles ; cycle++) {
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Starting cycle " << cycle);
-		for(int num = 1; num < numMessages ; num *= 2) {
-			for(int size = 512; size < messageSize ; size *= 2) {
-				if (num * size * (world.size()-1) < 1024*1024 || num * size * (world.size()-1) > 1024*1024*128)
+		for(int num = 1; num < maxNumMessages ; num *= 2) {
+			for(int size = 512; size < maxMessageSize ; size *= 2) {
+				if (num * size * (world.size()-1) < 8*1024*1024 || num * size * (world.size()-1) > maxDataSize)
 					continue;
 
 				for (int i = 0 ; i < 3 ; i++)
