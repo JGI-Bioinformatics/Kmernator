@@ -41,14 +41,19 @@ void all2all(mpi::communicator &world, int numMessages, int messageSize)
 	}
 
 	LOG_DEBUG(2, "Starting loop");
-	long iterations = 0;
-	bool hasActivity = true;
+	long inactiveIterations = 0;
+	long activeIterations = 0;
+	bool hasActivity = false;
+	lastActivity = boost::posix_time::microsec_clock::local_time();
 	bool done = false;
 	while (! done) {
 		if (hasActivity) {
-			iterations = 0;
+			inactiveIterations = 0;
 			hasActivity = false;
-			lastActivity = boost::posix_time::microsec_clock::local_time();
+			if (++activeIterations > 10000) {
+				activeIterations = 0;
+				lastActivity = boost::posix_time::microsec_clock::local_time();
+			}
 		}
 		int countSentDone = 1;
 		int countRecvDone = 1;
@@ -85,8 +90,10 @@ void all2all(mpi::communicator &world, int numMessages, int messageSize)
 			}
 		}
 		if (! hasActivity) {
-			boost::this_thread::sleep( boost::posix_time::milliseconds(1) );
-			if (++iterations % 1000) {
+			if (++inactiveIterations > 10000) {
+				inactiveIterations = 0;
+				activeIterations += 10000; // reset on the next activity
+				//boost::this_thread::sleep( boost::posix_time::milliseconds(1) );
 				boost::posix_time::ptime now = boost::posix_time::microsec_clock::local_time();
 				boost::posix_time::time_duration elapsed = now - lastActivity;
 				boost::posix_time::time_duration elapsedMessage = now - lastStallMessage;
@@ -136,16 +143,17 @@ int main(int argc, char **argv)
 	int maxCycles = 100;
 	if (argc > 1)
 		maxCycles = atoi(argv[1]);
-	int maxMessageSize = 1024*1024*256;
+	int maxMessageSize = 1024*1024*64; // 65535 kb
 	if (argc > 2)
 		maxMessageSize = atoi(argv[2]) * 1024;
-	int maxNumMessages = 1024*1024*256;
+	int maxNumMessages = 1024*1024*256; // 256 million+ messages
 	if (argc > 3)
 		maxNumMessages = atoi(argv[3]);
-	int maxDataSize = 1024*1024*256;
+	int maxDataSize = 1024*1024*256; // 256 MB
 	if (argc > 4)
 		maxDataSize = atoi(argv[4])*1024;
 
+	int minDataSize = 1024*1024*16;  // 16 MB
 
 	//Options::getDebug() = 2;
 	Logger::setWorld(&world);
@@ -161,7 +169,7 @@ int main(int argc, char **argv)
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Starting cycle " << cycle);
 		for(int num = 1; num < maxNumMessages ; num *= 2) {
 			for(int size = 512; size < maxMessageSize ; size *= 2) {
-				if (num * size * (world.size()-1) < 8*1024*1024 || num * size * (world.size()-1) > maxDataSize)
+				if (num * size * (world.size()-1) < minDataSize || num * size * (world.size()-1) > maxDataSize)
 					continue;
 
 				for (int i = 0 ; i < 3 ; i++)
