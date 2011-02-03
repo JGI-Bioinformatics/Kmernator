@@ -479,12 +479,12 @@ public:
 					_lineBuffer[threadNum] = current;
 
 					LOG_DEBUG(3, "Correctly picked record break point to read fastq in parallel: "
-							<< current << std::endl << tmp << " " << tellg());
+							<< current << "\n" << tmp << " " << tellg());
 
 
 				} else {
 					LOG_DEBUG(3, "Needed to skip an extra line to read fastq in parallel: "
-							<< current << std::endl << tmp << " " << tellg());
+							<< current << "\n" << tmp << " " << tellg());
 				}
 			}
 

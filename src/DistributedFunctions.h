@@ -599,7 +599,7 @@ private:
 			sendPurgeVariant[threadId*numThreads+t]->finalize(t);
 		}
 		recvPurgeVariant[threadId]->finalize(numThreads);
-		LOG_DEBUG(3, "_variantThreadSync() finished:" << maxDepth <<std::endl);
+		LOG_DEBUG(3, "_variantThreadSync() finished:" << maxDepth);
 	}
 	long _variantBatchSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
 		// call parent

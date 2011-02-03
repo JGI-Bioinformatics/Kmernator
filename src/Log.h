@@ -180,9 +180,13 @@ public:
 	}
 	template<typename T>
 	inline std::ostream &operator<<(T log) {
-		if (isActive())
-			return *_os << getStamp() << log;
-		else
+		if (isActive()) {
+			std::stringstream ss;
+			ss << getStamp() << log;
+			std::string s;
+			s = ss.str();
+			return *_os << s;
+		} else
 			return misuseWarning();
 	}
 	// cast to ostream
@@ -221,11 +225,12 @@ class Log
 			msg = log.gatherMessages(msg);
 #endif
 		if (!msg.empty()) {
+			std::string s(msg + std::string("\n"));
 #ifdef _USE_OPENMP
 			#pragma omp critical(Log)
 #endif
 			{
-				log << msg << std::endl;
+				log << s;
 			}
 		}
 		return log;

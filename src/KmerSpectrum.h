@@ -1096,7 +1096,7 @@ public:
 		if (fullStats) {
 			os << ", " << solid.size() << " solid / " << weak.size() << " weak / "
 			<< TrackingData::discarded << " discarded / "
-			<< singleton.size() + purgedSingletons << " singleton (" << purgedSingletons << " purged) - kmers so far " << std::endl;
+			<< singleton.size() + purgedSingletons << " singleton (" << purgedSingletons << " purged) - kmers so far \n";
 		}
 		os << MemoryUtils::getMemoryUsage() << std::endl;
 		return os;
@@ -1203,7 +1203,7 @@ public:
 
 		// first free up memory
 		if (Options::getMinDepth() <= 1) {
-			LOG_DEBUG(2, "Clearing memory from singletons" << std::endl << MemoryUtils::getMemoryUsage());
+			LOG_DEBUG(2, "Clearing memory from singletons\n"  << MemoryUtils::getMemoryUsage());
 		    singleton.clear();
 		}
 
@@ -1226,7 +1226,7 @@ public:
 		if (Options::getMinDepth() <= 1)
 			singleton.swap( const_cast<SingletonMapType&>( constSingleton) );
 
-		LOG_VERBOSE(2, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
+		LOG_VERBOSE(2, "Finished merging partial spectrums\n" << MemoryUtils::getMemoryUsage());
 
 		if (Log::isVerbose(1)) {
 			printStats(Log::Verbose("Final Stats"), store.getSize(), isSolid, true);
