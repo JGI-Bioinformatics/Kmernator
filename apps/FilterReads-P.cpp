@@ -146,8 +146,9 @@ int main(int argc, char *argv[]) {
 	}
 	KS spectrum(world, numBuckets);
 	Kmernator::MmapFileVector spectrumMmaps;
-
-	if (Options::getKmerSize() > 0) {
+	if (! Options::getLoadKmerMmap().empty() ) {
+		LOG_WARN(1, "load-kmer-mmap is unsupported at this time");
+	} else if (Options::getKmerSize() > 0) {
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		TrackingData::minimumWeight = Options::getMinKmerQuality();
@@ -165,7 +166,7 @@ int main(int argc, char *argv[]) {
 
 		}
 
-		if (!outputFilename.empty()) {
+		if (!outputFilename.empty() && Options::getSaveKmerMmap() > 0) {
 		  spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
 		  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
         }

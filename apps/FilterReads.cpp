@@ -37,6 +37,7 @@ typedef ReadSelector<DataType> RS;
 
 int main(int argc, char *argv[]) {
 
+	Options::getSaveKmerMmap() = 1;
 	try {
 		if (!FilterReadsOptions::parseOpts(argc, argv))
 			throw invalid_argument("Please fix the command line arguments");
