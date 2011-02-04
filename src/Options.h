@@ -96,6 +96,8 @@ private:
 	unsigned int deDupStartOffset;
 	unsigned int deDupLength;
 	unsigned int mmapInput;
+	unsigned int saveKmerMmap;
+	std::string  loadKmerMmap;
 	unsigned int buildPartitions;
 	unsigned int gcHeatMap;
 	unsigned int gatheredLogs;
@@ -107,7 +109,7 @@ private:
 	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
-	mmapInput(1), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
+	mmapInput(1), saveKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
 	{
 	}
 
@@ -205,6 +207,12 @@ public:
 	}
 	static inline unsigned int &getMmapInput() {
 		return getOptions().mmapInput;
+	}
+	static inline unsigned int &getSaveKmerMmap() {
+		return getOptions().saveKmerMmap;
+	}
+	static inline std::string &getLoadKmerMmap() {
+		return getOptions().loadKmerMmap;
 	}
 	static inline unsigned int &getBuildPartitions() {
 		return getOptions().buildPartitions;
@@ -351,6 +359,11 @@ protected:
 
 		("mmap-input", po::value<unsigned int>()->default_value(mmapInput),
 				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
+
+		("save-kmer-mmap", po::value<unsigned int>()->default_value(saveKmerMmap),
+				"If set to 1, creates a memory map of the kmer spectrum for later use")
+
+		("load-kmer-mmap", po::value<std::string>(), "file to load instead of building the kmer-spectrum (created with --save-kmer-mmap option)")
 
 		("build-partitions", po::value<unsigned int>()->default_value(buildPartitions),
 				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.")
@@ -553,6 +566,10 @@ public:
 
 			// set mmapInput
 			setOpt<unsigned int>("mmap-input", getMmapInput() , print);
+
+			setOpt<unsigned int>("save-kmer-mmap", getSaveKmerMmap(), print);
+
+			setOpt<std::string>("load-kmer-mmap", getLoadKmerMmap(), print);
 
 			// set buildPartitions
 			setOpt<unsigned int>("build-partitions", getBuildPartitions(), print);
