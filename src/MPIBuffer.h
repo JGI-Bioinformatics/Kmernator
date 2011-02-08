@@ -48,7 +48,7 @@
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
 
-#define MPI_BUFFER_DEFAULT_SIZE (512 * 1024)
+#define MPI_BUFFER_DEFAULT_SIZE (32 * 1024)
 #define WAIT_MS 1
 #define WAIT_AND_WARN( iterations, warningMessage ) \
 	if ((iterations % (60000/WAIT_MS)) == 0) LOG_WARN(1, warningMessage << " waiting in loop: " << iterations);  \
@@ -122,7 +122,7 @@ template <typename C, int BufferSize = MPI_BUFFER_DEFAULT_SIZE>
 class MPIMessageBufferBase : public _MPIMessageBufferBase {
 public:
 	static const int MESSAGE_BUFFER_SIZE = BufferSize;
-	static const int BUFFER_QUEUE_SOFT_LIMIT = 5;
+	static const int BUFFER_QUEUE_SOFT_LIMIT = 3;
 	typedef C MessageClass;
 	typedef _MPIMessageBufferBase::OptionalRequest OptionalRequest;
 	typedef _MPIMessageBufferBase::OptionalStatus  OptionalStatus;
