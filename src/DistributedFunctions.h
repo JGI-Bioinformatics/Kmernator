@@ -355,7 +355,7 @@ public:
 
 						if (rankDest == rank && threadDest == threadId) {
 							assert(this->getDMPThread(kmers[readPos], worldSize) == rank);
-							this->append2(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos, isSolid);
+							this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos, isSolid);
 						} else {
 							sendBuffers[ threadId ][ threadDest ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
 						}

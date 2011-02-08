@@ -1060,9 +1060,6 @@ public:
 	inline void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false, NumberType partIdx = 0, NumberType numParts = 1) {
 		return append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, numParts);
 	}
-    void append2(DataPointers &pointers, Kmer &least, WeightType &weight, ReadSetSizeType &readIdx, PositionType &readPos, bool isSolid = false) {
-    	append (pointers, least, weight, readIdx, readPos, isSolid);
-    }
 	inline void append(DataPointers &pointers, Kmer &least, WeightType &weight, ReadSetSizeType &readIdx, PositionType &readPos, bool isSolid = false) {
 		bool keepDirection = true;
 		if (weight < 0.0) {
