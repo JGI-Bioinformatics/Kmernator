@@ -45,6 +45,7 @@
 #include "config.h"
 #include "Options.h"
 #include "Log.h"
+#include "Utils.h"
 
 class MmapTempFile {
 	static int getUnique() { static int id = 0; return id++; }
@@ -100,8 +101,20 @@ public:
 	static MmapFile buildNewMmap(size_type size, std::string permanentFile = "") {
 		FileHandle fh = buildNew(size, permanentFile);
 		Kmernator::MmapFile mmap(fh.filename, std::ios_base::in | std::ios_base::out, size);
+		LOG_DEBUG_OPTIONAL(1, true, "Created mmap with alignment " << mmap.alignment() << " at " << fh.filename);
 		if (permanentFile.empty())
 			unlink(fh.filename.c_str());
+		return mmap;
+	}
+
+	static MmapFile openMmap(std::string filename) {
+		MmapFile mmap;
+		if (FileUtils::fileExists(filename)) {
+			mmap = MmapFile(filename, std::ios_base::in | std::ios_base::out);
+			assert(mmap.is_open());
+			assert(mmap.data() != NULL);
+			assert(mmap.size() > 0);
+		}
 		return mmap;
 	}
 

@@ -106,7 +106,7 @@ protected:
 
 public:
 	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long buckets = 0, bool separateSingletons = true)
-	: KS(buckets, separateSingletons), world(_world) {
+	: KS(buckets * _world.size(), separateSingletons), world(_world) {
 	}
 	~DistributedKmerSpectrum() {
 	}
@@ -115,35 +115,54 @@ public:
 		world = other.world;
 		return *this;
 	}
-
+	mpi::communicator &getWorld() {
+		return world;
+	}
 	template<typename D>
 	MmapFile writeKmerMap(D &kmerMap, std::string filepath) {
+		MmapFile mmap;
+		NumberType alignment = mmap.alignment();
+
+		NumberType totalMmapSize = sizeof(NumberType) * 2; // numBuckets + bucketMask
 		NumberType numBuckets = kmerMap.getNumBuckets();
+		totalMmapSize += numBuckets * sizeof(NumberType); // offsets for each bucket
+		totalMmapSize += alignment - (totalMmapSize % alignment); // align
+
+		LOG_DEBUG_OPTIONAL(1, true, "numBuckets: " << numBuckets);
+		// Get the size of each bucket
 		NumberType *mySizeCounts = new NumberType[ numBuckets ];
-		for(IndexType i = 0 ; i < numBuckets; i++)
+		for(IndexType i = 0 ; i < numBuckets; i++) {
 			mySizeCounts[i] = kmerMap.getBucketByIdx(i).size();
+			// DMP buckets should only be populated at rank blocks
+			assert( mySizeCounts[i] == 0ul || (long) (world.size() * i / numBuckets) == world.rank());
+		}
+		// Globally share bucket sizes
 		NumberType *ourSizeCounts = new NumberType[ numBuckets ];
-		LOG_DEBUG(2, "writeKmerMap(): all_reduce() " << numBuckets << ", " << ourSizeCounts[0] << " " << ourSizeCounts[1] << " " << ourSizeCounts[2] << " " << ourSizeCounts[3]);
 		all_reduce(world, mySizeCounts, numBuckets, ourSizeCounts, std::plus<NumberType>());
-		LOG_DEBUG(3, "Distributed Size Counts: " << ourSizeCounts[0] << " " << ourSizeCounts[1] << " " << ourSizeCounts[2] << " " << ourSizeCounts[3]);
 
 		// rename variable for clarity
 		NumberType *offsetArray = mySizeCounts;
-		NumberType offset = sizeof(NumberType) * (2+numBuckets);
-		NumberType totalSize = 0;
-		// store the arrays in mmap blocked by mpi rank, to minimized mapped footprint
-		for(int rank = 0 ; rank < world.size(); rank++) {
-			for(IndexType i = rank; i < numBuckets; i+= world.size()) {
-				totalSize += ourSizeCounts[i];
-				offsetArray[i] = offset;
-				offset += D::BucketType::sizeToStore( ourSizeCounts[i] );
+
+		// store the arrays in mmap blocked and aligned by mpi rank
+		NumberType myOffset = 0, mySize = 0;
+		int lastRank = world.size();
+		for(IndexType i = 0; i < numBuckets; i++) {
+			int rank = world.size() * i / numBuckets;
+			if (rank == world.rank() && lastRank != rank)
+				myOffset = totalMmapSize;
+
+			offsetArray[i] = totalMmapSize;
+			totalMmapSize += D::BucketType::sizeToStore( ourSizeCounts[i] );
+
+			if (world.size() * (i+1) / numBuckets != (IndexType) rank) {
+				totalMmapSize += alignment - (totalMmapSize % alignment); // align for each rank
+				if (rank == world.rank())
+					mySize = totalMmapSize - myOffset;
 			}
+			LOG_DEBUG(1, "myOffset " << myOffset << " mySize " << mySize << " totalMmapSize " << totalMmapSize);
+			lastRank = rank;
 		}
 
-		delete [] ourSizeCounts;
-
-		MmapFile mmap;
-		NumberType totalMmapSize = kmerMap.getSizeToStoreCountsAndIndexes() + totalSize * D::BucketType::getElementByteSize();
 		if (world.rank() == 0) {
 			mmap = MmapTempFile::buildNewMmap(totalMmapSize , filepath);
 			NumberType *numbers = (NumberType *) mmap.data();
@@ -172,12 +191,17 @@ public:
 
 		// store our part of mmap (interleaved DMP)
 		for(IndexType i = 0 ; i < numBuckets; i++) {
-			long size = kmerMap.getBucketByIdx(i).size();
-			if (size > 0) {
+			int rank = (world.size() * i / numBuckets);
+			if (rank == world.rank()) {
+				assert(myOffset <= offsetArray[i]);
+				assert(myOffset + mySize >= offsetArray[i] +  kmerMap.getBucketByIdx(i).size());
 				kmerMap.getBucketByIdx(i).store(mmap.data() + offsetArray[i]);
-				msync(mmap.data() + offsetArray[i], size, MS_ASYNC);
+			} else {
+				assert( kmerMap.getBucketByIdx(i).size() == 0);
 			}
 		}
+		// share with other processes
+		msync(mmap.data() + myOffset, mySize, MS_ASYNC);
 
 		delete [] mySizeCounts;	// aka offsetArray
 		LOG_DEBUG(2, "writeKmerMap(): barrier2");
@@ -264,6 +288,7 @@ public:
 		int process(RecvStoreKmerMessageBufferBase *bufferCallback) {
 			RecvStoreKmerMessageBuffer *kbufferCallback = (RecvStoreKmerMessageBuffer*) bufferCallback;
 			LOG_DEBUG(4, "StoreKmerMessage: " << readIdx << " " << readPos << " " << weight << " " << getKmer()->toFasta());
+			assert(kbufferCallback->getSpectrum().getDMPThread(*getKmer(), kbufferCallback->getSpectrum().getWorld().size()) == kbufferCallback->getSpectrum().getWorld().rank());
 			kbufferCallback->getSpectrum().append(kbufferCallback->getDataPointer(), *getKmer(), weight, readIdx, readPos, kbufferCallback->isSolid());
 			return 0;
 		}
@@ -326,10 +351,11 @@ public:
 						LOG_DEBUG(4, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << kmers[readPos].toFasta());
 					} else {
 
-						this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize);
+						this->getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize, true);
 
 						if (rankDest == rank && threadDest == threadId) {
-							this->append(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos, isSolid);
+							assert(this->getDMPThread(kmers[readPos], worldSize) == rank);
+							this->append2(recvBuffers[ threadId ]->getDataPointer(), kmers[readPos], weight, globalReadIdx, readPos, isSolid);
 						} else {
 							sendBuffers[ threadId ][ threadDest ]->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
 						}

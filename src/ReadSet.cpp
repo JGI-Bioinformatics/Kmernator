@@ -113,7 +113,7 @@ void ReadSet::addRead(const Read &read, SequenceLengthType readLength) {
 	_setFastqStart(read);
 }
 ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
-	MmapSource mmap(filePath, ReadFileReader::getFileSize(filePath));
+	MmapSource mmap(filePath, FileUtils::getFileSize(filePath));
 	addMmaps( MmapSourcePair(mmap, MmapSource()) );
 	return mmap;
 }

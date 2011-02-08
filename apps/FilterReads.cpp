@@ -87,8 +87,10 @@ int main(int argc, char *argv[]) {
 	KS spectrum(0);
 
 	Kmernator::MmapFileVector spectrumMmaps;
-
-	if (Options::getKmerSize() > 0) {
+	if (Options::getLoadKmerMmap() > 0 && ! outputFilename.empty()) {
+		spectrumMmaps = spectrum.restoreMmap(outputFilename + "-mmap");
+	}
+	if (Options::getKmerSize() > 0 && spectrumMmaps.empty()) {
 
 	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
 	  LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
@@ -98,7 +100,7 @@ int main(int argc, char *argv[]) {
 
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
-	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
+	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
 	  if (Options::getVariantSigmas() > 0.0) {
 		  spectrum.purgeVariants();
 		  if (Log::isVerbose(1)) {

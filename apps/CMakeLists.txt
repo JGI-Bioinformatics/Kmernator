@@ -67,6 +67,8 @@ target_link_libraries( FilterReads
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
+if( MPI_FOUND )
+
 set_source_files_properties( FilterReads-P
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
@@ -82,7 +84,9 @@ target_link_libraries( FilterReads-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
-                           
+                
+endif()
+           
 set_source_files_properties( TnfDistance
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )

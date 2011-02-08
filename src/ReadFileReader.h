@@ -39,6 +39,7 @@
 
 #include "config.h"
 #include "Log.h"
+#include "Utils.h"
 
 using namespace std;
 
@@ -237,22 +238,8 @@ public:
 		if (_parser->isMmaped()) {
 			return _parser->getMmapFileSize();
 		} else {
-		    return getFileSize(_ifs);
+		    return FileUtils::getFileSize(_ifs);
 		}
-	}
-	static unsigned long getFileSize(string &filePath) {
-		ifstream ifs(filePath.c_str());
-		return getFileSize(ifs);
-	}
-	static unsigned long getFileSize(ifstream &ifs) {
-		assert( !ifs.eof() );
-		assert( ifs.is_open() && ifs.good() );
-		assert( !ifs.fail() );
-		ifstream::streampos current = ifs.tellg();
-		ifs.seekg(0, ios_base::end);
-		unsigned long size = ifs.tellg();
-		ifs.seekg(current);
-		return size;
 	}
 
 	unsigned long getBlockSize(unsigned int numThreads) {

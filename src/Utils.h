@@ -413,6 +413,35 @@ public:
 	}
 };
 
+class FileUtils
+{
+public:
+	static unsigned long getFileSize(std::string &filePath) {
+		std::ifstream ifs(filePath.c_str());
+		return getFileSize(ifs);
+	}
+	static unsigned long getFileSize(std::ifstream &ifs) {
+		assert( !ifs.eof() );
+		assert( ifs.is_open() && ifs.good() );
+		assert( !ifs.fail() );
+		std::ifstream::streampos current = ifs.tellg();
+		ifs.seekg(0, std::ios_base::end);
+		unsigned long size = ifs.tellg();
+		ifs.seekg(current);
+		return size;
+	}
+	static bool fileExists(std::string &filePath) {
+		std::ifstream ifs(filePath.c_str());
+		return fileExists(ifs);
+	}
+	static bool fileExists(std::ifstream &ifs) {
+		if (ifs.fail())
+			return false;
+		else
+			return true;
+	}
+};
+
 class Statistics
 {
 public:

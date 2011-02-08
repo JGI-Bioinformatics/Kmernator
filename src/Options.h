@@ -97,7 +97,7 @@ private:
 	unsigned int deDupLength;
 	unsigned int mmapInput;
 	unsigned int saveKmerMmap;
-	std::string  loadKmerMmap;
+	unsigned int loadKmerMmap;
 	unsigned int buildPartitions;
 	unsigned int gcHeatMap;
 	unsigned int gatheredLogs;
@@ -109,7 +109,7 @@ private:
 	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
-	mmapInput(1), saveKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
+	mmapInput(1), saveKmerMmap(0), loadKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
 	{
 	}
 
@@ -211,7 +211,7 @@ public:
 	static inline unsigned int &getSaveKmerMmap() {
 		return getOptions().saveKmerMmap;
 	}
-	static inline std::string &getLoadKmerMmap() {
+	static inline unsigned int &getLoadKmerMmap() {
 		return getOptions().loadKmerMmap;
 	}
 	static inline unsigned int &getBuildPartitions() {
@@ -363,7 +363,7 @@ protected:
 		("save-kmer-mmap", po::value<unsigned int>()->default_value(saveKmerMmap),
 				"If set to 1, creates a memory map of the kmer spectrum for later use")
 
-		("load-kmer-mmap", po::value<std::string>(), "file to load instead of building the kmer-spectrum (created with --save-kmer-mmap option)")
+		("load-kmer-mmap", po::value<unsigned int>(), "Instead of generating kmer spectrum, load an existing one named after --output-file (created with --save-kmer-mmap=1 option)")
 
 		("build-partitions", po::value<unsigned int>()->default_value(buildPartitions),
 				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.")
@@ -569,7 +569,7 @@ public:
 
 			setOpt<unsigned int>("save-kmer-mmap", getSaveKmerMmap(), print);
 
-			setOpt<std::string>("load-kmer-mmap", getLoadKmerMmap(), print);
+			setOpt<unsigned int>("load-kmer-mmap", getLoadKmerMmap(), print);
 
 			// set buildPartitions
 			setOpt<unsigned int>("build-partitions", getBuildPartitions(), print);
