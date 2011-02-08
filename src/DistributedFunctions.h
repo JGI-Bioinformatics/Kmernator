@@ -496,18 +496,18 @@ public:
 	}
 
 
-	Kmernator::MmapFileVector writeKmerMaps(string fileprefix = Options::getOutputFile()) {
+	Kmernator::MmapFileVector writeKmerMaps(string mmapFilename = Options::getOutputFile()) {
 		// communicate sizes and allocate permanent file
 		LOG_VERBOSE(2, "Merging partial spectrums" );
 		LOG_DEBUG(3, MemoryUtils::getMemoryUsage() );
-		Kmernator::MmapFileVector ourSpectrum(3);
+		Kmernator::MmapFileVector ourSpectrum;
 		if (this->hasSolids){
-			ourSpectrum[0] = this->writeKmerMap(this->solid, fileprefix + "-kmer-mmap");
+			ourSpectrum.push_back(this->writeKmerMap(this->solid, mmapFilename + "-solid"));
 		}
-		ourSpectrum[1] = this->writeKmerMap(this->weak, fileprefix + "-kmer-mmap");
+		ourSpectrum.push_back(this->writeKmerMap(this->weak, mmapFilename));
 
 		if (Options::getMinDepth() <= 1 && this->hasSingletons) {
-			ourSpectrum[2] = this->writeKmerMap(this->singleton, fileprefix + "-singleton-kmer-mmap");
+			ourSpectrum.push_back(this->writeKmerMap(this->singleton, mmapFilename + "-singleton"));
 		}
 
 		LOG_DEBUG(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());

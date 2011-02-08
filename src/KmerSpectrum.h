@@ -154,7 +154,10 @@ public:
 
 	Kmernator::MmapFileVector storeMmap(string mmapFilename){
 		LOG_VERBOSE(1, "Saving weak kmer spectrum");
-		Kmernator::MmapFileVector savedMmaps(2);
+		Kmernator::MmapFileVector savedMmaps;
+		if (hasSolids) {
+			savedMmaps.push_back(solid.store(mmapFilename + "-solid"));
+		}
 		savedMmaps.push_back(weak.store(mmapFilename));
 		if (Options::getMinDepth() <= 1) {
 			LOG_VERBOSE(1, "Saving singleton kmer spectrum");
@@ -165,6 +168,12 @@ public:
 	Kmernator::MmapFileVector restoreMmap(string mmapfilename) {
 		LOG_VERBOSE(1, "Loading kmer spectrum from saved mmaps: " + mmapfilename);
 		Kmernator::MmapFileVector spectrumMmaps;
+		Kmernator::MmapFile solidMmap = MmapTempFile::openMmap(mmapfilename + "-solid");
+		if (solidMmap.is_open() && solidMmap.size() > 0) {
+			SolidMapType tmpSolid(solidMmap.data());
+			spectrumMmaps.push_back(solidMmap);
+			solid.swap(tmpSolid);
+		}
 		Kmernator::MmapFile weakMmap = MmapTempFile::openMmap(mmapfilename);
 		if (weakMmap.is_open() && weakMmap.size() > 0) {
 			WeakMapType tmpWeak(weakMmap.data());

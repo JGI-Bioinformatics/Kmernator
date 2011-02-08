@@ -27,7 +27,7 @@ check()
   fi
 }
 
-for thread in {1..13}
+for thread in {1..3}
 do
   check $FR --thread $thread
   rm -f $TMP*
@@ -42,8 +42,12 @@ then
   do
     check mpirun -np $mpi $FRP --thread 1
     rm -f $TMP*
-    check  mpirun -np $mpi $FRP --thread 1 --save-kmer-mmap 1
-    check  mpirun -np $mpi $FRP --thread 1 --load-kmer-mmap 1
+    check mpirun -np $mpi $FRP --thread 1 --save-kmer-mmap 1
+    check mpirun -np $mpi $FRP --thread 1 --load-kmer-mmap 1
+    check $FR --load-kmer-mmap 1
+    rm -f $TMP*
+    check $FR --thread $thread --save-kmer-mmap 1 
+    check mpirun -np $mpi $FRP --thread 1 --load-kmer-mmap 1
     rm -f $TMP*
   done
 fi
