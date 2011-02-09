@@ -106,6 +106,10 @@ public:
 		_qs.close();
 	}
 
+	std::string getFilePath() {
+		return _path;
+	}
+
 	void setReader(MmapSource &mmap) {
 		assert(mmap.is_open());
 		LOG_DEBUG(3, "setReader(mmap):" << (void*)mmap.data());

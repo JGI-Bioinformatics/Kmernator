@@ -105,12 +105,14 @@ void ReadSet::addRead(const Read &read) {
 	SequenceLengthType readLength = read.getLength();
 	addRead(read, readLength);
 }
-void ReadSet::addRead(const Read &read, SequenceLengthType readLength) {
+void ReadSet::addRead(const Read &read, SequenceLengthType readLength, int rank) {
 	_reads.push_back(read);
 	_baseCount += readLength;
 	_setMaxSequenceLength(readLength);
 	_trackSequentialPair(read);
 	_setFastqStart(read);
+	long countReads = getSize();
+    LOG_VERBOSE_OPTIONAL(2, ((countReads & 131071) == 0 && (rank & 15) == 0), "Just read " << countReads << " reads");
 }
 ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 	MmapSource mmap(filePath, FileUtils::getFileSize(filePath));
@@ -264,15 +266,20 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	string name, bases, quals;
 	LOG_DEBUG(2, "appendFasta(reader, " << rank << ", " << size << ")");
 	unsigned long lastPos = MAX_UI64;
+	unsigned long firstPos = 0;
 	if (size > 1) {
 		unsigned long blockSize = reader.getBlockSize(size);
 		if (rank + 1 != size ) {
 			reader.seekToNextRecord( blockSize * (rank+1) );
 			lastPos = reader.getPos();
+		} else {
+			lastPos = reader.getFileSize();
 		}
 		reader.seekToNextRecord( blockSize * rank );
+		firstPos = reader.getPos();
 	}
-	LOG_DEBUG(2, "appendFasta() at pos: " << reader.getPos());
+	LOG_VERBOSE(2, "Seeked to position " << firstPos << ", reading until " << lastPos << " on file " << reader.getFilePath());
+	long countReads = 0;
 	if (reader.isMmaped() && Options::getMmapInput() != 0) {
 	    RecordPtr recordPtr = reader.getStreamRecordPtr();
 	    RecordPtr qualPtr = reader.getStreamQualRecordPtr();
@@ -284,25 +291,27 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	    	if (isMultiline) {
             	// store the read in memory
             	Read read(name,bases,quals);
-            	addRead(read, bases.length());
+            	addRead(read, bases.length(), rank);
             } else {
             	Read read(recordPtr, qualPtr);
-            	addRead(read, bases.length());
+            	addRead(read, bases.length(), rank);
             }
             recordPtr = nextRecordPtr;
 	    	qualPtr = reader.getStreamQualRecordPtr();
 
             if (reader.getPos() >= lastPos)
             	break;
+
 	    }
 	} else {
 	    while (reader.nextRead(name, bases, quals)) {
 	        Read read(name, bases, quals);
-	        addRead(read, bases.length());
+	        addRead(read, bases.length(), rank);
             if (reader.getPos() >= lastPos)
             	break;
 	    }
 	}
+	LOG_VERBOSE(2, "Finished reading " << (lastPos - firstPos)/1024 << " KB, " << getSize() << " reads");
 	return reader.getParser();
 }
 
@@ -404,10 +413,10 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 	            if (isMultiline) {
 	            	// store the read in memory, as mmap does not currently work
 	            	Read read(name,bases,quals);
-	            	myReads.addRead(read, bases.length());
+	            	myReads.addRead(read, bases.length(), threadId);
 	            } else {
 	            	Read read(recordPtr, qualPtr);
-                    myReads.addRead(read, bases.length());
+                    myReads.addRead(read, bases.length(), threadId);
 	            }
 
 		    	recordPtr = nextRecordPtr;
@@ -417,7 +426,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		} else {
 		    while (hasNext && reader.nextRead(name, bases, quals)) {
 		        Read read(name, bases, quals);
-		        myReads.addRead(read, bases.length());
+		        myReads.addRead(read, bases.length(), threadId);
 		        hasNext = (reader.getPos() < lastPos);
 		    }
 		}
@@ -643,7 +652,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			LOG_VERBOSE(3, "Processed " << countNewPaired << " pairs for pairing");
 	}
 
-	LOG_VERBOSE_OPTIONAL(1, true, "Identified new pairs: " << newPairs);
+	LOG_VERBOSE(2, "Identified new pairs: " << newPairs);
 
 	return _pairs.size();
 }
