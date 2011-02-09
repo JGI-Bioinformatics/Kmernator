@@ -756,7 +756,7 @@ public:
 				filename = *(itF++);
 			}
 			mpi::broadcast(_world, filename, 0);
-			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << filename);
+			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << filename);
 			std::string myFile = filename + rank;
 			Iterator it = this->_map->find(myFile);
 			long mySize = 0;
