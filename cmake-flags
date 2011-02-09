@@ -12,6 +12,15 @@ libdir=$(dirname $(g++-${ver} --print-file-name=libstdc++.so))
 CXX=g++-${ver} \
 $CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall  -Wl,-rpath,${libdir}"
 
+# for NERSC hopper2:
+module load cmake
+module swap PrgEnv-pgi PrgEnv-gnu
+module swap xt-mpt xt-mpich2
+cmake $Kmernator -DCMAKE_C_COMPILER=cc -DCMAKE_CXX_COMPILER=CC  \
+  -DMPI_INCLUDE_PATH=${MPICH_DIR}/include   \
+  -DMPI_LIBRARY="libc.a"  -DMPI_LINK_FLAGS="-lmpich"  \
+  -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
+
 # for NERSC hopper.nersc.gov: gcc compilers and MPICH2 xt-mpt, threaded MPI
 module load cmake
 module swap PrgEnv-pgi PrgEnv-gnu 
@@ -22,15 +31,6 @@ CC=cc CXX=CC \
 cmake $Kmernator \
     -DMPI_INCLUDE_PATH=${MPICH_DIR}/include    \
     -DMPI_LIBRARY="libc.a" -DMPI_LINK_FLAGS="-lmpich_threadm"  \
-    -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
-
-# for NERSC hopp2.nersc.gov:
-module load cmake
-module swap PrgEnv-pgi PrgEnv-gnu
-module swap xt-mpt xt-mpich2
-CC=cc CXX=CC cmake $Kmernator \
-    -DMPI_INCLUDE_PATH=${MPICH_DIR}/include  \
-    -DMPI_LIBRARY="libc.a"  -DMPI_LINK_FLAGS="-lmpich" \
     -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
 
 # for NERSC carver
