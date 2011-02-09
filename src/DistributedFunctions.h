@@ -777,7 +777,10 @@ public:
 			MPI_Status status;
 			err = MPI_File_write_ordered(ourFile, myFileMmap.data(), mySize, MPI_BYTE, &status);
 			if (err != MPI_SUCCESS) throw;
-			LOG_DEBUG_OPTIONAL(1, _world.rank()==0, "Wrote: " << status._count);
+			int writeCount;
+			err = MPI_Get_count(&status, MPI_BYTE, &writeCount);
+			if (err != MPI_SUCCESS) throw;
+			LOG_DEBUG_OPTIONAL(1, _world.rank()==0, "Wrote: " << writeCount);
 			err = MPI_File_close(&ourFile);
 			if (err != MPI_SUCCESS) throw;
 
