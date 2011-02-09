@@ -48,6 +48,7 @@ int main(int argc, char *argv[]) {
 	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
+	MPI_Comm_set_errhandler( world, MPI::ERRORS_THROW_EXCEPTIONS );
 
 	try {
 		Logger::setWorld(&world);

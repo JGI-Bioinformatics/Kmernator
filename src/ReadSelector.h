@@ -56,6 +56,7 @@ public:
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 	typedef ReadSet::Pair Pair;
 	typedef float ScoreType;
+	typedef OfstreamMap OFM;
 	class ReadTrimType {
 	public:
 		SequenceLengthType trimOffset;
@@ -146,6 +147,9 @@ public:
 		_duplicateSet.clear();
 	}
 
+	OFM getOFM(std::string outputfile, std::string suffix = FormatOutput::getDefaultSuffix()) {
+		return OFM(outputfile, suffix);
+	}
 	class ScoreCompare : public std::binary_function<ReadSetSizeType,ReadSetSizeType,bool>
 	{
 	private:
@@ -795,17 +799,17 @@ public:
 		return os;
 	}
 
-	void writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = (Options::getSeparateOutputs() == 1), int format = Options::getFormatOutput() ) const {
+	void writePicks(OFM &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = (Options::getSeparateOutputs() == 1), int format = Options::getFormatOutput() ) const {
 		_writePicks(ofstreamMap, offset, _picks.size() - offset, byInputFile, format);
 	}
-	virtual void _writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, int format) const {
+	void _writePicks(OFM &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, int format) const {
 		for(ReadSetSizeType pickIdx = offset; pickIdx < length + offset; pickIdx++) {
 			const Pair &pair = _picks[pickIdx];
 			writePick(ofstreamMap, pair.read1, byInputFile, format);
 			writePick(ofstreamMap, pair.read2, byInputFile, format);
 		}
 	}
-	void writePick(OfstreamMap &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = (Options::getSeparateOutputs() == 1), int format = Options::getFormatOutput()) const {
+	void writePick(OFM &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = (Options::getSeparateOutputs() == 1), int format = Options::getFormatOutput()) const {
 		if (readIdx == ReadSet::MAX_READ_IDX)
 			return;
 		const ReadTrimType &trim = _trims[ readIdx ];

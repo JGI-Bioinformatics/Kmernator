@@ -106,7 +106,7 @@ public:
 template<typename _ReadSelector>
 long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector, std::string outputFilename)
 {
-
+	typedef typename _ReadSelector::OFM OFM;
 	LOG_VERBOSE_OPTIONAL(1, true, "selectReads with minDepth " << minDepth << ", minLength " << Options::getMinReadLength() << ": " << reads.getSize() << " reads");
 	LOG_DEBUG_OPTIONAL(1, true, MemoryUtils::getMemoryUsage());
 
@@ -115,7 +115,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 
 	int maximumKmerDepth = FilterReadsOptions::getMaxKmerDepth();
 
-	OfstreamMap ofmap(outputFilename, ".fastq");
+	OFM ofmap = selector.getOFM(outputFilename);
 
 	if (maximumKmerDepth > 0) {
 		for (int depth = 1; depth <= maximumKmerDepth; depth++) {
@@ -150,7 +150,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			if (maxDepth > 1) {
 				ofname += "-PartitionDepth" + boost::lexical_cast< string >( depth );
 			}
-			ofmap = OfstreamMap(ofname, ".fastq");
+			ofmap = selector.getOFM(ofname);
 			float tmpMinDepth = std::max(minDepth, depth);
 			if (Options::getKmerSize() == 0) {
 				tmpMinDepth = 0;

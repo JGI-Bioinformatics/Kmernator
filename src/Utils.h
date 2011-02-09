@@ -36,6 +36,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <vector>
+#include <set>
 #include <cstring>
 #include <cmath>
 
@@ -105,14 +106,11 @@ public:
 	typedef boost::unordered_map< std::string, OStreamPtr > Map;
 	typedef Map::iterator Iterator;
 	typedef boost::shared_ptr< Map > MapPtr;
-private:
+protected:
     MapPtr _map;
     std::string _outputFilePathPrefix;
     std::string _suffix;
     bool _append;
-#ifdef _USE_MPI
-    mpi::communicator *_world;
-#endif
 
 public:
 	static bool &getDefaultAppend() {
@@ -123,47 +121,41 @@ public:
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
 	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {
 		_append = getDefaultAppend();
-#ifdef _USE_MPI
-		_world = NULL;
-#endif
 	}
-	~OfstreamMap() {
+	virtual ~OfstreamMap() {
         clear();
 	}
-#ifdef _USE_MPI
-	void setWorld(mpi::communicator &world) {
-		_world = &world;
-	}
-#endif
-	std::string getRank() const {
-#ifdef _USE_MPI
-		return (_world == NULL ? std::string() : std::string("--MPIRANK-") + boost::lexical_cast<std::string>(_world->rank()) );
-#else
-		return std::string();
-#endif
-	}
-	void concatenateMPI(std::string rank) {
-		if (rank.empty())
-			return;
-		// TODO
-		// gather all filenames and sizes to master
-		// for each filename
-		//   master sends filename, total size, offset to others
-		//   each open, set_view, opens own piece (if applicable), copies, closes
+	std::set<std::string> getFiles() {
+		std::set<std::string> files;
+		std::string rank = getRank();
+		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
+			std::string file = it->first;
+			if (!rank.empty()) {
+				file = file.substr(0, file.find(rank));
+			}
+			files.insert(file);
+		}
+		return files;
 	}
 	bool &getAppend() {
 		return _append;
 	}
+	const bool &getAppend() const {
+		return _append;
+	}
+
 	void clear() {
 		close();
-		concatenateMPI(getRank());
 		_map->clear();
 	}
-	void close() {
+	virtual void close() {
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
 			LOG_VERBOSE_OPTIONAL(1, true, "Closing " << it->first);
 			it->second->close();
 		}
+	}
+	virtual std::string getRank() const {
+		return std::string();
 	}
 	std::string getFilename(std::string key) const {
 		return _outputFilePathPrefix + key + _suffix + getRank();

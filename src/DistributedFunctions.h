@@ -704,6 +704,92 @@ private:
 
 }; // DistributedKmerSpectrum
 
+
+/*
+ * DistributedOfstreamMap
+ */
+class DistributedOfstreamMap : public OfstreamMap
+{
+private:
+	mpi::communicator _world;
+
+public:
+	DistributedOfstreamMap(mpi::communicator &world, std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
+	 : OfstreamMap(outputFilePathPrefix, suffix), _world(world) {}
+
+	virtual ~DistributedOfstreamMap() {
+		clear();
+	}
+
+	virtual std::string getRank() const {
+		return std::string("--MPIRANK-") + boost::lexical_cast<std::string>(_world.rank());
+	}
+	virtual void close() {
+		LOG_VERBOSE_OPTIONAL(1, true, "Concatenating all MPI rank files");
+		OfstreamMap::close();
+		concatenateMPI();
+	}
+	void concatenateMPI() {
+		std::string rank = getRank();
+
+		// Send all filenames (minus Rank) to master
+		std::set< std::string > files = getFiles();
+
+		if (_world.rank() != 0) {
+			_world.send(0, 0, files);
+		} else {
+			for(int i = 1 ; i < _world.size() ; i++) {
+				std::set< std::string > newFiles;
+				_world.recv(i, 0, newFiles);
+				files.insert(newFiles.begin(), newFiles.end());
+			}
+		}
+
+		// synchronize all files
+		int numFiles = files.size();
+		mpi::broadcast(_world, numFiles, 0);
+		std::set< std::string >::iterator itF = files.begin();
+		for(int fileNum = 0; fileNum < numFiles; fileNum++) {
+			std::string filename;
+			if (_world.rank() == 0) {
+				assert(itF != files.end());
+				filename = *(itF++);
+			}
+			mpi::broadcast(_world, filename, 0);
+			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << filename);
+			std::string myFile = filename + rank;
+			Iterator it = this->_map->find(myFile);
+			long mySize = 0;
+			Kmernator::MmapFile myFileMmap;
+			if (it != this->_map->end()) {
+				myFileMmap = Kmernator::MmapFile(myFile, std::ios_base::in | std::ios_base::out);
+				mySize = myFileMmap.size();
+				LOG_DEBUG_OPTIONAL(1, true, "Re-mapped: " << myFile << " size " << mySize);
+				madvise(myFileMmap.data(), mySize, MADV_SEQUENTIAL | MADV_WILLNEED);
+			}
+			MPI_Info info(MPI_INFO_NULL);
+			LOG_DEBUG_OPTIONAL(1, true, "Writing to " << filename);
+
+			MPI_File ourFile;
+			int err;
+			err = MPI_File_open(_world, const_cast<char*>(filename.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
+			if (err != MPI_SUCCESS) throw;
+			MPI_Status status;
+			err = MPI_File_write_ordered(ourFile, myFileMmap.data(), mySize, MPI_BYTE, &status);
+			if (err != MPI_SUCCESS) throw;
+			LOG_DEBUG_OPTIONAL(1, true, "Wrote: " << status._count);
+			err = MPI_File_close(&ourFile);
+			if (err != MPI_SUCCESS) throw;
+
+			myFileMmap.close();
+			unlink(myFile.c_str());
+		}
+	}
+
+
+};
+
+
 template<typename M>
 class DistributedReadSelector : public ReadSelector<M>
 {
@@ -716,7 +802,7 @@ public:
 	typedef typename RS::ReadTrimType ReadTrimType;
 	typedef typename RS::KA KA;
 	typedef typename RS::ElementType ElementType;
-
+	typedef DistributedOfstreamMap OFM;
 	typedef Kmer::NumberType NumberType;
 
 	typedef std::vector<ScoreType> KmerValueVector;
@@ -731,6 +817,9 @@ public:
 	DistributedReadSelector(mpi::communicator &world, const ReadSet &reads, const KMType &map)
 		: RS(reads, map), _world(world) {
 		LOG_DEBUG(3, this->_map.toString());
+	}
+	OFM getOFM(std::string outputfile, std::string suffix = FormatOutput::getDefaultSuffix()) {
+		return OFM(_world, outputfile, suffix);
 	}
 
 	/*
@@ -1048,7 +1137,7 @@ done when empty cycle is received
 		_world.barrier();
 	}
 
-	void _writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, int format) const {
+	void xxx_writePicks(OFM &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, int format) const {
 		int rank = 0;
 		while (rank < _world.size()) {
 			if (rank == _world.rank()) {
@@ -1066,7 +1155,6 @@ done when empty cycle is received
 	// rescoreByBestCoveringSubset*
 
 };
-
 
 /*
  * ReadSet

@@ -40,14 +40,16 @@
 #include <boost/iostreams/filtering_streambuf.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
 
-
 #ifdef ENABLE_MPI
 
 #define _USE_MPI
+#include <boost/serialization/string.hpp>
+#include <boost/serialization/set.hpp>
+#include <boost/serialization/vector.hpp>
+
 #include <mpi.h>
 #include <boost/mpi.hpp>
 namespace mpi = boost::mpi;
-
 #endif
 
 #ifdef ENABLE_OPENMP
