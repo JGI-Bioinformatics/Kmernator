@@ -725,7 +725,7 @@ public:
 		return std::string("--MPIRANK-") + boost::lexical_cast<std::string>(_world.rank());
 	}
 	virtual void close() {
-		LOG_VERBOSE_OPTIONAL(1, true, "Concatenating all MPI rank files");
+		LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Concatenating all MPI rank files");
 		OfstreamMap::close();
 		concatenateMPI();
 	}
@@ -764,11 +764,11 @@ public:
 			if (it != this->_map->end()) {
 				myFileMmap = Kmernator::MmapFile(myFile, std::ios_base::in | std::ios_base::out);
 				mySize = myFileMmap.size();
-				LOG_DEBUG_OPTIONAL(1, true, "Re-mapped: " << myFile << " size " << mySize);
+				LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << myFile << " size " << mySize);
 				madvise(myFileMmap.data(), mySize, MADV_SEQUENTIAL | MADV_WILLNEED);
 			}
 			MPI_Info info(MPI_INFO_NULL);
-			LOG_DEBUG_OPTIONAL(1, true, "Writing to " << filename);
+			LOG_DEBUG_OPTIONAL(2, _world.rank()==0, "Writing to " << filename);
 
 			MPI_File ourFile;
 			int err;
@@ -777,7 +777,7 @@ public:
 			MPI_Status status;
 			err = MPI_File_write_ordered(ourFile, myFileMmap.data(), mySize, MPI_BYTE, &status);
 			if (err != MPI_SUCCESS) throw;
-			LOG_DEBUG_OPTIONAL(1, true, "Wrote: " << status._count);
+			LOG_DEBUG_OPTIONAL(1, _world.rank()==0, "Wrote: " << status._count);
 			err = MPI_File_close(&ourFile);
 			if (err != MPI_SUCCESS) throw;
 
@@ -1135,20 +1135,6 @@ done when empty cycle is received
 		LOG_DEBUG(1, s);
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier.  Finished scoreAndTrimReadsMPI");
 		_world.barrier();
-	}
-
-	void xxx_writePicks(OFM &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, int format) const {
-		int rank = 0;
-		while (rank < _world.size()) {
-			if (rank == _world.rank()) {
-				LOG_VERBOSE_OPTIONAL(1, true, "Writing files part " << (rank+1) << " of " << _world.size());
-				this->RS::_writePicks(ofstreamMap, offset, length, byInputFile, format);
-				ofstreamMap.close();
-				ofstreamMap.getAppend() = true;
-			}
-			_world.barrier();
-			rank++;
-		}
 	}
 
 	// TODO
