@@ -613,7 +613,7 @@ public:
 		return *this;
 	}
 
-	// restore a new array from a mmap
+	// restore a new array from a mmap, allocating new memory
 	KmerArray(const void *src) : _begin(NULL), _size(0), _capacity(0) {
 		initLock();
 		IndexType *size = (IndexType *) src;
@@ -642,6 +642,7 @@ public:
 	static SizeType sizeToStore(IndexType size) {
 		return sizeof(IndexType) + size * ( KmerSizer::getByteSize() + sizeof(Value) );
 	}
+	// create a new array using existing memory
 	static const KmerArray restore(const void *src) {
 		const IndexType *size = (const IndexType *) src;
 		IndexType xsize = *(size++);

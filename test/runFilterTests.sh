@@ -32,7 +32,8 @@ do
   check $FR --thread $thread
   rm -f $TMP*
   check $FR --thread $thread --save-kmer-mmap 1
-  check $FR --thread $thread --load-kmer-mmap 1
+  mv $TMP-mmap $TMP-mmap-saved
+  check $FR --thread $thread --load-kmer-mmap $TMP-mmap-saved
   rm -f $TMP*
 done
 
@@ -43,11 +44,13 @@ then
     check mpirun -np $mpi $FRP --thread 1
     rm -f $TMP*
     check mpirun -np $mpi $FRP --thread 1 --save-kmer-mmap 1
-    check mpirun -np $mpi $FRP --thread 1 --load-kmer-mmap 1
-    check $FR --load-kmer-mmap 1
+    mv $TMP-mmap $TMP-mmap-saved
+    check mpirun -np $mpi $FRP --thread 1 --load-kmer-mmap $TMP-mmap-saved
+    check $FR --load-kmer-mmap $TMP-mmap-saved
     rm -f $TMP*
     check $FR --thread $thread --save-kmer-mmap 1 
-    check mpirun -np $mpi $FRP --thread 1 --load-kmer-mmap 1
+    mv $TMP-mmap $TMP-mmap-saved
+    check mpirun -np $mpi $FRP --thread 1 --load-kmer-mmap $TMP-mmap-saved
     rm -f $TMP*
   done
 fi

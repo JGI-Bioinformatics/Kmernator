@@ -733,7 +733,7 @@ public:
 		std::string rank = getRank();
 
 		// Send all filenames (minus Rank) to master
-		std::set< std::string > files = getFiles();
+		std::set< std::string > files = getFiles(rank);
 
 		if (_world.rank() != 0) {
 			_world.send(0, 0, files);
@@ -747,6 +747,12 @@ public:
 
 		// synchronize all files
 		int numFiles = files.size();
+		if (_world.rank() == 0) {
+			LOG_VERBOSE_OPTIONAL(1, true, "Collectively writing " << numFiles << " files");
+			for(std::set< std::string >::iterator it = files.begin(); it != files.end(); it++)
+				LOG_VERBOSE_OPTIONAL(1, true, "File: " << *it);
+		}
+
 		mpi::broadcast(_world, numFiles, 0);
 		std::set< std::string >::iterator itF = files.begin();
 		for(int fileNum = 0; fileNum < numFiles; fileNum++) {

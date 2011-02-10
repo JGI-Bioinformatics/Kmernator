@@ -125,9 +125,8 @@ public:
 	virtual ~OfstreamMap() {
         clear();
 	}
-	std::set<std::string> getFiles() {
+	std::set<std::string> getFiles(std::string rank) {
 		std::set<std::string> files;
-		std::string rank = getRank();
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
 			std::string file = it->first;
 			if (!rank.empty()) {

@@ -147,15 +147,17 @@ int main(int argc, char *argv[]) {
 	}
 	KS spectrum(world, numBuckets);
 	Kmernator::MmapFileVector spectrumMmaps;
-	if (Options::getLoadKmerMmap() > 0 && ! outputFilename.empty()) {
-		spectrumMmaps = spectrum.restoreMmap(outputFilename + "-mmap");
-	}
-	if (Options::getKmerSize() > 0 && spectrumMmaps.empty()) {
+	if (Options::getKmerSize() > 0 && !Options::getLoadKmerMmap().empty()) {
+		spectrum.restoreMmap(Options::getLoadKmerMmap());
+	} else if (Options::getKmerSize() > 0) {
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 		spectrum.buildKmerSpectrum(reads);
+	}
+	if (Options::getKmerSize() > 0) {
+
 		if (Options::getVariantSigmas() > 0.0) {
 			long purgedVariants = spectrum.purgeVariants();
 			long totalPurgedVariants = all_reduce(world, purgedVariants, std::plus<long>());
@@ -169,8 +171,8 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (!outputFilename.empty() && Options::getSaveKmerMmap() > 0) {
-		  spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
-		  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+			spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
+			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
         }
 
 		if (Options::getMinDepth() > 1) {

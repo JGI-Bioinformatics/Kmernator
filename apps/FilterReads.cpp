@@ -87,10 +87,9 @@ int main(int argc, char *argv[]) {
 	KS spectrum(0);
 
 	Kmernator::MmapFileVector spectrumMmaps;
-	if (Options::getLoadKmerMmap() > 0 && ! outputFilename.empty()) {
-		spectrumMmaps = spectrum.restoreMmap(outputFilename + "-mmap");
-	}
-	if (Options::getKmerSize() > 0 && spectrumMmaps.empty()) {
+	if (Options::getKmerSize() > 0 && !Options::getLoadKmerMmap().empty()) {
+		spectrum.restoreMmap(Options::getLoadKmerMmap());
+	} else if (Options::getKmerSize() > 0) {
 
 	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
 	  LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
@@ -107,7 +106,9 @@ int main(int argc, char *argv[]) {
 			  spectrum.printHistograms(Log::Verbose("Variant-Removed Histogram"));
 		  }
 	  }
+	}
 
+	if (Options::getKmerSize() > 0) {
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {
