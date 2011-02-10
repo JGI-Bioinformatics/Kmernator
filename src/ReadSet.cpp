@@ -279,7 +279,6 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 		firstPos = reader.getPos();
 	}
 	LOG_VERBOSE(2, "Seeked to position " << firstPos << ", reading until " << lastPos << " on file " << reader.getFilePath());
-	long countReads = 0;
 	if (reader.isMmaped() && Options::getMmapInput() != 0) {
 	    RecordPtr recordPtr = reader.getStreamRecordPtr();
 	    RecordPtr qualPtr = reader.getStreamQualRecordPtr();

@@ -1368,7 +1368,7 @@ public:
 	typedef Value ValueType;
 	typedef NumberType * NumberTypePtr;
 	typedef KmerArray<Value> BucketType;
-    typedef	typename BucketType::Iterator BucketTypeIterator;
+        typedef	typename BucketType::Iterator BucketTypeIterator;
 	typedef typename BucketType::ElementType ElementType;
 
 	typedef std::vector< BucketType > BucketsVector;
@@ -1399,6 +1399,8 @@ public:
 
 		// ensure buckets are a precise powers of two
 		// with at least bucketCount buckets
+		if (bucketCount > MAX_KMER_MAP_BUCKETS)
+			bucketCount = MAX_KMER_MAP_BUCKETS;
 		NumberType powerOf2 = getMinPowerOf2(bucketCount);
 		BUCKET_MASK = powerOf2 - 1;
 		_buckets.resize(powerOf2);

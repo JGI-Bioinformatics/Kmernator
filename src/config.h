@@ -83,6 +83,10 @@ const int OMP_MAX_THREADS_DEFAULT = omp_get_max_threads();
 // if more than 128 bytes (512 sequence length) is needed, malloc will be called.
 #define MAX_STACK_SIZE 1024
 
+#ifndef MAX_KMER_MAP_BUCKETS
+#define MAX_KMER_MAP_BUCKETS 33554432
+#endif
+
 #ifndef DEBUG
 #define NDEBUG
 #endif
