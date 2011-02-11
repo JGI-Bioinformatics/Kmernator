@@ -147,8 +147,9 @@ public:
 		_duplicateSet.clear();
 	}
 
-	OFM getOFM(std::string outputfile, std::string suffix = FormatOutput::getDefaultSuffix()) {
-		return OFM(outputfile, suffix);
+	OFM getOFM(std::string outputFile, std::string suffix = FormatOutput::getDefaultSuffix()) {
+		LOG_DEBUG(1, "ReadSelector::getOFM(" << outputFile << ", " << suffix << ")");
+		return OFM(outputFile, suffix);
 	}
 	class ScoreCompare : public std::binary_function<ReadSetSizeType,ReadSetSizeType,bool>
 	{

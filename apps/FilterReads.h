@@ -115,9 +115,9 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 
 	int maximumKmerDepth = FilterReadsOptions::getMaxKmerDepth();
 
-	OFM ofmap = selector.getOFM(outputFilename);
 
 	if (maximumKmerDepth > 0) {
+		OFM ofmap = selector.getOFM(outputFilename);
 		for (int depth = 1; depth <= maximumKmerDepth; depth++) {
 			LOG_VERBOSE_OPTIONAL(2, true, "Picking depth " << depth << " layer of reads");
 			if (reads.hasPairs())
@@ -150,7 +150,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			if (maxDepth > 1) {
 				ofname += "-PartitionDepth" + boost::lexical_cast< string >( depth );
 			}
-			ofmap = selector.getOFM(ofname);
+			OFM ofmap = selector.getOFM(ofname);
 			float tmpMinDepth = std::max(minDepth, depth);
 			if (Options::getKmerSize() == 0) {
 				tmpMinDepth = 0;
@@ -179,9 +179,9 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			if (minDepth > depth) {
 				break;
 			}
+
 		}
 	}
-	ofmap.clear();
 	LOG_VERBOSE(1, "Done.  Cleaning up. " << MemoryUtils::getMemoryUsage());
 
 	return oldPicked;

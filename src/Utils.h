@@ -120,19 +120,23 @@ public:
 
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
 	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {
+		LOG_DEBUG(3, "OfstreamMap(" << outputFilePathPrefix << ", " << suffix << "):");
 		_append = getDefaultAppend();
 	}
-	virtual ~OfstreamMap() {
-        clear();
+	~OfstreamMap() {
+		LOG_DEBUG_OPTIONAL(2, true, "~OfstreamMap():");
+		this->clear();
 	}
 	std::set<std::string> getFiles(std::string rank) {
 		std::set<std::string> files;
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
 			std::string file = it->first;
+			LOG_DEBUG_OPTIONAL(2, true, "getFiles(): " << file);
 			if (!rank.empty()) {
 				file = file.substr(0, file.find(rank));
 			}
 			files.insert(file);
+			LOG_DEBUG_OPTIONAL(2, true, "getFiles() postrank: " << file);
 		}
 		return files;
 	}
@@ -143,11 +147,16 @@ public:
 		return _append;
 	}
 
-	void clear() {
-		close();
+	virtual void clear() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::clear()");
+		this->close();
+		_clear();
+	}
+	void _clear() {
 		_map->clear();
 	}
 	virtual void close() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::close()");
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
 			LOG_VERBOSE_OPTIONAL(1, true, "Closing " << it->first);
 			it->second->close();

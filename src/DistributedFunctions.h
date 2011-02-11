@@ -715,21 +715,30 @@ private:
 
 public:
 	DistributedOfstreamMap(mpi::communicator &world, std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
-	 : OfstreamMap(outputFilePathPrefix, suffix), _world(world) {}
+	 : OfstreamMap(outputFilePathPrefix, suffix), _world(world) {
+		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << ")");
+	}
 
-	virtual ~DistributedOfstreamMap() {
-		clear();
+	~DistributedOfstreamMap() {
+		LOG_DEBUG_OPTIONAL(2, _world.rank() == 0, "~DistributedOfstreamMap()");
+		this->clear();
 	}
 
 	virtual std::string getRank() const {
 		return std::string("--MPIRANK-") + boost::lexical_cast<std::string>(_world.rank());
 	}
+	virtual void clear() {
+		LOG_DEBUG_OPTIONAL(2, true, "DistributedOfstreamMap::clear()");
+		this->close();
+		_clear();
+	}
 	virtual void close() {
-		LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Concatenating all MPI rank files");
+		LOG_VERBOSE_OPTIONAL(2, _world.rank() == 0, "Concatenating all MPI rank files");
 		OfstreamMap::close();
 		concatenateMPI();
 	}
 	void concatenateMPI() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::concatenateMPI()");
 		std::string rank = getRank();
 
 		// Send all filenames (minus Rank) to master
@@ -827,8 +836,9 @@ public:
 		: RS(reads, map), _world(world) {
 		LOG_DEBUG(3, this->_map.toString());
 	}
-	OFM getOFM(std::string outputfile, std::string suffix = FormatOutput::getDefaultSuffix()) {
-		return OFM(_world, outputfile, suffix);
+	OFM getOFM(std::string outputFile, std::string suffix = FormatOutput::getDefaultSuffix()) {
+		LOG_DEBUG(2, "DistributedReadSelector::getOFM(" << outputFile << ", " << suffix << ")");
+		return OFM(_world, outputFile, suffix);
 	}
 
 	/*
