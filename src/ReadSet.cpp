@@ -265,7 +265,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadSet::MmapSource &mmap,
 ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, int rank, int size) {
 	string name, bases, quals;
 	LOG_DEBUG(2, "appendFasta(reader, " << rank << ", " << size << ")");
-	unsigned long lastPos = reader.getFileSize();
+	unsigned long lastPos = MAX_UI64;
 	unsigned long firstPos = 0;
 	if (size > 1) {
 		unsigned long blockSize = reader.getBlockSize(size);
@@ -308,6 +308,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
             	break;
 	    }
 	}
+	lastPos = reader.getPos();
 	LOG_VERBOSE(2, "Finished reading " << (lastPos - firstPos)/1024 << " KB, " << getSize() << " reads");
 	return reader.getParser();
 }
