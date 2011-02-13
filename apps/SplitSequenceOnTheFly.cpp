@@ -43,6 +43,14 @@ using namespace std;
 
 class SSOptions : public Options {
 public:
+	static int &getDefaultNumFiles() {
+		static int dummy = 0;
+		return dummy;
+	}
+	static int &getDefaultFileNum() {
+		static int dummy2 = 0;
+		return dummy2;
+	}
 	static int getNumFiles() {
 		return getVarMap()["num-files"].as<int> ();
 	}
@@ -53,15 +61,14 @@ public:
 		// set options specific to this program
 		getPosDesc().add("input-file", -1);
 		getDesc().add_options()("help", "produce help message")
-				("num-files", po::value<int>(), "The number of files to split into N")
-				("file-num",  po::value<int>(), "The number of the file to ouput (0-(N-1))");
+				("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
+				("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))");
 
 
 		bool ret = Options::parseOpts(argc, argv);
-		po::variables_map & vm = getVarMap();
-		if (getInputFiles().empty() || vm.count("num-files") == 0 || vm.count("file-num") == 0) {
+		if (getInputFiles().empty() || getNumFiles() == 0 || getFileNum() >= getNumFiles()) {
 			ret = false;
-			LOG_ERROR(1, "Please specify num-files, file-num and at least one input file");
+			LOG_ERROR(1, "Please specify num-files, file-num and at least one input file.\nnum-files=" << getNumFiles() << "\nfile-num=" << getFileNum());
 		}
 		return ret;
 	}
@@ -70,6 +77,13 @@ public:
 
 int main(int argc, char *argv[]) {
 	Options::getVerbosity() = 0;
+#ifdef ENABLE_MPI
+	MPI_Init(&argc, &argv);
+	mpi::environment env(argc, argv);
+	mpi::communicator world;
+	SSOptions::getDefaultNumFiles() = world.size();
+	SSOptions::getDefaultFileNum() = world.rank();
+#endif
 	if (!SSOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
@@ -84,6 +98,10 @@ int main(int argc, char *argv[]) {
 		const Read &read = reads.getRead(readIdx);
 		read.write(std::cout);
 	}
+
+#ifdef ENABLE_MPI
+	MPI_Finalize();
+#endif
 
 }
 

@@ -67,7 +67,7 @@ target_link_libraries( FilterReads
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
-if( FOUND_MPI )
+if( MPI_FOUND )
 set_source_files_properties( FilterReads-P
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
@@ -133,12 +133,27 @@ target_link_libraries(        FixPair
 
 
 add_executable( SplitSequenceOnTheFly SplitSequenceOnTheFly )
+if( MPI_FOUND )
+set_source_files_properties( SplitSequenceOnTheFly
+                             PROPERTIES COMPILE_FLAGS "${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+
+target_link_libraries(        SplitSequenceOnTheFly
+                              Sequence
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+else()
 target_link_libraries(        SplitSequenceOnTheFly
                               Sequence
                               ReadSet
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+
+endif()
 
 add_executable( RandomlySample RandomlySample )
 target_link_libraries(        RandomlySample
