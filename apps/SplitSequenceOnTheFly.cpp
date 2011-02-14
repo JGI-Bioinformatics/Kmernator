@@ -33,6 +33,10 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <boost/iostreams/device/file_descriptor.hpp>
+#include <boost/iostreams/stream.hpp>
+#include <fstream>
+
 #include "config.h"
 #include "Sequence.h"
 #include "ReadSet.h"
@@ -57,12 +61,17 @@ public:
 	static int getFileNum() {
 		return getVarMap()["file-num"].as<int> ();
 	}
+	static std::string getPipeCommand() {
+		return getVarMap().count("pipe-command") ? getVarMap()["pipe-command"].as<std::string>() : std::string();
+	}
 	static bool parseOpts(int argc, char *argv[]) {
 		// set options specific to this program
 		getPosDesc().add("input-file", -1);
 		getDesc().add_options()("help", "produce help message")
 				("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
-				("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))");
+				("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))")
+				("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into")
+				;
 
 
 		bool ret = Options::parseOpts(argc, argv);
@@ -74,6 +83,15 @@ public:
 	}
 };
 
+
+struct opipestream : boost::iostreams::stream< boost::iostreams::file_descriptor_sink >
+{
+	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_sink > base ;
+	explicit opipestream( const char* command ) : base( fileno( pipe = popen( command, "w" ) ) ) {}
+	~opipestream() { close() ; pclose( pipe ) ; }
+private :
+	FILE* pipe ;
+};
 
 int main(int argc, char *argv[]) {
 	Options::getVerbosity() = 0;
@@ -94,10 +112,18 @@ int main(int argc, char *argv[]) {
 	reads.appendAllFiles(inputs, SSOptions::getFileNum(), SSOptions::getNumFiles());
 	LOG_VERBOSE(1,"loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases ");
 
+	opipestream *ops = NULL;
+	std::string pipeCommand = SSOptions::getPipeCommand();
+	if (!pipeCommand.empty()) {
+		ops = new opipestream(pipeCommand.c_str());
+	}
 	for(ReadSet::ReadSetSizeType readIdx = 0 ; readIdx < reads.getSize(); readIdx++) {
 		const Read &read = reads.getRead(readIdx);
-		read.write(std::cout);
+		read.write(ops == NULL ? std::cout : *ops);
 	}
+
+	if (ops != NULL)
+		delete ops;
 
 #ifdef ENABLE_MPI
 	MPI_Finalize();
