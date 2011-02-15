@@ -502,9 +502,12 @@ const ReadSet::ReadIdxVector ReadSet::getReadIdxVector() const {
 }
 
 
+bool ReadSet::isPair(const std::string &readNameA, const std::string &readNameB) {
+	return SequenceRecordParser::isPair(readNameA, readNameB);
+}
 bool ReadSet::isPair(const std::string &readNameA, const Read &readB) {
 	std::string readNameB = readB.getName();
-	return SequenceRecordParser::isPair(readNameA, readNameB);
+	return isPair(readNameA, readNameB);
 }
 bool ReadSet::isPair(const Read &readA, const Read &readB) {
 	std::string readNameA = readA.getName();

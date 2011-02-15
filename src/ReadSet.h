@@ -222,6 +222,7 @@ public:
 	}
 	static bool isPair(const Read &readA, const Read &readB);
 	static bool isPair(const std::string &readNameA, const Read &readB);
+	static bool isPair(const std::string &readNameA, const std::string &readNameB);
 
 	// may return either as MAX_READ_IDX
 	inline Pair &getPair(ReadSetSizeType pairIndex) {

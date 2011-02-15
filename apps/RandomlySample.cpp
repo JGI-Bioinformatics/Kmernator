@@ -142,6 +142,18 @@ int main(int argc, char *argv[]) {
 	}
 
 	bool byPair = (RSOptions::getByPair() == 1);
+
+	if (rfr.seekToNextRecord(0, true)) {
+		LOG_DEBUG(1, "Reading first two records to determine inherent pairing");
+		std::string name1, name2, bases1, bases2, quals1, quals2;
+		rfr.nextRead(name1, bases1, quals1);
+		rfr.nextRead(name2, bases2, quals2);
+
+		bool isFilePaired= ReadSet::isPair(name1,name2);
+		LOG_DEBUG(1, "Reading first two records to determine inherent pairing: " << isFilePaired << " " << name1 << " " << name2);
+		byPair &= isFilePaired;
+	}	
+
 	LOG_DEBUG(1, "detecting by pair: " << byPair);
 
 	unsigned long numRecords = 0;
