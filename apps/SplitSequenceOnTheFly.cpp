@@ -62,7 +62,18 @@ public:
 		return getVarMap()["file-num"].as<int> ();
 	}
 	static std::string getPipeCommand() {
-		return getVarMap().count("pipe-command") ? getVarMap()["pipe-command"].as<std::string>() : std::string();
+		std::string pipeCmd = getVarMap().count("pipe-command") ? getVarMap()["pipe-command"].as<std::string>() : std::string();
+		size_t pos;
+		while ((pos = pipeCmd.find("{FileNum}")) != std::string::npos) {
+			LOG_DEBUG_OPTIONAL(1, true, "Replacing {FileNum} in " << pipeCmd);
+			pipeCmd.replace(pos, 9, boost::lexical_cast<std::string>(getFileNum()));
+		}
+		while ((pos = pipeCmd.find("{NumFiles}")) != std::string::npos) {
+			LOG_DEBUG_OPTIONAL(1, true, "Replacing {NumFiles} in " << pipeCmd);
+			pipeCmd.replace(pos, 10, boost::lexical_cast<std::string>(getNumFiles()));
+		}
+		LOG_DEBUG_OPTIONAL(1, true, "final pipe-command " << pipeCmd);
+		return pipeCmd;
 	}
 	static bool parseOpts(int argc, char *argv[]) {
 		// set options specific to this program
@@ -70,7 +81,7 @@ public:
 		getDesc().add_options()("help", "produce help message")
 				("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
 				("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))")
-				("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into")
+				("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
 				;
 
 
