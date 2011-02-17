@@ -52,7 +52,7 @@
 class FilterKnownOddities {
 public:
 	typedef Kmer::NumberType NumberType;
-	typedef KmerMap<unsigned short> KM;
+	typedef KmerMap<unsigned int> KM;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 	typedef std::vector< ReadSetSizeType > SequenceCounts;
 	typedef std::vector< long > BaseCounts;
@@ -63,10 +63,11 @@ private:
 	unsigned short twoBitLength;
 	KM filter;
 	SequenceCounts counts;
+	int numErrors;
 
 public:
-	FilterKnownOddities(int _length = Options::getArtifactFilterMatchLength(), int numErrors = Options::getArtifactFilterEditDistance()) :
-		length(_length), filter(16*1024*1024) {
+	FilterKnownOddities(int _length = Options::getArtifactFilterMatchLength(), int _numErrors = Options::getArtifactFilterEditDistance()) :
+		length(_length), filter(512*1024), numErrors(_numErrors) {
 		if (length > 28) {
 			throw std::invalid_argument("FilterKnownOddities must use 7 bytes or less (<= 28 bases)");
 		}
@@ -90,9 +91,17 @@ public:
 			getPhiXReadIdx() = sequences.getSize();
 			sequences.appendFastaFile(fasta);
 		}
+		sequences.circularize(length);
+
+		Options::FileListType artifacts = Options::getArtifactReferenceFiles();
+		if (!artifacts.empty()) {
+			getReferenceReadIdx() = sequences.getSize();
+			for(unsigned int i = 0 ; i < artifacts.size(); i++)
+				sequences.appendAnyFile(artifacts[i]);
+		}
 		counts.resize( sequences.getSize()+1 );
 
-		prepareMaps(numErrors);
+		prepareMaps();
 	}
 	~FilterKnownOddities() {
 		clear();
@@ -102,40 +111,51 @@ public:
 		KmerSizer::set(length);
 		filter.clear();
 		counts.clear();
+		numErrors = 0;
 		KmerSizer::set(oldKmerLength);
 	}
 
-	void prepareMaps(int numErrors) {
+	void prepareMaps() {
 		unsigned long oldKmerLength = KmerSizer::getSequenceLength();
 		assert(length % 4 == 0);
 		KmerSizer::set(length);
 
-		sequences.circularize(length);
-
-		for (unsigned short i = 0; i < sequences.getSize(); i++) {
+		LOG_DEBUG(2, "Preparing exact match artifacts");
+		for (unsigned int i = 0; i < sequences.getSize(); i++) {
 			const Read read = sequences.getRead(i);
 			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true);
 			for (Kmer::IndexType j = 0; j < kmers.size(); j++) {
 				filter.getOrSetElement( kmers[j] , i );
 			}
+			if (Log::isDebug(2) && i % 10000 == 0)
+				LOG_DEBUG(2, "Processed " << i << " artifact reads. " << filter.size() << " " << MemoryUtils::getMemoryUsage())
 		}
-		LOG_DEBUG(2,  "Prepared exact match: " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
+		LOG_DEBUG(2, "Processed " << sequences.getSize() << " artifact reads. " << filter.size() << " " << MemoryUtils::getMemoryUsage())
 
-		for (int error = 0; error < numErrors; error++) {
-			std::vector< KM::BucketType > tmpKmers;
-			tmpKmers.reserve(filter.size());
-			for(KM::Iterator it = filter.begin(); it != filter.end(); it++) {
-				tmpKmers.push_back( KM::BucketType::permuteBases(it->key(), it->value(), true) );
-			}
-			for(std::vector< KM::BucketType >::iterator it = tmpKmers.begin(); it != tmpKmers.end(); it++) {
-				KM::BucketType &kmers = *it;
-				for (Kmer::IndexType j = 0; j < kmers.size(); j++) {
-					filter.getOrSetElement( kmers[j] , kmers.valueAt(j) );
+		int maxErrors = numErrors;
+		int buildEdits = Options::getBuildArtifactEditsInFilter();
+		for (int error = 0; error < maxErrors; error++) {
+			if (buildEdits == 1 || (buildEdits == 2 && (filter.size() < 750000))) {
+				numErrors--;
+
+				LOG_DEBUG(2,  "Preparing edit distance " << (error+1) << " match: " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
+
+				std::vector< KM::BucketType > tmpKmers;
+				tmpKmers.reserve(filter.size());
+				for(KM::Iterator it = filter.begin(); it != filter.end(); it++) {
+					tmpKmers.push_back( KM::BucketType::permuteBases(it->key(), it->value(), true) );
 				}
+				for(std::vector< KM::BucketType >::iterator it = tmpKmers.begin(); it != tmpKmers.end(); it++) {
+					KM::BucketType &kmers = *it;
+					for (Kmer::IndexType j = 0; j < kmers.size(); j++) {
+						filter.getOrSetElement( kmers[j] , kmers.valueAt(j) );
+					}
+				}
+				tmpKmers.clear();
+				LOG_DEBUG(2, "Prepared order " << (error+1) << ": " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
 			}
-		    tmpKmers.clear();
-			LOG_DEBUG(2, "Prepared order " << (error+1) << ": " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
 		}
+		LOG_DEBUG(1, "filter is " << filter.size() << ".  Remaining edits is: " << numErrors);
 
 		KmerSizer::set(oldKmerLength);
 	}
@@ -198,8 +218,6 @@ public:
 				reads += baseCounts[i];
 			return reads;
 		}
-
-
 	};
 
 	FilterResults applyFilterToPair(ReadSet &reads, long pairIdx, Recorder &recorder) {
@@ -269,15 +287,15 @@ public:
 
 		KM::ElementType elem;
 		bool wasPhiX = false;
-
+		KM::BucketType kmers;
+		TEMP_KMER(leastKmer);
 
 		for(long byteHop = 0; byteHop <= byteHops; byteHop++) {
 
-			// need to test both forward and reverse paths since only one is stored in filter
-
 			const Kmer &fwd = (const Kmer&) *ptr;
+			fwd.buildLeastComplement(leastKmer);
 
-			elem = filter.getElementIfExists( fwd );
+			elem = filter.getElementIfExists( leastKmer );
 			if (elem.isValid()) {
 				SequenceLengthType pos = byteHop*4;
 				value = elem.value();
@@ -288,21 +306,20 @@ public:
 					maxAffected = pos+length;
 			}
 
-			const Kmer &rev = (const Kmer&) *revPtr;
-
-			elem = filter.getElementIfExists( rev );
-			if (elem.isValid()) {
-			    SequenceLengthType pos = 0;
-			    SequenceLengthType posMinus = length + byteHop*4;
-			    if (seqLen > posMinus) {
-			        pos = seqLen - posMinus;
-			    }
-				value = elem.value();
-				wasPhiX |= isPhiX(value);
-				if (minAffected > pos)
-					minAffected = pos;
-				if (maxAffected < pos+length)
-					maxAffected = pos+length;
+			if (numErrors > 0) {
+				KM::BucketType::permuteBases(leastKmer, kmers, numErrors, true);
+				for(unsigned int i = 0; i < kmers.size(); i++) {
+					elem = filter.getElementIfExists( kmers[i] );
+					if (elem.isValid()) {
+						SequenceLengthType pos = byteHop*4;
+						value = elem.value();
+						wasPhiX |= isPhiX(value);
+						if (minAffected > pos)
+							minAffected = pos;
+						if (maxAffected < pos+length)
+							maxAffected = pos+length;
+					}
+				}
 			}
 
 			ptr++;
@@ -353,6 +370,8 @@ public:
 
 		bool wasAffected = (results1.value != 0) | (results2.value != 0);
 		bool wasPhiX = isPhiX(results1.value) | isPhiX(results2.value);
+		bool wasReference = ((results1.value != sequences.getSize()) & isReference(results1.value))
+				| ((results2.value != sequences.getSize()) & isReference(results2.value));
 
 		if (wasAffected) {
 
@@ -402,7 +421,7 @@ public:
 					if (isRead1 && results1.value != 0) {
 						Read &read = reads.getRead(readIdx1);
 						SequenceLengthType len = read.getLength();
-						if (results1.minAffected == 0 || !PASSES_LENGTH(results1.minAffected, len, recorder.minReadPos)) {
+						if (wasReference || results1.minAffected == 0 || !PASSES_LENGTH(results1.minAffected, len, recorder.minReadPos)) {
 							recorder.recordDiscard(results1.value, read, os, label1);
 						} else {
 							recorder.recordTrim(results1.value, len - results1.minAffected);
@@ -411,7 +430,7 @@ public:
 					if (isRead2 && results2.value != 0) {
 						Read &read = reads.getRead(readIdx2);
 						SequenceLengthType len = read.getLength();
-						if (results2.minAffected == 0 || !PASSES_LENGTH(results2.minAffected, len, recorder.minReadPos)) {
+						if (wasReference || results2.minAffected == 0 || !PASSES_LENGTH(results2.minAffected, len, recorder.minReadPos)) {
 							recorder.recordDiscard(results2.value, read, os, label2);
 						} else {
 							recorder.recordTrim(results2.value, len - results2.minAffected);
@@ -569,16 +588,16 @@ public:
 	}
 
 
-	static inline unsigned short &getSimpleRepeatBegin() {
-		static unsigned short simpleRepeatBegin = -1;
+	static inline unsigned int &getSimpleRepeatBegin() {
+		static unsigned int simpleRepeatBegin = -1;
 		return simpleRepeatBegin;
 	}
-	static inline unsigned short &getSimpleRepeatEnd() {
-		static unsigned short getSimpleRepeatEnd = -1;
+	static inline unsigned int &getSimpleRepeatEnd() {
+		static unsigned int getSimpleRepeatEnd = -1;
 		return getSimpleRepeatEnd;
 	}
 
-	static inline bool isSimpleRepeat(unsigned short readIdx) {
+	static inline bool isSimpleRepeat(unsigned int readIdx) {
 		return (readIdx >= getSimpleRepeatBegin() && readIdx < getSimpleRepeatEnd());
 	}
 
@@ -1079,11 +1098,11 @@ public:
 		return ss.str();
 	}
 
-	static inline unsigned short &getPhiXReadIdx() {
-		static unsigned short phiXReadIdx = -1;
+	static inline unsigned int &getPhiXReadIdx() {
+		static unsigned int phiXReadIdx = -1;
 		return phiXReadIdx;
 	}
-	static inline bool isPhiX(unsigned short readIdx) {
+	static inline bool isPhiX(unsigned int readIdx) {
 		return getPhiXReadIdx() == readIdx;
 	}
 
@@ -1168,6 +1187,17 @@ public:
 		ss << "AGAACGCAAAAAGAGAGATGAGATTGAGGCTGGGAAAAGTTACTGTAGCCGACGTTTTGGCGGCGCAACC" << std::endl;
 		ss << "TGTGACGACAAATCTGCTCAAATTTATGCGCGCTTCGATAAAAATGATTGGCGTATCCAACCTGCA"     << std::endl;
 		return ss.str();
+	}
+
+	static inline unsigned int &getReferenceReadIdx() {
+		static unsigned int referenceReadId = -1;
+		return referenceReadId;
+	}
+	static inline bool isReference(unsigned int readIdx) {
+		return getReferenceReadIdx() <= readIdx;
+	}
+	static inline bool hasReference() {
+		return getReferenceReadIdx() != (unsigned int) -1;
 	}
 
 };
