@@ -178,8 +178,10 @@ public:
 			// lock if not found and map needs to be updated
 			#pragma omp critical (ofStreamMap)
 			{
-				// recheck map
+				// re-copy the map first
 				thisMap = _map;
+
+				// recheck map
 				it = thisMap->find(filename);
 				if (it == thisMap->end()) {
 					LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << filename);
@@ -193,8 +195,8 @@ public:
 						throw std::runtime_error((std::string("Could not open file for writing: ") + filename).c_str());
 
 					MapPtr copy = MapPtr(new Map(*thisMap));
-					it = copy->insert( it, Map::value_type(filename, osp) );
-					_map = copy;
+					it = copy->insert( copy->end(), Map::value_type(filename, osp) );
+					_map = thisMap = copy;
 				}
 			}
 		}
