@@ -712,11 +712,17 @@ class DistributedOfstreamMap : public OfstreamMap
 {
 private:
 	mpi::communicator _world;
+	std::string _tempPrefix;
+	std::string _realOutputPrefix;
 
+	static string getTempPath(std::string tempPath) {
+		return tempPath + UniqueName::generateUniqueName("/.tmp-output");
+	}
 public:
-	DistributedOfstreamMap(mpi::communicator &world, std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
-	 : OfstreamMap(outputFilePathPrefix, suffix), _world(world) {
-		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << ")");
+	DistributedOfstreamMap(mpi::communicator &world, std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix(), std::string tempPath = Options::getTmpDir())
+	 :  OfstreamMap(getTempPath(tempPath), suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
+		_tempPrefix = OfstreamMap::getOutputPrefix();
+		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << "," << tempPath <<")");
 	}
 
 	~DistributedOfstreamMap() {
@@ -731,6 +737,9 @@ public:
 		LOG_DEBUG_OPTIONAL(2, true, "DistributedOfstreamMap::clear()");
 		this->close();
 		_clear();
+	}
+	virtual std::string getOutputPrefix() {
+		return _realOutputPrefix;
 	}
 	virtual void close() {
 		LOG_VERBOSE_OPTIONAL(2, _world.rank() == 0, "Concatenating all MPI rank files");
@@ -756,13 +765,13 @@ public:
 
 		// synchronize all files
 		int numFiles = files.size();
+		mpi::broadcast(_world, numFiles, 0);
 		if (_world.rank() == 0) {
 			LOG_VERBOSE_OPTIONAL(1, true, "Collectively writing " << numFiles << " files");
 			for(std::set< std::string >::iterator it = files.begin(); it != files.end(); it++)
-				LOG_VERBOSE_OPTIONAL(1, true, "File: " << *it);
+				LOG_VERBOSE_OPTIONAL(1, true, "File: " << _realOutputPrefix << *it);
 		}
 
-		mpi::broadcast(_world, numFiles, 0);
 		std::set< std::string >::iterator itF = files.begin();
 		for(int fileNum = 0; fileNum < numFiles; fileNum++) {
 			std::string filename;
@@ -771,23 +780,25 @@ public:
 				filename = *(itF++);
 			}
 			mpi::broadcast(_world, filename, 0);
-			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << filename);
+			std::string fullPath = _realOutputPrefix + filename;
+			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << fullPath);
 			std::string myFile = filename + rank;
 			Iterator it = this->_map->find(myFile);
+			std::string myFilePath = _tempPrefix + myFile;
 			long mySize = 0;
 			Kmernator::MmapFile myFileMmap;
 			if (it != this->_map->end()) {
-				myFileMmap = Kmernator::MmapFile(myFile, std::ios_base::in | std::ios_base::out);
+				myFileMmap = Kmernator::MmapFile(myFilePath, std::ios_base::in | std::ios_base::out);
 				mySize = myFileMmap.size();
-				LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << myFile << " size " << mySize);
+				LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << myFilePath << " size " << mySize);
 				madvise(myFileMmap.data(), mySize, MADV_SEQUENTIAL | MADV_WILLNEED);
 			}
 			MPI_Info info(MPI_INFO_NULL);
-			LOG_DEBUG_OPTIONAL(2, _world.rank()==0, "Writing to " << filename);
+			LOG_DEBUG_OPTIONAL(2, _world.rank()==0, "Writing to " << fullPath);
 
 			MPI_File ourFile;
 			int err;
-			err = MPI_File_open(_world, const_cast<char*>(filename.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
+			err = MPI_File_open(_world, const_cast<char*>(fullPath.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
 			if (err != MPI_SUCCESS) throw;
 			MPI_Status status;
 			err = MPI_File_write_ordered(ourFile, myFileMmap.data(), mySize, MPI_BYTE, &status);

@@ -99,6 +99,17 @@ public:
 	}
 };
 
+class UniqueName {
+	static int getUnique() { static int id = 0; return id++; }
+public:
+	static std::string generateUniqueName(std::string filename = "") {
+		filename += boost::lexical_cast<std::string>( getpid() );
+		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
+		filename += getenv("HOST") == NULL ? "unknown" : getenv("HOST");
+		return filename;
+	}
+
+};
 
 class OfstreamMap {
 public:
@@ -146,7 +157,9 @@ public:
 	const bool &getAppend() const {
 		return _append;
 	}
-
+	virtual std::string getOutputPrefix() const {
+		return _outputFilePathPrefix;
+	}
 	virtual void clear() {
 		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::clear()");
 		this->close();
@@ -158,7 +171,7 @@ public:
 	virtual void close() {
 		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::close()");
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
-			LOG_VERBOSE_OPTIONAL(1, true, "Closing " << it->first);
+			LOG_VERBOSE_OPTIONAL(2, true, "Closing " << this->getOutputPrefix() << it->first);
 			it->second->close();
 		}
 	}
@@ -166,7 +179,7 @@ public:
 		return std::string();
 	}
 	std::string getFilename(std::string key) const {
-		return _outputFilePathPrefix + key + _suffix + getRank();
+		return key + _suffix + getRank();
 	}
 	std::ofstream &getOfstream(std::string key) {
 		std::string filename = getFilename(key);
@@ -184,15 +197,17 @@ public:
 				// recheck map
 				it = thisMap->find(filename);
 				if (it == thisMap->end()) {
-					LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << filename);
+					std::string fullPath = _outputFilePathPrefix + filename;
+
+					LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << fullPath);
 					std::ios_base::openmode mode = std::ios_base::out;
 					if (getAppend())
 						mode |= std::ios_base::app;
 					else
 						mode |= std::ios_base::trunc;
-					OStreamPtr osp(new std::ofstream(filename.c_str(), mode));
+					OStreamPtr osp(new std::ofstream(fullPath.c_str(), mode));
 					if( osp->fail() )
-						throw std::runtime_error((std::string("Could not open file for writing: ") + filename).c_str());
+						throw std::runtime_error((std::string("Could not open file for writing: ") + fullPath).c_str());
 
 					MapPtr copy = MapPtr(new Map(*thisMap));
 					it = copy->insert( copy->end(), Map::value_type(filename, osp) );

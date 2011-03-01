@@ -38,6 +38,7 @@
 #include <cstring>
 #include <vector>
 
+
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
@@ -113,6 +114,11 @@ private:
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
 	mmapInput(1), saveKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
 	{
+		 char *tmpPath;
+		 tmpPath = getenv ("TMPDIR");
+		 if (tmpPath != NULL) {
+			 tmpDir = std::string(tmpPath);
+		 }
 	}
 
 public:

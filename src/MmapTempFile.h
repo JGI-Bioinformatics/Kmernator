@@ -48,7 +48,6 @@
 #include "Utils.h"
 
 class MmapTempFile {
-	static int getUnique() { static int id = 0; return id++; }
 public:
 	typedef Kmernator::MmapFile MmapFile;
 	typedef unsigned long size_type;
@@ -79,17 +78,10 @@ public:
 		}
 	};
 
-	static std::string generateUniqueName() {
-		std::string filename = "Kmmap-";
-		filename += boost::lexical_cast<std::string>( getpid() );
-		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
-		filename += getenv("HOST") == NULL ? "unknown" : getenv("HOST");
-		return filename;
-	}
 	static FileHandle buildNew(size_type size, std::string permanentFile) {
 		std::string filename;
 		if (permanentFile.empty())
-			filename = Options::getTmpDir() + "/.tmp-" + generateUniqueName();
+			filename = Options::getTmpDir() + UniqueName::generateUniqueName("/.tmp-Kmmap-");
 		else
 			filename = permanentFile;
 		LOG_DEBUG_OPTIONAL(1, true, "Creating new file: " << filename << " " << size);
