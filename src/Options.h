@@ -405,6 +405,11 @@ protected:
 
 public:
 
+	static std::string getHostname() {
+		char hostname[256];
+		gethostname(hostname, 256);
+		return std::string(hostname);
+	}
 
 	template<typename T>
 	static void setOpt(std::string key, T &val, bool print = false) {
@@ -460,11 +465,8 @@ public:
 			}
 
 			if (getVerbosity() > 0)
-			{
-				char hostname[128];
-				gethostname(hostname, 128);
-				LOG_VERBOSE(1, "Starting on " << hostname);
-			}
+				LOG_VERBOSE(1, "Starting on " << getHostname());
+
 			bool print = Logger::isMaster() && ((Log::isVerbose(1) || Log::isDebug(1)));
 
 			std::ostream *output = NULL;

@@ -105,7 +105,7 @@ public:
 	static std::string generateUniqueName(std::string filename = "") {
 		filename += boost::lexical_cast<std::string>( getpid() );
 		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
-		filename += getenv("HOST") == NULL ? "unknown" : getenv("HOST");
+		filename += Options::getHostname();
 		return filename;
 	}
 
