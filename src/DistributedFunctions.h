@@ -811,7 +811,7 @@ public:
 			if (err != MPI_SUCCESS) throw;
 
 			myFileMmap.close();
-			unlink(myFile.c_str());
+			unlink(myFilePath.c_str());
 		}
 	}
 
