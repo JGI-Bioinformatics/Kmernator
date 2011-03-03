@@ -51,8 +51,9 @@ namespace po = boost::program_options;
 // extend the class for specific options for each application
 class Options {
 public:
-	typedef std::vector<std::string> FileListType;
+	typedef std::vector<std::string> StringListType;
 	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
+	typedef StringListType FileListType;
 
 protected:
 	static inline Options &getOptions() {

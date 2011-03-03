@@ -51,19 +51,23 @@
 
 void reduceOMPThreads(mpi::communicator &world) {
 	Options::validateOMPThreads();
+#ifdef _USE_OPENMP
 	int numThreads = omp_get_max_threads();
 	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
 	omp_set_num_threads(numThreads);
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
+#endif
 }
 
 void validateMPIWorld(mpi::communicator &world) {
 	int provided;
 	MPI_Query_thread(&provided);
+#ifdef _USE_OPENMP
 	if (provided != MPI_THREAD_MULTIPLE && omp_get_max_threads() > 1) {
 		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE (" << MPI::Query_thread() << "), reducing OpenMP threads to 1")
 		omp_set_num_threads(1);
 	}
+#endif
 	reduceOMPThreads(world);
 }
 
@@ -784,37 +788,50 @@ public:
 			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << fullPath);
 			std::string myFile = filename + rank;
 			Iterator it = this->_map->find(myFile);
-			std::string myFilePath = _tempPrefix + myFile;
-			long mySize = 0;
-			Kmernator::MmapFile myFileMmap;
 			if (it != this->_map->end()) {
-				myFileMmap = Kmernator::MmapFile(myFilePath, std::ios_base::in | std::ios_base::out);
-				mySize = myFileMmap.size();
-				LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << myFilePath << " size " << mySize);
-				madvise(myFileMmap.data(), mySize, MADV_SEQUENTIAL | MADV_WILLNEED);
+				std::string myFilePath = _tempPrefix + myFile;
+				mergeFiles(_world, myFilePath, fullPath, true);
+			} else {
+				LOG_WARN(1, "Could not find " << myFile << " in DistributedOfstreamMap");
 			}
-			MPI_Info info(MPI_INFO_NULL);
-			LOG_DEBUG_OPTIONAL(2, _world.rank()==0, "Writing to " << fullPath);
-
-			MPI_File ourFile;
-			int err;
-			err = MPI_File_open(_world, const_cast<char*>(fullPath.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
-			if (err != MPI_SUCCESS) throw;
-			MPI_Status status;
-			err = MPI_File_write_ordered(ourFile, myFileMmap.data(), mySize, MPI_BYTE, &status);
-			if (err != MPI_SUCCESS) throw;
-			int writeCount;
-			err = MPI_Get_count(&status, MPI_BYTE, &writeCount);
-			if (err != MPI_SUCCESS) throw;
-			LOG_DEBUG_OPTIONAL(1, _world.rank()==0, "Wrote: " << writeCount);
-			err = MPI_File_close(&ourFile);
-			if (err != MPI_SUCCESS) throw;
-
-			myFileMmap.close();
-			unlink(myFilePath.c_str());
 		}
 	}
 
+	static void mergeFiles(mpi::communicator &world, std::string rankFile, std::string globalFile, bool unlinkAfter = false) {
+		long mySize = 0;
+		int rank = world.rank();
+		Kmernator::MmapFile rankFileMmap;
+
+		LOG_DEBUG_OPTIONAL(2, true, "Opening mmap on '" << rankFile << "'");
+		rankFileMmap = Kmernator::MmapFile(rankFile, std::ios_base::in | std::ios_base::out);
+		mySize = rankFileMmap.size();
+		LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << rankFile << " size " << mySize);
+		madvise(rankFileMmap.data(), mySize, MADV_SEQUENTIAL | MADV_WILLNEED);
+
+		MPI_Info info(MPI_INFO_NULL);
+		LOG_DEBUG_OPTIONAL(2, rank==0, "Writing to '" << globalFile << "'");
+
+		MPI_File ourFile;
+		int err;
+		err = MPI_File_open(world, const_cast<char*>(globalFile.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
+		if (err != MPI_SUCCESS) {
+			LOG_ERROR(1, "Could not open " << globalFile << " collectively");
+			throw;
+		}
+		MPI_Status status;
+		err = MPI_File_write_ordered(ourFile, rankFileMmap.data(), mySize, MPI_BYTE, &status);
+		if (err != MPI_SUCCESS) throw;
+		int writeCount;
+		err = MPI_Get_count(&status, MPI_BYTE, &writeCount);
+		if (err != MPI_SUCCESS) throw;
+		LOG_DEBUG_OPTIONAL(1, rank==0, "Wrote: " << writeCount);
+		err = MPI_File_close(&ourFile);
+		if (err != MPI_SUCCESS) throw;
+
+		rankFileMmap.close();
+		if (unlinkAfter)
+			unlink(rankFile.c_str());
+	}
 
 };
 

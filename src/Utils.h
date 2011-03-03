@@ -39,11 +39,25 @@
 #include <set>
 #include <cstring>
 #include <cmath>
+#include <memory>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <libgen.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/shared_ptr.hpp>
+
+#include <boost/iostreams/device/file_descriptor.hpp>
+#include <boost/iostreams/stream.hpp>
+#include <fstream>
 
 #define foreach BOOST_FOREACH
 
@@ -430,9 +444,85 @@ public:
 	}
 };
 
+class OPipestream : public boost::iostreams::stream< boost::iostreams::file_descriptor_sink >
+{
+public:
+	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_sink > base ;
+	explicit OPipestream( const std::string command ) : base( fileno( _pipe = popen( command.c_str(), "w" ) ) ), _cmd(command) {
+		assert(_pipe != NULL);
+		assert(fileno(_pipe) >= 0);
+		assert(is_open());
+	}
+	void close() {
+		this->flush();
+		int status = pclose( _pipe );
+		if (status != 0) {
+			LOG_ERROR(1, "Pipe '" << _cmd << "' closed with an error: " << status);
+			throw;
+		}
+		try {
+			base::close();
+		} catch(...) {
+			// ignoring this pipe closure error.  pclose is the proper way to close this..
+			LOG_DEBUG_OPTIONAL(1, true, "Potentially failed to close pipe properly");
+		}
+	}
+	~OPipestream() {
+		close();
+	}
+private :
+	FILE* _pipe ;
+	std::string _cmd;
+};
+
+
 class FileUtils
 {
 public:
+
+	static std::string getDirname(const std::string &filePath) {
+		char buf[filePath.size() + 1];
+		memcpy(buf, filePath.c_str(), filePath.size());
+	    std::string dirPath(dirname(buf));
+		return dirPath;
+	}
+	static void syncDir(const std::string &filePath) {
+		std::string dirPath = getDirname(filePath);
+		DIR *d = opendir(dirPath.c_str());
+		if (d == NULL) {
+			LOG_ERROR(1, "Could not opendir " << dirPath << "! " << strerror(errno));
+		} else {
+			if (fsync(dirfd(d)) != 0)
+				LOG_ERROR(1, "Could not dirsync " << dirPath << "! " << strerror(errno));
+			closedir(d);
+		}
+	}
+	static void syncFile(const std::string &filePath) {
+		int fd = open(filePath.c_str(), std::ios_base::in | std::ios_base::out);
+		if (fd < 0) {
+			LOG_ERROR(1, "Could not open " << filePath << "! " << strerror(errno));
+		} else {
+			if (fsync(fd) != 0)
+				LOG_ERROR(1, "Could not fsync " << filePath << "! " << strerror(errno));
+		}
+		if (close(fd) != 0)
+			LOG_ERROR(1, "Could not close " << filePath << "! " << strerror(errno));
+	}
+	static std::auto_ptr<struct stat> statFile(const std::string &filePath, bool dofsync = false, bool dodirsync = false) {
+		if (dodirsync) {
+			syncDir(filePath);
+		}
+		if (dofsync) {
+			syncFile(filePath);
+		}
+		std::auto_ptr<struct stat> fileStat(new struct stat);
+		if (stat(filePath.c_str(), fileStat.get()) != 0) {
+			LOG_ERROR(1, "Could not stat " << filePath << "! " << strerror(errno));
+		} else {
+			LOG_DEBUG_OPTIONAL(2, true, "stat of " << filePath << ": dev " << fileStat->st_dev << ", ino " << fileStat->st_ino << ", mode " << fileStat->st_mode << ", nlink " << fileStat->st_nlink << ", size " << fileStat->st_size)
+		}
+		return fileStat;
+	}
 	static unsigned long getFileSize(std::string &filePath) {
 		std::ifstream ifs(filePath.c_str());
 		return getFileSize(ifs);
