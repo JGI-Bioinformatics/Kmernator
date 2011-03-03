@@ -110,6 +110,8 @@ public:
 
 int main(int argc, char *argv[]) {
 	Options::getVerbosity() = 0;
+	Options::getMmapInput() = 0;
+
 #ifdef ENABLE_MPI
 	MPI_Init(&argc, &argv);
 	mpi::environment env(argc, argv);
@@ -121,21 +123,25 @@ int main(int argc, char *argv[]) {
 	if (!SSOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
-	Options::FileListType inputs = Options::getInputFiles();
-
-	ReadSet reads;
-	LOG_VERBOSE(1, "Reading Input Files");
-	reads.appendAllFiles(inputs, SSOptions::getFileNum(), SSOptions::getNumFiles());
-	LOG_VERBOSE(1,"loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases ");
-
 	OPipestream *ops = NULL;
 	std::string pipeCommand = SSOptions::getPipeCommand();
 	if (!pipeCommand.empty()) {
 		ops = new OPipestream(pipeCommand);
 	}
-	for(ReadSet::ReadSetSizeType readIdx = 0 ; readIdx < reads.getSize(); readIdx++) {
-		const Read &read = reads.getRead(readIdx);
-		read.write(ops == NULL ? std::cout : *ops);
+
+	Options::FileListType inputs = Options::getInputFiles();
+
+	ostream &output = (ops == NULL ? std::cout : *ops);
+	for (unsigned int i = 0 ; i < inputs.size(); i++) {
+		ReadFileReader reader(inputs[i], "");
+		unsigned long lastPos = reader.seekToPartition( SSOptions::getFileNum(), SSOptions::getNumFiles() );
+		std::string name, bases, quals;
+	    while (reader.nextRead(name, bases, quals)) {
+	        Read read(name, bases, quals);
+	        read.write(output);
+            if (reader.getPos() >= lastPos)
+            	break;
+	    }
 	}
 
 	if (ops != NULL) {

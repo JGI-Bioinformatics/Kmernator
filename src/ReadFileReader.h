@@ -264,6 +264,22 @@ public:
 		return _parser->getType();
 	}
 
+	unsigned long seekToPartition(int rank, int size) {
+		unsigned long lastPos = getFileSize();
+		unsigned long firstPos = 0;
+		if (size > 1) {
+			unsigned long blockSize = getBlockSize(size);
+			if (rank + 1 != size ) {
+				seekToNextRecord( blockSize * (rank+1) );
+				lastPos = getPos();
+			}
+			seekToNextRecord( blockSize * rank );
+			firstPos = getPos();
+		}
+		LOG_VERBOSE(2, "Seeked to position " << firstPos << ", reading until " << lastPos << " on file " << getFilePath());
+		return lastPos;
+	}
+
 public:
 
 	class SequenceStreamParser {
