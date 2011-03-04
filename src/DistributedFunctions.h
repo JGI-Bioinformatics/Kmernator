@@ -788,26 +788,29 @@ public:
 			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << fullPath);
 			std::string myFile = filename + rank;
 			Iterator it = this->_map->find(myFile);
-			if (it != this->_map->end()) {
-				std::string myFilePath = _tempPrefix + myFile;
-				mergeFiles(_world, myFilePath, fullPath, true);
-			} else {
-				LOG_WARN(1, "Could not find " << myFile << " in DistributedOfstreamMap");
+			std::string myFilePath = _tempPrefix + myFile;
+			if (it == this->_map->end()) {
+				LOG_WARN(1, "Could not find " << myFilePath << " in DistributedOfstreamMap");
 			}
+			mergeFiles(_world, myFilePath, fullPath, true);
 		}
 	}
 
 	static void mergeFiles(mpi::communicator &world, std::string rankFile, std::string globalFile, bool unlinkAfter = false) {
-		long mySize = 0;
+		long mySize = FileUtils::getFileSize(rankFile);
+		char buf;
+		void *data = &buf;
 		int rank = world.rank();
 		Kmernator::MmapFile rankFileMmap;
-
-		LOG_DEBUG_OPTIONAL(2, true, "Opening mmap on '" << rankFile << "'");
-		rankFileMmap = Kmernator::MmapFile(rankFile, std::ios_base::in | std::ios_base::out);
-		mySize = rankFileMmap.size();
-		LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << rankFile << " size " << mySize);
-		madvise(rankFileMmap.data(), mySize, MADV_SEQUENTIAL | MADV_WILLNEED);
-
+		if (mySize > 0) {
+			LOG_DEBUG_OPTIONAL(2, true, "Opening mmap on '" << rankFile << "'");
+			rankFileMmap = Kmernator::MmapFile(rankFile, std::ios_base::in | std::ios_base::out);
+			data = rankFileMmap.data();
+			assert(data != NULL);
+			assert(mySize == rankFileMmap.size());
+			LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << rankFile << " size " << mySize);
+			madvise(rankFileMmap.data(), mySize, MADV_SEQUENTIAL | MADV_WILLNEED);
+		}
 		MPI_Info info(MPI_INFO_NULL);
 		LOG_DEBUG_OPTIONAL(2, rank==0, "Writing to '" << globalFile << "'");
 
@@ -819,7 +822,7 @@ public:
 			throw;
 		}
 		MPI_Status status;
-		err = MPI_File_write_ordered(ourFile, rankFileMmap.data(), mySize, MPI_BYTE, &status);
+		err = MPI_File_write_ordered(ourFile, data, mySize, MPI_BYTE, &status);
 		if (err != MPI_SUCCESS) throw;
 		int writeCount;
 		err = MPI_Get_count(&status, MPI_BYTE, &writeCount);
@@ -828,7 +831,8 @@ public:
 		err = MPI_File_close(&ourFile);
 		if (err != MPI_SUCCESS) throw;
 
-		rankFileMmap.close();
+		if (mySize > 0)
+			rankFileMmap.close();
 		if (unlinkAfter)
 			unlink(rankFile.c_str());
 	}

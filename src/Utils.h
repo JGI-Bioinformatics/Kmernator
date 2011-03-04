@@ -525,7 +525,10 @@ public:
 	}
 	static unsigned long getFileSize(std::string &filePath) {
 		std::ifstream ifs(filePath.c_str());
-		return getFileSize(ifs);
+		if (ifs.good())
+			return getFileSize(ifs);
+		else
+			return 0;
 	}
 	static unsigned long getFileSize(std::ifstream &ifs) {
 		assert( !ifs.eof() );
