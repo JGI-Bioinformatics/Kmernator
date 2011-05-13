@@ -131,6 +131,10 @@ public:
 	_lastSortedPick(0)
 	{
 		_bimodalSigmas = Options::getBimodalSigmas();
+		// Let the kernel know how these pages will be used
+		if (Options::getMmapInput() != 0)
+			ReadSet::madviseMmapsNormal();
+
 	}
 
 	void clear() {

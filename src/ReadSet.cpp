@@ -214,7 +214,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 	if (Options::getMmapInput() == 0)
 		madviseMmapsDontNeed();
 	else
-		madviseMmapsSequential();
+		madviseMmapsNormal();
 }
 
 void ReadSet::append(const Read &read) {

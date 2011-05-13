@@ -65,6 +65,9 @@ public:
 	static void madviseMmapsSequential() {
 		madviseMmaps(MADV_SEQUENTIAL);
 	}
+	static void madviseMmapsNormal() {
+		madviseMmaps(MADV_NORMAL);
+	}
 	static void madviseMmapsDontNeed() {
 		madviseMmaps(MADV_DONTNEED);
 	}
