@@ -60,12 +60,13 @@ private:
 	ifstream _qs;
 	istringstream _iss;
 	Kmernator::FilteredIStream _fis;
+	int _streamType;
 
 public:
 	ReadFileReader(): _parser() {}
 
 	ReadFileReader(string fastaFilePath, string qualFilePath) :
-	    _parser(), _path(fastaFilePath) {
+	    _parser(), _path(fastaFilePath), _streamType(0) {
 
         _ifs.open(fastaFilePath.c_str());
 
@@ -90,7 +91,7 @@ public:
 	}
 
 	ReadFileReader(string &fasta) :
-		_iss(fasta) {
+		_iss(fasta), _streamType(1) {
 		_parser = SequenceStreamParserPtr(new FastaStreamParser(_iss));
 	}
 
@@ -102,8 +103,11 @@ public:
 	}
 
 	~ReadFileReader() {
-		_ifs.close();
-		_qs.close();
+		switch (_streamType) {
+		case(0) : _ifs.close();	_qs.close(); break;
+		case(1) : break;
+		case(2) : break;
+		}
 	}
 
 	std::string getFilePath() {
@@ -242,7 +246,13 @@ public:
 		if (_parser->isMmaped()) {
 			return _parser->getMmapFileSize();
 		} else {
-		    return FileUtils::getFileSize(_ifs);
+		    long size = 0;
+		    switch(_streamType) {
+		    case(0) : size = FileUtils::getFileSize(_ifs); break;
+		    case(1) : size = FileUtils::getFileSize(_iss); break;
+		    case(2) : size = 0; break;
+		    }
+		    return size;
 		}
 	}
 

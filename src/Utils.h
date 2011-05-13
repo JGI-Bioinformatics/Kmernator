@@ -530,14 +530,14 @@ public:
 		else
 			return 0;
 	}
-	static unsigned long getFileSize(std::ifstream &ifs) {
-		assert( !ifs.eof() );
-		assert( ifs.is_open() && ifs.good() );
-		assert( !ifs.fail() );
-		std::ifstream::streampos current = ifs.tellg();
-		ifs.seekg(0, std::ios_base::end);
-		unsigned long size = ifs.tellg();
-		ifs.seekg(current);
+	static unsigned long getFileSize(std::istream &is) {
+		assert( !is.eof() );
+		assert( is.good() );
+		assert( !is.fail() );
+		std::ifstream::streampos current = is.tellg();
+		is.seekg(0, std::ios_base::end);
+		unsigned long size = is.tellg();
+		is.seekg(current);
 		return size;
 	}
 	static bool fileExists(std::string &filePath) {
