@@ -11,6 +11,7 @@ GOOD=1000-Filtered.fastq
 
 check()
 {
+  echo "Executing: $@ --mask-simple-repeats 0 --artifact-edit-distance 1 --out $TMP 31 $IN"
   if $@ --mask-simple-repeats 0 --artifact-edit-distance 1 --out $TMP 31 $IN
   then
     if ! diff -q $TMP-MinDepth2-1000.fastq $GOOD
