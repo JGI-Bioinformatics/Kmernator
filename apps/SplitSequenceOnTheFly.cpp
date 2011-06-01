@@ -149,6 +149,7 @@ int main(int argc, char *argv[]) {
 	}
 
 #ifdef ENABLE_MPI
+	niceBarrier(world);
 	Options::StringListType merges = SSOptions::getMergeList();
 	for(unsigned int i = 0; i < merges.size(); i++) {
 		std::string &merge = merges[i];

@@ -43,6 +43,7 @@
 
 #include "boost/optional.hpp"
 #include <boost/thread/thread.hpp>
+#include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
 
 #ifndef ENABLE_MPI
@@ -71,6 +72,50 @@ void validateMPIWorld(mpi::communicator &world) {
 	reduceOMPThreads(world);
 }
 
+void niceBarrier(mpi::communicator &world, int waitMs = 1) {
+	mpi::communicator tmpWorld(world, mpi::comm_duplicate);
+	int rank = tmpWorld.rank();
+	int size = tmpWorld.size();
+	char buf, buf2;
+	buf  = '\0';
+	buf2 = '\0';
+	mpi::request rreq, rreq2;
+	mpi::request sreq, sreq2;
+
+	LOG_DEBUG(2, "Entering niceBarrier");
+	if (rank == 0)
+		sreq = tmpWorld.isend((rank+1) % size, 0, buf);
+
+	rreq = tmpWorld.irecv((rank+size-1) % size, 0, buf2);
+	while (! rreq.test() ) {
+		boost::this_thread::sleep( boost::posix_time::milliseconds(waitMs) );
+	}
+
+	if (rank != 0)
+		sreq = tmpWorld.isend((rank+1) % size, 0, buf);
+
+	while (! sreq.test() ) {
+		boost::this_thread::sleep( boost::posix_time::milliseconds(waitMs) );
+	}
+
+	if (rank == 0)
+		sreq2 = tmpWorld.isend((rank+1) % size, 1, buf);
+
+	rreq2 = tmpWorld.irecv((rank+size-1) % size, 1, buf2);
+	while (! rreq2.test() ) {
+		boost::this_thread::sleep( boost::posix_time::milliseconds(waitMs) );
+	}
+
+	if (rank != 0)
+		sreq2 = tmpWorld.isend((rank+1) % size, 1, buf);
+
+	while (! sreq2.test() ) {
+		boost::this_thread::sleep( boost::posix_time::milliseconds(waitMs) );
+	}
+
+	LOG_DEBUG(1, "Exiting niceBarrier");
+
+}
 
 ReadSet::ReadSetSizeType setGlobalReadSetOffset(mpi::communicator &world, ReadSet &store) {
 	// share ReadSet sizes for globally unique readIdx calculations
@@ -807,9 +852,9 @@ public:
 			rankFileMmap = Kmernator::MmapFile(rankFile, std::ios_base::in | std::ios_base::out);
 			data = rankFileMmap.data();
 			assert(data != NULL);
-			assert(mySize == rankFileMmap.size());
+			assert(mySize == (long) rankFileMmap.size());
 			LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << rankFile << " size " << mySize);
-			madvise(rankFileMmap.data(), mySize, MADV_SEQUENTIAL | MADV_WILLNEED);
+			madvise(rankFileMmap.data(), mySize, MADV_SEQUENTIAL);
 		}
 		MPI_Info info(MPI_INFO_NULL);
 		LOG_DEBUG_OPTIONAL(2, rank==0, "Writing to '" << globalFile << "'");
