@@ -290,6 +290,10 @@ public:
 		return lastPos;
 	}
 
+	bool eof() const {
+		return _parser->endOfStream();
+	}
+
 public:
 
 	class SequenceStreamParser {

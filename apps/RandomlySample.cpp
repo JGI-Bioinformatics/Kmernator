@@ -32,6 +32,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 
 #include "config.h"
 #include "Sequence.h"
@@ -58,7 +59,7 @@ public:
 		getDesc().add_options()("help", "produce help message")
 				("by-pair", po::value<int>()->default_value(1), "If set, pairs are sampled, if not set, reads are sampled")
 				("num-samples",  po::value<int>()->default_value(1000), "The number of samples to output")
-				("min-bytes-per-record", po::value<int>()->default_value(2000), "The minimum number of bytes between two records (should be >2x greatest record size)"
+				("min-bytes-per-record", po::value<int>()->default_value(900), "The minimum number of bytes between two records (should be >2x greatest record size)"
 				);
 
 
@@ -99,10 +100,15 @@ int main(int argc, char *argv[]) {
 	LOG_DEBUG(1, "FileSize of " << file << " is " << fileSize);
 	unsigned long minBytes = RSOptions::getMinBytesPerRecord();
 	unsigned long numSamples = RSOptions::getNumSamples();
+	if (fileSize * 0.333 < minBytes * numSamples) {
+		minBytes = fileSize * 0.333 / numSamples;
+		LOG_DEBUG(1, "Overriding minBytes: " << minBytes);
+	}
 	std::vector<unsigned long> positions;
 	positions.reserve(numSamples);
 	unsigned long attempts = 0;
-	while (positions.size() < numSamples && attempts++ < numSamples ) {
+	unsigned long maxAttempts =  (log(numSamples)/log(2)+3)*2;
+	while (positions.size() < numSamples && attempts++ < maxAttempts) {
 		long newSamples = numSamples - positions.size();
 		for(long i = 0; i < newSamples; i++)
 			positions.push_back( longRand() % fileSize);
@@ -110,7 +116,7 @@ int main(int argc, char *argv[]) {
 		long lastPos = positions[0];
 		std::vector<long> deleteThese;
 		for(long i = 1 ; i < (long) positions.size(); i++) {
-			if (positions[i] < lastPos + minBytes) {
+			if (positions[i] < lastPos + minBytes || positions[i] >= fileSize - minBytes*50) {
 				deleteThese.push_back(i);
 			} else {
 				lastPos = positions[i];
@@ -118,9 +124,10 @@ int main(int argc, char *argv[]) {
 		}
 		for(long i = deleteThese.size() - 1 ; i >= 0; i--) {
 			std::swap(positions[deleteThese[i]], positions.back());
-			LOG_DEBUG(1, "attempt " << attempts << " size " << positions.size() << " removing " << positions.back() << " from " << deleteThese[i]);
+			LOG_DEBUG(2, "attempt " << attempts << " size " << positions.size() << " removing " << positions.back() << " from " << deleteThese[i]);
 			positions.pop_back();
 		}
+		LOG_DEBUG(1, "Selected " <<  positions.size() << " after removing " << deleteThese.size() << " attempt " << attempts << " of " << maxAttempts);
 	}
 
 	if (Log::isDebug(1)) {
@@ -128,19 +135,29 @@ int main(int argc, char *argv[]) {
 		for(long i = 0 ; i < (long) positions.size(); i++)
 			ss << "\t" << positions[i];
 		std::string s = ss.str();
-		LOG_DEBUG(1, "Picked positions(" << positions.size() << "):" << s);
+		LOG_DEBUG(2, "Picked positions(" << positions.size() << "):" << s);
 	}
 
 	bool byPair = (RSOptions::getByPair() == 1);
 	LOG_DEBUG(1, "detecting by pair: " << byPair);
 
+	unsigned long count = 0;
 	unsigned long lastPos = fileSize;
 	for(long i = 0; i < (long) positions.size(); i++) {
+		if (rfr.eof())
+			break;
 		rfr.seekToNextRecord(positions[i], byPair);
-		if (lastPos == rfr.getPos()) {
-			rfr.seekToNextRecord(rfr.getPos(), byPair);
+		unsigned long myPos = rfr.getPos();
+		while (lastPos < fileSize && lastPos >= myPos) {
+			LOG_DEBUG(2, "Re-seeking from " << myPos << " because lastPos is larger " << lastPos);
+			rfr.seekToNextRecord(myPos + 1, byPair);
+			if (rfr.eof())
+				break;
+			myPos = rfr.getPos();
 		}
-		lastPos = rfr.getPos();
+		if (rfr.eof())
+			break;
+		lastPos = myPos;
 		std::string name, bases, quals;
 		rfr.nextRead(name, bases, quals);
 		Read read(name, bases, quals);
@@ -150,6 +167,10 @@ int main(int argc, char *argv[]) {
 			Read read2(name, bases, quals);
 			read2.write(std::cout);
 		}
+		count++;
+	}
+	if (count < numSamples) {
+		LOG_WARN(1, "Could not select all samples. " << count << " selected.");
 	}
 
 }
