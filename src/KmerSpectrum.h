@@ -191,8 +191,11 @@ public:
 	}
 
 	void prepareSolids() {
-		solid = SolidMapType(weak.getBucketSize() / 8);
-		hasSolids = true;
+		if (!hasSolids) {
+			solid.clear(true);
+			solid = SolidMapType(weak.getBucketSize());
+			hasSolids = true;
+		}
 	}
 	void setSolidOnly() {
 		prepareSolids();
@@ -1124,6 +1127,7 @@ public:
 	void append( KmerWeights &kmers, ReadSetSizeType readIdx, bool isSolid, ReadSetSizeType kmerIdx, PositionType kmerLen, int partIdx, NumberType numParts ) {
 
 		DataPointers pointers(*this);
+		//LOG_DEBUG(1, "append to " << &kmers << " " << readIdx << " " << kmerIdx << " " << kmerLen );
 
 		for(PositionType readPos=0; readPos < kmerLen; readPos++)
 		{
@@ -1392,7 +1396,7 @@ public:
 			if (numThreads != omp_get_num_threads())
 				throw "OMP thread count mis-match";
 		}
-		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads);
+		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads << " over " << store.getSize() << " reads");
 
 		while (batchIdx < (long) store.getSize())
 		{
@@ -1421,7 +1425,7 @@ public:
 
 				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
 				for (long j = 0; j < numThreads; j++)
-				startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
+					startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 				for (IndexType j = 0; j < kmers.size(); j++) {
 					int smpThreadId;
 					if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, numParts, true) )
@@ -1438,23 +1442,21 @@ public:
 				for(int threads = 0; threads < numThreads; threads++)
 				{
 					int threadId = omp_get_thread_num();
-					for(unsigned long idx = 0; idx < startReadIdx[ threads ][ threadId ].size(); idx++)
+					unsigned long idxSize = startReadIdx[ threads ][ threadId ].size();
+					for(unsigned long idx = 0; idx < idxSize; idx++)
 					{
 						ReadPosType readPos = startReadIdx[ threads ][ threadId ][idx];
 						unsigned long startIdx = readPos.second;
 						unsigned long len = 0;
-						if ( idx < startReadIdx[ threads ][ threadId ].size() -1) {
-							len = startReadIdx[ threads ][ threadId ][idx+1].second - startIdx;
-						} else {
-							len = kmerBuffers[threads][ threadId ].size() - startIdx;
-						}
-						if (len > 0) {
+						unsigned long last = ( idx + 1 < idxSize ) ? startReadIdx[ threads ][ threadId ][idx+1].second : kmerBuffers[threads][ threadId ].size();
+						if (last > startIdx) {
+							len = last - startIdx;
+
 							// do not include partIdx or partBitmMask , as getSMPThread() already accounted for partitioning
-						    append(kmerBuffers[threads][ threadId ], readPos.first, isSolid, startIdx, len, 0, 1);
+							append(kmerBuffers[threads][ threadId ], readPos.first, isSolid, startIdx, len, 0, 1);
 						}
 					}
 				}
-
 			}
 
 			batchIdx += batch;
@@ -1475,9 +1477,7 @@ public:
 
 		solid.reset(false);
 		if (isSolid) {
-			// no need to keep this memory around then...
-			weak.clear();
-			singleton.clear();
+			prepareSolids();
 		} else {
 		    weak.reset(false);
 		    singleton.reset(false);
