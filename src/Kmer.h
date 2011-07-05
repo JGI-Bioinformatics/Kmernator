@@ -1083,6 +1083,31 @@ public:
 		}
 	}
 
+	static KmerArray extendKmer(const Kmer &kmer, bool toRight, bool leastComplement = false) {
+		KmerArray kmers(4);
+		std::string fasta = kmer.toFasta().substr(toRight ? 1: 0, KmerSizer::getSequenceLength() - 1);
+
+        if (toRight) {
+		    TwoBitSequence::compressSequence(fasta + "A", kmers[0].getTwoBitSequence());
+		    TwoBitSequence::compressSequence(fasta + "C", kmers[1].getTwoBitSequence());
+		    TwoBitSequence::compressSequence(fasta + "G", kmers[2].getTwoBitSequence());
+		    TwoBitSequence::compressSequence(fasta + "T", kmers[3].getTwoBitSequence());
+        } else {
+		    TwoBitSequence::compressSequence("A" + fasta, kmers[0].getTwoBitSequence());
+		    TwoBitSequence::compressSequence("C" + fasta, kmers[1].getTwoBitSequence());
+		    TwoBitSequence::compressSequence("G" + fasta, kmers[2].getTwoBitSequence());
+		    TwoBitSequence::compressSequence("T" + fasta, kmers[3].getTwoBitSequence());
+
+        }
+		if (leastComplement) {
+			TEMP_KMER(tmp);
+			for(int i = 0; i < 4; i++) {
+				tmp = kmers[i];
+				tmp.buildLeastComplement(kmers[i]);
+			}
+		}
+		return kmers;
+	}
 		protected:
 			IndexType _find(const Kmer &target) const {
 				for(IndexType i=0; i<_size; i++)

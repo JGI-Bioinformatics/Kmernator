@@ -87,7 +87,13 @@ void boost::intrusive_ptr_release(TwoBitSequenceBase::_TwoBitEncodingPtr* r)
     	TwoBitSequenceBase::_TwoBitEncodingPtr::release(r);
 }
 
-static unsigned char compressBase(char base) {
+char TwoBitSequence::uncompressBase(unsigned int v) {
+    static const char bases[] = {'A', 'C', 'G', 'T'};
+    assert(v <= 3);
+    return bases[v];
+}
+
+unsigned char TwoBitSequence::compressBase(char base) {
 	switch (base) {
 	case 'A':
 		return 0;
@@ -386,6 +392,22 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut,
 	}
 
 }
+
+void TwoBitSequence::extendBase(std::string _fasta, char base, void *twoBitOut, bool toRight) {
+	char bases[_fasta.length()+2];
+	int idx = 0;
+	if ( toRight )
+		bases[idx++] = base;
+	const char *fasta = _fasta.c_str();
+	for (unsigned int i = 0 ; i < _fasta.length(); i++)
+		bases[idx++] = fasta[i];
+	if (toRight)
+		bases[idx++] = base;
+	bases[idx++] = '\0';
+	assert(idx == _fasta.length() + 2);
+	compressSequence(bases,(TwoBitEncoding*) twoBitOut);
+}
+
 
 TwoBitSequenceBase::MarkupElementSizeType TwoBitSequence::getMarkupElementSize(const BaseLocationVectorType &markups) {
 	long totalMarkupSize;

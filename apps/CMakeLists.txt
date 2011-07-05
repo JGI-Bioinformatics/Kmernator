@@ -86,6 +86,18 @@ target_link_libraries( FilterReads-P
                               )
 endif()
 
+set_source_files_properties( ContigExtender
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
+                             )
+add_executable( ContigExtender ContigExtender )
+target_link_libraries( ContigExtender 
+                              Sequence
+                              Kmer
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              )
+
 set_source_files_properties( TnfDistance
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )
