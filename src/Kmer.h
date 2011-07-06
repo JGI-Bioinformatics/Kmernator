@@ -257,6 +257,17 @@ public:
 				output.getTwoBitSequence(), getLength());
 	}
 
+	void set(std::string fasta, bool leastComplement = false) {
+		assert(fasta.length() == KmerSizer::getSequenceLength());
+		if (leastComplement) {
+			TEMP_KMER(temp);
+			TwoBitSequence::compressSequence(fasta, temp.getTwoBitSequence());
+			temp.buildLeastComplement(*this);
+		} else {
+			TwoBitSequence::compressSequence(fasta, this->getTwoBitSequence());
+		}
+	}
+
 	// returns true if this is the least complement, false otherwise (output is least)
 	bool buildLeastComplement(Kmer &output) const {
 		buildReverseComplement(output);
@@ -1421,7 +1432,11 @@ private:
 	inline const KmerMap &_constThis() const {return *this;}
 
 public:
-	KmerMap(IndexType bucketCount = 1024) {
+	KmerMap() {
+		BUCKET_MASK=0;
+		_buckets.clear();
+	}
+	KmerMap(IndexType bucketCount) {
 
 		// ensure buckets are a precise powers of two
 		// with at least bucketCount buckets

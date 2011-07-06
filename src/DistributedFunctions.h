@@ -343,7 +343,7 @@ public:
 		}
 	};
 
-	void _buildKmerSpectrumMPI(ReadSet &store, bool isSolid) {
+	void _buildKmerSpectrumMPI(const ReadSet &store, bool isSolid) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
 		int worldSize = world.size();
@@ -506,11 +506,11 @@ public:
 		}
 	};
 
-	void buildKmerSpectrum( ReadSet &store ) {
+	void buildKmerSpectrum(const ReadSet &store ) {
 		return this->buildKmerSpectrum(store, false);
 	}
 
-	void buildKmerSpectrum(ReadSet &store, bool isSolid) {
+	void buildKmerSpectrum(const ReadSet &store, bool isSolid) {
 
 		_buildKmerSpectrumMPI(store, isSolid);
 

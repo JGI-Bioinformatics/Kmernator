@@ -100,6 +100,9 @@ int main(int argc, char *argv[]) {
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
+	  if (Log::isVerbose(1))
+		  spectrum.printHistograms(Log::Verbose("Histogram"));
+
 	  if (Options::getVariantSigmas() > 0.0) {
 		  spectrum.purgeVariants();
 		  if (Log::isVerbose(1)) {

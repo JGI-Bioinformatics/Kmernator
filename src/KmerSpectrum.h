@@ -127,8 +127,9 @@ public:
 
 public:
 	// if singletons are separated use less buckets (but same # as singletons)
-	KmerSpectrum(unsigned long buckets = 0, bool separateSingletons = true):
-		solid(1), weak(separateSingletons ? buckets/8 : buckets), singleton(separateSingletons ? buckets/8 : 1),
+	KmerSpectrum() : solid(), weak(), singleton(), hasSolids(false), hasSingletons(false), purgedSingletons(0) {}
+	KmerSpectrum(unsigned long buckets, bool separateSingletons = true):
+		solid(), weak(separateSingletons ? buckets/8 : buckets), singleton(separateSingletons ? buckets/8 : 1),
 		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0)
 	{
 		// set the minimum weight that will be used to track kmers
@@ -150,6 +151,15 @@ public:
 		this->hasSingletons = other.hasSingletons;
 		this->purgedSingletons = other.purgedSingletons;
 		return *this;
+	}
+
+	void swap(KmerSpectrum &other) {
+		solid.swap(other.solid);
+		weak.swap(other.weak);
+		singleton.swap(other.singleton);
+		std::swap(hasSolids, other.hasSolids);
+		std::swap(hasSingletons, other.hasSingletons);
+		std::swap(purgedSingletons, other.purgedSingletons);
 	}
 
 	Kmernator::MmapFileVector storeMmap(string mmapFilename){
@@ -211,7 +221,7 @@ public:
 		purgedSingletons = 0;
 	}
 
-	static unsigned long estimateWeakKmerBucketSize( ReadSet &store, unsigned long targetKmersPerBucket = 128) {
+	static unsigned long estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = 128) {
 		unsigned long baseCount = store.getBaseCount();
 		if (baseCount == 0 || store.getSize() == 0)
 		return 128;
@@ -1069,8 +1079,15 @@ public:
 		return header.str();
 	}
 
+	inline void appendSolid(Kmer &least) {
+		WeightType weight = 1;
+		DataPointers pointers(*this);
+		ReadSetSizeType readIdx = 0;
+		PositionType readPos = 0;
+		append(pointers, least, weight, readIdx, readPos, true);
+	}
 	inline void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false, NumberType partIdx = 0, NumberType numParts = 1) {
-		return append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, numParts);
+		append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, numParts);
 	}
 	inline void append(DataPointers &pointers, Kmer &least, WeightType &weight, ReadSetSizeType &readIdx, PositionType &readPos, bool isSolid = false) {
 		bool keepDirection = true;
@@ -1140,7 +1157,6 @@ public:
 	}
 
 	ostream &printStats(ostream &os, unsigned long pos, bool printSolidOnly = false, bool fullStats = false) {
-		//stats.printHistograms(printSolidOnly);
 		os << pos << " reads" << "\t";
 		if (fullStats) {
 			os << ", " << solid.size() << " solid / " << weak.size() << " weak / "
@@ -1249,7 +1265,7 @@ public:
 	}
 
 	// important! returned memory maps must remain in scope!
-	Kmernator::MmapFileVector buildKmerSpectrumInParts(ReadSet &store, NumberType numParts, std::string mmapFileNamePrefix = "") {
+	Kmernator::MmapFileVector buildKmerSpectrumInParts(const ReadSet &store, NumberType numParts, std::string mmapFileNamePrefix = "") {
 		bool isSolid = false; // not supported for references...
 		Kmernator::MmapFileVector mmaps;
 		if (numParts <= 1) {
@@ -1322,13 +1338,6 @@ public:
 
 		LOG_VERBOSE(2, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
 
-		if (Log::isVerbose(1)) {
-			printStats(Log::Verbose("Final Stats"), store.getSize(), isSolid, true);
-			if (!isSolid) {
-				printHistograms(Log::Verbose("Final Histogram"));
-			}
-		}
-
 		if (Options::getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
 			mmaps = storeMmap(mmapFileNamePrefix);
 		}
@@ -1350,7 +1359,7 @@ public:
 		}
 
 	}
-	void _buildKmerSpectrumSerial(ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts, long batch, long purgeEvery, long &purgeCount) {
+	void _buildKmerSpectrumSerial(const ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts, long batch, long purgeEvery, long &purgeCount) {
 		for (long batchIdx=0; batchIdx < (long) store.getSize(); batchIdx++)
 		{
 			const Read &read = store.getRead( batchIdx );
@@ -1366,7 +1375,7 @@ public:
 		}
 
 	}
-	void _buildKmerSpectrumParallel(ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts, long batch, long purgeEvery, long &purgeCount) {
+	void _buildKmerSpectrumParallel(const ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts, long batch, long purgeEvery, long &purgeCount) {
 
 		long numThreads = omp_get_max_threads();
 		long batchIdx = 0;
@@ -1465,13 +1474,13 @@ public:
 
 	}
 
-	virtual void buildKmerSpectrum( ReadSet &store ) {
+	virtual void buildKmerSpectrum( const ReadSet &store ) {
 		return this->buildKmerSpectrum(store, false);
 	}
-	virtual void buildKmerSpectrum( ReadSet &store, bool isSolid ) {
+	virtual void buildKmerSpectrum( const ReadSet &store, bool isSolid ) {
 		return this->buildKmerSpectrum(store, isSolid, 0, 1);
 	}
-	void buildKmerSpectrum( ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts)
+	void buildKmerSpectrum( const ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts)
 	{
 		assert(partIdx < numParts);
 
@@ -1497,11 +1506,6 @@ public:
 
 		if (Log::isVerbose(2)) {
 		    printStats(Log::Verbose("Stats"), store.getSize(), isSolid, true);
-		}
-		if (Log::isVerbose(1)) {
-		    if (!isSolid) {
-			    printHistograms(Log::Verbose("Histogram"));
-		    }
 		}
 	}
 
@@ -1631,34 +1635,6 @@ public:
 
 		return purgedKmers;
 	}
-/*
-	static void experimentOnSpectrum( ostream &os, KmerSpectrum &spectrum ) {
-		KmerSpectrum everything(spectrum);
-
-		unsigned long promoted = spectrum.promote(0.05);
-		os << "Promoted " << promoted << " kmers" << std::endl;
-		spectrum.printHistograms(true);
-
-		for (double prob = 0.10; prob > 0.0; prob -= 0.005) {
-			KmerSpectrum copy(everything);
-			os << "Testing " << prob << std::endl;
-			promoted = copy.promote(prob);
-			os << "Promoted " << promoted << " kmers" << std::endl;
-			copy.printHistograms(true);
-			copy.contrastSpectrums(os, spectrum);
-		}
-
-		for(WeakIterator it(everything.weak.begin()), itEnd(everything.weak.end()); it != itEnd; it++) {
-			everything.getSolid( it->key() ) = it->value();
-		}
-		everything.weak.clear();
-
-		for (double minDepth = 1; minDepth < 10; minDepth++) {
-			os << "Comparing minDepth " << minDepth << std::endl;
-			everything.contrastSpectrums(os, spectrum, minDepth);
-		}
-	}
-*/
 
 	void analyseSingletons(ostream &os)
 	{

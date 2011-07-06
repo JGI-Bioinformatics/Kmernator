@@ -155,6 +155,10 @@ int main(int argc, char *argv[]) {
 		TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 		spectrum.buildKmerSpectrum(reads);
+		if (Log::isVerbose(1)) {
+			std::string hist = spectrum.getHistogram(false);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Histogram\n" << hist);
+		}
 	}
 	if (Options::getKmerSize() > 0) {
 
