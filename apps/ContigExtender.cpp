@@ -274,12 +274,12 @@ int main(int argc, char *argv[]) {
 	//maxKmerSize = minKmerSize;
 	ReadSet newContigs = extendContigs(contigs, reads, minKmerSize, maxKmerSize);
 
-	OfstreamMap ofmap;
 	string outputFilename = Options::getOutputFile();
+	OfstreamMap ofmap(outputFilename,"");
 	Options::getFormatOutput() = FormatOutput::FASTA_UNMASKED;
 	if (!outputFilename.empty()) {
 		for(unsigned long i = 0; i < newContigs.getSize(); i++)
-			newContigs.getRead(i).write(ofmap.getOfstream("-contigs"));
+			newContigs.getRead(i).write(ofmap.getOfstream(""));
 	}
 
 	LOG_VERBOSE(1, "Finished");
