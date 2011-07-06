@@ -38,6 +38,7 @@
 #include "Options.h"
 #include "Kmer.h"
 #include "KmerSpectrum.h"
+#include "DuplicateFragmentFilter.h"
 #include "Log.h"
 
 using namespace std;
@@ -49,6 +50,12 @@ public:
 	static std::string getContigFile () {
 		return getVarMap()["contig-file"].as<std::string> ();
 	}
+	static double getMinimumConsensus() {
+		return getVarMap()["minimum-consensus"].as<double>() / 100;
+	}
+	static double getMinimumCoverage() {
+		return getVarMap()["minimum-coverage"].as<double>();
+	}
 	static bool parseOpts(int argc, char *argv[]) {
 		// override the default output format!
 		Options::getFormatOutput() = 3;
@@ -57,6 +64,12 @@ public:
 		getPosDesc().add("input-file", -1);
 
 		getDesc().add_options()
+
+		("minimum-consensus", po::value<double>()->default_value(95),
+				"minimum percent consensus to call the next base")
+
+		("minimum-coverage", po::value<double>()->default_value(9.9),
+				"minimum (probability-weighted) coverage to continue calling the next base")
 
 		("contig-file", po::value<std::string>(),
 				"filename of input contigs.fa");
@@ -71,7 +84,157 @@ public:
 	}
 };
 
+bool extendContig(std::string &fasta, bool toRight, double minimumCoverage, double minimumConsensus, KS &readSpectrum, KS &contigSpectrum) {
+
+	SequenceLengthType kmerSize = KmerSizer::getSequenceLength();
+	TEMP_KMER(tmp);
+	std::string dir = toRight ? "Right" : "Left";
+
+	std::string kmerString = toRight ? fasta.substr(fasta.length()-kmerSize, kmerSize) : fasta.substr(0, kmerSize);
+	TwoBitSequence::compressSequence(kmerString, tmp.getTwoBitSequence());
+	LOG_DEBUG(2, dir << " extending " << tmp.toFasta());
+
+	KmerWeights ext = KmerWeights::extendKmer(tmp, toRight, true);
+	double total = 0.0;
+	for(unsigned int i = 0; i < ext.size(); i++) {
+		KS::WeakElementType elem = readSpectrum.getIfExistsWeak(ext[i]);
+		if (elem.isValid()) {
+			total += ext.valueAt(i) = elem.value().getWeightedCount();
+		}
+	}
+	bool wasExtended = false;
+
+	double best = 0;
+	if (total >= minimumCoverage) {
+		for(unsigned int i = 0; i < ext.size(); i++) {
+			double consensus = ext.valueAt(i) / total;
+			best = std::max(consensus, best);
+			if (consensus >= minimumConsensus) {
+				// do not allow repeats
+				if (contigSpectrum.getIfExistsSolid(ext[i]).isValid()) {
+					LOG_VERBOSE(1, dir << " detected repeat: " << ext[i].toFasta() << " with kmer " << KmerSizer::getSequenceLength());
+					break;
+				}
+				char base = TwoBitSequence::uncompressBase(i);
+				fasta.insert(toRight ? fasta.length() : 0, 1, base);
+				LOG_DEBUG(2, dir << " extended " << base << "\t" << fasta);
+				wasExtended = true;
+				break;
+			}
+		}
+		if (! wasExtended ) {
+			LOG_VERBOSE(1, "Ambiguous " << dir << " extension " << best << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength())
+		}
+	} else {
+		LOG_VERBOSE(1, "Not enough coverage to extend " << dir << " " << total << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength());
+	}
+
+	return wasExtended;
+}
+
+void recordKmer(std::vector<KS> &contigSpectrums, bool toRight, std::string fasta, SequenceLengthType minKmerSize, SequenceLengthType maxKmerSize) {
+	SequenceLengthType kmerSize;
+	KmerSizer::set(maxKmerSize);
+	TEMP_KMER(tmp);
+
+	for(kmerSize = minKmerSize ; kmerSize <= maxKmerSize; kmerSize+=2) {
+		if (fasta.length() < kmerSize)
+			break;
+		KmerSizer::set(kmerSize);
+		SequenceLengthType pos = toRight ? fasta.length() - kmerSize : 0;
+		tmp.set(fasta.substr(pos, kmerSize), true);
+		contigSpectrums[kmerSize].appendSolid( tmp );
+	}
+}
+
+ReadSet extendContigs(const ReadSet &contigs, const ReadSet &reads, SequenceLengthType minKmerSize, SequenceLengthType maxKmerSize) {
+	SequenceLengthType kmerSize = minKmerSize;
+	KmerSizer::set(kmerSize);
+
+	// set scoping of spectrum arrays
+	std::vector<KS> readSpectrums(maxKmerSize+1, KS()), contigSpectrums(maxKmerSize+1, KS());
+	for(kmerSize = minKmerSize ; kmerSize <= maxKmerSize; kmerSize+=2) {
+		KmerSizer::set(kmerSize);
+		LOG_VERBOSE(2, "Building kmer spectrum for kmer sized: " << kmerSize);
+		KS readSpectrum(KS::estimateWeakKmerBucketSize(reads, 64));
+		readSpectrum.buildKmerSpectrum( reads, false );
+		KS contigSpectrum(128);
+
+		readSpectrums[kmerSize].swap(readSpectrum);
+		contigSpectrums[kmerSize].swap(contigSpectrum);
+
+	}
+
+	double minimumConsensus = ContigExtenderOptions::getMinimumConsensus();
+	double minimumCoverage = ContigExtenderOptions::getMinimumCoverage();
+
+	ReadSet newContigs;
+
+	for(unsigned int i = 0; i < contigs.getSize(); i++) {
+		bool extendLeft = true;
+		bool extendRight = true;
+		Read read = contigs.getRead(i);
+
+		ReadSet thisReadOnlySet;
+		thisReadOnlySet.append(read);
+		for(kmerSize = minKmerSize ; kmerSize <= maxKmerSize; kmerSize+=2) {
+			contigSpectrums[kmerSize].reset(false);
+			contigSpectrums[kmerSize].buildKmerSpectrum(thisReadOnlySet,true);
+		}
+
+		std::string fasta = read.getFasta();
+		LOG_VERBOSE(1, "Extending " << read.getName() << " of length " << fasta.length());
+		int leftTotal = 0, rightTotal = 0;
+		while (extendLeft | extendRight) {
+			SequenceLengthType len = fasta.length();
+			if (len < minKmerSize)
+				break;
+
+			if (extendLeft) {
+				bool toRight = false;
+				for(kmerSize = minKmerSize; kmerSize <= maxKmerSize; kmerSize += 2) {
+					LOG_DEBUG(1, "Extending for kmer size " << kmerSize);
+					KmerSizer::set(kmerSize);
+					extendLeft = extendContig(fasta, toRight, minimumCoverage, minimumConsensus, readSpectrums[kmerSize], contigSpectrums[kmerSize]);
+					if (extendLeft) {
+						recordKmer(contigSpectrums, toRight, fasta, minKmerSize, maxKmerSize);
+						leftTotal++;
+						break;
+					}
+				}
+			}
+
+			if (extendRight) {
+				bool toRight = true;
+				for(kmerSize = minKmerSize; kmerSize <= maxKmerSize; kmerSize += 2) {
+					KmerSizer::set(kmerSize);
+					extendRight =  extendContig(fasta, toRight, minimumCoverage, minimumConsensus, readSpectrums[kmerSize], contigSpectrums[kmerSize]);
+					if (extendRight) {
+						recordKmer(contigSpectrums, toRight, fasta, minKmerSize, maxKmerSize);
+						rightTotal++;
+						break;
+					}
+				}
+			}
+		}
+
+		std::string newName = read.getName() + "-l" + boost::lexical_cast<std::string>(leftTotal) + "r" + boost::lexical_cast<std::string>(rightTotal);
+		LOG_VERBOSE(1, "Extended " << newName << " : " << read.getName() << " left +" << leftTotal << " right +" << rightTotal << " to " << fasta.length());
+		Read newContig(newName, fasta, std::string(fasta.length(), Read::REF_QUAL));
+		newContigs.append(newContig);
+	}
+
+	for(kmerSize = minKmerSize ; kmerSize < maxKmerSize; kmerSize+=2) {
+		KmerSizer::set(kmerSize);
+		// must explicitly release memory as KmerSizer could cause memory leaks if set differently from when created
+		readSpectrums[kmerSize-minKmerSize].reset(true);
+		contigSpectrums[kmerSize-minKmerSize].reset(true);
+	}
+	return newContigs;
+}
+
 int main(int argc, char *argv[]) {
+	Options::getSkipArtifactFilter() = 1;
 	if (!ContigExtenderOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
@@ -91,99 +254,25 @@ int main(int argc, char *argv[]) {
 	contigs.appendAllFiles(contigFiles);
 	LOG_VERBOSE(1, "loaded " << contigs.getSize() << " Reads, " << contigs.getBaseCount() << " Bases ");
 
-	SequenceLengthType kmerSize = Options::getKmerSize();
-	KmerSizer::set(kmerSize);
-
-	KS readSpectrum(KS::estimateWeakKmerBucketSize(reads, 64));
-	readSpectrum.buildKmerSpectrum( reads, false );
-	LOG_VERBOSE(1, "Built read kmer spectrum");
-
-	KS contigSpectrum(KS::estimateWeakKmerBucketSize(contigs, 64));
-	contigSpectrum.buildKmerSpectrum(contigs, true);
-	LOG_VERBOSE(1, "Built contig kmer spectrum");
-
-	ReadSet newContigs;
-	double minimumConsensus = 0.90;
-	double minimumCoverage = 9.9;
-
-	for(unsigned int i = 0; i < contigs.getSize(); i++) {
-		SequenceLengthType len = 0;
-		Read read = contigs.getRead(i);
-		std::string fasta = read.getFasta();
-		while (fasta.length() != len) {
-			len = fasta.length();
-			if (len < kmerSize)
-				continue;
-
-			LOG_VERBOSE(1, "Processing " << fasta);
-
-			TEMP_KMER(tmp);
-			TwoBitSequence::compressSequence(fasta.substr(0, kmerSize), tmp.getTwoBitSequence());
-			LOG_VERBOSE(1, "Left extending " << tmp.toFasta());
-
-			KmerWeights leftExt = KmerWeights::extendKmer(tmp, false, true);
-			double leftTotal = 0.0;
-			for(unsigned int i = 0; i < leftExt.size(); i++) {
-				KS::WeakElementType elem = readSpectrum.getIfExistsWeak(leftExt[i]);
-				if (elem.isValid()) {
-					leftTotal += leftExt.valueAt(i) = elem.value().getWeightedCount();
-					// do not allow repeats
-					if (contigSpectrum.getIfExistsSolid(leftExt[i]).isValid()) {
-						LOG_VERBOSE(1, "Left detected repeat: " << leftExt[i].toFasta());
-						leftTotal = 0;
-						break;
-					}
-				}
-			}
-			if (leftTotal >= minimumCoverage) {
-				for(unsigned int i = 0; i < leftExt.size(); i++) {
-					if (leftExt.valueAt(i) / leftTotal >= minimumConsensus) {
-						char base = TwoBitSequence::uncompressBase(i);
-						fasta.insert(0, 1, base);
-						LOG_VERBOSE(1, "Left extended " << base);
-						break;
-					}
-				}
-			} else {
-				LOG_VERBOSE(1, "Not enough coverage to extend left: " << leftTotal);
-			}
-
-			TwoBitSequence::compressSequence(fasta.substr(fasta.length()-kmerSize, kmerSize), tmp.getTwoBitSequence());
-			LOG_VERBOSE(1, "Right extending " << tmp.toFasta());
-
-			KmerWeights rightExt = KmerWeights::extendKmer(tmp, true, true);
-			double rightTotal = 0.0;
-			for(unsigned int i = 0; i < rightExt.size(); i++) {
-				KS::WeakElementType elem = readSpectrum.getIfExistsWeak(rightExt[i]);
-				if (elem.isValid()) {
-					rightTotal += rightExt.valueAt(i) = elem.value().getWeightedCount();
-					// do not allow repeats
-					if (contigSpectrum.getIfExistsSolid(rightExt[i]).isValid()) {
-						LOG_VERBOSE(1, "Right detected repeat: " << rightExt[i].toFasta());
-						rightTotal = 0;
-						break;
-					}
-				}
-			}
-			if (rightTotal >= minimumCoverage) {
-				for(unsigned int i = 0; i < rightExt.size(); i++) {
-					if (rightExt.valueAt(i) / rightTotal >= minimumConsensus) {
-						char base = TwoBitSequence::uncompressBase(i);
-						fasta.insert(fasta.length(), 1, base);
-						LOG_VERBOSE(1, "Right extended " << base);
-						break;
-					}
-				}
-			} else {
-				LOG_VERBOSE(1, "Not enough coverage to extend right: " << rightTotal);
-			}
-
-			LOG_VERBOSE(1, "Extended " << fasta << " to " << leftTotal << " " << leftExt.toString() << " and " << rightTotal << " " << rightExt.toString());
-		}
-		Read newContig(read.getName(), fasta, std::string(fasta.length(), Read::REF_QUAL));
-		newContigs.append(newContig);
+	if (Options::getDeDupMode() > 0 && Options::getDeDupEditDistance() >= 0) {
+	  LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
+	  unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
+	  LOG_VERBOSE(1, "filter removed duplicate fragment pair reads: " << duplicateFragments);
+	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 	}
 
+	SequenceLengthType minKmerSize = Options::getKmerSize();
+	SequenceLengthType maxKmerSize = std::min(reads.getMaxSequenceLength(), (SequenceLengthType) (reads.getBaseCount() / reads.getSize())) - 1;
+	maxKmerSize = std::min(maxKmerSize, contigs.getMaxSequenceLength());
+	maxKmerSize = maxKmerSize > 3*minKmerSize ? 3*minKmerSize : maxKmerSize;
+	minKmerSize = maxKmerSize > minKmerSize ? minKmerSize : maxKmerSize - 2;
+	if (maxKmerSize < 4) {
+		LOG_ERROR(1, "There is not enough data to run a kmer walk in input files.");
+		exit(1);
+	}
+
+	//maxKmerSize = minKmerSize;
+	ReadSet newContigs = extendContigs(contigs, reads, minKmerSize, maxKmerSize);
 
 	OfstreamMap ofmap;
 	string outputFilename = Options::getOutputFile();
@@ -196,21 +285,3 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(1, "Finished");
 }
 
-// $Log: Fastq2Fasta.cpp,v $
-// Revision 1.7  2010-05-24 21:48:50  regan
-// merged changes from RNADedupMods-20100518
-//
-// Revision 1.6.2.1  2010-05-19 00:20:49  regan
-// refactored fomat output options
-// added options to fastq2fasta
-//
-// Revision 1.6  2010-05-18 20:50:18  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.5.2.1  2010-05-07 22:59:29  regan
-// refactored base type declarations
-//
-// Revision 1.5  2010-05-06 21:46:57  regan
-// merged changes from PerformanceTuning-20100501
-//
-//
