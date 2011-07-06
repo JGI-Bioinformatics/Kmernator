@@ -193,7 +193,7 @@ public:
 		_globalOffset = globalOffset;
 	}
 
-	inline ReadSetSizeType getGlobalOffset() {
+	inline ReadSetSizeType getGlobalOffset() const {
 		return _globalOffset;
 	}
 
