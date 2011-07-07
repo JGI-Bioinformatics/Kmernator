@@ -133,6 +133,7 @@ private:
 	void _trackSequentialPair(const Read &read);
 	inline bool _setMaxSequenceLength(SequenceLengthType len) {
 		if (len > _maxSequenceLength) {
+			#pragma omp critical
 			_maxSequenceLength = len;
 			return true;
 		}
