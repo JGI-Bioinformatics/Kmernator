@@ -395,7 +395,7 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut,
 
 void TwoBitSequence::extendBase(std::string _fasta, char base, void *twoBitOut, bool toRight) {
 	char bases[_fasta.length()+2];
-	int idx = 0;
+	unsigned int idx = 0;
 	if ( toRight )
 		bases[idx++] = base;
 	const char *fasta = _fasta.c_str();
