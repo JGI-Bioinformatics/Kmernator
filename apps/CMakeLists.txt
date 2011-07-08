@@ -68,6 +68,7 @@ target_link_libraries( FilterReads
                               )
 
 if( MPI_FOUND )
+
 set_source_files_properties( FilterReads-P
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
@@ -84,7 +85,19 @@ target_link_libraries( FilterReads-P
                               ${KMERNATOR_P_LIBS}
                               )
 endif()
-                           
+
+set_source_files_properties( ContigExtender
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
+                             )
+add_executable( ContigExtender ContigExtender )
+target_link_libraries( ContigExtender 
+                              Sequence
+                              Kmer
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              )
+
 set_source_files_properties( TnfDistance
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )

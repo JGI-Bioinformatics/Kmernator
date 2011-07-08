@@ -105,15 +105,17 @@ void ReadSet::addRead(const Read &read) {
 	SequenceLengthType readLength = read.getLength();
 	addRead(read, readLength);
 }
-void ReadSet::addRead(const Read &read, SequenceLengthType readLength) {
+void ReadSet::addRead(const Read &read, SequenceLengthType readLength, int rank) {
 	_reads.push_back(read);
 	_baseCount += readLength;
 	_setMaxSequenceLength(readLength);
 	_trackSequentialPair(read);
 	_setFastqStart(read);
+	long countReads = getSize();
+    LOG_VERBOSE_OPTIONAL(2, ((countReads & 131071) == 0 && (rank & 15) == 0), "Just read " << countReads << " reads");
 }
 ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
-	MmapSource mmap(filePath, ReadFileReader::getFileSize(filePath));
+	MmapSource mmap(filePath, FileUtils::getFileSize(filePath));
 	addMmaps( MmapSourcePair(mmap, MmapSource()) );
 	return mmap;
 }
@@ -212,7 +214,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 	if (Options::getMmapInput() == 0)
 		madviseMmapsDontNeed();
 	else
-		madviseMmapsSequential();
+		madviseMmapsNormal();
 }
 
 void ReadSet::append(const Read &read) {
@@ -263,16 +265,8 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadSet::MmapSource &mmap,
 ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, int rank, int size) {
 	string name, bases, quals;
 	LOG_DEBUG(2, "appendFasta(reader, " << rank << ", " << size << ")");
-	unsigned long lastPos = MAX_UI64;
-	if (size > 1) {
-		unsigned long blockSize = reader.getBlockSize(size);
-		if (rank + 1 != size ) {
-			reader.seekToNextRecord( blockSize * (rank+1) );
-			lastPos = reader.getPos();
-		}
-		reader.seekToNextRecord( blockSize * rank );
-	}
-	LOG_DEBUG(2, "appendFasta() at pos: " << reader.getPos());
+	unsigned long lastPos = reader.seekToPartition(rank,size);
+	unsigned long firstPos = reader.getPos();
 	if (reader.isMmaped() && Options::getMmapInput() != 0) {
 	    RecordPtr recordPtr = reader.getStreamRecordPtr();
 	    RecordPtr qualPtr = reader.getStreamQualRecordPtr();
@@ -284,25 +278,28 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	    	if (isMultiline) {
             	// store the read in memory
             	Read read(name,bases,quals);
-            	addRead(read, bases.length());
+            	addRead(read, bases.length(), rank);
             } else {
             	Read read(recordPtr, qualPtr);
-            	addRead(read, bases.length());
+            	addRead(read, bases.length(), rank);
             }
             recordPtr = nextRecordPtr;
 	    	qualPtr = reader.getStreamQualRecordPtr();
 
             if (reader.getPos() >= lastPos)
             	break;
+
 	    }
 	} else {
 	    while (reader.nextRead(name, bases, quals)) {
 	        Read read(name, bases, quals);
-	        addRead(read, bases.length());
+	        addRead(read, bases.length(), rank);
             if (reader.getPos() >= lastPos)
             	break;
 	    }
 	}
+	lastPos = reader.getPos();
+	LOG_VERBOSE(2, "Finished reading " << (lastPos - firstPos)/1024 << " KB, " << getSize() << " reads");
 	return reader.getParser();
 }
 
@@ -404,10 +401,10 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 	            if (isMultiline) {
 	            	// store the read in memory, as mmap does not currently work
 	            	Read read(name,bases,quals);
-	            	myReads.addRead(read, bases.length());
+	            	myReads.addRead(read, bases.length(), threadId);
 	            } else {
 	            	Read read(recordPtr, qualPtr);
-                    myReads.addRead(read, bases.length());
+                    myReads.addRead(read, bases.length(), threadId);
 	            }
 
 		    	recordPtr = nextRecordPtr;
@@ -417,7 +414,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 		} else {
 		    while (hasNext && reader.nextRead(name, bases, quals)) {
 		        Read read(name, bases, quals);
-		        myReads.addRead(read, bases.length());
+		        myReads.addRead(read, bases.length(), threadId);
 		        hasNext = (reader.getPos() < lastPos);
 		    }
 		}
@@ -646,7 +643,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			LOG_VERBOSE(3, "Processed " << countNewPaired << " pairs for pairing");
 	}
 
-	LOG_VERBOSE_OPTIONAL(1, true, "Identified new pairs: " << newPairs);
+	LOG_VERBOSE(2, "Identified new pairs: " << newPairs);
 
 	return _pairs.size();
 }

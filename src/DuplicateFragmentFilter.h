@@ -412,7 +412,7 @@ public:
 		  affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, false);
 
       KmerSizer::set(oldKmerSize);
-      ReadSet::madviseMmapsSequential();
+      ReadSet::madviseMmapsNormal();
 
 	  return affectedCount;
 	}

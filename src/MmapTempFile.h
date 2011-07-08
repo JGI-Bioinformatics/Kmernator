@@ -45,9 +45,9 @@
 #include "config.h"
 #include "Options.h"
 #include "Log.h"
+#include "Utils.h"
 
 class MmapTempFile {
-	static int getUnique() { static int id = 0; return id++; }
 public:
 	typedef Kmernator::MmapFile MmapFile;
 	typedef unsigned long size_type;
@@ -78,17 +78,10 @@ public:
 		}
 	};
 
-	static std::string generateUniqueName() {
-		std::string filename = "Kmmap-";
-		filename += boost::lexical_cast<std::string>( getpid() );
-		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
-		filename += getenv("HOST") == NULL ? "unknown" : getenv("HOST");
-		return filename;
-	}
 	static FileHandle buildNew(size_type size, std::string permanentFile) {
 		std::string filename;
 		if (permanentFile.empty())
-			filename = Options::getTmpDir() + "/.tmp-" + generateUniqueName();
+			filename = Options::getTmpDir() + UniqueName::generateUniqueName("/.tmp-Kmmap-");
 		else
 			filename = permanentFile;
 		LOG_DEBUG_OPTIONAL(1, true, "Creating new file: " << filename << " " << size);
@@ -100,8 +93,20 @@ public:
 	static MmapFile buildNewMmap(size_type size, std::string permanentFile = "") {
 		FileHandle fh = buildNew(size, permanentFile);
 		Kmernator::MmapFile mmap(fh.filename, std::ios_base::in | std::ios_base::out, size);
+		LOG_DEBUG_OPTIONAL(1, true, "Created mmap with alignment " << mmap.alignment() << " at " << fh.filename);
 		if (permanentFile.empty())
 			unlink(fh.filename.c_str());
+		return mmap;
+	}
+
+	static MmapFile openMmap(std::string filename) {
+		MmapFile mmap;
+		if (FileUtils::fileExists(filename)) {
+			mmap = MmapFile(filename, std::ios_base::in | std::ios_base::out);
+			assert(mmap.is_open());
+			assert(mmap.data() != NULL);
+			assert(mmap.size() > 0);
+		}
 		return mmap;
 	}
 

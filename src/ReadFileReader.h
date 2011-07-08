@@ -39,6 +39,7 @@
 
 #include "config.h"
 #include "Log.h"
+#include "Utils.h"
 
 using namespace std;
 
@@ -59,12 +60,13 @@ private:
 	ifstream _qs;
 	istringstream _iss;
 	Kmernator::FilteredIStream _fis;
+	int _streamType;
 
 public:
 	ReadFileReader(): _parser() {}
 
 	ReadFileReader(string fastaFilePath, string qualFilePath) :
-	    _parser(), _path(fastaFilePath) {
+	    _parser(), _path(fastaFilePath), _streamType(0) {
 
         _ifs.open(fastaFilePath.c_str());
 
@@ -89,7 +91,7 @@ public:
 	}
 
 	ReadFileReader(string &fasta) :
-		_iss(fasta) {
+		_iss(fasta), _streamType(1) {
 		_parser = SequenceStreamParserPtr(new FastaStreamParser(_iss));
 	}
 
@@ -101,8 +103,15 @@ public:
 	}
 
 	~ReadFileReader() {
-		_ifs.close();
-		_qs.close();
+		switch (_streamType) {
+		case(0) : _ifs.close();	_qs.close(); break;
+		case(1) : break;
+		case(2) : break;
+		}
+	}
+
+	std::string getFilePath() {
+		return _path;
 	}
 
 	void setReader(MmapSource &mmap) {
@@ -237,22 +246,14 @@ public:
 		if (_parser->isMmaped()) {
 			return _parser->getMmapFileSize();
 		} else {
-		    return getFileSize(_ifs);
+		    long size = 0;
+		    switch(_streamType) {
+		    case(0) : size = FileUtils::getFileSize(_ifs); break;
+		    case(1) : size = FileUtils::getFileSize(_iss); break;
+		    case(2) : size = 0; break;
+		    }
+		    return size;
 		}
-	}
-	static unsigned long getFileSize(string &filePath) {
-		ifstream ifs(filePath.c_str());
-		return getFileSize(ifs);
-	}
-	static unsigned long getFileSize(ifstream &ifs) {
-		assert( !ifs.eof() );
-		assert( ifs.is_open() && ifs.good() );
-		assert( !ifs.fail() );
-		ifstream::streampos current = ifs.tellg();
-		ifs.seekg(0, ios_base::end);
-		unsigned long size = ifs.tellg();
-		ifs.seekg(current);
-		return size;
 	}
 
 	unsigned long getBlockSize(unsigned int numThreads) {
@@ -271,6 +272,26 @@ public:
 	}
 	int getType() const {
 		return _parser->getType();
+	}
+
+	unsigned long seekToPartition(int rank, int size) {
+		unsigned long lastPos = getFileSize();
+		unsigned long firstPos = 0;
+		if (size > 1) {
+			unsigned long blockSize = getBlockSize(size);
+			if (rank + 1 != size ) {
+				seekToNextRecord( blockSize * (rank+1) );
+				lastPos = getPos();
+			}
+			seekToNextRecord( blockSize * rank );
+			firstPos = getPos();
+		}
+		LOG_VERBOSE(2, "Seeked to position " << firstPos << ", reading until " << lastPos << " on file " << getFilePath());
+		return lastPos;
+	}
+
+	bool eof() const {
+		return _parser->endOfStream();
 	}
 
 public:

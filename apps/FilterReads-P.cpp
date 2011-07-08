@@ -48,6 +48,7 @@ int main(int argc, char *argv[]) {
 	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
+	MPI_Comm_set_errhandler( world, MPI::ERRORS_THROW_EXCEPTIONS );
 
 	try {
 		Logger::setWorld(&world);
@@ -146,14 +147,21 @@ int main(int argc, char *argv[]) {
 	}
 	KS spectrum(world, numBuckets);
 	Kmernator::MmapFileVector spectrumMmaps;
-	if (! Options::getLoadKmerMmap().empty() ) {
-		LOG_WARN(1, "load-kmer-mmap is unsupported at this time");
+	if (Options::getKmerSize() > 0 && !Options::getLoadKmerMmap().empty()) {
+		spectrum.restoreMmap(Options::getLoadKmerMmap());
 	} else if (Options::getKmerSize() > 0) {
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		TrackingData::minimumWeight = Options::getMinKmerQuality();
 
 		spectrum.buildKmerSpectrum(reads);
+		if (Log::isVerbose(1)) {
+			std::string hist = spectrum.getHistogram(false);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Histogram\n" << hist);
+		}
+	}
+	if (Options::getKmerSize() > 0) {
+
 		if (Options::getVariantSigmas() > 0.0) {
 			long purgedVariants = spectrum.purgeVariants();
 			long totalPurgedVariants = all_reduce(world, purgedVariants, std::plus<long>());
@@ -167,8 +175,8 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (!outputFilename.empty() && Options::getSaveKmerMmap() > 0) {
-		  spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
-		  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+			spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
+			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
         }
 
 		if (Options::getMinDepth() > 1) {

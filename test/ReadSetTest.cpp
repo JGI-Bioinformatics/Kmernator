@@ -154,6 +154,8 @@ void testConsensus(string filename)
 	store.identifyPairs();
 	BOOST_CHECK_EQUAL(store.getSize() / 2, store.getPairSize());
 
+	int minq = Options::getMinQuality();
+	Options::getMinQuality() = 0;
 	ReadSet reads1, reads2;
 	for(unsigned int i = 0 ; i < store.getSize(); i+=2) {
 		reads1.append(store.getRead(i).clone());
@@ -167,7 +169,7 @@ void testConsensus(string filename)
 
 	BOOST_CHECK_EQUAL( consensus1.getFasta(), store.getRead(0).getFasta() );
 	BOOST_CHECK_EQUAL( consensus2.getFasta(), store.getRead(1).getFasta() );
-
+	Options::getMinQuality() = minq;
 }
 
 BOOST_AUTO_TEST_CASE( ReadSetTest )

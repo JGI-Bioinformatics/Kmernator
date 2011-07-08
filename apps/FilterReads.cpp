@@ -37,7 +37,7 @@ typedef ReadSelector<DataType> RS;
 
 int main(int argc, char *argv[]) {
 
-	Options::getSaveKmerMmap() = 1;
+	Options::getSaveKmerMmap() = 0;
 	try {
 		if (!FilterReadsOptions::parseOpts(argc, argv))
 			throw invalid_argument("Please fix the command line arguments");
@@ -87,8 +87,9 @@ int main(int argc, char *argv[]) {
 	KS spectrum(0);
 
 	Kmernator::MmapFileVector spectrumMmaps;
-
-	if (Options::getKmerSize() > 0) {
+	if (Options::getKmerSize() > 0 && !Options::getLoadKmerMmap().empty()) {
+		spectrum.restoreMmap(Options::getLoadKmerMmap());
+	} else if (Options::getKmerSize() > 0) {
 
 	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
 	  LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
@@ -98,14 +99,19 @@ int main(int argc, char *argv[]) {
 
 	  TrackingData::minimumWeight = Options::getMinKmerQuality();
 
-	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
+	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
+	  if (Log::isVerbose(1))
+		  spectrum.printHistograms(Log::Verbose("Histogram"));
+
 	  if (Options::getVariantSigmas() > 0.0) {
 		  spectrum.purgeVariants();
 		  if (Log::isVerbose(1)) {
 			  spectrum.printHistograms(Log::Verbose("Variant-Removed Histogram"));
 		  }
 	  }
+	}
 
+	if (Options::getKmerSize() > 0) {
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {

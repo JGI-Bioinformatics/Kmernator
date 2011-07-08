@@ -65,6 +65,9 @@ public:
 	static void madviseMmapsSequential() {
 		madviseMmaps(MADV_SEQUENTIAL);
 	}
+	static void madviseMmapsNormal() {
+		madviseMmaps(MADV_NORMAL);
+	}
 	static void madviseMmapsDontNeed() {
 		madviseMmaps(MADV_DONTNEED);
 	}
@@ -126,10 +129,11 @@ protected:
 
 private:
 	void addRead(const Read &read);
-	void addRead(const Read &read, SequenceLengthType readLength);
+	void addRead(const Read &read, SequenceLengthType readLength, int rank = -1);
 	void _trackSequentialPair(const Read &read);
 	inline bool _setMaxSequenceLength(SequenceLengthType len) {
 		if (len > _maxSequenceLength) {
+			#pragma omp critical
 			_maxSequenceLength = len;
 			return true;
 		}
@@ -190,7 +194,7 @@ public:
 		_globalOffset = globalOffset;
 	}
 
-	inline ReadSetSizeType getGlobalOffset() {
+	inline ReadSetSizeType getGlobalOffset() const {
 		return _globalOffset;
 	}
 

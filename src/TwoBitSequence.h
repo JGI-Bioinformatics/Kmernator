@@ -120,6 +120,9 @@ public:
 	static SequenceLengthType  gcCount[256];
 
 public:
+	static char uncompressBase(unsigned int v);
+	static unsigned char compressBase(char base);
+
 	// NULL for out is okay to just get markups
 	static BaseLocationVectorType compressSequence(const char *bases,TwoBitEncoding *out);
 	static BaseLocationVectorType compressSequence(const std::string &bases, TwoBitEncoding *out) {
@@ -145,6 +148,8 @@ public:
     static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
 
     static void shiftLeft(const void *in, void *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases, bool hasExtraByte = false);
+
+    static void extendBase(std::string _fasta, char base, void *twoBitOut, bool toRight);
 
 	static MarkupElementSizeType getMarkupElementSize(const BaseLocationVectorType &markups);
 	static MarkupElementSizeType getMarkupElementSize(const BaseLocationVectorType &markups, long &totalMarkupSize);

@@ -610,7 +610,64 @@ void testKmerMap(SequenceLengthType size) {
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
 		count++;
 	}
+
 	BOOST_CHECK_EQUAL(kmerF.size(), count);
+
+	Kmer::IndexType countThread;
+
+	countThread = 0;
+	#pragma omp parallel num_threads(1) reduction(+: countThread)
+	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+		BOOST_CHECK(kmerF.exists(it->key()));
+		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
+		countThread++;
+	}
+	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
+
+	countThread = 0;
+	#pragma omp parallel num_threads(2) reduction(+: countThread)
+	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+		BOOST_CHECK(kmerF.exists(it->key()));
+		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
+		countThread++;
+	}
+	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
+
+	countThread = 0;
+	#pragma omp parallel num_threads(3) reduction(+: countThread)
+	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+		BOOST_CHECK(kmerF.exists(it->key()));
+		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
+		countThread++;
+	}
+	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
+
+	countThread = 0;
+	#pragma omp parallel num_threads(4) reduction(+: countThread)
+	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+		BOOST_CHECK(kmerF.exists(it->key()));
+		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
+		countThread++;
+	}
+	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
+
+	countThread = 0;
+	#pragma omp parallel num_threads(7) reduction(+: countThread)
+	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+		BOOST_CHECK(kmerF.exists(it->key()));
+		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
+		countThread++;
+	}
+	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
+
+	countThread = 0;
+	#pragma omp parallel num_threads(31) reduction(+: countThread)
+	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+		BOOST_CHECK(kmerF.exists(it->key()));
+		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
+		countThread++;
+	}
+	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
 }
 
 

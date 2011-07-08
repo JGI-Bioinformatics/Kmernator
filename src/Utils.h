@@ -36,13 +36,28 @@
 #include <fstream>
 #include <cstdlib>
 #include <vector>
+#include <set>
 #include <cstring>
 #include <cmath>
+#include <memory>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <libgen.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/shared_ptr.hpp>
+
+#include <boost/iostreams/device/file_descriptor.hpp>
+#include <boost/iostreams/stream.hpp>
+#include <fstream>
 
 #define foreach BOOST_FOREACH
 
@@ -98,6 +113,17 @@ public:
 	}
 };
 
+class UniqueName {
+	static int getUnique() { static int id = 0; return id++; }
+public:
+	static std::string generateUniqueName(std::string filename = "") {
+		filename += boost::lexical_cast<std::string>( getpid() );
+		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
+		filename += Options::getHostname();
+		return filename;
+	}
+
+};
 
 class OfstreamMap {
 public:
@@ -105,15 +131,18 @@ public:
 	typedef boost::unordered_map< std::string, OStreamPtr > Map;
 	typedef Map::iterator Iterator;
 	typedef boost::shared_ptr< Map > MapPtr;
-private:
+protected:
     MapPtr _map;
     std::string _outputFilePathPrefix;
     std::string _suffix;
     bool _append;
+<<<<<<< HEAD:src/Utils.h
     bool _isStdout;
 #ifdef _USE_MPI
     mpi::communicator *_world;
 #endif
+=======
+>>>>>>> master:src/Utils.h
 
 public:
 	static bool &getDefaultAppend() {
@@ -122,6 +151,7 @@ public:
 	}
 
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
+<<<<<<< HEAD:src/Utils.h
 	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix), _append(false), _isStdout(false) {
 		_append = getDefaultAppend();
 		if (Options::getOutputFile() == std::string("-")) {
@@ -131,47 +161,58 @@ public:
 #ifdef _USE_MPI
 		_world = NULL;
 #endif
+=======
+	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {
+		LOG_DEBUG(3, "OfstreamMap(" << outputFilePathPrefix << ", " << suffix << "):");
+		_append = getDefaultAppend();
+>>>>>>> master:src/Utils.h
 	}
 	~OfstreamMap() {
-        clear();
+		LOG_DEBUG_OPTIONAL(2, true, "~OfstreamMap():");
+		this->clear();
 	}
-#ifdef _USE_MPI
-	void setWorld(mpi::communicator &world) {
-		_world = &world;
-	}
-#endif
-	std::string getRank() const {
-#ifdef _USE_MPI
-		return (_world == NULL ? std::string() : std::string("--MPIRANK-") + boost::lexical_cast<std::string>(_world->rank()) );
-#else
-		return std::string();
-#endif
-	}
-	void concatenateMPI(std::string rank) {
-		if (rank.empty())
-			return;
-		// TODO
-		// gather all filenames and sizes to master
-		// for each filename
-		//   master sends filename, total size, offset to others
-		//   each open, set_view, opens own piece (if applicable), copies, closes
+	std::set<std::string> getFiles(std::string rank) {
+		std::set<std::string> files;
+		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
+			std::string file = it->first;
+			LOG_DEBUG_OPTIONAL(2, true, "getFiles(): " << file);
+			if (!rank.empty()) {
+				file = file.substr(0, file.find(rank));
+			}
+			files.insert(file);
+			LOG_DEBUG_OPTIONAL(2, true, "getFiles() postrank: " << file);
+		}
+		return files;
 	}
 	bool &getAppend() {
 		return _append;
 	}
-	void clear() {
-		close();
-		concatenateMPI(getRank());
+	const bool &getAppend() const {
+		return _append;
+	}
+	virtual std::string getOutputPrefix() const {
+		return _outputFilePathPrefix;
+	}
+	virtual void clear() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::clear()");
+		this->close();
+		_clear();
+	}
+	void _clear() {
 		_map->clear();
 	}
-	void close() {
+	virtual void close() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::close()");
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
-			LOG_VERBOSE_OPTIONAL(1, true, "Closing " << it->first);
+			LOG_VERBOSE_OPTIONAL(2, true, "Closing " << this->getOutputPrefix() << it->first);
 			it->second->close();
 		}
 	}
+	virtual std::string getRank() const {
+		return std::string();
+	}
 	std::string getFilename(std::string key) const {
-		return _outputFilePathPrefix + key + _suffix + getRank();
+		return key + _suffix + getRank();
 	}
 	std::ostream &getOfstream(std::string key) {
 		if (_isStdout)
@@ -187,23 +228,27 @@ public:
 			#pragma omp critical (ofStreamMap)
 #endif
 			{
-				// recheck map
+				// re-copy the map first
 				thisMap = _map;
+
+				// recheck map
 				it = thisMap->find(filename);
 				if (it == thisMap->end()) {
-					LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << filename);
+					std::string fullPath = _outputFilePathPrefix + filename;
+
+					LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << fullPath);
 					std::ios_base::openmode mode = std::ios_base::out;
 					if (getAppend())
 						mode |= std::ios_base::app;
 					else
 						mode |= std::ios_base::trunc;
-					OStreamPtr osp(new std::ofstream(filename.c_str(), mode));
+					OStreamPtr osp(new std::ofstream(fullPath.c_str(), mode));
 					if( osp->fail() )
-						throw std::runtime_error((std::string("Could not open file for writing: ") + filename).c_str());
+						throw std::runtime_error((std::string("Could not open file for writing: ") + fullPath).c_str());
 
 					MapPtr copy = MapPtr(new Map(*thisMap));
-					it = copy->insert( it, Map::value_type(filename, osp) );
-					_map = copy;
+					it = copy->insert( copy->end(), Map::value_type(filename, osp) );
+					_map = thisMap = copy;
 				}
 			}
 		}
@@ -419,6 +464,114 @@ public:
 		} else {
 			return false;
 		}
+	}
+};
+
+class OPipestream : public boost::iostreams::stream< boost::iostreams::file_descriptor_sink >
+{
+public:
+	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_sink > base ;
+	explicit OPipestream( const std::string command ) : base( fileno( _pipe = popen( command.c_str(), "w" ) ) ), _cmd(command) {
+		assert(_pipe != NULL);
+		assert(fileno(_pipe) >= 0);
+		assert(is_open());
+	}
+	void close() {
+		this->flush();
+		int status = pclose( _pipe );
+		if (status != 0) {
+			LOG_ERROR(1, "Pipe '" << _cmd << "' closed with an error: " << status);
+			throw;
+		}
+		try {
+			base::close();
+		} catch(...) {
+			// ignoring this pipe closure error.  pclose is the proper way to close this..
+			LOG_DEBUG_OPTIONAL(1, true, "Potentially failed to close pipe properly");
+		}
+	}
+	~OPipestream() {
+		close();
+	}
+private :
+	FILE* _pipe ;
+	std::string _cmd;
+};
+
+
+class FileUtils
+{
+public:
+
+	static std::string getDirname(const std::string &filePath) {
+		char buf[filePath.size() + 1];
+		memcpy(buf, filePath.c_str(), filePath.size());
+	    std::string dirPath(dirname(buf));
+		return dirPath;
+	}
+	static void syncDir(const std::string &filePath) {
+		std::string dirPath = getDirname(filePath);
+		DIR *d = opendir(dirPath.c_str());
+		if (d == NULL) {
+			LOG_ERROR(1, "Could not opendir " << dirPath << "! " << strerror(errno));
+		} else {
+			if (fsync(dirfd(d)) != 0)
+				LOG_ERROR(1, "Could not dirsync " << dirPath << "! " << strerror(errno));
+			closedir(d);
+		}
+	}
+	static void syncFile(const std::string &filePath) {
+		int fd = open(filePath.c_str(), std::ios_base::in | std::ios_base::out);
+		if (fd < 0) {
+			LOG_ERROR(1, "Could not open " << filePath << "! " << strerror(errno));
+		} else {
+			if (fsync(fd) != 0)
+				LOG_ERROR(1, "Could not fsync " << filePath << "! " << strerror(errno));
+		}
+		if (close(fd) != 0)
+			LOG_ERROR(1, "Could not close " << filePath << "! " << strerror(errno));
+	}
+	static std::auto_ptr<struct stat> statFile(const std::string &filePath, bool dofsync = false, bool dodirsync = false) {
+		if (dodirsync) {
+			syncDir(filePath);
+		}
+		if (dofsync) {
+			syncFile(filePath);
+		}
+		std::auto_ptr<struct stat> fileStat(new struct stat);
+		if (stat(filePath.c_str(), fileStat.get()) != 0) {
+			LOG_ERROR(1, "Could not stat " << filePath << "! " << strerror(errno));
+		} else {
+			LOG_DEBUG_OPTIONAL(2, true, "stat of " << filePath << ": dev " << fileStat->st_dev << ", ino " << fileStat->st_ino << ", mode " << fileStat->st_mode << ", nlink " << fileStat->st_nlink << ", size " << fileStat->st_size)
+		}
+		return fileStat;
+	}
+	static unsigned long getFileSize(std::string &filePath) {
+		std::ifstream ifs(filePath.c_str());
+		if (ifs.good())
+			return getFileSize(ifs);
+		else
+			return 0;
+	}
+	static unsigned long getFileSize(std::istream &is) {
+		assert( !is.eof() );
+		assert( is.good() );
+		assert( !is.fail() );
+		std::ifstream::streampos current = is.tellg();
+		is.seekg(0, std::ios_base::end);
+		unsigned long size = is.tellg();
+		is.seekg(current);
+		return size;
+	}
+	static bool fileExists(std::string &filePath) {
+		std::ifstream ifs(filePath.c_str());
+		return fileExists(ifs);
+	}
+	static bool fileExists(std::ifstream &ifs) {
+		if (ifs.fail())
+			return false;
+		else
+			return true;
 	}
 };
 

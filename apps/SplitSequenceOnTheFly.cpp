@@ -42,11 +42,17 @@
 #include "ReadSet.h"
 #include "Options.h"
 #include "Log.h"
+#include "Utils.h"
+#ifdef ENABLE_MPI
+#include "DistributedFunctions.h"
+#endif
 
 using namespace std;
 
 class SSOptions : public Options {
 public:
+	typedef Options::StringListType StringListType;
+
 	static int &getDefaultNumFiles() {
 		static int dummy = 0;
 		return dummy;
@@ -61,8 +67,31 @@ public:
 	static int getFileNum() {
 		return getVarMap()["file-num"].as<int> ();
 	}
+
+	static std::string _replaceWithKeys(std::string input) {
+		size_t pos;
+		while ((pos = input.find("{FileNum}")) != std::string::npos) {
+			LOG_DEBUG_OPTIONAL(1, true, "Replacing {FileNum} in " << input);
+			input.replace(pos, 9, boost::lexical_cast<std::string>(getFileNum()));
+		}
+		while ((pos = input.find("{NumFiles}")) != std::string::npos) {
+			LOG_DEBUG_OPTIONAL(1, true, "Replacing {NumFiles} in " << input);
+			input.replace(pos, 10, boost::lexical_cast<std::string>(getNumFiles()));
+		}
+		LOG_DEBUG_OPTIONAL(1, true, "final string " << input);
+		return input;
+	}
 	static std::string getPipeCommand() {
-		return getVarMap().count("pipe-command") ? getVarMap()["pipe-command"].as<std::string>() : std::string();
+		std::string pipeCmd = getVarMap().count("pipe-command") ? getVarMap()["pipe-command"].as<std::string>() : std::string();
+		return _replaceWithKeys(pipeCmd);
+	}
+	static StringListType getMergeList() {
+		StringListType input = getVarMap().count("merge") ? getVarMap()["merge"].as<StringListType>() : StringListType();
+		StringListType output;
+		for(unsigned int i = 0; i < input.size(); i++) {
+			output.push_back( _replaceWithKeys(input[i]));
+		}
+		return output;
 	}
 	static bool parseOpts(int argc, char *argv[]) {
 		// set options specific to this program
@@ -70,9 +99,9 @@ public:
 		getDesc().add_options()("help", "produce help message")
 				("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
 				("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))")
-				("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into")
+				("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
+				("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
 				;
-
 
 		bool ret = Options::parseOpts(argc, argv);
 		if (getInputFiles().empty() || getNumFiles() == 0 || getFileNum() >= getNumFiles()) {
@@ -84,48 +113,64 @@ public:
 };
 
 
-struct opipestream : boost::iostreams::stream< boost::iostreams::file_descriptor_sink >
-{
-	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_sink > base ;
-	explicit opipestream( const char* command ) : base( fileno( pipe = popen( command, "w" ) ) ) {}
-	~opipestream() { close() ; pclose( pipe ) ; }
-private :
-	FILE* pipe ;
-};
-
 int main(int argc, char *argv[]) {
 	Options::getVerbosity() = 0;
+	Options::getMmapInput() = 0;
+
 #ifdef ENABLE_MPI
 	MPI_Init(&argc, &argv);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
 	SSOptions::getDefaultNumFiles() = world.size();
 	SSOptions::getDefaultFileNum() = world.rank();
+	Logger::setWorld(&world);
 #endif
 	if (!SSOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
-	Options::FileListType inputs = Options::getInputFiles();
-
-	ReadSet reads;
-	LOG_VERBOSE(1, "Reading Input Files");
-	reads.appendAllFiles(inputs, SSOptions::getFileNum(), SSOptions::getNumFiles());
-	LOG_VERBOSE(1,"loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases ");
-
-	opipestream *ops = NULL;
+	OPipestream *ops = NULL;
 	std::string pipeCommand = SSOptions::getPipeCommand();
 	if (!pipeCommand.empty()) {
-		ops = new opipestream(pipeCommand.c_str());
-	}
-	for(ReadSet::ReadSetSizeType readIdx = 0 ; readIdx < reads.getSize(); readIdx++) {
-		const Read &read = reads.getRead(readIdx);
-		read.write(ops == NULL ? std::cout : *ops);
+		ops = new OPipestream(pipeCommand);
 	}
 
-	if (ops != NULL)
+	Options::FileListType inputs = Options::getInputFiles();
+
+	ostream &output = (ops == NULL ? std::cout : *ops);
+	for (unsigned int i = 0 ; i < inputs.size(); i++) {
+		ReadFileReader reader(inputs[i], "");
+		unsigned long lastPos = reader.seekToPartition( SSOptions::getFileNum(), SSOptions::getNumFiles() );
+		std::string name, bases, quals;
+	    while (reader.nextRead(name, bases, quals)) {
+	        Read read(name, bases, quals);
+	        read.write(output);
+            if (reader.getPos() >= lastPos)
+            	break;
+	    }
+	}
+
+	if (ops != NULL) {
 		delete ops;
+	}
 
 #ifdef ENABLE_MPI
+	niceBarrier(world);
+	Options::StringListType merges = SSOptions::getMergeList();
+	for(unsigned int i = 0; i < merges.size(); i++) {
+		std::string &merge = merges[i];
+		size_t pos = merge.find(' ');
+		if (pos == std::string::npos) {
+			LOG_WARN(1, "Could not parse merge string: " << merge);
+		} else {
+			LOG_DEBUG(2, "'" << merge << "' pos=" << pos);
+			std::string myFile = merge.substr(0, pos);
+			std::string mergeFile = merge.substr(pos+1);
+			LOG_DEBUG(2, "'" << merge << "' pos=" << pos << " '" << myFile.c_str() << "' '" << mergeFile.c_str() << "'");
+			LOG_DEBUG(2, "Merging '" << myFile << "' into '" << mergeFile << "'");
+			DistributedOfstreamMap::mergeFiles(world, myFile, mergeFile, true);
+		}
+	}
+
 	MPI_Finalize();
 #endif
 

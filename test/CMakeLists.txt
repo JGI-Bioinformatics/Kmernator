@@ -140,14 +140,17 @@ target_link_libraries (TestMPI
 endif()
 
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
-
-# v2.8: file(COPY test/500.fasta test/500.qual DESTINATION test)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fasta test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus1.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus2.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus2-diff.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus3.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runFilterTests.sh test/ )
+
+add_test(filter runFilterTests.sh)
 
 #
 # $Log: CMakeLists.txt,v $

@@ -257,6 +257,17 @@ public:
 				output.getTwoBitSequence(), getLength());
 	}
 
+	void set(std::string fasta, bool leastComplement = false) {
+		assert(fasta.length() == KmerSizer::getSequenceLength());
+		if (leastComplement) {
+			TEMP_KMER(temp);
+			TwoBitSequence::compressSequence(fasta, temp.getTwoBitSequence());
+			temp.buildLeastComplement(*this);
+		} else {
+			TwoBitSequence::compressSequence(fasta, this->getTwoBitSequence());
+		}
+	}
+
 	// returns true if this is the least complement, false otherwise (output is least)
 	bool buildLeastComplement(Kmer &output) const {
 		buildReverseComplement(output);
@@ -613,7 +624,7 @@ public:
 		return *this;
 	}
 
-	// restore a new array from a mmap
+	// restore a new array from a mmap, allocating new memory
 	KmerArray(const void *src) : _begin(NULL), _size(0), _capacity(0) {
 		initLock();
 		IndexType *size = (IndexType *) src;
@@ -642,6 +653,7 @@ public:
 	static SizeType sizeToStore(IndexType size) {
 		return sizeof(IndexType) + size * ( KmerSizer::getByteSize() + sizeof(Value) );
 	}
+	// create a new array using existing memory
 	static const KmerArray restore(const void *src) {
 		const IndexType *size = (const IndexType *) src;
 		IndexType xsize = *(size++);
@@ -1082,6 +1094,31 @@ public:
 		}
 	}
 
+	static KmerArray extendKmer(const Kmer &kmer, bool toRight, bool leastComplement = false) {
+		KmerArray kmers(4);
+		std::string fasta = kmer.toFasta().substr(toRight ? 1: 0, KmerSizer::getSequenceLength() - 1);
+
+        if (toRight) {
+		    TwoBitSequence::compressSequence(fasta + "A", kmers[0].getTwoBitSequence());
+		    TwoBitSequence::compressSequence(fasta + "C", kmers[1].getTwoBitSequence());
+		    TwoBitSequence::compressSequence(fasta + "G", kmers[2].getTwoBitSequence());
+		    TwoBitSequence::compressSequence(fasta + "T", kmers[3].getTwoBitSequence());
+        } else {
+		    TwoBitSequence::compressSequence("A" + fasta, kmers[0].getTwoBitSequence());
+		    TwoBitSequence::compressSequence("C" + fasta, kmers[1].getTwoBitSequence());
+		    TwoBitSequence::compressSequence("G" + fasta, kmers[2].getTwoBitSequence());
+		    TwoBitSequence::compressSequence("T" + fasta, kmers[3].getTwoBitSequence());
+
+        }
+		if (leastComplement) {
+			TEMP_KMER(tmp);
+			for(int i = 0; i < 4; i++) {
+				tmp = kmers[i];
+				tmp.buildLeastComplement(kmers[i]);
+			}
+		}
+		return kmers;
+	}
 		protected:
 			IndexType _find(const Kmer &target) const {
 				for(IndexType i=0; i<_size; i++)
@@ -1368,24 +1405,14 @@ public:
 	typedef Value ValueType;
 	typedef NumberType * NumberTypePtr;
 	typedef KmerArray<Value> BucketType;
-    typedef	typename BucketType::Iterator BucketTypeIterator;
+        typedef	typename BucketType::Iterator BucketTypeIterator;
 	typedef typename BucketType::ElementType ElementType;
 
 	typedef std::vector< BucketType > BucketsVector;
 	typedef typename BucketsVector::iterator BucketsVectorIterator;
 
-private:
-	BucketsVector _buckets;
-	NumberType BUCKET_MASK;
-
-	inline const KmerMap &_constThis() const {return *this;}
-
-public:
-	KmerMap(IndexType bucketCount = 1024) {
-
-		// ensure buckets are a precicise power of two
-		// with at least bucketCount buckets
-		NumberType powerOf2 = bucketCount;
+	static IndexType getMinPowerOf2(IndexType minBucketCount) {
+		NumberType powerOf2 = minBucketCount;
 		if (powerOf2 == 0) {
 			powerOf2 = 1;
 		} else if ( (powerOf2 & (powerOf2 -1)) == 0 ) {
@@ -1396,7 +1423,26 @@ public:
 			powerOf2 |= powerOf2 >> i;
 			powerOf2++;
 		}
+		return powerOf2;
+	}
+private:
+	BucketsVector _buckets;
+	NumberType BUCKET_MASK;
 
+	inline const KmerMap &_constThis() const {return *this;}
+
+public:
+	KmerMap() {
+		BUCKET_MASK=0;
+		_buckets.clear();
+	}
+	KmerMap(IndexType bucketCount) {
+
+		// ensure buckets are a precise powers of two
+		// with at least bucketCount buckets
+		if (bucketCount > MAX_KMER_MAP_BUCKETS)
+			bucketCount = MAX_KMER_MAP_BUCKETS;
+		NumberType powerOf2 = getMinPowerOf2(bucketCount);
 		BUCKET_MASK = powerOf2 - 1;
 		_buckets.resize(powerOf2);
 	}
@@ -1409,7 +1455,6 @@ public:
 		BUCKET_MASK = other.BUCKET_MASK;
 		return *this;
 	}
-
 	// restore new instance from mmap
 	KmerMap(const void *src) {
 		NumberType size(0), *offsetArray;
@@ -1460,9 +1505,7 @@ public:
 
 	void swap(KmerMap &other) {
 		_buckets.swap(other._buckets);
-		NumberType tmp = other.BUCKET_MASK;
-		other.BUCKET_MASK = BUCKET_MASK;
-		BUCKET_MASK = tmp;
+		std::swap(BUCKET_MASK, other.BUCKET_MASK);
 	}
 
 	static const void _getMmapSizes(const void *src, NumberType &size, NumberType &mask, NumberTypePtr &offsetArray) {
@@ -1485,6 +1528,9 @@ public:
 	NumberType getBucketMask() const {
 		return BUCKET_MASK;
 	}
+	NumberType getBucketSize() const {
+		return _buckets.size();
+	}
 	void reset(bool releaseMemory = true) {
 		for(size_t i=0; i< _buckets.size(); i++) {
 			_buckets[i].reset(releaseMemory);
@@ -1498,7 +1544,7 @@ public:
 
 	void setReadOnlyOptimization() {
 		for(size_t i = 0; i<_buckets.size(); i++) {
-			_buckets[i].setReadOnlyOptimization();
+			_buckets[i].setReadOnlyOptimization( );
 		}
 	}
 	void unsetReadOnlyOptimization() {
@@ -1508,17 +1554,15 @@ public:
 	}
 
 	inline int getLocalThreadId(NumberType hash, int numThreads) const {
-		// use the bottom bits of hash (which are used to sort by bucket)
-		// partition by numThreads blocks
-		// splits into numThread contiguous blocks
-		return (hash & BUCKET_MASK) / (_buckets.size() / numThreads + 1);
+		// stripe across all buckets
+		return (hash & BUCKET_MASK) % numThreads;
 	}
 	inline int getLocalThreadId(const KeyType &key, int numThreads) const {
 		return getLocalThreadId(key.hash(), numThreads);
 	}
 	inline int getDistributedThreadId(NumberType hash, NumberType numDistributedThreads) const {
-		// stripe within the contiguous blocks for the local thread
-		return (hash % numDistributedThreads);
+		// partition in contiguous blocks of 'global' buckets
+		return numDistributedThreads * (hash & BUCKET_MASK) / _buckets.size();
 	}
 	inline int getDistributedThreadId(const KeyType &key, NumberType numDistributedThreads) const {
 		return getDistributedThreadId(key.hash(), numDistributedThreads);
@@ -1527,8 +1571,7 @@ public:
 	// optimized to look at both possible thread partitions
 	// if this is the correct distributed thread, return true and set the proper localThread
 	// otherwise return false
-	inline bool getLocalThreadId(const KeyType &key, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
-		NumberType hash = key.hash();
+	inline bool getLocalThreadId(NumberType hash, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
 		if (numDistributedThreads == 1 || getDistributedThreadId(hash, numDistributedThreads) == distributedThreadId) {
 			localThreadId = getLocalThreadId(hash, numLocalThreads);
 			return true;
@@ -1536,40 +1579,48 @@ public:
 			return false;
 		}
 	}
-
-	inline void getThreadIds(const KeyType &key, int &localThreadId, int numLocalThreads, int &distributedThreadId, NumberType numThreads) const {
+	inline bool getLocalThreadId(const KeyType &key, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
 		NumberType hash = key.hash();
-		distributedThreadId = getDistributedThreadId(hash, numThreads);
+		return getLocalThreadId(hash, localThreadId, numLocalThreads, distributedThreadId, numDistributedThreads);
+	}
+
+	inline void getThreadIds(const KeyType &key, int &localThreadId, int numLocalThreads, int &distributedThreadId, NumberType numDistributedThreads) const {
+		NumberType hash = key.hash();
+		distributedThreadId = getDistributedThreadId(hash, numDistributedThreads);
 		localThreadId = getLocalThreadId(hash, numLocalThreads);
 	}
 
 	// optimization to move the buckets with pre-allocated memory to the next DMP thread
 	void rotateDMPBuffers(int numThreads) {
-		BucketType tmp;
-		tmp.swap(_buckets[ 0 ]);
-		for(size_t i = 0 ; i < _buckets.size() - 1; i++) {
-			_buckets[i].swap(_buckets[i+1]);
+		IndexType block = _buckets.size() / numThreads;
+		size_t i = 0;
+		// skip to the first non-zero bucket
+		while (i < _buckets.size() && _buckets[i].size() == 0)
+			i++;
+		for(size_t j = i; j < _buckets.size() - 1 && j < i+block; j++) {
+			_buckets[j].swap(_buckets[ (j+block) % _buckets.size() ]);
 		}
-		tmp.swap(_buckets[ _buckets.size() - 1]);
 	}
 
-
 	inline NumberType getBucketIdx(NumberType hash) const {
-		return hash & BUCKET_MASK;
+		NumberType bucketIdx = (hash & BUCKET_MASK);
+		return bucketIdx;
 	}
 	inline NumberType getBucketIdx(const KeyType &key) const {
 		return getBucketIdx(key.hash());
 	}
 
 	inline const BucketType &getBucket(NumberType hash) const {
-		return _buckets[getBucketIdx(hash)];
+		NumberType idx = getBucketIdx(hash);
+		return _buckets[idx];
 	}
 	inline BucketType &getBucket(NumberType hash) {
 		return const_cast<BucketType &>( _constThis().getBucket(hash) );
 	}
 
 	inline const BucketType &getBucket(const KeyType &key) const {
-		return getBucket(getBucketIdx(key));
+		NumberType idx = getBucketIdx(key);
+		return getBucket(idx);
 	}
 	inline BucketType &getBucket(const KeyType &key) {
 		return const_cast<BucketType &>( _constThis().getBucket(key) );
@@ -1779,7 +1830,7 @@ public:
 		return false;
 	}
 
-	// optimized merge for DMP threaded (interlaced) KmerMaps
+	// optimized merge for DMP threaded (blocked) KmerMaps
 	void merge(const KmerMap &src) const {
 	    if (getNumBuckets() != src.getNumBuckets()) {
 	    	 throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
@@ -1908,6 +1959,7 @@ public:
 	public:
 		Iterator() : _target(NULL), _rank(0), _size(0) {}
 
+		// iterator over rank/size will stripe across the buckets (modulus by size).
 		Iterator(KmerMap *target, int rank = 0, int size = 1):
 		_target(target),
 		_iBucket(target->_buckets.begin()),
@@ -1957,20 +2009,29 @@ public:
 		void _moveToNextValidElement() {
 			while (! isEnd() ) {
 				if (_iElement == _iBucket->end()) {
-					for(int i = 0 ; i < _size; i++)
-						if (++_iBucket == _target->_buckets.end())
+					for(int i = 0 ; i < _size; i++) {
+						++_iBucket;
+						if (isEnd())
 							break;
-						else
-							_iElement = _iBucket->begin();
+					}
+					if (isEnd())
+						break;
+					_iElement = _iBucket->begin();
 				} else
 					break;
 			}
 		}
 		void _moveToRank() {
-			if (isEnd() || ((int) _target->_buckets.size() <= _rank))
+			if (_size == 1)
 				return;
+			if (isEnd() || ((int) _target->_buckets.size() <= _rank)) {
+				while (!isEnd())
+					++_iBucket;
+				return;
+			}
 			for(int i = 0 ; i < _rank ; i++) {
-				if (++_iBucket == _target->_buckets.end())
+				++_iBucket;
+				if (isEnd())
 					return;
 			}
 			_iElement = _iBucket->begin();
@@ -2039,32 +2100,11 @@ public:
 	ConstIterator begin(int rank = 0, int size = 1) const {return Iterator(this, rank, size);}
 	ConstIterator end() const {return Iterator(this, _buckets.end());}
 
-	typedef std::pair<BucketsVectorIterator, BucketsVectorIterator> ThreadedBuckets;
-	ThreadedBuckets _getThreadedBuckets() {
-		long threads = omp_get_num_threads();
-
-		if (threads == 1) {
-			return ThreadedBuckets(_buckets.begin(), _buckets.end());
-		} else {
-			long threadNum = omp_get_thread_num();
-			long step = (_buckets.size() / threads) + 1;
-			if (step == 0)
-				step = 1;
-			BucketsVectorIterator begin = _buckets.begin() + step*threadNum;
-			BucketsVectorIterator end = begin + step;
-			if (threadNum + 1 == threads || end > _buckets.end())
-				end = _buckets.end();
-			if (begin > _buckets.end()) {
-				begin = _buckets.end();
-			}
-			return ThreadedBuckets(begin,end);
-		}
-	}
-	Iterator beginThreaded(int rank = 0, int size = 1) {
-		return Iterator(this, _getThreadedBuckets().first, rank, size);
+	Iterator beginThreaded(int rank = omp_get_thread_num(), int size = omp_get_num_threads()) {
+		return begin(rank, size);
 	}
 	Iterator endThreaded() {
-		return Iterator(this, _getThreadedBuckets().second);
+		return end();
 	}
 
 };

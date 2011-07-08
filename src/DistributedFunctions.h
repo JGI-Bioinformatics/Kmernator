@@ -43,6 +43,7 @@
 
 #include "boost/optional.hpp"
 #include <boost/thread/thread.hpp>
+#include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
 
 #ifndef ENABLE_MPI
@@ -51,22 +52,70 @@
 
 void reduceOMPThreads(mpi::communicator &world) {
 	Options::validateOMPThreads();
+#ifdef _USE_OPENMP
 	int numThreads = omp_get_max_threads();
 	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
 	omp_set_num_threads(numThreads);
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
+#endif
 }
 
 void validateMPIWorld(mpi::communicator &world) {
 	int provided;
 	MPI_Query_thread(&provided);
+#ifdef _USE_OPENMP
 	if (provided != MPI_THREAD_MULTIPLE && omp_get_max_threads() > 1) {
 		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_MULTIPLE (" << MPI::Query_thread() << "), reducing OpenMP threads to 1")
 		omp_set_num_threads(1);
 	}
+#endif
 	reduceOMPThreads(world);
 }
 
+void niceBarrier(mpi::communicator &world, int waitMs = 1) {
+	mpi::communicator tmpWorld(world, mpi::comm_duplicate);
+	int rank = tmpWorld.rank();
+	int size = tmpWorld.size();
+	char buf, buf2;
+	buf  = '\0';
+	buf2 = '\0';
+	mpi::request rreq, rreq2;
+	mpi::request sreq, sreq2;
+
+	LOG_DEBUG(2, "Entering niceBarrier");
+	if (rank == 0)
+		sreq = tmpWorld.isend((rank+1) % size, 0, buf);
+
+	rreq = tmpWorld.irecv((rank+size-1) % size, 0, buf2);
+	while (! rreq.test() ) {
+		boost::this_thread::sleep( boost::posix_time::milliseconds(waitMs) );
+	}
+
+	if (rank != 0)
+		sreq = tmpWorld.isend((rank+1) % size, 0, buf);
+
+	while (! sreq.test() ) {
+		boost::this_thread::sleep( boost::posix_time::milliseconds(waitMs) );
+	}
+
+	if (rank == 0)
+		sreq2 = tmpWorld.isend((rank+1) % size, 1, buf);
+
+	rreq2 = tmpWorld.irecv((rank+size-1) % size, 1, buf2);
+	while (! rreq2.test() ) {
+		boost::this_thread::sleep( boost::posix_time::milliseconds(waitMs) );
+	}
+
+	if (rank != 0)
+		sreq2 = tmpWorld.isend((rank+1) % size, 1, buf);
+
+	while (! sreq2.test() ) {
+		boost::this_thread::sleep( boost::posix_time::milliseconds(waitMs) );
+	}
+
+	LOG_DEBUG(1, "Exiting niceBarrier");
+
+}
 
 ReadSet::ReadSetSizeType setGlobalReadSetOffset(mpi::communicator &world, ReadSet &store) {
 	// share ReadSet sizes for globally unique readIdx calculations
@@ -106,7 +155,7 @@ protected:
 
 public:
 	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long buckets = 0, bool separateSingletons = true)
-	: KS(buckets, separateSingletons), world(_world) {
+	: KS(buckets * _world.size(), separateSingletons), world(_world) {
 	}
 	~DistributedKmerSpectrum() {
 	}
@@ -115,35 +164,54 @@ public:
 		world = other.world;
 		return *this;
 	}
-
+	mpi::communicator &getWorld() {
+		return world;
+	}
 	template<typename D>
 	MmapFile writeKmerMap(D &kmerMap, std::string filepath) {
+		MmapFile mmap;
+		NumberType alignment = mmap.alignment();
+
+		NumberType totalMmapSize = sizeof(NumberType) * 2; // numBuckets + bucketMask
 		NumberType numBuckets = kmerMap.getNumBuckets();
+		totalMmapSize += numBuckets * sizeof(NumberType); // offsets for each bucket
+		totalMmapSize += alignment - (totalMmapSize % alignment); // align
+
+		LOG_DEBUG_OPTIONAL(1, true, "numBuckets: " << numBuckets);
+		// Get the size of each bucket
 		NumberType *mySizeCounts = new NumberType[ numBuckets ];
-		for(IndexType i = 0 ; i < numBuckets; i++)
+		for(IndexType i = 0 ; i < numBuckets; i++) {
 			mySizeCounts[i] = kmerMap.getBucketByIdx(i).size();
+			// DMP buckets should only be populated at rank blocks
+			assert( mySizeCounts[i] == 0ul || (long) (world.size() * i / numBuckets) == world.rank());
+		}
+		// Globally share bucket sizes
 		NumberType *ourSizeCounts = new NumberType[ numBuckets ];
-		LOG_DEBUG(2, "writeKmerMap(): all_reduce() " << numBuckets << ", " << ourSizeCounts[0] << " " << ourSizeCounts[1] << " " << ourSizeCounts[2] << " " << ourSizeCounts[3]);
 		all_reduce(world, mySizeCounts, numBuckets, ourSizeCounts, std::plus<NumberType>());
-		LOG_DEBUG(3, "Distributed Size Counts: " << ourSizeCounts[0] << " " << ourSizeCounts[1] << " " << ourSizeCounts[2] << " " << ourSizeCounts[3]);
 
 		// rename variable for clarity
 		NumberType *offsetArray = mySizeCounts;
-		NumberType offset = sizeof(NumberType) * (2+numBuckets);
-		NumberType totalSize = 0;
-		// store the arrays in mmap blocked by mpi rank, to minimized mapped footprint
-		for(int rank = 0 ; rank < world.size(); rank++) {
-			for(IndexType i = rank; i < numBuckets; i+= world.size()) {
-				totalSize += ourSizeCounts[i];
-				offsetArray[i] = offset;
-				offset += D::BucketType::sizeToStore( ourSizeCounts[i] );
+
+		// store the arrays in mmap blocked and aligned by mpi rank
+		NumberType myOffset = 0, mySize = 0;
+		int lastRank = world.size();
+		for(IndexType i = 0; i < numBuckets; i++) {
+			int rank = world.size() * i / numBuckets;
+			if (rank == world.rank() && lastRank != rank)
+				myOffset = totalMmapSize;
+
+			offsetArray[i] = totalMmapSize;
+			totalMmapSize += D::BucketType::sizeToStore( ourSizeCounts[i] );
+
+			if (world.size() * (i+1) / numBuckets != (IndexType) rank) {
+				totalMmapSize += alignment - (totalMmapSize % alignment); // align for each rank
+				if (rank == world.rank())
+					mySize = totalMmapSize - myOffset;
 			}
+			LOG_DEBUG(1, "myOffset " << myOffset << " mySize " << mySize << " totalMmapSize " << totalMmapSize);
+			lastRank = rank;
 		}
 
-		delete [] ourSizeCounts;
-
-		MmapFile mmap;
-		NumberType totalMmapSize = kmerMap.getSizeToStoreCountsAndIndexes() + totalSize * D::BucketType::getElementByteSize();
 		if (world.rank() == 0) {
 			mmap = MmapTempFile::buildNewMmap(totalMmapSize , filepath);
 			NumberType *numbers = (NumberType *) mmap.data();
@@ -172,12 +240,17 @@ public:
 
 		// store our part of mmap (interleaved DMP)
 		for(IndexType i = 0 ; i < numBuckets; i++) {
-			long size = kmerMap.getBucketByIdx(i).size();
-			if (size > 0) {
+			int rank = (world.size() * i / numBuckets);
+			if (rank == world.rank()) {
+				assert(myOffset <= offsetArray[i]);
+				assert(myOffset + mySize >= offsetArray[i] +  kmerMap.getBucketByIdx(i).size());
 				kmerMap.getBucketByIdx(i).store(mmap.data() + offsetArray[i]);
-				msync(mmap.data() + offsetArray[i], size, MS_ASYNC);
+			} else {
+				assert( kmerMap.getBucketByIdx(i).size() == 0);
 			}
 		}
+		// share with other processes
+		msync(mmap.data() + myOffset, mySize, MS_ASYNC);
 
 		delete [] mySizeCounts;	// aka offsetArray
 		LOG_DEBUG(2, "writeKmerMap(): barrier2");
@@ -239,7 +312,8 @@ public:
 		inline bool isSolid() const {
 			return _isSolid;
 		}
-		bool _isSolid;		int process(StoreKmerMessageHeader *msg, StoreKmerMessageBuffersBase *bufferCallback) {
+		bool _isSolid;
+		int process(StoreKmerMessageHeader *msg, StoreKmerMessageBuffersBase *bufferCallback) {
 			LOG_DEBUG(4, "StoreKmerMessage: " << msg->readIdx << " " << msg->readPos << " " << msg->weight << " " << msg->getKmer()->toFasta());
 			getSpectrum().append(getDataPointer(), *msg->getKmer(), msg->weight, msg->readIdx, msg->readPos, isSolid());
 			return 0;
@@ -249,7 +323,7 @@ public:
 	typedef MPIRecvMessageBuffer< StoreKmerMessageHeader, StoreKmerMessageHeaderProcessor > RecvStoreKmerMessageBuffer;
 	typedef MPISendMessageBuffer< StoreKmerMessageHeader, StoreKmerMessageHeaderProcessor > SendStoreKmerMessageBuffer;
 
-	void _buildKmerSpectrumMPI(ReadSet &store, bool isSolid) {
+	void _buildKmerSpectrumMPI(const ReadSet &store, bool isSolid) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
 		int worldSize = world.size();
@@ -307,7 +381,7 @@ public:
 						LOG_DEBUG(4, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << kmers[readPos].toFasta());
 					} else {
 
-						this->solid.getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize);
+						this->getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize, true);
 
 						if (rankDest == rank && threadDest == threadId) {
 							this->append(pointers, kmers[readPos], weight, globalReadIdx, readPos, isSolid);
@@ -412,11 +486,11 @@ public:
 		}
 	};
 
-	void buildKmerSpectrum( ReadSet &store ) {
+	void buildKmerSpectrum(const ReadSet &store ) {
 		return this->buildKmerSpectrum(store, false);
 	}
 
-	void buildKmerSpectrum(ReadSet &store, bool isSolid) {
+	void buildKmerSpectrum(const ReadSet &store, bool isSolid) {
 
 		_buildKmerSpectrumMPI(store, isSolid);
 
@@ -451,18 +525,18 @@ public:
 	}
 
 
-	Kmernator::MmapFileVector writeKmerMaps(string fileprefix = Options::getOutputFile()) {
+	Kmernator::MmapFileVector writeKmerMaps(string mmapFilename = Options::getOutputFile()) {
 		// communicate sizes and allocate permanent file
 		LOG_VERBOSE(2, "Merging partial spectrums" );
 		LOG_DEBUG(3, MemoryUtils::getMemoryUsage() );
-		Kmernator::MmapFileVector ourSpectrum(3);
+		Kmernator::MmapFileVector ourSpectrum;
 		if (this->hasSolids){
-			ourSpectrum[0] = this->writeKmerMap(this->solid, fileprefix + "-kmer-mmap");
+			ourSpectrum.push_back(this->writeKmerMap(this->solid, mmapFilename + "-solid"));
 		}
-		ourSpectrum[1] = this->writeKmerMap(this->weak, fileprefix + "-kmer-mmap");
+		ourSpectrum.push_back(this->writeKmerMap(this->weak, mmapFilename));
 
 		if (Options::getMinDepth() <= 1 && this->hasSingletons) {
-			ourSpectrum[2] = this->writeKmerMap(this->singleton, fileprefix + "-singleton-kmer-mmap");
+			ourSpectrum.push_back(this->writeKmerMap(this->singleton, mmapFilename + "-singleton"));
 		}
 
 		LOG_DEBUG(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
@@ -646,6 +720,138 @@ private:
 
 }; // DistributedKmerSpectrum
 
+
+/*
+ * DistributedOfstreamMap
+ */
+class DistributedOfstreamMap : public OfstreamMap
+{
+private:
+	mpi::communicator _world;
+	std::string _tempPrefix;
+	std::string _realOutputPrefix;
+
+	static string getTempPath(std::string tempPath) {
+		return tempPath + UniqueName::generateUniqueName("/.tmp-output");
+	}
+public:
+	DistributedOfstreamMap(mpi::communicator &world, std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix(), std::string tempPath = Options::getTmpDir())
+	 :  OfstreamMap(getTempPath(tempPath), suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
+		_tempPrefix = OfstreamMap::getOutputPrefix();
+		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << "," << tempPath <<")");
+	}
+
+	~DistributedOfstreamMap() {
+		LOG_DEBUG_OPTIONAL(2, _world.rank() == 0, "~DistributedOfstreamMap()");
+		this->clear();
+	}
+
+	virtual std::string getRank() const {
+		return std::string("--MPIRANK-") + boost::lexical_cast<std::string>(_world.rank());
+	}
+	virtual void clear() {
+		LOG_DEBUG_OPTIONAL(2, true, "DistributedOfstreamMap::clear()");
+		this->close();
+		_clear();
+	}
+	virtual std::string getOutputPrefix() {
+		return _realOutputPrefix;
+	}
+	virtual void close() {
+		LOG_VERBOSE_OPTIONAL(2, _world.rank() == 0, "Concatenating all MPI rank files");
+		OfstreamMap::close();
+		concatenateMPI();
+	}
+	void concatenateMPI() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::concatenateMPI()");
+		std::string rank = getRank();
+
+		// Send all filenames (minus Rank) to master
+		std::set< std::string > files = getFiles(rank);
+
+		if (_world.rank() != 0) {
+			_world.send(0, 0, files);
+		} else {
+			for(int i = 1 ; i < _world.size() ; i++) {
+				std::set< std::string > newFiles;
+				_world.recv(i, 0, newFiles);
+				files.insert(newFiles.begin(), newFiles.end());
+			}
+		}
+
+		// synchronize all files
+		int numFiles = files.size();
+		mpi::broadcast(_world, numFiles, 0);
+		if (_world.rank() == 0) {
+			LOG_VERBOSE_OPTIONAL(1, true, "Collectively writing " << numFiles << " files");
+			for(std::set< std::string >::iterator it = files.begin(); it != files.end(); it++)
+				LOG_VERBOSE_OPTIONAL(1, true, "File: " << _realOutputPrefix << *it);
+		}
+
+		std::set< std::string >::iterator itF = files.begin();
+		for(int fileNum = 0; fileNum < numFiles; fileNum++) {
+			std::string filename;
+			if (_world.rank() == 0) {
+				assert(itF != files.end());
+				filename = *(itF++);
+			}
+			mpi::broadcast(_world, filename, 0);
+			std::string fullPath = _realOutputPrefix + filename;
+			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << fullPath);
+			std::string myFile = filename + rank;
+			Iterator it = this->_map->find(myFile);
+			std::string myFilePath = _tempPrefix + myFile;
+			if (it == this->_map->end()) {
+				LOG_WARN(1, "Could not find " << myFilePath << " in DistributedOfstreamMap");
+			}
+			mergeFiles(_world, myFilePath, fullPath, true);
+		}
+	}
+
+	static void mergeFiles(mpi::communicator &world, std::string rankFile, std::string globalFile, bool unlinkAfter = false) {
+		long mySize = FileUtils::getFileSize(rankFile);
+		char buf;
+		void *data = &buf;
+		int rank = world.rank();
+		Kmernator::MmapFile rankFileMmap;
+		if (mySize > 0) {
+			LOG_DEBUG_OPTIONAL(2, true, "Opening mmap on '" << rankFile << "'");
+			rankFileMmap = Kmernator::MmapFile(rankFile, std::ios_base::in | std::ios_base::out);
+			data = rankFileMmap.data();
+			assert(data != NULL);
+			assert(mySize == (long) rankFileMmap.size());
+			LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << rankFile << " size " << mySize);
+			madvise(rankFileMmap.data(), mySize, MADV_SEQUENTIAL);
+		}
+		MPI_Info info(MPI_INFO_NULL);
+		LOG_DEBUG_OPTIONAL(2, rank==0, "Writing to '" << globalFile << "'");
+
+		MPI_File ourFile;
+		int err;
+		err = MPI_File_open(world, const_cast<char*>(globalFile.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
+		if (err != MPI_SUCCESS) {
+			LOG_ERROR(1, "Could not open " << globalFile << " collectively");
+			throw;
+		}
+		MPI_Status status;
+		err = MPI_File_write_ordered(ourFile, data, mySize, MPI_BYTE, &status);
+		if (err != MPI_SUCCESS) throw;
+		int writeCount;
+		err = MPI_Get_count(&status, MPI_BYTE, &writeCount);
+		if (err != MPI_SUCCESS) throw;
+		LOG_DEBUG_OPTIONAL(1, rank==0, "Wrote: " << writeCount);
+		err = MPI_File_close(&ourFile);
+		if (err != MPI_SUCCESS) throw;
+
+		if (mySize > 0)
+			rankFileMmap.close();
+		if (unlinkAfter)
+			unlink(rankFile.c_str());
+	}
+
+};
+
+
 template<typename M>
 class DistributedReadSelector : public ReadSelector<M>
 {
@@ -658,7 +864,7 @@ public:
 	typedef typename RS::ReadTrimType ReadTrimType;
 	typedef typename RS::KA KA;
 	typedef typename RS::ElementType ElementType;
-
+	typedef DistributedOfstreamMap OFM;
 	typedef Kmer::NumberType NumberType;
 
 	typedef std::vector<ScoreType> KmerValueVector;
@@ -673,6 +879,10 @@ public:
 	DistributedReadSelector(mpi::communicator &world, const ReadSet &reads, const KMType &map)
 		: RS(reads, map), _world(world) {
 		LOG_DEBUG(3, this->_map.toString());
+	}
+	OFM getOFM(std::string outputFile, std::string suffix = FormatOutput::getDefaultSuffix()) {
+		LOG_DEBUG(2, "DistributedReadSelector::getOFM(" << outputFile << ", " << suffix << ")");
+		return OFM(_world, outputFile, suffix);
 	}
 
 	/*
@@ -973,25 +1183,10 @@ done when empty cycle is received
 		_world.barrier();
 	}
 
-	void _writePicks(OfstreamMap &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, int format) const {
-		int rank = 0;
-		while (rank < _world.size()) {
-			if (rank == _world.rank()) {
-				LOG_VERBOSE_OPTIONAL(1, true, "Writing files part " << (rank+1) << " of " << _world.size());
-				this->RS::_writePicks(ofstreamMap, offset, length, byInputFile, format);
-				ofstreamMap.close();
-				ofstreamMap.getAppend() = true;
-			}
-			_world.barrier();
-			rank++;
-		}
-	}
-
 	// TODO
 	// rescoreByBestCoveringSubset*
 
 };
-
 
 /*
  * ReadSet

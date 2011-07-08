@@ -38,6 +38,7 @@
 #include <cstring>
 #include <vector>
 
+
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
@@ -50,8 +51,9 @@ namespace po = boost::program_options;
 // extend the class for specific options for each application
 class Options {
 public:
-	typedef std::vector<std::string> FileListType;
+	typedef std::vector<std::string> StringListType;
 	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
+	typedef StringListType FileListType;
 
 protected:
 	static inline Options &getOptions() {
@@ -87,8 +89,10 @@ private:
 	unsigned int skipArtifactFilter;
 	unsigned int artifactFilterMatchLength;
 	unsigned int artifactFilterEditDistance;
+	unsigned int buildArtifactEditsInFilter;
 	unsigned int maskSimpleRepeats;
 	unsigned int phiXOutput;
+	FileListType artifactReferenceFiles;
 	unsigned int filterOutput;
 	unsigned int deDupMode;
 	unsigned int deDupSingle;
@@ -106,11 +110,16 @@ private:
 
 	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10),
 	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
-	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2),
+	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
 	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
 	mmapInput(1), saveKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
 	{
+		 char *tmpPath;
+		 tmpPath = getenv ("TMPDIR");
+		 if (tmpPath != NULL) {
+			 tmpDir = std::string(tmpPath);
+		 }
 	}
 
 public:
@@ -181,11 +190,17 @@ public:
 	static inline unsigned int &getArtifactFilterEditDistance() {
 		return getOptions().artifactFilterEditDistance;
 	}
+	static inline unsigned int &getBuildArtifactEditsInFilter() {
+		return getOptions().buildArtifactEditsInFilter;
+	}
 	static inline unsigned int &getMaskSimpleRepeats() {
 		return getOptions().maskSimpleRepeats;
 	}
 	static inline unsigned int &getPhiXOutput(){
 		return getOptions().phiXOutput;
+	}
+	static inline FileListType &getArtifactReferenceFiles() {
+		return getOptions().artifactReferenceFiles;
 	}
 	static inline unsigned int &getFilterOutput(){
 		return getOptions().filterOutput;
@@ -211,7 +226,7 @@ public:
 	static inline unsigned int &getSaveKmerMmap() {
 		return getOptions().saveKmerMmap;
 	}
-	static inline std::string &getLoadKmerMmap() {
+	static inline std::string  &getLoadKmerMmap() {
 		return getOptions().loadKmerMmap;
 	}
 	static inline unsigned int &getBuildPartitions() {
@@ -339,8 +354,13 @@ protected:
 		("artifact-edit-distance", po::value<unsigned int>()->default_value(artifactFilterEditDistance),
 				"edit-distance to apply to artifact-match-length matches to know artifacts")
 
+		("build-artifact-edits-in-filter", po::value<unsigned int>()->default_value(buildArtifactEditsInFilter),
+				"0 - edits will be applied to reads on the fly, 1 - edits will be pre-build in the filter (needs more memory, less overall CPU), 2 - automatic based on size")
+
 		("mask-simple-repeats", po::value<unsigned int>()->default_value(maskSimpleRepeats),
 				"if filtering artifacts, also mask simple repeats")
+
+		("artifact-reference-file", po::value<FileListType>(), "additional artifact reference file(s)")
 
 		("dedup-mode", po::value<unsigned int>()->default_value(deDupMode),
 				"if 0, no fragment de-duplication will occur.  if 1, single orientation (AB and BA are separated) will collapse to consensus. if 2, both orientations (AB and BA are the same) will collapse")
@@ -363,7 +383,7 @@ protected:
 		("save-kmer-mmap", po::value<unsigned int>()->default_value(saveKmerMmap),
 				"If set to 1, creates a memory map of the kmer spectrum for later use")
 
-		("load-kmer-mmap", po::value<std::string>(), "file to load instead of building the kmer-spectrum (created with --save-kmer-mmap option)")
+		("load-kmer-mmap", po::value<std::string>(), "Instead of generating kmer spectrum, load an existing one (read-only) named by this option")
 
 		("build-partitions", po::value<unsigned int>()->default_value(buildPartitions),
 				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.")
@@ -386,6 +406,11 @@ protected:
 
 public:
 
+	static std::string getHostname() {
+		char hostname[256];
+		gethostname(hostname, 256);
+		return std::string(hostname);
+	}
 
 	template<typename T>
 	static void setOpt(std::string key, T &val, bool print = false) {
@@ -441,11 +466,8 @@ public:
 			}
 
 			if (getVerbosity() > 0)
-			{
-				char hostname[128];
-				gethostname(hostname, 128);
-				LOG_VERBOSE(1, "Starting on " << hostname);
-			}
+				LOG_VERBOSE(1, "Starting on " << getHostname());
+
 			bool print = Logger::isMaster() && ((Log::isVerbose(1) || Log::isDebug(1)));
 
 			std::ostream *output = NULL;
@@ -535,6 +557,7 @@ public:
 			setOpt<unsigned int>("skip-artifact-filter", getSkipArtifactFilter(), print);
 			setOpt<unsigned int>("artifact-match-length", getArtifactFilterMatchLength(), print);
 			setOpt<unsigned int>("artifact-edit-distance", getArtifactFilterEditDistance(), print);
+			setOpt<unsigned int>("build-artifact-edits-in-filter", getBuildArtifactEditsInFilter(), print);
 
 			// set simple repeat masking
 			setOpt<unsigned int>("mask-simple-repeats", getMaskSimpleRepeats() , print);
@@ -542,6 +565,18 @@ public:
 			// set phix masking
 			setOpt<unsigned int>("phix-output", getPhiXOutput() , print);
 
+			if (vm.count("artifact-reference-file")) {
+				if (print) {
+					Log::Verbose() << "Artifact Reference files are: ";
+				}
+				FileListType artifacts = getArtifactReferenceFiles() = vm["artifact-reference-file"].as<FileListType> ();
+				if (print) {
+					for (FileListType::iterator it = artifacts.begin(); it
+							!= artifacts.end(); it++)
+						*output << *it << ", ";
+					*output << std::endl;
+				}
+			}
 			// set simple repeat masking
 			setOpt<unsigned int>("filter-output", getFilterOutput() , print);
 

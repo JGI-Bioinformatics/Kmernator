@@ -45,6 +45,10 @@
 #include <vector>
 
 #define MPI_BUFFER_DEFAULT_SIZE (512 * 1024)
+#define WAIT_MS 1
+#define WAIT_AND_WARN( iterations, warningMessage ) \
+	if ((iterations % (60000/WAIT_MS)) == 0) LOG_WARN(1, warningMessage << " waiting in loop: " << iterations);  \
+	boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) );
 
 class MPIMessageBufferBase
 {
