@@ -68,6 +68,7 @@ inline void omp_set_nested(int i) {}
 inline int omp_get_nested() { return 0; }
 inline void omp_set_dynamic(int i) {}
 inline int omp_get_dynamic() { return 0; }
+inline bool omp_in_parallel() { return false; }
 
 const int MAX_FILE_PARALLELISM = 1;
 

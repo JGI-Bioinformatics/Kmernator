@@ -136,13 +136,10 @@ protected:
     std::string _outputFilePathPrefix;
     std::string _suffix;
     bool _append;
-<<<<<<< HEAD:src/Utils.h
     bool _isStdout;
 #ifdef _USE_MPI
     mpi::communicator *_world;
 #endif
-=======
->>>>>>> master:src/Utils.h
 
 public:
 	static bool &getDefaultAppend() {
@@ -151,7 +148,6 @@ public:
 	}
 
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
-<<<<<<< HEAD:src/Utils.h
 	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix), _append(false), _isStdout(false) {
 		_append = getDefaultAppend();
 		if (Options::getOutputFile() == std::string("-")) {
@@ -161,11 +157,6 @@ public:
 #ifdef _USE_MPI
 		_world = NULL;
 #endif
-=======
-	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix) {
-		LOG_DEBUG(3, "OfstreamMap(" << outputFilePathPrefix << ", " << suffix << "):");
-		_append = getDefaultAppend();
->>>>>>> master:src/Utils.h
 	}
 	~OfstreamMap() {
 		LOG_DEBUG_OPTIONAL(2, true, "~OfstreamMap():");
