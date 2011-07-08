@@ -240,6 +240,12 @@ public:
 	bool hasSolid( const Kmer &kmer ) const {
 		return hasSolids && solid.exists( kmer );
 	}
+	const SolidElementType getIfExistsSolid( const Kmer &kmer ) const {
+		if (hasSolids)
+			return solid.getElementIfExists( kmer );
+		else
+			return SolidElementType();
+	}
 	SolidElementType getIfExistsSolid( const Kmer &kmer ) {
 		if (hasSolids)
 			return solid.getElementIfExists( kmer );
@@ -255,6 +261,9 @@ public:
 	bool hasWeak( const Kmer &kmer ) const {
 		return weak.exists( kmer );
 	}
+	const WeakElementType getIfExistsWeak( const Kmer &kmer ) const {
+		return weak.getElementIfExists( kmer );
+	}
 	WeakElementType getIfExistsWeak( const Kmer &kmer ) {
 		return weak.getElementIfExists( kmer );
 	}
@@ -267,6 +276,12 @@ public:
 		    return singleton.exists( kmer );
 		else
 			return false;
+	}
+	const SingletonElementType getIfExistsSingleton( const Kmer &kmer ) const {
+		if (hasSingletons)
+		    return singleton.getElementIfExists( kmer );
+		else
+			return SingletonElementType();
 	}
 	SingletonElementType getIfExistsSingleton( const Kmer &kmer ) {
 		if (hasSingletons)
@@ -1634,6 +1649,55 @@ public:
 		this->purgeMinDepth(Options::getMinDepth());
 
 		return purgedKmers;
+	}
+
+
+	bool extendContig(std::string &fasta, bool toRight, double minimumCoverage, double minimumConsensus, const KmerSpectrum *excludeSpectrum = NULL) const {
+
+		SequenceLengthType kmerSize = KmerSizer::getSequenceLength();
+		TEMP_KMER(tmp);
+		std::string dir = toRight ? "Right" : "Left";
+
+		std::string kmerString = toRight ? fasta.substr(fasta.length()-kmerSize, kmerSize) : fasta.substr(0, kmerSize);
+		TwoBitSequence::compressSequence(kmerString, tmp.getTwoBitSequence());
+		LOG_DEBUG(2, dir << " extending " << tmp.toFasta());
+
+		KmerWeights ext = KmerWeights::extendKmer(tmp, toRight, true);
+		double total = 0.0;
+		for(unsigned int i = 0; i < ext.size(); i++) {
+			WeakElementType elem = getIfExistsWeak(ext[i]);
+			if (elem.isValid()) {
+				total += ext.valueAt(i) = elem.value().getWeightedCount();
+			}
+		}
+		bool wasExtended = false;
+
+		double best = 0;
+		if (total >= minimumCoverage) {
+			for(unsigned int i = 0; i < ext.size(); i++) {
+				double consensus = ext.valueAt(i) / total;
+				best = std::max(consensus, best);
+				if (consensus >= minimumConsensus) {
+					// do not allow repeats
+					if (excludeSpectrum != NULL && excludeSpectrum->getIfExistsSolid(ext[i]).isValid()) {
+						LOG_VERBOSE(1, dir << " detected repeat/exclusion: " << ext[i].toFasta() << " with kmer " << KmerSizer::getSequenceLength());
+						break;
+					}
+					char base = TwoBitSequence::uncompressBase(i);
+					fasta.insert(toRight ? fasta.length() : 0, 1, base);
+					LOG_DEBUG(2, dir << " extended " << base << "\t" << fasta);
+					wasExtended = true;
+					break;
+				}
+			}
+			if (! wasExtended ) {
+				LOG_DEBUG(1, "Ambiguous " << dir << " extension " << best << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength())
+			}
+		} else {
+			LOG_DEBUG(1, "Not enough coverage to extend " << dir << " " << total << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength());
+		}
+
+		return wasExtended;
 	}
 
 	void analyseSingletons(ostream &os)

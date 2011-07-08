@@ -15,6 +15,45 @@
 #include "KmerSpectrum.h"
 #include "Log.h"
 
+class ContigExtenderOptions : public Options {
+public:
+	static std::string getContigFile () {
+		return getVarMap()["contig-file"].as<std::string> ();
+	}
+	static double getMinimumConsensus() {
+		return getVarMap()["minimum-consensus"].as<double>() / 100;
+	}
+	static double getMinimumCoverage() {
+		return getVarMap()["minimum-coverage"].as<double>();
+	}
+	static bool parseOpts(int argc, char *argv[]) {
+
+		// set options specific to this program
+		getPosDesc().add("input-file", -1);
+
+		getDesc().add_options()
+
+		("minimum-consensus", po::value<double>()->default_value(95),
+				"minimum percent consensus to call the next base")
+
+		("minimum-coverage", po::value<double>()->default_value(9.9),
+				"minimum (probability-weighted) coverage to continue calling the next base")
+
+		("contig-file", po::value<std::string>(),
+				"filename of input contigs.fa");
+
+		bool ret = Options::parseOpts(argc, argv);
+
+		if (getContigFile().empty() || getInputFiles().empty()) {
+			LOG_ERROR(1, "you must specify the --contig-file and one or more input files");
+			ret = false;
+		}
+		return ret;
+	}
+};
+
+
+
 template <typename KS>
 class ContigExtender {
 protected:
@@ -36,10 +75,13 @@ protected:
 	}
 
 public:
-	static ReadSet extendContigs(const ReadSet &contigs, const ReadSet &reads, double minimumConsensus, double minimumCoverage, SequenceLengthType minKmerSize, SequenceLengthType maxKmerSize) {
+	static ReadSet extendContigs(const ReadSet &contigs, const ReadSet &reads, SequenceLengthType minKmerSize, SequenceLengthType maxKmerSize) {
 		SequenceLengthType enteringKmerSize = KmerSizer::getSequenceLength();
 		SequenceLengthType kmerSize = minKmerSize;
 		KmerSizer::set(kmerSize);
+
+		double minimumConsensus = ContigExtenderOptions::getMinimumConsensus();
+		double minimumCoverage = ContigExtenderOptions::getMinimumCoverage();
 
 		LOG_VERBOSE(1, "Starting extendContigs with consensus fraction " << minimumConsensus << " and coverage " << minimumCoverage << " using kmers " << minKmerSize << " to " << maxKmerSize);
 
