@@ -155,12 +155,48 @@ Sequence &Sequence::operator=(const Sequence &other) {
 	return *this;
 }
 
-Sequence Sequence::clone() const {
-	return Sequence(getFasta());
+Sequence Sequence::clone(bool usePreAllocation) const {
+	return Sequence(getFasta(), usePreAllocation);
 }
 
 Sequence::~Sequence() {
 	reset(0);
+}
+
+long Sequence::getStoreSize() const {
+	if (isMmaped()) {
+		// need to build it first!
+		return clone(true).getStoreSize();
+	}
+	const char *start = (char*) this->_getData();
+	const char *end = (const char*) this->_getEnd();
+	return sizeof(char) + (end-start);
+}
+
+long Sequence::store(void *_dst) const {
+	if (isMmaped()) {
+		return clone(true).store(_dst);
+	}
+	char *dst = (char*) _dst;
+	*(dst++) = _flags;
+	const char *start = (const char*) this->_getData();
+	const char *end = (const char*) this->_getEnd();
+	memcpy(dst, start, (end-start));
+	return sizeof(char) + (end-start);
+}
+
+void *Sequence::restore(void *_src, long size) {
+	char *src = (char*) _src;
+	reset(*(src++));
+	size -= sizeof(char);
+	try {
+		_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
+	} catch (...) {
+		throw std::runtime_error(
+				"Cannot allocate memory in Sequence::restore()");
+	}
+	memcpy(_data.get(), src, size);
+	return src + size;
 }
 
 void Sequence::setSequence(std::string fasta, bool usePreAllocation) {
@@ -193,7 +229,7 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 	}
 	try {
 		unsigned int size =
-			    sizeof(SequenceLengthType)
+				sizeof(SequenceLengthType)
 		        + buffSize
 				+ totalMarkupSize
 				+ extraBytes;
@@ -471,6 +507,21 @@ BaseLocationType2 *Sequence::_getMarkupBases2() {
 	return const_cast<BaseLocationType2 *> (constThis()._getMarkupBases2());
 }
 
+const void *Sequence::_getEnd() const {
+	const void *end;
+	if (hasMarkups()) {
+		if (isMarkups4())
+			end =  _getMarkupBases() + *_getMarkupBasesCount();
+		else if (isMarkups2())
+			end =  _getMarkupBases2() + *_getMarkupBasesCount2();
+		else
+			end =  _getMarkupBases1() + *_getMarkupBasesCount1();
+	} else {
+		end = _getMarkupBasesCount();
+	}
+	return end;
+}
+
 SequenceLengthType Sequence::getLength() const {
 	if ( !isValid() )
 		return 0;
@@ -652,8 +703,8 @@ Read &Read::operator=(const Read &other) {
     // there are no extra data members
     return *this;
 }
-Read Read::clone() const {
-	return Read(getName(), getFasta(), getQuals());
+Read Read::clone(bool usePreAllocation) const {
+	return Read(getName(), getFasta(), getQuals(), usePreAllocation);
 }
 
 
@@ -736,6 +787,11 @@ const char * Read::_getName() const {
 }
 char * Read::_getName() {
 	return const_cast<char*> (constThis()._getName());
+}
+
+const void *Read::_getEnd() const {
+	assert(!isMmaped());
+	return (const void *) (_getName() + strlen(_getName())+1);
 }
 
 void Read::setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation) {

@@ -127,7 +127,28 @@ public:
 
 class OfstreamMap {
 public:
-	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
+	class OStreamPtr {
+	public:
+		boost::shared_ptr< std::ofstream > of;
+		boost::shared_ptr< std::stringstream> ss;
+
+		OStreamPtr() {}
+		OStreamPtr(std::ofstream *_of) : of(_of) {}
+		OStreamPtr(std::stringstream *_ss) : ss(_ss) {}
+
+		std::ostream &operator*() {
+			if (of.get() != NULL)
+				return *of;
+			else if (ss.get() != NULL)
+				return *ss;
+			else
+				throw;
+		}
+		std::ofstream *operator->() {
+			assert(of.get() != NULL);
+			return of.get();
+		}
+	};
 	typedef boost::unordered_map< std::string, OStreamPtr > Map;
 	typedef Map::iterator Iterator;
 	typedef boost::shared_ptr< Map > MapPtr;
@@ -137,6 +158,7 @@ protected:
     std::string _suffix;
     bool _append;
     bool _isStdout;
+    bool _buildInMemory;
 #ifdef _USE_MPI
     mpi::communicator *_world;
 #endif
@@ -148,7 +170,7 @@ public:
 	}
 
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
-	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix), _append(false), _isStdout(false) {
+	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix), _append(false), _isStdout(false), _buildInMemory(false) {
 		_append = getDefaultAppend();
 		if (Options::getOutputFile() == std::string("-")) {
 			_isStdout = true;
@@ -162,18 +184,28 @@ public:
 		LOG_DEBUG_OPTIONAL(2, true, "~OfstreamMap():");
 		this->clear();
 	}
+	std::string stripRank(std::string filename, std::string rank) {
+		if (!rank.empty()) {
+			filename.substr(0, filename.find(rank));
+		}
+		return filename;
+	}
 	std::set<std::string> getFiles(std::string rank) {
 		std::set<std::string> files;
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
 			std::string file = it->first;
 			LOG_DEBUG_OPTIONAL(2, true, "getFiles(): " << file);
-			if (!rank.empty()) {
-				file = file.substr(0, file.find(rank));
-			}
+			file = stripRank(file, rank);
 			files.insert(file);
 			LOG_DEBUG_OPTIONAL(2, true, "getFiles() postrank: " << file);
 		}
 		return files;
+	}
+	void setBuildInMemory() {
+		_buildInMemory = true;
+	}
+	bool isBuildInMemory() const {
+		return _buildInMemory;
 	}
 	bool &getAppend() {
 		return _append;
@@ -196,7 +228,15 @@ public:
 		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::close()");
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
 			LOG_VERBOSE_OPTIONAL(2, true, "Closing " << this->getOutputPrefix() << it->first);
-			it->second->close();
+			if (isBuildInMemory()) {
+				assert(it->second.ss.get() != NULL);
+				OStreamPtr osp = getOStreamPtr(it->first);
+				*osp.of << *(it->second.ss);
+				osp.of->close();
+			} else {
+				assert(it->second.of.get() != NULL);
+				it->second.of->close();
+			}
 		}
 	}
 	virtual std::string getRank() const {
@@ -204,6 +244,9 @@ public:
 	}
 	std::string getFilename(std::string key) const {
 		return key + _suffix + getRank();
+	}
+	virtual std::string getFilePath(std::string key) {
+		return _outputFilePathPrefix + getFilename(key);
 	}
 	std::ostream &getOfstream(std::string key) {
 		if (_isStdout)
@@ -225,17 +268,11 @@ public:
 				// recheck map
 				it = thisMap->find(filename);
 				if (it == thisMap->end()) {
-					std::string fullPath = _outputFilePathPrefix + filename;
-
-					LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << fullPath);
-					std::ios_base::openmode mode = std::ios_base::out;
-					if (getAppend())
-						mode |= std::ios_base::app;
+					OStreamPtr osp;
+					if (_buildInMemory)
+						osp.ss.reset(new std::stringstream());
 					else
-						mode |= std::ios_base::trunc;
-					OStreamPtr osp(new std::ofstream(fullPath.c_str(), mode));
-					if( osp->fail() )
-						throw std::runtime_error((std::string("Could not open file for writing: ") + fullPath).c_str());
+						osp = getOStreamPtr(filename);
 
 					MapPtr copy = MapPtr(new Map(*thisMap));
 					it = copy->insert( copy->end(), Map::value_type(filename, osp) );
@@ -244,6 +281,23 @@ public:
 			}
 		}
 		return *(it->second);
+	}
+
+protected:
+	OStreamPtr getOStreamPtr(const std::string filename) {
+		std::string fullPath = _outputFilePathPrefix + filename;
+
+		LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << fullPath);
+		std::ios_base::openmode mode = std::ios_base::out;
+		if (getAppend())
+			mode |= std::ios_base::app;
+		else
+			mode |= std::ios_base::trunc;
+		OStreamPtr osp( new std::ofstream(fullPath.c_str(), mode) );
+		if( osp->fail() )
+			throw std::runtime_error((std::string("Could not open file for writing: ") + fullPath).c_str());
+
+		return osp;
 	}
 };
 
@@ -259,6 +313,9 @@ private:
 public:
 	PartitioningData() : _partitions() {}
 
+	void clear() {
+		_partitions.clear();
+	}
     inline bool hasPartitions() const {
     	return ! _partitions.empty();
     }
@@ -468,20 +525,50 @@ public:
 		assert(is_open());
 	}
 	void close() {
-		this->flush();
-		int status = pclose( _pipe );
-		if (status != 0) {
-			LOG_ERROR(1, "Pipe '" << _cmd << "' closed with an error: " << status);
-			throw;
-		}
 		try {
+			this->flush();
 			base::close();
+			int status = pclose(_pipe);
+			if (status != 0) {
+				LOG_ERROR(1, "Pipe '" << _cmd << "' closed with an error: " << status);
+				throw;
+			}
 		} catch(...) {
 			// ignoring this pipe closure error.  pclose is the proper way to close this..
 			LOG_DEBUG_OPTIONAL(1, true, "Potentially failed to close pipe properly");
 		}
 	}
 	~OPipestream() {
+		close();
+	}
+private :
+	FILE* _pipe ;
+	std::string _cmd;
+};
+
+class IPipestream : public boost::iostreams::stream< boost::iostreams::file_descriptor_source >
+{
+public:
+	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_source > base ;
+	explicit IPipestream( const std::string command ) : base( fileno( _pipe = popen( command.c_str(), "r" ) ) ), _cmd(command) {
+		assert(_pipe != NULL);
+		assert(fileno(_pipe) >= 0);
+		assert(is_open());
+	}
+	void close() {
+		try {
+			base::close();
+			int status = pclose(_pipe);
+			if (status != 0) {
+				LOG_ERROR(1, "Pipe '" << _cmd << "' closed with an error: " << status);
+				throw;
+			}
+		} catch(...) {
+			// ignoring this pipe closure error.  pclose is the proper way to close this..
+			LOG_DEBUG_OPTIONAL(1, true, "Potentially failed to close pipe properly");
+		}
+	}
+	~IPipestream() {
 		close();
 	}
 private :

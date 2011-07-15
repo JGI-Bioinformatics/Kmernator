@@ -72,6 +72,12 @@ void validateMPIWorld(mpi::communicator &world) {
 	reduceOMPThreads(world);
 }
 
+std::string getRankSubdir(mpi::communicator &world, std::string prefix) {
+	std::string subDir = prefix + "/" + boost::lexical_cast<std::string>(world.rank()) + "of" + boost::lexical_cast<std::string>(world.size());
+	mkdir(subDir.c_str(), 0x777);
+	return subDir;
+}
+
 void niceBarrier(mpi::communicator &world, int waitMs = 1) {
 	mpi::communicator tmpWorld(world, mpi::comm_duplicate);
 	int rank = tmpWorld.rank();
@@ -117,21 +123,18 @@ void niceBarrier(mpi::communicator &world, int waitMs = 1) {
 
 }
 
-ReadSet::ReadSetSizeType setGlobalReadSetOffset(mpi::communicator &world, ReadSet &store) {
+void setGlobalReadSetOffsets(mpi::communicator &world, ReadSet &store) {
 	// share ReadSet sizes for globally unique readIdx calculations
-	long readSetSize = store.getSize();
-	long readSetSizesInput[ world.size() ];
-	long readSetSizes[ world.size() ];
+	ReadSet::ReadSetSizeType readSetSize = store.getSize();
+	ReadSet::ReadSetSizeType readSetSizesInput[world.size()], readSetSizesOutput[world.size()];
 	for(int i = 0; i < world.size(); i++)
 		readSetSizesInput[i] = i == world.rank() ? readSetSize : 0;
 	LOG_DEBUG(2, "setGlobalReadSetOffset: all_reduce:" << readSetSize);
-	mpi::all_reduce(world, (long*) readSetSizesInput, world.size(), (long*) readSetSizes, mpi::maximum<long>());
-	long globalReadSetOffset = 0;
-	for(int i = 0; i < world.rank(); i++)
-		globalReadSetOffset += readSetSizes[i];
-	LOG_DEBUG(2, "reduced readSetSizes " << globalReadSetOffset);
-	store.setGlobalOffset( globalReadSetOffset );
-	return globalReadSetOffset;
+
+	mpi::all_reduce(world, (ReadSet::ReadSetSizeType*) readSetSizesInput, world.size(),  (ReadSet::ReadSetSizeType*) readSetSizesOutput, mpi::maximum<ReadSet::ReadSetSizeType>());
+	ReadSet::ReadIdxVector readSizes(readSetSizesOutput, readSetSizesOutput + world.size());
+	store.setGlobalOffsets(readSizes);
+	LOG_DEBUG(2, "globalOffset: " << store.getGlobalOffset(world.rank()) << " of " << store.getGlobalSize());
 }
 
 template<typename So, typename We, typename Si = TrackingDataSingleton>
@@ -340,7 +343,7 @@ public:
 
 		LOG_DEBUG(2, "building spectrum using " << numThreads << " threads (" << omp_get_max_threads() << ")");
 
-		ReadSetSizeType globalReadSetOffset = store.getGlobalOffset();
+		ReadSetSizeType globalReadSetOffset = store.getGlobalOffset(world.rank());
 		assert( world.rank() == 0 ? (globalReadSetOffset == 0) : (globalReadSetOffset > 0) );
 
 		std::stringstream ss;
@@ -757,13 +760,20 @@ public:
 	virtual std::string getOutputPrefix() {
 		return _realOutputPrefix;
 	}
+	virtual std::string getFilePath(std::string key) {
+		return getOutputPrefix() + stripRank(getFilename(key), getRank());
+	}
 	virtual void close() {
 		LOG_VERBOSE_OPTIONAL(2, _world.rank() == 0, "Concatenating all MPI rank files");
+		if (isBuildInMemory()) {
+			writeGlobalFiles();
+		}
 		OfstreamMap::close();
 		concatenateMPI();
 	}
-	void concatenateMPI() {
-		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::concatenateMPI()");
+	std::set< std::string > getFileSet() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::getFileSet()");
+
 		std::string rank = getRank();
 
 		// Send all filenames (minus Rank) to master
@@ -778,6 +788,86 @@ public:
 				files.insert(newFiles.begin(), newFiles.end());
 			}
 		}
+
+		return files;
+	}
+	void writeGlobalFiles() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::writeGlobalFiles()");
+
+		int size = _world.size();
+		std::string rank = getRank();
+		std::set< std::string > files = getFileSet();
+		MPI_Comm world = _world;
+
+		// synchronize all files
+		int numFiles = files.size();
+		mpi::broadcast(_world, numFiles, 0);
+		if (_world.rank() == 0) {
+			LOG_VERBOSE_OPTIONAL(1, true, "Collectively writing " << numFiles << " files");
+			for(std::set< std::string >::iterator it = files.begin(); it != files.end(); it++)
+				LOG_VERBOSE_OPTIONAL(1, true, "File: " << _realOutputPrefix << *it);
+		}
+
+		std::set< std::string >::iterator itF = files.begin();
+		for(int fileNum = 0; fileNum < numFiles; fileNum++) {
+			std::string filename;
+			if (_world.rank() == 0) {
+				assert(itF != files.end());
+				filename = *(itF++);
+			}
+			mpi::broadcast(_world, filename, 0);
+			std::string fullPath = _realOutputPrefix + filename;
+			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << fullPath);
+
+			std::string contents;
+
+			std::string myFile = filename + rank;
+			Iterator it = this->_map->find(myFile);
+
+			if (it == this->_map->end()) {
+				LOG_WARN(1, "Could not find " << myFile << " in DistributedOfstreamMap");
+			} else {
+				assert(it->second.ss.get() != NULL);
+				contents = it->second.ss->str();
+				_map->erase(it); // make sure this is not output in OfstreamMap::close();
+			}
+
+			long long int mySize = contents.length();
+			long long int sendPos[size], recvPos[size], totalSize = 0, myStart = 0;
+			for(int i = 0; i < size; i++)
+				sendPos[i] = _world.rank() == i ? mySize : 0;
+			MPI_Allreduce(&sendPos, &recvPos, size, MPI_LONG_LONG_INT, MPI_SUM, _world);
+			for(int i = 0; i < size; i++) {
+				if (_world.rank() == i)
+					myStart = totalSize;
+				totalSize += recvPos[i];
+			}
+
+			LOG_DEBUG(1, "Opening " << fullPath);
+			int err;
+			MPI_File ourFile;
+			err = MPI_File_open(world, const_cast<char*>(fullPath.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &ourFile);
+			if (err != MPI_SUCCESS) {
+				LOG_ERROR(1, "Could not open " << fullPath << " collectively");
+				throw;
+			}
+			err = MPI_File_set_size(ourFile, totalSize);
+			if (err != MPI_SUCCESS) {
+				LOG_ERROR(1, "Could not set the size for " << fullPath << " to " << totalSize);
+				throw;
+			}
+			LOG_DEBUG(1, "Writing " << mySize << " at " << myStart << " to " << fullPath);
+			MPI_File_write_at(ourFile, myStart, const_cast<char*>(contents.data()), mySize, MPI_BYTE, MPI_STATUS_IGNORE);
+			LOG_DEBUG(1, "Closing " << fullPath);
+			MPI_File_close(&ourFile);
+		}
+
+	}
+	void concatenateMPI() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::concatenateMPI()");
+
+		std::string rank = getRank();
+		std::set< std::string > files = getFileSet();
 
 		// synchronize all files
 		int numFiles = files.size();
@@ -810,41 +900,84 @@ public:
 
 	static void mergeFiles(mpi::communicator &world, std::string rankFile, std::string globalFile, bool unlinkAfter = false) {
 		long mySize = FileUtils::getFileSize(rankFile);
-		char buf;
-		void *data = &buf;
-		int rank = world.rank();
-		Kmernator::MmapFile rankFileMmap;
-		if (mySize > 0) {
-			LOG_DEBUG_OPTIONAL(2, true, "Opening mmap on '" << rankFile << "'");
-			rankFileMmap = Kmernator::MmapFile(rankFile, std::ios_base::in | std::ios_base::out);
-			data = rankFileMmap.data();
-			assert(data != NULL);
-			assert(mySize == (long) rankFileMmap.size());
-			LOG_DEBUG_OPTIONAL(2, true, "Re-mapped: " << rankFile << " size " << mySize);
-			madvise(rankFileMmap.data(), mySize, MADV_SEQUENTIAL);
-		}
+		char *buf[2];
+		int bufSize = 1024*1024*16;
+		buf[0] = new char[bufSize];
+		buf[1] = new char[bufSize];
+		int bufId = 0;
 		MPI_Info info(MPI_INFO_NULL);
-		LOG_DEBUG_OPTIONAL(2, rank==0, "Writing to '" << globalFile << "'");
+
+		int rank = world.rank();
+		int size = world.size();
+		int err;
+		MPI_File myFile;
+		err = MPI_File_open(MPI_COMM_SELF, const_cast<char*>(rankFile.c_str()), MPI_MODE_RDONLY, info, &myFile);
+		if (err != MPI_SUCCESS) {
+			LOG_ERROR(1, "Could not open " << rankFile << " myself");
+			throw;
+		}
+
+		long long int sendPos[size], recvPos[size], totalSize = 0, myStart = 0, myPos = 0;
+		for(int i = 0; i < size; i++)
+			sendPos[i] = rank == i ? mySize : 0;
+		MPI_Allreduce(&sendPos, &recvPos, size, MPI_LONG_LONG_INT, MPI_SUM, world);
+		for(int i = 0; i < size; i++) {
+			if (rank == i)
+				myStart = totalSize;
+			totalSize += recvPos[i];
+		}
+
+		LOG_DEBUG_OPTIONAL(2, rank==0, "Writing to '" << globalFile << "' at " << myStart << " for " << totalSize << " bytes");
 
 		MPI_File ourFile;
-		int err;
 		err = MPI_File_open(world, const_cast<char*>(globalFile.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
 		if (err != MPI_SUCCESS) {
 			LOG_ERROR(1, "Could not open " << globalFile << " collectively");
 			throw;
 		}
+		err = MPI_File_set_size(ourFile, totalSize);
+		if (err != MPI_SUCCESS) {
+			LOG_ERROR(1, "Could not set the size for " << globalFile << " to " << totalSize);
+			throw;
+		}
+
 		MPI_Status status;
-		err = MPI_File_write_ordered(ourFile, data, mySize, MPI_BYTE, &status);
-		if (err != MPI_SUCCESS) throw;
-		int writeCount;
-		err = MPI_Get_count(&status, MPI_BYTE, &writeCount);
-		if (err != MPI_SUCCESS) throw;
-		LOG_DEBUG_OPTIONAL(1, rank==0, "Wrote: " << writeCount);
-		err = MPI_File_close(&ourFile);
+		MPI_Request writeRequest = MPI_REQUEST_NULL;
+		myPos = myStart;
+		while (myPos < myStart + mySize) {
+			err = MPI_File_read(myFile, buf[bufId % 2], bufSize, MPI_BYTE, &status);
+			if (err != MPI_SUCCESS) {
+				LOG_ERROR(1, "Could not read from " << rankFile);
+				throw;
+			}
+			int sendBytes;
+			err = MPI_Get_count(&status, MPI_BYTE, &sendBytes);
+			if (sendBytes == 0 || err != MPI_SUCCESS)
+				break;
+
+			err = MPI_Wait(&writeRequest, MPI_STATUS_IGNORE);
+			if (err != MPI_SUCCESS) {
+				LOG_ERROR(1, "Could not wait for write of " << globalFile);
+				throw;
+			}
+			err = MPI_File_iwrite_at(ourFile, myPos, buf[bufId++ % 2], sendBytes, MPI_BYTE, &writeRequest);
+			if (err != MPI_SUCCESS) {
+				LOG_ERROR(1, "Could not write to " << globalFile);
+				throw;
+			}
+			myPos += sendBytes;
+		}
+		err = MPI_Wait(&writeRequest, MPI_STATUS_IGNORE);
 		if (err != MPI_SUCCESS) throw;
 
-		if (mySize > 0)
-			rankFileMmap.close();
+		err = MPI_File_close(&ourFile);
+		if (err != MPI_SUCCESS) throw;
+		err = MPI_File_close(&myFile);
+		if (err != MPI_SUCCESS) throw;
+
+		delete [] buf[0];
+		delete [] buf[1];
+
 		if (unlinkAfter)
 			unlink(rankFile.c_str());
 	}

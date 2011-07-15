@@ -75,6 +75,11 @@ protected:
 	}
 
 public:
+	static ReadSet extendContigs(const ReadSet &contigs, const ReadSet &reads) {
+		SequenceLengthType minKmerSize, maxKmerSize;
+		getMinMaxKmerSize(reads, minKmerSize, maxKmerSize);
+		return extendContigs(contigs, reads, minKmerSize, maxKmerSize);
+	}
 	static ReadSet extendContigs(const ReadSet &contigs, const ReadSet &reads, SequenceLengthType minKmerSize, SequenceLengthType maxKmerSize) {
 		SequenceLengthType enteringKmerSize = KmerSizer::getSequenceLength();
 		SequenceLengthType kmerSize = minKmerSize;
@@ -163,6 +168,13 @@ public:
 		}
 		KmerSizer::set(enteringKmerSize);
 		return newContigs;
+	}
+
+	static void getMinMaxKmerSize(const ReadSet &reads, SequenceLengthType &minKmerSize, SequenceLengthType &maxKmerSize) {
+		minKmerSize = Options::getKmerSize();
+		maxKmerSize = std::min(reads.getMaxSequenceLength(), (SequenceLengthType) (reads.getBaseCount() / reads.getSize())) - 1;
+		maxKmerSize = std::min(maxKmerSize, reads.getMaxSequenceLength() - 1);
+		maxKmerSize = std::min(maxKmerSize, 5 * minKmerSize);
 	}
 };
 

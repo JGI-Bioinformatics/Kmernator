@@ -194,6 +194,8 @@ protected:
 	BaseLocationType2 *_getMarkupBases2();
 	const BaseLocationType2 *_getMarkupBases2() const;
 
+	virtual const void *_getEnd() const;
+
 	BaseLocationVectorType _getMarkups() const;
 
 	void reset(char flags = 0);
@@ -220,7 +222,7 @@ public:
 	Sequence(std::string fasta, bool usePreAllocation = false);
 	Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	Sequence &operator=(const Sequence &other);
-	Sequence clone() const;
+	Sequence clone(bool usePreAllocation = false) const;
 
 	~Sequence();
 
@@ -237,6 +239,10 @@ public:
 	inline bool isPreAllocated() const { return (_flags & PREALLOCATED)  == PREALLOCATED; }
 	inline bool hasFastaQual()   const { return (_flags & HASFASTAQUAL)  == HASFASTAQUAL; }
 	inline bool isValid()        const { return ( _getData() != NULL ); }
+
+	virtual long getStoreSize() const;
+	virtual long store(void *dst) const;
+	virtual void *restore(void *src, long size);
 
 	void setSequence(std::string fasta, bool usePreAllocation = false);
 	void setSequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
@@ -370,6 +376,8 @@ private:
 	const char * _getName() const;
 	SequenceLengthType _qualLength() const;
 
+	virtual const void *_getEnd() const;
+
 	static int qualityToProbabilityInitialized;
 	static int
 			initializeQualityToProbability(unsigned char minQualityScore = 0, char startChar = Kmernator::FASTQ_START_CHAR_ILLUMINA);
@@ -384,7 +392,7 @@ public:
 	Read(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	Read(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart = NULL);
 	Read &operator=(const Read &other);
-	Read clone() const;
+	Read clone(bool usePreAllocation = false) const;
 
 	void setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false);
 	void setRead(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);

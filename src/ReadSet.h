@@ -54,6 +54,7 @@ public:
 	typedef Read::ReadPtr ReadPtr;
 	typedef Sequence::RecordPtr RecordPtr;
 	typedef std::vector<Read> ReadVector;
+	typedef std::vector<ReadSet> ReadSetVector;
 
 	static const ReadSetSizeType MAX_READ_IDX = MAX_READ_SET_SIZE;
 
@@ -121,9 +122,10 @@ private:
 
 protected:
 	PartitioningData<ReadSetSizeType> _filePartitions;
-	unsigned long _baseCount;
+	ReadSetSizeType _baseCount;
 	SequenceLengthType _maxSequenceLength;
-	ReadSetSizeType _globalOffset;
+	ReadIdxVector _globalOffsets;
+	ReadSetSizeType _globalSize;
 	PairedIndexType _pairs;
 	std::string previousReadName; // for fast pairing
 
@@ -161,9 +163,78 @@ private:
 
 public:
 	ReadSet() :
-		_baseCount(0), _maxSequenceLength(0), _globalOffset(0) {
+		_baseCount(0), _maxSequenceLength(0), _globalSize(0) {
+	}
+	ReadSet(const ReadSet &copy)  :
+		_baseCount(0), _maxSequenceLength(0), _globalSize(0) {
+		*this = copy;
 	}
 	~ReadSet() {
+	}
+
+	void clear() {
+		_reads.clear();
+		_filePartitions.clear();
+		_baseCount = 0;
+		_maxSequenceLength = 0;
+		_globalOffsets.clear();
+		_pairs.clear();
+		previousReadName.clear();
+	}
+
+	ReadSet &operator=(const ReadSet &copy) {
+		_reads.assign(copy._reads.begin(), copy._reads.end());
+		_filePartitions.clear();
+		_baseCount = copy._baseCount;
+		_maxSequenceLength = copy._maxSequenceLength;
+		_globalOffsets.assign(copy._globalOffsets.begin(), copy._globalOffsets.end());
+		_globalSize = copy._globalSize;
+		_pairs.assign(copy._pairs.begin(), copy._pairs.end());
+		previousReadName = copy.previousReadName;
+		return *this;
+	}
+
+	long getStoreSize() const {
+		// just store numReads, baseCount, maxSeqLength, readSizeCounts & readData
+		long size = sizeof(ReadSetSizeType)*2 + sizeof(SequenceLengthType) * (1+getSize());
+		for(ReadSetSizeType i = 0; i < getSize(); i++)
+			size += getRead(i).getStoreSize();
+		return size;
+	}
+	long store(void *_dst) const {
+		ReadSetSizeType *readSize = (ReadSetSizeType*) _dst;
+		*(readSize++) = getSize();
+		*(readSize++) = _baseCount;
+		SequenceLengthType *dstSizes = (SequenceLengthType*) readSize;
+		*(dstSizes++) = _maxSequenceLength;
+		char *readData = (char*) dstSizes + getSize();
+		for(SequenceLengthType i = 0; i < getSize(); i++) {
+			SequenceLengthType size = getRead(i).store(readData);
+			*(dstSizes++) = size;
+			readData += size;
+		}
+		return readData - ((char*) _dst);
+	}
+	void *restore(void *_src) {
+		clear();
+
+		ReadSetSizeType size, *rssp = (ReadSetSizeType*) _src;
+		size = *(rssp++);
+		_baseCount = *(rssp++);
+		_reads.reserve(size);
+
+		SequenceLengthType *dstSizes = (SequenceLengthType*) rssp;
+		_maxSequenceLength = *(dstSizes++);
+		char *readData = (char*) dstSizes + size;
+		for(ReadSetSizeType i = 0; i < size; i++) {
+			SequenceLengthType readSize = *(dstSizes++);
+			Read read;
+			char *newReadData = (char*) read.restore(readData, readSize);
+			_reads.push_back(read);
+			assert(newReadData = readData + readSize);
+			readData = newReadData;
+		}
+		return readData;
 	}
 
 	inline SequenceLengthType getMaxSequenceLength() const {
@@ -182,7 +253,7 @@ public:
 	inline ReadSetSizeType getSize() const {
 		return _reads.size();
 	}
-	inline unsigned long getBaseCount() const {
+	inline ReadSetSizeType getBaseCount() const {
 		return _baseCount;
 	}
 
@@ -190,12 +261,38 @@ public:
 		return _pairs.size();
 	}
 
-	inline void setGlobalOffset(ReadSetSizeType globalOffset) {
-		_globalOffset = globalOffset;
+	void setGlobalOffsets(ReadIdxVector &globalSizes) {
+		_globalSize = 0;
+		_globalOffsets.clear();
+		for(int i = 0; i < (int) globalSizes.size(); i++) {
+			_globalOffsets.push_back(_globalSize);
+			_globalSize += globalSizes[i];
+		}
 	}
 
-	inline ReadSetSizeType getGlobalOffset() const {
-		return _globalOffset;
+	inline ReadSetSizeType getGlobalOffset(int rank) const {
+		if (_globalOffsets.size() == 0)
+			return 0;
+		else
+			return _globalOffsets[rank];
+	}
+
+	void getRankReadForGlobalReadIdx(ReadSetSizeType &globalReadIdx, int &rank, ReadSetSizeType &rankReadIdx) const {
+		int size = _globalOffsets.size();
+		if (size == 0) {
+			rank = 0;
+			rankReadIdx = globalReadIdx;
+		} else {
+			for(rank = size - 1 ; rank >= 0 ; rank--) {
+				if (_globalOffsets[rank] <- globalReadIdx)
+					break;
+			}
+			rankReadIdx = globalReadIdx - _globalOffsets[rank];
+		}
+	}
+
+	inline ReadSetSizeType getGlobalSize() const {
+		return _globalSize;
 	}
 
 	inline bool isValidRead(ReadSetSizeType index) const {
@@ -267,6 +364,12 @@ public:
 		else if (forcePair)
 			fakePair(getRead(pair.read1)).write(os);
 
+		return os;
+	}
+	inline std::ostream &writeAll(std::ostream &os, FormatOutput format = FormatOutput::getDefault()) const {
+		LOG_VERBOSE(1, "ReadSet::writeAll()");
+		for(ReadSetSizeType i = 0; i < getSize(); i++)
+			write(os, i, 0, MAX_SEQUENCE_LENGTH, "", format);
 		return os;
 	}
 	static Read fakePair(const Read &unPaired);

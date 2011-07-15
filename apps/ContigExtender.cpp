@@ -78,17 +78,7 @@ int main(int argc, char *argv[]) {
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 	}
 
-	SequenceLengthType minKmerSize = Options::getKmerSize();
-	SequenceLengthType maxKmerSize = std::min(reads.getMaxSequenceLength(), (SequenceLengthType) (reads.getBaseCount() / reads.getSize())) - 1;
-	maxKmerSize = std::min(maxKmerSize, reads.getMaxSequenceLength() - 1);
-	maxKmerSize = std::min(maxKmerSize, 5 * minKmerSize);
-
-	if (maxKmerSize < 4) {
-		LOG_ERROR(1, "There is not enough data to run a kmer walk in input files.");
-		exit(1);
-	}
-	//maxKmerSize = minKmerSize;
-	ReadSet newContigs = ContigExtender<KS>::extendContigs(contigs, reads, minKmerSize, maxKmerSize);
+	ReadSet newContigs = ContigExtender<KS>::extendContigs(contigs, reads);
 
 	string outputFilename = Options::getOutputFile();
 	OfstreamMap ofmap(outputFilename,"");

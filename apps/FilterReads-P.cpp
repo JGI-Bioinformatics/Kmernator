@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
 	Options::getVerbosity() = 2;
 
 	int threadProvided;
-	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_MULTIPLE;
+	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
 	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
 	all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
 
-	setGlobalReadSetOffset(world, reads);
+	setGlobalReadSetOffsets(world, reads);
 
 	if (Options::getSkipArtifactFilter() == 0) {
 

@@ -84,6 +84,7 @@ target_link_libraries( FilterReads-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+
 endif()
 
 set_source_files_properties( ContigExtender
@@ -97,6 +98,27 @@ target_link_libraries( ContigExtender
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+
+if( MPI_FOUND )
+
+set_source_files_properties( DistributedNucleatingAssembler
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+add_executable( DistributedNucleatingAssembler DistributedNucleatingAssembler )
+set_target_properties( DistributedNucleatingAssembler
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       )
+target_link_libraries( DistributedNucleatingAssembler 
+                              Sequence
+                              Kmer
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+
+endif()
+
 
 set_source_files_properties( TnfDistance
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
