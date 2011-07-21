@@ -172,6 +172,27 @@ void testConsensus(string filename)
 	Options::getMinQuality() = minq;
 }
 
+void testStore(string filename) {
+	ReadSet a, b, c;
+	a.appendAnyFile(filename);
+	long bufSize = a.getStoreSize();
+	char *buf = new char[bufSize];
+	a.store(buf);
+	b.restore(buf);
+
+	BOOST_CHECK_EQUAL( a.getSize(), b.getSize() );
+	for(unsigned int i = 0 ; i < a.getSize(); i++) {
+		const Read &reada = a.getRead(i);
+		const Read &readb = a.getRead(i);
+
+		BOOST_CHECK_EQUAL(reada.getName(), readb.getName());
+		BOOST_CHECK_EQUAL(reada.getFastaNoMarkup(), readb.getFastaNoMarkup());
+		BOOST_CHECK_EQUAL(reada.getQuals(), readb.getQuals());
+	}
+
+	delete [] buf;
+}
+
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
 	testParser();
@@ -193,8 +214,14 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 	testConsensus("consensus3.fastq");
 	Sequence::clearCaches();
 	testConsensus("consensus2-diff.fastq");
-
 	Sequence::clearCaches();
+	testStore("10.fasta");
+	Sequence::clearCaches();
+	testStore("consensus1.fastq");
+	Sequence::clearCaches();
+	testStore("consensus2.fastq");
+	Sequence::clearCaches();
+
 
 }
 

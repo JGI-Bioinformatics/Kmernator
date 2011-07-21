@@ -729,6 +729,7 @@ private:
  */
 class DistributedOfstreamMap : public OfstreamMap
 {
+
 private:
 	mpi::communicator _world;
 	std::string _tempPrefix;
@@ -742,6 +743,7 @@ public:
 	 :  OfstreamMap(getTempPath(tempPath), suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
 		_tempPrefix = OfstreamMap::getOutputPrefix();
 		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << "," << tempPath <<")");
+		setBuildInMemory(Options::getBuildOutputInMemory());
 	}
 
 	~DistributedOfstreamMap() {
@@ -757,79 +759,71 @@ public:
 		this->close();
 		_clear();
 	}
-	virtual std::string getOutputPrefix() {
-		return _realOutputPrefix;
-	}
-	virtual std::string getFilePath(std::string key) {
-		return getOutputPrefix() + stripRank(getFilename(key), getRank());
+	virtual std::string getRealFilePath(std::string key) const {
+		return _realOutputPrefix + key + getSuffix();
 	}
 	virtual void close() {
 		LOG_VERBOSE_OPTIONAL(2, _world.rank() == 0, "Concatenating all MPI rank files");
-		if (isBuildInMemory()) {
-			writeGlobalFiles();
-		}
+		KeySet keys = getGlobalKeySet();
+		if (isBuildInMemory())
+			writeGlobalFiles(keys);
 		OfstreamMap::close();
-		concatenateMPI();
+		if (!isBuildInMemory())
+			concatenateMPI(keys);
 	}
-	std::set< std::string > getFileSet() {
-		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::getFileSet()");
-
-		std::string rank = getRank();
+	// gets global keys to rank0.  All other ranks may have partial set...
+	KeySet getGlobalKeySet() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::getGlobalKeySet()");
 
 		// Send all filenames (minus Rank) to master
-		std::set< std::string > files = getFiles(rank);
+		KeySet keys = getKeySet();
 
 		if (_world.rank() != 0) {
-			_world.send(0, 0, files);
+			_world.send(0, 0, keys);
 		} else {
 			for(int i = 1 ; i < _world.size() ; i++) {
-				std::set< std::string > newFiles;
-				_world.recv(i, 0, newFiles);
-				files.insert(newFiles.begin(), newFiles.end());
+				KeySet newKeys;
+				_world.recv(i, 0, newKeys);
+				keys.insert(newKeys.begin(), newKeys.end());
 			}
+			LOG_VERBOSE_OPTIONAL(1, true, "getGlobalKeySet(): Collectively writing " << keys.size() << " files");
+			for(KeySet::iterator it = keys.begin(); it != keys.end(); it++)
+				LOG_DEBUG_OPTIONAL(1, true, "File key: " << *it);
 		}
 
-		return files;
+		return keys;
 	}
-	void writeGlobalFiles() {
+	void writeGlobalFiles(KeySet &keys) {
 		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::writeGlobalFiles()");
+		assert(isBuildInMemory());
 
 		int size = _world.size();
-		std::string rank = getRank();
-		std::set< std::string > files = getFileSet();
 		MPI_Comm world = _world;
 
 		// synchronize all files
-		int numFiles = files.size();
+		int numFiles = keys.size();
 		mpi::broadcast(_world, numFiles, 0);
-		if (_world.rank() == 0) {
-			LOG_VERBOSE_OPTIONAL(1, true, "Collectively writing " << numFiles << " files");
-			for(std::set< std::string >::iterator it = files.begin(); it != files.end(); it++)
-				LOG_VERBOSE_OPTIONAL(1, true, "File: " << _realOutputPrefix << *it);
-		}
 
-		std::set< std::string >::iterator itF = files.begin();
+		KeySet::iterator itF = keys.begin();
 		for(int fileNum = 0; fileNum < numFiles; fileNum++) {
-			std::string filename;
+			std::string key;
 			if (_world.rank() == 0) {
-				assert(itF != files.end());
-				filename = *(itF++);
+				assert(itF != keys.end());
+				key = *(itF++);
 			}
-			mpi::broadcast(_world, filename, 0);
-			std::string fullPath = _realOutputPrefix + filename;
-			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << fullPath);
+			mpi::broadcast(_world, key, 0);
+			std::string fullPath = getRealFilePath(key);
+			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "writeGlobalFiles(): Collectively writing: " << fullPath);
 
 			std::string contents;
 
-			std::string myFile = filename + rank;
-			Iterator it = this->_map->find(myFile);
+			Iterator it = this->_map->find(key);
 
 			if (it == this->_map->end()) {
-				LOG_WARN(1, "Could not find " << myFile << " in DistributedOfstreamMap");
+				LOG_WARN(1, "Could not find " << key << " in DistributedOfstreamMap");
 			} else {
-				assert(it->second.ss.get() != NULL);
-				contents = it->second.ss->str();
-				_map->erase(it); // make sure this is not output in OfstreamMap::close();
+				assert(it->second.isStringStream());
+				contents = it->second.getFinalString();
 			}
 
 			long long int mySize = contents.length();
@@ -857,51 +851,52 @@ public:
 				throw;
 			}
 			LOG_DEBUG(1, "Writing " << mySize << " at " << myStart << " to " << fullPath);
-			MPI_File_write_at(ourFile, myStart, const_cast<char*>(contents.data()), mySize, MPI_BYTE, MPI_STATUS_IGNORE);
+			char *data = const_cast<char*>(contents.data());
+			long long int  offset = 0;
+			long long int maxwrite = 0xf000000; // keep writes to less than max int size at a time to avoid MPI overflows
+			while (offset < mySize) {
+				long long int thisWriteSize = std::min(maxwrite, mySize - offset);
+				MPI_File_write_at(ourFile, myStart+offset, data+offset, thisWriteSize, MPI_BYTE, MPI_STATUS_IGNORE);
+				offset += thisWriteSize;
+			}
 			LOG_DEBUG(1, "Closing " << fullPath);
 			MPI_File_close(&ourFile);
 		}
 
 	}
-	void concatenateMPI() {
+	void concatenateMPI(KeySet &keys) {
 		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::concatenateMPI()");
 
-		std::string rank = getRank();
-		std::set< std::string > files = getFileSet();
-
 		// synchronize all files
-		int numFiles = files.size();
+		int numFiles = keys.size();
 		mpi::broadcast(_world, numFiles, 0);
-		if (_world.rank() == 0) {
-			LOG_VERBOSE_OPTIONAL(1, true, "Collectively writing " << numFiles << " files");
-			for(std::set< std::string >::iterator it = files.begin(); it != files.end(); it++)
-				LOG_VERBOSE_OPTIONAL(1, true, "File: " << _realOutputPrefix << *it);
-		}
 
-		std::set< std::string >::iterator itF = files.begin();
+		KeySet::iterator itF = keys.begin();
 		for(int fileNum = 0; fileNum < numFiles; fileNum++) {
-			std::string filename;
+			std::string key;
 			if (_world.rank() == 0) {
-				assert(itF != files.end());
-				filename = *(itF++);
+				assert(itF != keys.end());
+				key = *(itF++);
 			}
-			mpi::broadcast(_world, filename, 0);
-			std::string fullPath = _realOutputPrefix + filename;
-			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "Collectively writing: " << fullPath);
-			std::string myFile = filename + rank;
-			Iterator it = this->_map->find(myFile);
-			std::string myFilePath = _tempPrefix + myFile;
+			mpi::broadcast(_world, key, 0);
+			std::string fullPath = getRealFilePath(key);
+			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0, "concatenateMPI(): Collectively writing: " << fullPath);
+
+			Iterator it = this->_map->find(key);
+			std::string myFilePath;
 			if (it == this->_map->end()) {
 				LOG_WARN(1, "Could not find " << myFilePath << " in DistributedOfstreamMap");
+			} else {
+				myFilePath = getFilePath(key);
 			}
 			mergeFiles(_world, myFilePath, fullPath, true);
 		}
 	}
 
 	static void mergeFiles(mpi::communicator &world, std::string rankFile, std::string globalFile, bool unlinkAfter = false) {
-		long mySize = FileUtils::getFileSize(rankFile);
+		long long int mySize = 0;
 		char *buf[2];
-		int bufSize = 1024*1024*16;
+		int bufSize = 1024*1024*32;
 		buf[0] = new char[bufSize];
 		buf[1] = new char[bufSize];
 		int bufId = 0;
@@ -913,8 +908,9 @@ public:
 		MPI_File myFile;
 		err = MPI_File_open(MPI_COMM_SELF, const_cast<char*>(rankFile.c_str()), MPI_MODE_RDONLY, info, &myFile);
 		if (err != MPI_SUCCESS) {
-			LOG_ERROR(1, "Could not open " << rankFile << " myself");
-			throw;
+			LOG_WARN(1, "Could not open " << rankFile << " myself.  Merging 0 bytes");
+		} else {
+			err = MPI_File_get_size(myFile, &mySize);
 		}
 
 		long long int sendPos[size], recvPos[size], totalSize = 0, myStart = 0, myPos = 0;

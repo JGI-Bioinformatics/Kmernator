@@ -127,26 +127,78 @@ public:
 
 class OfstreamMap {
 public:
+	typedef std::set< std::string > KeySet;
 	class OStreamPtr {
-	public:
+	private:
 		boost::shared_ptr< std::ofstream > of;
 		boost::shared_ptr< std::stringstream> ss;
+		std::string filePath;
+	public:
+		OStreamPtr() {
+			assert(!isFileStream() && !isStringStream());
+		}
+		OStreamPtr(std::string _filePath, bool append) : filePath(_filePath) {
+			std::ios_base::openmode mode = std::ios_base::out;
+			if (append)
+				mode |= std::ios_base::app;
+			else
+				mode |= std::ios_base::trunc;
 
-		OStreamPtr() {}
-		OStreamPtr(std::ofstream *_of) : of(_of) {}
-		OStreamPtr(std::stringstream *_ss) : ss(_ss) {}
+			LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr(): Writing to " << filePath);
+			of.reset(new std::ofstream(filePath.c_str(), mode));
+			assert(isFileStream());
+		}
+		OStreamPtr(std::string _filePath) : filePath(_filePath) {
+			LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr(): In-memory writing to " << filePath);
+			ss.reset(new std::stringstream());
+			assert(isStringStream());
+		}
+		void close() {
+			if (isFileStream()) {
+				LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr::close(): Closing " << getFilePath());
+				of->flush();
+				of->close();
+			}
+			if (isStringStream()) {
+				LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr::close(): Writing out in-memory : " << getFilePath());
+				OStreamPtr osp(getFilePath(), false);
+				*osp << *ss;
+			}
+			reset();
+		}
+		void reset() {
+			of.reset();
+			ss.reset();
+			filePath.clear();
+		}
+		~OStreamPtr() {
+			reset();
+		}
 
+		bool isFileStream() const {
+			return of.get() != NULL && ss.get() == NULL;
+		}
+		bool isStringStream() const {
+			return of.get() == NULL && ss.get() != NULL;
+		}
 		std::ostream &operator*() {
-			if (of.get() != NULL)
+			if (isFileStream())
 				return *of;
-			else if (ss.get() != NULL)
+			else if (isStringStream())
 				return *ss;
 			else
 				throw;
 		}
-		std::ofstream *operator->() {
-			assert(of.get() != NULL);
-			return of.get();
+		std::string getFilePath() const {
+			return filePath;
+		}
+		std::string getFinalString() {
+			assert(isStringStream());
+			long long int bytes = ss->tellp();
+			LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr::getFinalString(): Writing out " << bytes << " bytes in-memory for virtual file: " << getFilePath());
+			std::string s = ss->str();
+			reset();
+			return s;
 		}
 	};
 	typedef boost::unordered_map< std::string, OStreamPtr > Map;
@@ -184,25 +236,22 @@ public:
 		LOG_DEBUG_OPTIONAL(2, true, "~OfstreamMap():");
 		this->clear();
 	}
-	std::string stripRank(std::string filename, std::string rank) {
-		if (!rank.empty()) {
-			filename.substr(0, filename.find(rank));
+	std::string strip(std::string filename, std::string suffix) {
+		if (!suffix.empty()) {
+			filename.substr(0, filename.find(suffix));
 		}
 		return filename;
 	}
-	std::set<std::string> getFiles(std::string rank) {
-		std::set<std::string> files;
+	KeySet getKeySet() {
+		KeySet keys;
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
-			std::string file = it->first;
-			LOG_DEBUG_OPTIONAL(2, true, "getFiles(): " << file);
-			file = stripRank(file, rank);
-			files.insert(file);
-			LOG_DEBUG_OPTIONAL(2, true, "getFiles() postrank: " << file);
+			std::string key = it->first;
+			keys.insert(key);
 		}
-		return files;
+		return keys;
 	}
-	void setBuildInMemory() {
-		_buildInMemory = true;
+	void setBuildInMemory(bool buildInMemory = true) {
+		_buildInMemory = buildInMemory;
 	}
 	bool isBuildInMemory() const {
 		return _buildInMemory;
@@ -213,11 +262,8 @@ public:
 	const bool &getAppend() const {
 		return _append;
 	}
-	virtual std::string getOutputPrefix() const {
-		return _outputFilePathPrefix;
-	}
 	virtual void clear() {
-		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::clear()");
+		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::clear() " << _map->size() << " " << _outputFilePathPrefix);
 		this->close();
 		_clear();
 	}
@@ -227,34 +273,34 @@ public:
 	virtual void close() {
 		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::close()");
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
-			LOG_VERBOSE_OPTIONAL(2, true, "Closing " << this->getOutputPrefix() << it->first);
-			if (isBuildInMemory()) {
-				assert(it->second.ss.get() != NULL);
-				OStreamPtr osp = getOStreamPtr(it->first);
-				*osp.of << *(it->second.ss);
-				osp.of->close();
-			} else {
-				assert(it->second.of.get() != NULL);
-				it->second.of->close();
-			}
+			OStreamPtr &_osp = it->second;
+			_osp.close();
 		}
 	}
 	virtual std::string getRank() const {
 		return std::string();
 	}
-	std::string getFilename(std::string key) const {
-		return key + _suffix + getRank();
+	std::string getOutputPrefix() const {
+		return _outputFilePathPrefix;
 	}
-	virtual std::string getFilePath(std::string key) {
-		return _outputFilePathPrefix + getFilename(key);
+	std::string getSuffix() const {
+		return _suffix;
+	}
+	std::string getFilename(std::string key) const {
+		return key + getSuffix() + getRank();
+	}
+	std::string getFilePath(std::string key) const {
+		return getOutputPrefix() + getFilename(key);
+	}
+	virtual std::string getRealFilePath(std::string key) const {
+		return getFilePath(key);
 	}
 	std::ostream &getOfstream(std::string key) {
 		if (_isStdout)
 			return std::cout;
-		std::string filename = getFilename(key);
 		// lockless lookup
 		MapPtr thisMap = _map;
-		Iterator it = thisMap->find(filename);
+		Iterator it = thisMap->find(key);
 		if (it == thisMap->end()) {
 
 			// lock if not found and map needs to be updated
@@ -266,16 +312,16 @@ public:
 				thisMap = _map;
 
 				// recheck map
-				it = thisMap->find(filename);
+				it = thisMap->find(key);
 				if (it == thisMap->end()) {
 					OStreamPtr osp;
 					if (_buildInMemory)
-						osp.ss.reset(new std::stringstream());
+						osp = OStreamPtr(getFilePath(key));
 					else
-						osp = getOStreamPtr(filename);
+						osp = OStreamPtr(getFilePath(key), getAppend());
 
 					MapPtr copy = MapPtr(new Map(*thisMap));
-					it = copy->insert( copy->end(), Map::value_type(filename, osp) );
+					it = copy->insert( copy->end(), Map::value_type(key, osp) );
 					_map = thisMap = copy;
 				}
 			}
@@ -283,22 +329,6 @@ public:
 		return *(it->second);
 	}
 
-protected:
-	OStreamPtr getOStreamPtr(const std::string filename) {
-		std::string fullPath = _outputFilePathPrefix + filename;
-
-		LOG_VERBOSE_OPTIONAL(1, true, "Writing to " << fullPath);
-		std::ios_base::openmode mode = std::ios_base::out;
-		if (getAppend())
-			mode |= std::ios_base::app;
-		else
-			mode |= std::ios_base::trunc;
-		OStreamPtr osp( new std::ofstream(fullPath.c_str(), mode) );
-		if( osp->fail() )
-			throw std::runtime_error((std::string("Could not open file for writing: ") + fullPath).c_str());
-
-		return osp;
-	}
 };
 
 template<typename S>

@@ -17,6 +17,7 @@ check()
     if ! diff -q $TMP-MinDepth2-1000.fastq $GOOD
     then
        echo "FAILED $@ --out $TMP 31 $IN"
+       wc $TMP-MinDepth2-1000.fastq $GOOD
        diff $TMP-MinDepth2-1000.fastq $GOOD | head -50
        rm -f $TMP*
        exit 1

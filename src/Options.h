@@ -76,6 +76,7 @@ private:
 	OStreamPtr   logFileStream;
 	std::string  tmpDir;
 	unsigned int formatOutput;
+	bool         buildOutputInMemory;
 	unsigned int kmerSize;
 	double       minKmerQuality;
 	unsigned int minQuality;
@@ -108,7 +109,7 @@ private:
 	unsigned int batchSize;
 	unsigned int separateOutputs;
 
-	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), kmerSize(21), minKmerQuality(0.10),
+	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), buildOutputInMemory(false), kmerSize(21), minKmerQuality(0.10),
 	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
 	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
@@ -144,6 +145,9 @@ public:
 	}
 	static inline unsigned int &getFormatOutput() {
 		return getOptions().formatOutput;
+	}
+	static inline bool &getBuildOutputInMemory() {
+		return getOptions().buildOutputInMemory;
 	}
 	static inline unsigned int &getKmerSize() {
 		return getOptions().kmerSize;
@@ -305,6 +309,9 @@ protected:
 
 		("format-output", po::value<unsigned int>()->default_value(formatOutput),
 				"0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
+
+		("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory),
+				"if set, all temporary output files will first be stored in memory (faster for MPI applications)")
 
 		("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
 		        "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
@@ -522,6 +529,8 @@ public:
 			setOpt<std::string>("temp-dir", getTmpDir(), print);
 
 			setOpt<unsigned int>("format-output", getFormatOutput(), print);
+
+			setOpt<bool>("build-output-in-memory", getBuildOutputInMemory(), print);
 
 			// set kmer quality
 			setOpt<double>("min-kmer-quality", getMinKmerQuality(), print);
