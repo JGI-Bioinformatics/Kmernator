@@ -79,17 +79,17 @@ public:
 		sequences.append(empty);
 
 		std::string fasta = getArtifactFasta();
-		sequences.appendFastaFile(fasta);
+		sequences.appendFastaData(fasta);
 		if (Options::getMaskSimpleRepeats()) {
 			fasta = getSimpleRepeatFasta();
 			getSimpleRepeatBegin() = sequences.getSize();
-			sequences.appendFastaFile(fasta);
+			sequences.appendFastaData(fasta);
 			getSimpleRepeatEnd() = sequences.getSize();
 		}
 		if (Options::getPhiXOutput()) {
 			fasta = getPhiX();
 			getPhiXReadIdx() = sequences.getSize();
-			sequences.appendFastaFile(fasta);
+			sequences.appendFastaData(fasta);
 		}
 		sequences.circularize(length);
 
