@@ -1365,8 +1365,8 @@ public:
 	}
 
 	void _evaluateBatch(bool isSolid, long batchIdx, long purgeEvery, long purgeCount) {
-		if (Log::isVerbose(2)) {
-			printStats(Log::Verbose("Batch Stats"), batchIdx, isSolid);
+		if (Log::isDebug(2)) {
+			printStats(Log::Debug("Batch Stats"), batchIdx, isSolid);
 		}
 		if (purgeEvery > 0 && batchIdx >= (purgeCount+1)*purgeEvery) {
 			purgedSingletons += resetSingletons();
@@ -1519,8 +1519,8 @@ public:
 			_buildKmerSpectrumSerial  (store, isSolid, partIdx, numParts, batch, purgeEvery, purgeCount);
 		}
 
-		if (Log::isVerbose(2)) {
-		    printStats(Log::Verbose("Stats"), store.getSize(), isSolid, true);
+		if (Log::isDebug(2)) {
+		    printStats(Log::Debug("Stats"), store.getSize(), isSolid, true);
 		}
 	}
 
@@ -1655,6 +1655,9 @@ public:
 	bool extendContig(std::string &fasta, bool toRight, double minimumCoverage, double minimumConsensus, const KmerSpectrum *excludeSpectrum = NULL) const {
 
 		SequenceLengthType kmerSize = KmerSizer::getSequenceLength();
+		if (fasta.length() <= kmerSize)
+			return false;
+
 		TEMP_KMER(tmp);
 		std::string dir = toRight ? "Right" : "Left";
 
@@ -1680,21 +1683,21 @@ public:
 				if (consensus >= minimumConsensus) {
 					// do not allow repeats
 					if (excludeSpectrum != NULL && excludeSpectrum->getIfExistsSolid(ext[i]).isValid()) {
-						LOG_VERBOSE(1, dir << " detected repeat/exclusion: " << ext[i].toFasta() << " with kmer " << KmerSizer::getSequenceLength());
+						LOG_VERBOSE_OPTIONAL(1, true, dir << " detected repeat/exclusion: " << ext[i].toFasta() << " with kmer " << KmerSizer::getSequenceLength());
 						break;
 					}
 					char base = TwoBitSequence::uncompressBase(i);
 					fasta.insert(toRight ? fasta.length() : 0, 1, base);
-					LOG_DEBUG(2, dir << " extended " << base << "\t" << fasta);
+					LOG_DEBUG_OPTIONAL(1, true, dir << " extended " << base << "\t" << fasta);
 					wasExtended = true;
 					break;
 				}
 			}
 			if (! wasExtended ) {
-				LOG_DEBUG(1, "Ambiguous " << dir << " extension " << best << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength())
+				LOG_DEBUG_OPTIONAL(1, true, "Ambiguous " << dir << " extension " << best << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength())
 			}
 		} else {
-			LOG_DEBUG(1, "Not enough coverage to extend " << dir << " " << total << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength());
+			LOG_DEBUG_OPTIONAL(1, true, "Not enough coverage to extend " << dir << " " << total << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength());
 		}
 
 		return wasExtended;
