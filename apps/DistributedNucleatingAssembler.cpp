@@ -72,7 +72,7 @@ public:
 
 		FieldsType(std::string &_line) : line(_line) {
 			static const char *format = "%d %d %d %c %d %d %d %d %e %d %f";
-			sscanf(line.c_str(), format, &subjectLength, &subjectNumber, &subjectPosition, &type, &queryLength, &queryNumber, &queryPosition, &distance, &scoreValue, &percentIdentity);
+			sscanf(line.c_str(), format, &subjectLength, &subjectNumber, &subjectPosition, &type, &queryLength, &queryNumber, &queryPosition, &distance, &eValue, &scoreValue, &percentIdentity);
 		}
 
 		int subjectLength;
@@ -208,16 +208,16 @@ int main(int argc, char *argv[]) {
 		for(Vmatch::MatchResults::iterator match = matches.begin(); match != matches.end(); match++) {
 			ReadSet::ReadSetSizeType contigIdx = match->queryNumber, readIdx = match->subjectNumber;
 			contigReadHits[contigIdx].insert(readIdx);
+			// include pairs
+			if (readIdx % 2 == 0)
+				contigReadHits[contigIdx].insert( readIdx + 1);
+			else
+				contigReadHits[contigIdx].insert( readIdx - 1 );
 		}
 		for(long contigIdx = 0; contigIdx < (long)contigReadHits.size(); contigIdx++) {
 			for(std::set<long>::iterator it2 = contigReadHits[contigIdx].begin(); it2 != contigReadHits[contigIdx].end(); it2++) {
 				long readIdx = *it2;
 				contigReadSet[ contigIdx ].append( reads.getRead( readIdx ) );
-				// include pairs
-				if (readIdx % 2 == 0)
-					contigReadSet[ contigIdx ].append( reads.getRead( readIdx + 1) );
-				else
-					contigReadSet[ contigIdx ].append( reads.getRead( readIdx - 1) );
 			}
 		}
 		contigReadHits.clear();
