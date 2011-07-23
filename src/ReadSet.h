@@ -207,11 +207,11 @@ public:
 		*(readSize++) = _baseCount;
 		SequenceLengthType *dstSizes = (SequenceLengthType*) readSize;
 		*(dstSizes++) = _maxSequenceLength;
-		char *readData = (char*) dstSizes + getSize();
+		char *readData = (char*) (dstSizes + getSize());
 		for(SequenceLengthType i = 0; i < getSize(); i++) {
-			SequenceLengthType size = getRead(i).store(readData);
-			*(dstSizes++) = size;
-			readData += size;
+			SequenceLengthType readSize = getRead(i).store(readData);
+			*(dstSizes++) = readSize;
+			readData += readSize;
 		}
 		return readData - ((char*) _dst);
 	}
@@ -225,7 +225,7 @@ public:
 
 		SequenceLengthType *dstSizes = (SequenceLengthType*) rssp;
 		_maxSequenceLength = *(dstSizes++);
-		char *readData = (char*) dstSizes + size;
+		char *readData = (char*) (dstSizes + size);
 		for(ReadSetSizeType i = 0; i < size; i++) {
 			SequenceLengthType readSize = *(dstSizes++);
 			Read read;
@@ -246,6 +246,7 @@ public:
 	SequenceStreamParserPtr appendAnyFile(std::string filePath, std::string filePath2 = "", int rank = 0, int size = 1);
 	SequenceStreamParserPtr appendAnyFileMmap(string fastaFilePath, string qualFilePath = "", int rank = 0, int size = 1);
 	SequenceStreamParserPtr appendFastaFile(std::string &is, int rank = 0, int size = 1);
+	SequenceStreamParserPtr appendFastaData(std::string &is, int rank = 0, int size = 1);
 
 	void append(const ReadSet &reads);
 	void append(const Read &read);
@@ -277,16 +278,17 @@ public:
 			return _globalOffsets[rank];
 	}
 
-	void getRankReadForGlobalReadIdx(ReadSetSizeType &globalReadIdx, int &rank, ReadSetSizeType &rankReadIdx) const {
+	void getRankReadForGlobalReadIdx(ReadSetSizeType globalReadIdx, int &rank, ReadSetSizeType &rankReadIdx) const {
 		int size = _globalOffsets.size();
 		if (size == 0) {
 			rank = 0;
 			rankReadIdx = globalReadIdx;
 		} else {
-			for(rank = size - 1 ; rank >= 0 ; rank--) {
-				if (_globalOffsets[rank] <- globalReadIdx)
+			for(rank = size - 1 ; rank > 0 ; rank--) {
+				if (_globalOffsets[rank] <= globalReadIdx)
 					break;
 			}
+			LOG_DEBUG_OPTIONAL(1, true, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << "): " << rank << " " << _globalOffsets[rank]);
 			rankReadIdx = globalReadIdx - _globalOffsets[rank];
 		}
 	}

@@ -273,6 +273,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	    RecordPtr nextRecordPtr = recordPtr;
 	    std::string name, bases, quals;
 	    bool isMultiline;
+	    LOG_DEBUG(3, "Reading mmap file");
 	    while (reader.nextRead(nextRecordPtr, name, bases, quals, isMultiline)) {
 
 	    	if (isMultiline) {
@@ -291,6 +292,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 
 	    }
 	} else {
+		LOG_DEBUG(3, "Reading file stream");
 	    while (reader.nextRead(name, bases, quals)) {
 	        Read read(name, bases, quals);
 	        addRead(read, bases.length(), rank);
@@ -304,13 +306,20 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 }
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendFastaFile(string &str, int rank, int size) {
-	ReadFileReader reader(str);
+	LOG_DEBUG(2, "ReadSet::appendFastaFile(" << str << ", " << rank << ", " << size << ")");
+	ReadFileReader reader(str, "");
 	appendFasta(reader, rank, size);
 	incrementFile(reader);
 	return reader.getParser();
 }
 
-
+ReadSet::SequenceStreamParserPtr ReadSet::appendFastaData(string &str, int rank, int size) {
+	LOG_DEBUG(2, "ReadSet::appendFastaData(" << str.size() << ", " << rank << ", " << size << ")");
+	ReadFileReader reader(str);
+	appendFasta(reader, rank, size);
+	incrementFile(reader);
+	return reader.getParser();
+}
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSource &mmap)
 {
