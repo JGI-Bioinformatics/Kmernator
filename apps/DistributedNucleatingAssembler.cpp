@@ -45,7 +45,16 @@ typedef KmerSpectrum<DataType, DataType> KS;
 
 class DistributedNucleatingAssemblerOptions : public ContigExtenderOptions {
 public:
+	static std::string getVmatchOptions() {
+		return getVarMap()["vmatch-options"].as<std::string>();
+	}
 	static bool parseOpts(int argc, char *argv[]) {
+
+		getDesc().add_options()
+
+		("vmatch-options", po::value<std::string>()->default_value("-d -p -seedlength 10 -l 50 -e 3"),
+				"options with which to call vmatch")
+				;
 
 		bool ret = ContigExtenderOptions::parseOpts(argc, argv);
 
@@ -53,15 +62,17 @@ public:
 	}
 };
 
+
 #include <stdlib.h>
+#include "Utils.h"
 class Vmatch {
 public:
 	class FieldsType {
 	public:
 
 		FieldsType(std::string &_line) : line(_line) {
-			static const char *format = "%d %d %d %c %d %d %d %d %f %d %f";
-			sscanf(line.c_str(), format, subjectLength, subjectNumber, subjectPosition, type, queryLength, queryNumber, queryPosition, distance, scoreValue, percentIdentity);
+			static const char *format = "%d %d %d %c %d %d %d %d %e %d %f";
+			sscanf(line.c_str(), format, &subjectLength, &subjectNumber, &subjectPosition, &type, &queryLength, &queryNumber, &queryPosition, &distance, &scoreValue, &percentIdentity);
 		}
 
 		int subjectLength;
@@ -84,19 +95,29 @@ private:
 	MatchResults _results;
 public:
 	Vmatch(std::string indexName, ReadSet &inputs) : _indexName(indexName) {
+		if (FileUtils::getFileSize(indexName + ".suf") > 0) {
+			LOG_DEBUG_OPTIONAL(1, true, "Vmatch(" << indexName << ", reads(" << inputs.getSize() << ")): Index already exists: " << indexName);
+		} else {
+			buildVmatchIndex(indexName, inputs);
+		}
+	}
+	static void buildVmatchIndex(std::string indexName, ReadSet &inputs) {
 		std::string inputFile = indexName + ".tmp.input";
 		OfstreamMap ofm(inputFile, "");
 		inputs.writeAll(ofm.getOfstream(""), FormatOutput::FASTA);
 		ofm.clear();
-		std::string cmd("mkvtree -dna -allout -pl -indexname " + indexName + " -db " + inputFile);
+		buildVmatchIndex(indexName, inputFile);
+		LOG_VERBOSE(1, "Removing temporary inputFile" << inputFile);
+		unlink(inputFile.c_str());
+	}
+	static void buildVmatchIndex(std::string indexName, std::string inputFasta) {
+		std::string cmd("mkvtree -dna -allout -pl -indexname " + indexName + " -db " + inputFasta);
 		LOG_VERBOSE(1, "Building vmatch index " << indexName << " : " << cmd);
 		int ret = system(cmd.c_str());
 		if (ret != 0)
 			throw;
-		LOG_VERBOSE(1, "Removing temporary inputFile" << inputFile);
-		unlink(inputFile.c_str());
 	}
-	MatchResults &match(std::string queryFile, std::string options = "-d -p -seedlength 10 -l 50 -e 3") {
+	MatchResults &match(std::string queryFile, std::string options = "") {
 		_results.clear();
 		IPipestream vmatchOutput("vmatch " + options + " -q " + queryFile + " " + _indexName);
 		std::string line;
@@ -108,9 +129,11 @@ public:
 				continue;
 			_results.push_back(FieldsType(line));
 		}
+		LOG_DEBUG_OPTIONAL(1, true, "Vmatch::match(,): Found " << _results.size() << " results");
 		return _results;
 	}
 };
+
 
 int main(int argc, char *argv[]) {
 	// do not apply artifact filtering by default
@@ -155,28 +178,33 @@ int main(int argc, char *argv[]) {
 
 	std::string tmpDir = Options::getOutputFile() + "-tmp." + boost::lexical_cast<std::string>(world.size());
 	if (world.rank() == 0)
-		mkdir(tmpDir.c_str(), 0x777);
+		mkdir(tmpDir.c_str(), 0777);
 	world.barrier();
 
 	std::string rankOutputDir = getRankSubdir(world, tmpDir);
 
 	Vmatch myVmatch = Vmatch(rankOutputDir + "/myReads", reads);
 
+	SequenceLengthType minKmerSize, maxKmerSize;
+	ContigExtender<KS>::getMinMaxKmerSize(reads, minKmerSize, maxKmerSize);
+	maxKmerSize = boost::mpi::all_reduce(world, maxKmerSize, mpi::minimum<SequenceLengthType>());
+
 	ReadSet finalContigs;
 	int iteration = 0;
-	while(++iteration) {
+	while(++iteration < 100) {
 		ReadSet contigs;
-		LOG_VERBOSE(1, "Reading Contig File" );
+		LOG_VERBOSE(1, "Reading Contig File: " << contigFile );
 		contigs.appendFastaFile(contigFile, world.rank(), world.size());
 
-		LOG_VERBOSE(2, "loaded " << contigs.getSize() << " Reads, " << contigs.getBaseCount() << " Bases ");
 		setGlobalReadSetOffsets(world, contigs);
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "loaded " << contigs.getGlobalSize() << " Reads");
 		if (contigs.getGlobalSize() == 0)
 			break;
 
 		ReadSet::ReadSetVector contigReadSet(contigs.getGlobalSize(), ReadSet());
-		Vmatch::MatchResults matches = myVmatch.match(contigFile);
-		std::vector< std::set<long> > contigReadHits;
+		Vmatch::MatchResults matches = myVmatch.match(contigFile, DistributedNucleatingAssemblerOptions::getVmatchOptions());
+
+		std::vector< std::set<long> > contigReadHits(contigs.getGlobalSize());
 		for(Vmatch::MatchResults::iterator match = matches.begin(); match != matches.end(); match++) {
 			ReadSet::ReadSetSizeType contigIdx = match->queryNumber, readIdx = match->subjectNumber;
 			contigReadHits[contigIdx].insert(readIdx);
@@ -185,8 +213,14 @@ int main(int argc, char *argv[]) {
 			for(std::set<long>::iterator it2 = contigReadHits[contigIdx].begin(); it2 != contigReadHits[contigIdx].end(); it2++) {
 				long readIdx = *it2;
 				contigReadSet[ contigIdx ].append( reads.getRead( readIdx ) );
+				// include pairs
+				if (readIdx % 2 == 0)
+					contigReadSet[ contigIdx ].append( reads.getRead( readIdx + 1) );
+				else
+					contigReadSet[ contigIdx ].append( reads.getRead( readIdx - 1) );
 			}
 		}
+		contigReadHits.clear();
 
 		int sendBytes[world.size()], recvBytes[world.size()], sendDisp[world.size()], recvDisp[world.size()], totalSend = 0, totalRecv = 0;
 		for(int i = 0; i < world.size(); i++) {
@@ -199,7 +233,7 @@ int main(int argc, char *argv[]) {
 			contigs.getRankReadForGlobalReadIdx(i, rank, rankReadIdx);
 			sendBytes[ rank ] += contigReadSet[ i ].getStoreSize();
 		}
-		MPI_Alltoall(sendBytes, world.size(), MPI_INT, recvBytes, world.size(), MPI_LONG, world);
+		MPI_Alltoall(&sendBytes, world.size(), MPI_INT, &recvBytes, world.size(), MPI_INT, world);
 		for(int i = 0; i < world.size(); i++) {
 			sendDisp[i] = totalSend;
 			totalSend += sendBytes[i];
@@ -235,33 +269,56 @@ int main(int argc, char *argv[]) {
 
 		ReadSet changedContigs;
 
+        //#pragma omp parallel for
 		for(ReadSet::ReadSetSizeType i = 0; i < contigs.getSize(); i++) {
 			const Read &oldRead = contigs.getRead(i);
+			LOG_DEBUG_OPTIONAL(1, true, "Extending " << oldRead.getName() << " with " << contigReadSet[i].getSize() << " pool of reads");
 			ReadSet myContig;
 			myContig.append(oldRead);
-			ReadSet newContig = ContigExtender<KS>::extendContigs(myContig, contigReadSet[i]);
+			ReadSet newContig;
+			SequenceLengthType myKmerSize = minKmerSize;
+			SequenceLengthType newLen = 0;
+			while (newLen <= oldRead.getLength() && myKmerSize < maxKmerSize) {
+				newContig = ContigExtender<KS>::extendContigs(myContig, contigReadSet[i], myKmerSize, myKmerSize);
+				newLen = newContig.getRead(0).getLength();
+				myKmerSize +=2;
+			}
 			const Read &newRead = newContig.getRead(0);
-			if (newRead.getLength() > oldRead.getLength())
-				changedContigs.append(newRead);
-			else
-				finalContigs.append(oldRead);
+
+			//#pragma omp critical
+			{
+				if (newRead.getLength() > oldRead.getLength()) {
+					changedContigs.append(newRead);
+				} else {
+					finalContigs.append(oldRead);
+				}
+			}
 		}
 
-		LOG_VERBOSE(1, "Changed contigs: " << changedContigs.getSize());
+		LOG_VERBOSE(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
+		setGlobalReadSetOffsets(world, changedContigs);
+		if (changedContigs.getGlobalSize() == 0)
+			break;
 
 		std::string filekey = "contig-" + boost::lexical_cast<std::string>(iteration);
 		DistributedOfstreamMap om(world, tmpDir, FormatOutput::getSuffix(FormatOutput::FASTA));
 		om.setBuildInMemory();
 		changedContigs.writeAll(om.getOfstream(filekey), FormatOutput::FASTA);
-		std::string newContigFile = om.getFilePath(filekey);
+		std::string newContigFile = om.getRealFilePath(filekey);
 		om.clear();
 
 		contigFile = newContigFile;
 	}
 
-	DistributedOfstreamMap om(world, Options::getOutputFile(), "");
-	om.setBuildInMemory();
-	finalContigs.writeAll(om.getOfstream(""), FormatOutput::FASTA);
+	if (!Options::getOutputFile().empty()) {
+		DistributedOfstreamMap om(world, Options::getOutputFile(), "");
+		om.setBuildInMemory();
+		finalContigs.writeAll(om.getOfstream(""), FormatOutput::FASTA);
+	}
 
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
+	MPI_Finalize();
+
+	return 0;
 }
 
