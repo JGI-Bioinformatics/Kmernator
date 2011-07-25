@@ -88,7 +88,7 @@ public:
 		double minimumConsensus = ContigExtenderOptions::getMinimumConsensus();
 		double minimumCoverage = ContigExtenderOptions::getMinimumCoverage();
 
-		LOG_VERBOSE_OPTIONAL(1, true, "Starting extendContigs with consensus fraction " << minimumConsensus << " and coverage " << minimumCoverage << " using kmers " << minKmerSize << " to " << maxKmerSize);
+		LOG_DEBUG_OPTIONAL(1, true, "Starting extendContigs with consensus fraction " << minimumConsensus << " and coverage " << minimumCoverage << " using kmers " << minKmerSize << " to " << maxKmerSize);
 
 		// set scoping of spectrum arrays
 		std::vector<KS> readSpectrums(maxKmerSize+1, KS()), contigSpectrums(maxKmerSize+1, KS());
@@ -111,6 +111,9 @@ public:
 			bool extendRight = true;
 			Read read = contigs.getRead(i);
 
+			std::string fasta = read.getFasta();
+			LOG_VERBOSE_OPTIONAL(2, true, "Extending " << read.getName() << " of length " << fasta.length());
+
 			ReadSet thisReadOnlySet;
 			thisReadOnlySet.append(read);
 			for(kmerSize = minKmerSize ; kmerSize <= maxKmerSize; kmerSize+=2) {
@@ -118,8 +121,6 @@ public:
 				contigSpectrums[kmerSize].buildKmerSpectrum(thisReadOnlySet,true);
 			}
 
-			std::string fasta = read.getFasta();
-			LOG_VERBOSE_OPTIONAL(1, true, "Extending " << read.getName() << " of length " << fasta.length());
 			int leftTotal = 0, rightTotal = 0;
 			while (extendLeft | extendRight) {
 				SequenceLengthType len = fasta.length();
@@ -129,7 +130,7 @@ public:
 				if (extendLeft) {
 					bool toRight = false;
 					for(kmerSize = minKmerSize; kmerSize <= maxKmerSize; kmerSize += 2) {
-						LOG_DEBUG_OPTIONAL(1, true, "Extending for kmer size " << kmerSize);
+						LOG_DEBUG_OPTIONAL(2, true, "Extending for kmer size " << kmerSize);
 						KmerSizer::set(kmerSize);
 						extendLeft = readSpectrums[kmerSize].extendContig(fasta, toRight, minimumCoverage, minimumConsensus, &contigSpectrums[kmerSize]);
 						if (extendLeft) {
@@ -155,7 +156,7 @@ public:
 			}
 
 			std::string newName = read.getName() + "-l" + boost::lexical_cast<std::string>(leftTotal) + "r" + boost::lexical_cast<std::string>(rightTotal);
-			LOG_VERBOSE_OPTIONAL(1, true, "Extended " << newName << " : " << read.getName() << " left +" << leftTotal << " right +" << rightTotal << " to " << fasta.length());
+			LOG_DEBUG_OPTIONAL(1, true, "Extended " << newName << " : " << read.getName() << " left +" << leftTotal << " right +" << rightTotal << " to " << fasta.length());
 			Read newContig(newName, fasta, std::string(fasta.length(), Read::REF_QUAL));
 			newContigs.append(newContig);
 		}
