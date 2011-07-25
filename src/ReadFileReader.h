@@ -286,7 +286,6 @@ public:
 			if (rank + 1 != size ) {
 				seekToNextRecord( blockSize * (rank+1) );
 				lastPos = getPos();
-				_parser->reset(); // reset a potential eof...
 			}
 			seekToNextRecord( blockSize * rank );
 			firstPos = getPos();
@@ -352,11 +351,15 @@ public:
 
 		SequenceStreamParser(istream &stream, char marker) :
 			_stream(&stream), _line(0), _pos(0), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
+			if (!_stream->good() || _stream->fail())
+				LOG_THROW("SequenceStreamParser(" << _stream << ", " << marker << ") has an invalid stream!");
 			LOG_DEBUG(4, "SequenceStreamParser(istream, " << marker << ")");
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::MmapSource &mmap, char marker) :
 		    _stream(NULL), _line(0), _pos(0), _marker(marker), _mmap( mmap ), _lastPtr(NULL), _freeStream(false) {
+			if (!_mmap.is_open() || !_mmap.size()>0 || _mmap.data() == NULL)
+				LOG_THROW("SequenceStreamParser(" << _mmap << ", " << marker << ") has an invalid memory map!");
 
 			_stream = new MmapIStream(_mmap);
 			_lastPtr = _mmap.data() + _mmap.size();
@@ -367,6 +370,9 @@ public:
 		SequenceStreamParser(ReadFileReader::FilteredIStream &stream, char marker) :
 			_line(0), _pos(0), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
 			_stream = (istream *) &stream;
+			if (!_stream->good() || _stream->fail())
+				LOG_THROW("SequenceStreamParser(FilteredIStream " << _stream << ", " << marker << ") has an invalid stream!");
+
 			LOG_DEBUG(4, "SequenceStreamParser(FilteredIStream, " << marker << ")");
 			setBuffers();
 		}
@@ -398,7 +404,7 @@ public:
 		}
 		void seekg(unsigned long pos) {
 			_pos = pos;
-			// first clear eof bit
+			reset(); // reset a potential eof...
 			_stream->seekg(_pos);
 		}
 		bool endOfStream() {
