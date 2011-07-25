@@ -147,6 +147,8 @@ public:
 			LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr(): Writing to " << filePath);
 			of.reset(new std::ofstream(filePath.c_str(), mode));
 			assert(isFileStream());
+			if (of->fail() || !of->is_open() || !of->good())
+				LOG_THROW("Could not open " << filePath << " for writing! " << of->rdstate());
 		}
 		OStreamPtr(std::string _filePath) : filePath(_filePath) {
 			LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr(): In-memory writing to " << filePath);
@@ -158,10 +160,13 @@ public:
 				LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr::close(): Closing " << getFilePath());
 				of->flush();
 				of->close();
+				if (of->fail())
+					LOG_WARN(1, "Could not properly close: " << getFilePath());
 			}
 			if (isStringStream()) {
 				LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr::close(): Writing out in-memory : " << getFilePath());
 				OStreamPtr osp(getFilePath(), false);
+				assert(osp.isFileStream());
 				*osp << *ss;
 			}
 			reset();
@@ -560,12 +565,12 @@ public:
 			base::close();
 			int status = pclose(_pipe);
 			if (status != 0) {
-				LOG_ERROR(1, "Pipe '" << _cmd << "' closed with an error: " << status);
-				throw;
+				LOG_WARN(1, "OPipestream::close() '" << _cmd << "' closed with an error: " << status);
+				//throw;
 			}
 		} catch(...) {
 			// ignoring this pipe closure error.  pclose is the proper way to close this..
-			LOG_DEBUG_OPTIONAL(1, true, "Potentially failed to close pipe properly");
+			LOG_DEBUG_OPTIONAL(1, true, "OPipestream::close(): Potentially failed to close pipe properly");
 		}
 	}
 	~OPipestream() {
@@ -587,15 +592,15 @@ public:
 	}
 	void close() {
 		try {
-			base::close();
 			int status = pclose(_pipe);
 			if (status != 0) {
-				LOG_ERROR(1, "Pipe '" << _cmd << "' closed with an error: " << status);
-				throw;
+				LOG_WARN(1, "IPipestream::close() '" << _cmd << "' closed with an error: " << status);
+				//throw;
 			}
+			base::close();
 		} catch(...) {
 			// ignoring this pipe closure error.  pclose is the proper way to close this..
-			LOG_DEBUG_OPTIONAL(1, true, "Potentially failed to close pipe properly");
+			LOG_DEBUG_OPTIONAL(1, true, "IPipestream::close(): Potentially failed to close pipe properly");
 		}
 	}
 	~IPipestream() {
@@ -611,13 +616,13 @@ class FileUtils
 {
 public:
 
-	static std::string getDirname(const std::string &filePath) {
+	static std::string getDirname(const std::string filePath) {
 		char buf[filePath.size() + 1];
 		memcpy(buf, filePath.c_str(), filePath.size());
 	    std::string dirPath(dirname(buf));
 		return dirPath;
 	}
-	static void syncDir(const std::string &filePath) {
+	static void syncDir(const std::string filePath) {
 		std::string dirPath = getDirname(filePath);
 		DIR *d = opendir(dirPath.c_str());
 		if (d == NULL) {
@@ -628,7 +633,7 @@ public:
 			closedir(d);
 		}
 	}
-	static void syncFile(const std::string &filePath) {
+	static void syncFile(const std::string filePath) {
 		int fd = open(filePath.c_str(), std::ios_base::in | std::ios_base::out);
 		if (fd < 0) {
 			LOG_ERROR(1, "Could not open " << filePath << "! " << strerror(errno));
@@ -639,7 +644,7 @@ public:
 		if (close(fd) != 0)
 			LOG_ERROR(1, "Could not close " << filePath << "! " << strerror(errno));
 	}
-	static std::auto_ptr<struct stat> statFile(const std::string &filePath, bool dofsync = false, bool dodirsync = false) {
+	static std::auto_ptr<struct stat> statFile(const std::string filePath, bool dofsync = false, bool dodirsync = false) {
 		if (dodirsync) {
 			syncDir(filePath);
 		}
@@ -654,7 +659,7 @@ public:
 		}
 		return fileStat;
 	}
-	static unsigned long getFileSize(std::string &filePath) {
+	static unsigned long getFileSize(const std::string filePath) {
 		std::ifstream ifs(filePath.c_str());
 		if (ifs.good())
 			return getFileSize(ifs);
