@@ -96,7 +96,7 @@ private:
 public:
 	Vmatch(std::string indexName, ReadSet &inputs) : _indexName(indexName) {
 		if (FileUtils::getFileSize(indexName + ".suf") > 0) {
-			LOG_DEBUG_OPTIONAL(1, true, "Vmatch(" << indexName << ", reads(" << inputs.getSize() << ")): Index already exists: " << indexName);
+			LOG_VERBOSE_OPTIONAL(1, true, "Vmatch(" << indexName << ", reads(" << inputs.getSize() << ")): Index already exists: " << indexName);
 		} else {
 			buildVmatchIndex(indexName, inputs);
 		}
@@ -107,19 +107,21 @@ public:
 		inputs.writeAll(ofm.getOfstream(""), FormatOutput::FASTA);
 		ofm.clear();
 		buildVmatchIndex(indexName, inputFile);
-		LOG_VERBOSE(1, "Removing temporary inputFile" << inputFile);
+		LOG_DEBUG_OPTIONAL(1, true, "Removing temporary inputFile" << inputFile);
 		unlink(inputFile.c_str());
 	}
 	static void buildVmatchIndex(std::string indexName, std::string inputFasta) {
 		std::string cmd("mkvtree -dna -allout -pl -indexname " + indexName + " -db " + inputFasta);
-		LOG_VERBOSE(1, "Building vmatch index " << indexName << " : " << cmd);
+		LOG_VERBOSE_OPTIONAL(1, true, "Building vmatch index " << indexName << " : " << cmd);
 		int ret = system(cmd.c_str());
 		if (ret != 0)
-			throw;
+			LOG_THROW("mkvtree failed to build(" << ret << "): " << cmd);
 	}
 	MatchResults &match(std::string queryFile, std::string options = "") {
 		_results.clear();
-		IPipestream vmatchOutput("vmatch " + options + " -q " + queryFile + " " + _indexName);
+		std::string cmd("vmatch " + options + " -q " + queryFile + " " + _indexName);
+		LOG_DEBUG_OPTIONAL(1, true, "Executing vmatch: " << cmd);
+		IPipestream vmatchOutput(cmd);
 		std::string line;
 		while (!vmatchOutput.eof()) {
 			getline(vmatchOutput, line);
@@ -142,6 +144,7 @@ int main(int argc, char *argv[]) {
 	Options::getFormatOutput() = 3;
 	Options::getMmapInput() = 0;
 	Options::getVerbosity() = 2;
+	Options::getMaxThreads() = 1;
 
 	int threadProvided;
 	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
@@ -190,79 +193,96 @@ int main(int argc, char *argv[]) {
 	maxKmerSize = boost::mpi::all_reduce(world, maxKmerSize, mpi::minimum<SequenceLengthType>());
 
 	ReadSet finalContigs;
-	int iteration = 0;
-	while(++iteration < 100) {
+	short iteration = 0;
+	while(++iteration > 0) {
 		ReadSet contigs;
-		LOG_VERBOSE(1, "Reading Contig File: " << contigFile );
 		contigs.appendFastaFile(contigFile, world.rank(), world.size());
 
 		setGlobalReadSetOffsets(world, contigs);
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "loaded " << contigs.getGlobalSize() << " Reads");
-		if (contigs.getGlobalSize() == 0)
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Reading Contig File: " << contigFile << ". loaded " << contigs.getGlobalSize() << " Reads");
+		if (contigs.getGlobalSize() == 0) {
+			LOG_VERBOSE_OPTIONAL(1, true, "There are no contigs to extend in " << contigFile);
 			break;
+		}
 
 		ReadSet::ReadSetVector contigReadSet(contigs.getGlobalSize(), ReadSet());
 		Vmatch::MatchResults matches = myVmatch.match(contigFile, DistributedNucleatingAssemblerOptions::getVmatchOptions());
 
 		std::vector< std::set<long> > contigReadHits(contigs.getGlobalSize());
 		for(Vmatch::MatchResults::iterator match = matches.begin(); match != matches.end(); match++) {
-			ReadSet::ReadSetSizeType contigIdx = match->queryNumber, readIdx = match->subjectNumber;
-			contigReadHits[contigIdx].insert(readIdx);
+			ReadSet::ReadSetSizeType globalContigIdx = match->queryNumber, readIdx = match->subjectNumber;
+			contigReadHits[globalContigIdx].insert(readIdx);
 			// include pairs
 			if (readIdx % 2 == 0)
-				contigReadHits[contigIdx].insert( readIdx + 1);
+				contigReadHits[globalContigIdx].insert( readIdx + 1);
 			else
-				contigReadHits[contigIdx].insert( readIdx - 1 );
+				contigReadHits[globalContigIdx].insert( readIdx - 1 );
 		}
-		for(long contigIdx = 0; contigIdx < (long)contigReadHits.size(); contigIdx++) {
-			for(std::set<long>::iterator it2 = contigReadHits[contigIdx].begin(); it2 != contigReadHits[contigIdx].end(); it2++) {
+		for(long globalContigIdx = 0; globalContigIdx < (long)contigReadHits.size(); globalContigIdx++) {
+			LOG_DEBUG_OPTIONAL(3, true, "GlobalContig: " << globalContigIdx << " has " << contigReadHits[globalContigIdx].size() << " contigReadHits");
+			for(std::set<long>::iterator it2 = contigReadHits[globalContigIdx].begin(); it2 != contigReadHits[globalContigIdx].end(); it2++) {
 				long readIdx = *it2;
-				contigReadSet[ contigIdx ].append( reads.getRead( readIdx ) );
+				contigReadSet[ globalContigIdx ].append( reads.getRead( readIdx ) );
 			}
 		}
 		contigReadHits.clear();
 
-		int sendBytes[world.size()], recvBytes[world.size()], sendDisp[world.size()], recvDisp[world.size()], totalSend = 0, totalRecv = 0;
-		for(int i = 0; i < world.size(); i++) {
-			sendBytes[i] = 0;
-			recvBytes[i] = 0;
+		int sendBytes[world.size()], recvBytes[world.size()], sendDisp[world.size()], recvDisp[world.size()];
+		int totalSend = 0, totalRecv = 0;
+
+		for(int rank = 0; rank < world.size(); rank++) {
+			sendBytes[rank] = 0;
+			recvBytes[rank] = 0;
 		}
-		for(ReadSet::ReadSetSizeType i = 0; i < contigs.getSize(); i++) {
+		for(ReadSet::ReadSetSizeType globalContigIdx = 0; globalContigIdx < contigs.getGlobalSize(); globalContigIdx++) {
 			int rank;
 			ReadSet::ReadSetSizeType rankReadIdx;
-			contigs.getRankReadForGlobalReadIdx(i, rank, rankReadIdx);
-			sendBytes[ rank ] += contigReadSet[ i ].getStoreSize();
+			contigs.getRankReadForGlobalReadIdx(globalContigIdx, rank, rankReadIdx);
+			int sendByteCount = contigReadSet[ globalContigIdx ].getStoreSize();
+            sendBytes[ rank ] += sendByteCount;
+            LOG_DEBUG_OPTIONAL(3, true, "GlobalContig: " << globalContigIdx << " sending " << contigReadSet[ globalContigIdx ].getSize() << " reads / "<< sendByteCount << " bytes to " << rank << " total: " << sendBytes[rank]);
 		}
-		MPI_Alltoall(&sendBytes, world.size(), MPI_INT, &recvBytes, world.size(), MPI_INT, world);
-		for(int i = 0; i < world.size(); i++) {
-			sendDisp[i] = totalSend;
-			totalSend += sendBytes[i];
-			recvDisp[i] = totalRecv;
-			totalRecv += recvBytes[i];
+		for(int rank = 0; rank < world.size(); rank++) {
+			sendDisp[rank] = totalSend;
+			totalSend += sendBytes[rank];
+			LOG_DEBUG_OPTIONAL(3, true, "Sending to rank " << rank << " sendBytes " << sendBytes[rank] << " sendDisp[] " << sendDisp[rank] << ". 0 == recvBytes[] "<< recvBytes[rank]);
 		}
-		char *sendBuf = (char*) malloc(totalSend);
+
+		MPI_Alltoall(sendBytes, 1, MPI_INT, recvBytes, 1, MPI_INT, world);
+
+		for(int rank = 0; rank < world.size(); rank++) {
+			recvDisp[rank] = totalRecv;
+			totalRecv += recvBytes[rank];
+			LOG_DEBUG_OPTIONAL(3, true, "to/from rank " << rank << ": sendDisp[] " << sendDisp[rank] << " sendBytes[] " << sendBytes[rank] << " recvDisp[] " << recvDisp[rank] << " recvBytes[] " << recvBytes[rank] );
+		}
+		LOG_DEBUG_OPTIONAL(3, true, "Sending " << totalSend << " Receiving " << totalRecv);
+		world.barrier();
+		char *sendBuf = (char*) malloc(totalSend == 0 ? 8 : totalSend);
 		if (sendBuf == NULL)
-			throw;
+			LOG_THROW("Could not allocate totalSend bytes! " << totalSend);
 		char *tmp = sendBuf;
-		for(ReadSet::ReadSetSizeType i = 0; i < contigs.getSize(); i++) {
-			tmp += contigReadSet[i].store(tmp);
+		for(ReadSet::ReadSetSizeType contigGlobalIndex = 0; contigGlobalIndex < contigs.getGlobalSize(); contigGlobalIndex++) {
+			tmp += contigReadSet[contigGlobalIndex].store(tmp);
 		}
 		contigReadSet.clear();
-		char *recvBuf = (char*) malloc(totalRecv);
+		char *recvBuf = (char*) malloc(totalRecv == 0 ? 8 : totalRecv);
 		if (recvBuf == NULL)
-			throw;
+			LOG_THROW("Could not allocate totalRecv bytes! " << totalRecv);
 
 		MPI_Alltoallv(sendBuf, sendBytes, sendDisp, MPI_BYTE, recvBuf, recvBytes, recvDisp, MPI_BYTE, world);
 		free(sendBuf);
+		// set contigReadSet to hold read sets for local set of contigs
 		contigReadSet.resize(contigs.getSize(), ReadSet());
 
-		for(int i = 0; i < world.size(); i++) {
+		for(int rank = 0; rank < world.size(); rank++) {
 			ReadSet::ReadSetSizeType contigIdx = 0;
-			tmp = recvBuf + recvDisp[i];
-			while (tmp != recvBuf + recvDisp[i] + recvBytes[i]) {
+			tmp = recvBuf + recvDisp[rank];
+			while (tmp != recvBuf + recvDisp[rank] + recvBytes[rank]) {
 				ReadSet rs;
 				tmp = (char*) rs.restore(tmp);
-				contigReadSet[contigIdx++].append(rs);
+				contigReadSet[contigIdx].append(rs);
+				LOG_DEBUG_OPTIONAL(3, true, "Restored from rank " << rank << " ReadSet " << rs.getSize() << " totaling " << contigReadSet[contigIdx].getSize());
+				contigIdx++;
 			}
 		}
 		free(recvBuf);
@@ -288,8 +308,10 @@ int main(int argc, char *argv[]) {
 			//#pragma omp critical
 			{
 				if (newRead.getLength() > oldRead.getLength()) {
+					LOG_DEBUG_OPTIONAL(1, true, "Extended " << oldRead.getName() << " to " << newRead.getName());
 					changedContigs.append(newRead);
 				} else {
+					LOG_VERBOSE_OPTIONAL(1, true, "Could not further extend " << oldRead.getName());
 					finalContigs.append(oldRead);
 				}
 			}
@@ -297,8 +319,10 @@ int main(int argc, char *argv[]) {
 
 		LOG_VERBOSE(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
 		setGlobalReadSetOffsets(world, changedContigs);
-		if (changedContigs.getGlobalSize() == 0)
+		if (changedContigs.getGlobalSize() == 0) {
+			LOG_VERBOSE_OPTIONAL(1, true, "No more contigs to extend " << changedContigs.getSize());
 			break;
+		}
 
 		std::string filekey = "contig-" + boost::lexical_cast<std::string>(iteration);
 		DistributedOfstreamMap om(world, tmpDir, FormatOutput::getSuffix(FormatOutput::FASTA));
