@@ -265,6 +265,7 @@ public:
 	void setGlobalOffsets(ReadIdxVector &globalSizes) {
 		_globalSize = 0;
 		_globalOffsets.clear();
+		_globalOffsets.reserve(globalSizes.size());
 		for(int i = 0; i < (int) globalSizes.size(); i++) {
 			_globalOffsets.push_back(_globalSize);
 			_globalSize += globalSizes[i];
@@ -288,9 +289,10 @@ public:
 				if (_globalOffsets[rank] <= globalReadIdx)
 					break;
 			}
-			LOG_DEBUG_OPTIONAL(1, true, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << "): " << rank << " " << _globalOffsets[rank]);
 			rankReadIdx = globalReadIdx - _globalOffsets[rank];
 		}
+		LOG_DEBUG_OPTIONAL(1, true, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << ", " << rank << ", " << rankReadIdx << "): " << _globalOffsets[rank]);
+
 	}
 
 	inline ReadSetSizeType getGlobalSize() const {

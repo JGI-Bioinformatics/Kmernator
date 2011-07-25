@@ -68,10 +68,10 @@ public:
 	ReadFileReader(string fastaFilePath, string qualFilePath) :
 	    _parser(), _path(fastaFilePath), _streamType(0) {
 
-        _ifs.open(fastaFilePath.c_str());
+        _ifs.open(_path.c_str());
 
 		if (_ifs.fail())
-			throw runtime_error("Could not open : " + fastaFilePath);
+			throw runtime_error("Could not open : " + _path);
 
 		if (Options::getIgnoreQual())
 			qualFilePath.clear();
@@ -83,15 +83,16 @@ public:
 		} else {
 		     if (!Options::getIgnoreQual()) {
 			   // test for an implicit qual file
-			   _qs.open((fastaFilePath + ".qual").c_str());
+			   _qs.open((_path + ".qual").c_str());
 			 }
 		}
-		LOG_DEBUG(2, "ReadFileReader(" << fastaFilePath << ", " << qualFilePath << ")");
+		LOG_DEBUG(2, "ReadFileReader(" << _path << ", " << qualFilePath << ")");
 		setParser(_ifs, _qs);
 	}
 
 	ReadFileReader(string &fasta) :
 		_iss(fasta), _streamType(1) {
+		LOG_DEBUG(2, "ReadFileReader(" << fasta.length() << "): Constructor on a string-based fasta file");
 		_parser = SequenceStreamParserPtr(new FastaStreamParser(_iss));
 	}
 
@@ -257,7 +258,10 @@ public:
 	}
 
 	unsigned long getBlockSize(unsigned int numThreads) {
-		return getFileSize() / numThreads;
+		unsigned long fileSize = getFileSize();
+		unsigned long blockSize = fileSize / numThreads;
+		LOG_DEBUG_OPTIONAL(1, true, "getBlockSize(" << numThreads <<"): " << blockSize << " out of " << fileSize);
+		return blockSize;
 	}
 
 	inline unsigned long getPos() {
@@ -282,6 +286,7 @@ public:
 			if (rank + 1 != size ) {
 				seekToNextRecord( blockSize * (rank+1) );
 				lastPos = getPos();
+				_parser->reset(); // reset a potential eof...
 			}
 			seekToNextRecord( blockSize * rank );
 			firstPos = getPos();
@@ -323,6 +328,8 @@ public:
 			  name = getName();
 			  bases = getBases();
 			  quals = getQuals();
+			} else {
+				LOG_DEBUG(5, "SequenceStreamParser()::readRecord(" << recordPtr <<",,,) found the end");
 			}
 			return end;
 		}
@@ -384,8 +391,14 @@ public:
 		unsigned long tellg() {
 			return _stream->tellg();
 		}
+
+		void reset() {
+			_stream->clear(_stream->rdstate() & ( ~ios_base::eofbit ) );
+			_stream->clear(_stream->rdstate() & ( ~ios_base::failbit ) );
+		}
 		void seekg(unsigned long pos) {
 			_pos = pos;
+			// first clear eof bit
 			_stream->seekg(_pos);
 		}
 		bool endOfStream() {
@@ -420,14 +433,16 @@ public:
 			std::string &name = getName();
 			nextLine( name );
 
-			while (name.length() == 0) // skip empty lines at end of stream
+			while (name.length() == 0 ) //|| name[0] != _marker) // skip empty lines at end of stream
 			{
+				LOG_DEBUG(5, "SequenceStreamParser::readName() found nothing on the last line");
 				if (endOfStream()) {
 					name.clear();
 					return name;
 				}
 				nextLine( name );
 			}
+			LOG_DEBUG(5, "SequenceStreamParser::readName() found " << name);
 
 			if (name[0] != _marker)
 				throw runtime_error(
@@ -482,6 +497,7 @@ public:
 					nextLine();
 			} else {
 				seekg(0);
+				assert(!endOfStream());
 				return true;
 			}
 			LOG_DEBUG(2, "seeked to " << tellg() );
@@ -530,7 +546,7 @@ public:
 				readRecord();
 				string name2 = getName();
 				if (name2.empty() || endOfStream()) {
-					LOG_DEBUG(3, "Found endofstream 1 record in leaving at eof to preserve pair" << name1);
+					LOG_DEBUG(3, "Found endofstream 1 record in leaving at eof to preserve pair " << name1);
 					return false;
 				}
 
@@ -538,18 +554,18 @@ public:
 				string name3 = getName();
 				if (name3.empty() || endOfStream()) {
 					seekg(here1);
-					LOG_DEBUG(3, "Found endofstream two records in, rewinding to initial boundary: " << name1 << " & " << name2);
+					LOG_DEBUG(3, "Found endofstream two records in, rewinding to initial boundary " << here1 << " : " << name1 << " & " << name2);
 					return true;
 				}
 
 				if (SequenceRecordParser::isPair(name1,name2)) {
 					seekg(here1);
-					LOG_DEBUG(3, "Found natural pair at boundary, rewinding");
+					LOG_DEBUG(3, "Found natural pair at boundary, rewinding to " << here1);
 				} else if (SequenceRecordParser::isPair(name2, name3)) {
 					seekg(here2);
-					LOG_DEBUG(3, "Found split pair at boundary, incrementing one record");
+					LOG_DEBUG(3, "Found split pair at boundary, incrementing one record to " << here2);
 				} else {
-					LOG_DEBUG(3, "Found no pairs at boundary, rewinding");
+					LOG_DEBUG(3, "Found no pairs at boundary, rewinding to " << here1);
 					seekg(here1);
 				}
 				return true;
@@ -571,13 +587,16 @@ public:
 
 		}
 		RecordPtr readRecord() {
+
+			int threadNum = omp_get_thread_num();
 			if (readName().empty()) {
-				int threadNum = omp_get_thread_num();
 				_basesBuffer[threadNum].clear();
 				_qualsBuffer[threadNum].clear();
+				LOG_DEBUG(5, "FastqStreamParser::readRecord() found the end");
 			} else {
 				readBases();
 				readQuals();
+				LOG_DEBUG(5, "FastqStreamParser::readRecord() found " << _nameBuffer[threadNum]);
 			}
 
 			return getStreamRecordPtr();
@@ -642,12 +661,14 @@ public:
 		}
 
 		RecordPtr readRecord() {
+			int threadNum = omp_get_thread_num();
 			if (readName().empty()) {
-				int threadNum = omp_get_thread_num();
 				_basesBuffer[threadNum].clear();
 				_qualsBuffer[threadNum].clear();
+				LOG_DEBUG(5, "FastaStreamParser::readRecord() found the end at " << tellg());
 			} else {
 				readBases();
+				LOG_DEBUG(5, "FastaStreamParser::readRecord() found " << _nameBuffer[threadNum]);
 			}
 			return getStreamRecordPtr();
 		}
@@ -731,10 +752,12 @@ public:
 			if (readName().empty()) {
 				_basesBuffer[threadNum].clear();
 				_qualsBuffer[threadNum].clear();
+				LOG_DEBUG(5, "FastaQualStreamParser::readRecord() found the end");
 			} else {
 			    readBases();
 			    readQuals();
 			    _isMultiline[threadNum] = _isMultiline[threadNum] || _qualParser.isMultiline();
+			    LOG_DEBUG(5, "FastaQualStreamParser::readRecord() found " << _nameBuffer[threadNum]);
 			}
 			return getStreamRecordPtr();
 		}
