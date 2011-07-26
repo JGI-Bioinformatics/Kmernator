@@ -265,7 +265,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadSet::MmapSource &mmap,
 ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, int rank, int size) {
 	string name, bases, quals;
 	LOG_DEBUG(2, "appendFasta(reader, " << rank << ", " << size << ")");
-	unsigned long lastPos = reader.seekToPartition(rank,size);
+	reader.seekToPartition(rank,size);
 	unsigned long firstPos = reader.getPos();
 	if (reader.isMmaped() && Options::getMmapInput() != 0) {
 	    RecordPtr recordPtr = reader.getStreamRecordPtr();
@@ -287,21 +287,16 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
             recordPtr = nextRecordPtr;
 	    	qualPtr = reader.getStreamQualRecordPtr();
 
-            if (reader.getPos() >= lastPos)
-            	break;
-
 	    }
 	} else {
 		LOG_DEBUG(3, "Reading file stream");
 	    while (reader.nextRead(name, bases, quals)) {
 	        Read read(name, bases, quals);
 	        addRead(read, bases.length(), rank);
-            if (reader.getPos() >= lastPos)
-            	break;
 	    }
 	}
-	lastPos = reader.getPos();
-	LOG_VERBOSE(2, "Finished reading " << (lastPos - firstPos)/1024 << " KB, " << getSize() << " reads");
+	unsigned long lastPos = reader.getPos();
+	LOG_DEBUG(1, "Finished reading " << (lastPos - firstPos)/1024 << " KB, " << getSize() << " reads");
 	return reader.getParser();
 }
 

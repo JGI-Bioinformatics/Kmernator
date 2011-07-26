@@ -188,7 +188,8 @@ public:
 		try {
 			assert(recordStart == _parser->getStreamRecordPtr());
 			RecordPtr endPtr = _parser->readRecord();
-			if (_parser->getName().empty()) {
+			if (endPtr == NULL || _parser->getName().empty()) {
+				_parser->resetBuffers();
 				recordStart = NULL;
 				return false;
 			} else {
@@ -278,7 +279,7 @@ public:
 		return _parser->getType();
 	}
 
-	unsigned long seekToPartition(int rank, int size) {
+	void seekToPartition(int rank, int size) {
 		unsigned long lastPos = getFileSize();
 		unsigned long firstPos = 0;
 		if (size > 1) {
@@ -290,10 +291,13 @@ public:
 			seekToNextRecord( blockSize * rank );
 			firstPos = getPos();
 		}
-		LOG_VERBOSE(2, "Seeked to position " << firstPos << ", reading until " << lastPos << " on file " << getFilePath());
-		return lastPos;
+		setLastPos(lastPos);
+		LOG_DEBUG(1, "Seeked to position " << firstPos << ", reading until " << lastPos << " on file " << getFilePath());
 	}
 
+	void setLastPos(unsigned long lastPos) {
+		_parser->setLastPos(lastPos);
+	}
 	bool eof() const {
 		return _parser->endOfStream();
 	}
@@ -304,7 +308,8 @@ public:
 	private:
 		istream * _stream;
 		unsigned long _line;
-		unsigned long _pos;
+		mutable unsigned long _pos;
+		unsigned long _lastPos;
 
 	protected:
 		char _marker;
@@ -329,6 +334,8 @@ public:
 			  quals = getQuals();
 			} else {
 				LOG_DEBUG(5, "SequenceStreamParser()::readRecord(" << recordPtr <<",,,) found the end");
+				resetBuffers();
+				return NULL;
 			}
 			return end;
 		}
@@ -339,6 +346,8 @@ public:
 		inline string &nextLine(string &buffer) {
 			_line++;
 			buffer.clear();
+			if (isPastPartition())
+				return buffer;
 			getline(*_stream, buffer);
 			_pos += buffer.length() + 1;
 			return buffer;
@@ -350,14 +359,14 @@ public:
 		}
 
 		SequenceStreamParser(istream &stream, char marker) :
-			_stream(&stream), _line(0), _pos(0), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
+			_stream(&stream), _line(0), _pos(0), _lastPos(-1), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
 			if (!_stream->good() || _stream->fail())
 				LOG_THROW("SequenceStreamParser(" << _stream << ", " << marker << ") has an invalid stream!");
 			LOG_DEBUG(4, "SequenceStreamParser(istream, " << marker << ")");
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::MmapSource &mmap, char marker) :
-		    _stream(NULL), _line(0), _pos(0), _marker(marker), _mmap( mmap ), _lastPtr(NULL), _freeStream(false) {
+		    _stream(NULL), _line(0), _pos(0), _lastPos(-1), _marker(marker), _mmap( mmap ), _lastPtr(NULL), _freeStream(false) {
 			if (!_mmap.is_open() || !_mmap.size()>0 || _mmap.data() == NULL)
 				LOG_THROW("SequenceStreamParser(" << _mmap << ", " << marker << ") has an invalid memory map!");
 
@@ -368,7 +377,7 @@ public:
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::FilteredIStream &stream, char marker) :
-			_line(0), _pos(0), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
+			_line(0), _pos(0), _lastPos(-1), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
 			_stream = (istream *) &stream;
 			if (!_stream->good() || _stream->fail())
 				LOG_THROW("SequenceStreamParser(FilteredIStream " << _stream << ", " << marker << ") has an invalid stream!");
@@ -384,6 +393,14 @@ public:
 			_isMultiline.assign(OMP_MAX_THREADS_DEFAULT, false);
 		}
 
+		void resetBuffers() const {
+			int threadNum = omp_get_thread_num();
+			_nameBuffer[threadNum].clear();
+			_basesBuffer[threadNum].clear();
+			_qualsBuffer[threadNum].clear();
+			_lineBuffer[threadNum].clear();
+		}
+
 		virtual ~SequenceStreamParser() {
 			// TODO fix this -- open a new mmap that can be closed!
 			// Do not free/close istream as that closes the mmap too!!!
@@ -391,11 +408,14 @@ public:
 			//	delete _stream;
 		}
 
+		void setLastPos(unsigned long lastPos) {
+			_lastPos = lastPos;
+		}
 		unsigned long lineNumber() {
 			return _line;
 		}
 		unsigned long tellg() {
-			return _stream->tellg();
+			return _pos = _stream->tellg();
 		}
 
 		void reset() {
@@ -439,16 +459,16 @@ public:
 			std::string &name = getName();
 			nextLine( name );
 
-			while (name.length() == 0 ) //|| name[0] != _marker) // skip empty lines at end of stream
+			while (name.length() == 0 || name[0] != _marker) // skip empty lines at end of stream
 			{
-				LOG_DEBUG(5, "SequenceStreamParser::readName() found nothing on the last line");
-				if (endOfStream()) {
+				LOG_DEBUG(5, "SequenceStreamParser::readName() found nothing on the last line: " << name << " " << getPos());
+				if (isPastPartition() || endOfStream()) {
 					name.clear();
 					return name;
 				}
 				nextLine( name );
 			}
-			LOG_DEBUG(5, "SequenceStreamParser::readName() found " << name);
+			LOG_DEBUG(5, "SequenceStreamParser::readName() found " << name << " at " << getPos());
 
 			if (name[0] != _marker)
 				throw runtime_error(
@@ -465,6 +485,12 @@ public:
 
 		unsigned long getPos() const {
 			return _pos;
+		}
+		void setPos(unsigned long newPos) const {
+			_pos = newPos;
+		}
+		bool isPastPartition() const {
+			return _pos >= _lastPos;
 		}
 		bool isMmaped() const {
 			return _mmap.is_open();
@@ -508,6 +534,11 @@ public:
 			}
 			LOG_DEBUG(2, "seeked to " << tellg() );
 
+			if (endOfStream()) {
+				LOG_DEBUG(3, "At endofstream already1");
+				return false;
+			}
+
 			while ( (!endOfStream()) && _stream->peek() != _marker) {
 				nextLine();
 			}
@@ -532,16 +563,16 @@ public:
 			}
 
 			if (endOfStream()) {
-				LOG_DEBUG(3, "At endofstream already");
+				LOG_DEBUG(3, "At endofstream already2");
 				return false;
 			}
 
 			if (byPair) {
 				// now verify that we have not split a sequential pair
 				unsigned long here1 = tellg();
+				string name1;
 				readRecord();
-				string name1 = getName();
-				if (name1.empty() || endOfStream()) {
+				if ( (name1 = getName()).empty() || endOfStream()) {
 					LOG_DEBUG(3, "Found endofstream 0 records in leaving at eof to preserve pair");
 					return false;
 				} else {
@@ -549,16 +580,16 @@ public:
 				}
 
 				unsigned long here2 = tellg();
+				string name2;
 				readRecord();
-				string name2 = getName();
-				if (name2.empty() || endOfStream()) {
+				if ( (name2 = getName()).empty() || endOfStream()) {
 					LOG_DEBUG(3, "Found endofstream 1 record in leaving at eof to preserve pair " << name1);
 					return false;
 				}
 
+				string name3;
 				readRecord();
-				string name3 = getName();
-				if (name3.empty() || endOfStream()) {
+				if ( (name3 = getName()).empty() || endOfStream()) {
 					seekg(here1);
 					LOG_DEBUG(3, "Found endofstream two records in, rewinding to initial boundary " << here1 << " : " << name1 << " & " << name2);
 					return true;
@@ -596,9 +627,9 @@ public:
 
 			int threadNum = omp_get_thread_num();
 			if (readName().empty()) {
-				_basesBuffer[threadNum].clear();
-				_qualsBuffer[threadNum].clear();
+				resetBuffers();
 				LOG_DEBUG(5, "FastqStreamParser::readRecord() found the end");
+				return NULL;
 			} else {
 				readBases();
 				readQuals();
@@ -607,11 +638,16 @@ public:
 
 			return getStreamRecordPtr();
 		}
-		RecordPtr readRecord(RecordPtr recordPtr) const {
+		RecordPtr readRecord(RecordPtr _recordPtr) const {
 			int threadNum = omp_get_thread_num();
+			RecordPtr recordPtr = _recordPtr;
+			if (isPastPartition()) {
+				resetBuffers();
+				return NULL;
+			}
 			if (*(recordPtr++) != _marker) {
 			    // skip the first character
-				throw;
+				LOG_THROW("Detected invalid line marker: at " << getPos() << ": " << *recordPtr);
 			}
 			std::string &name = _nameBuffer[threadNum];
 			nextLine(name, recordPtr);
@@ -620,6 +656,7 @@ public:
 			nextLine(_basesBuffer[threadNum], recordPtr); // fasta
 			nextLine(_lineBuffer[threadNum], recordPtr);  // qual name
 			nextLine(_qualsBuffer[threadNum], recordPtr); // quals
+			setPos( getPos() + (recordPtr - _recordPtr));
 			return recordPtr;
 		}
 		string &readBases() {
@@ -669,17 +706,22 @@ public:
 		RecordPtr readRecord() {
 			int threadNum = omp_get_thread_num();
 			if (readName().empty()) {
-				_basesBuffer[threadNum].clear();
-				_qualsBuffer[threadNum].clear();
+				resetBuffers();
 				LOG_DEBUG(5, "FastaStreamParser::readRecord() found the end at " << tellg());
+				return NULL;
 			} else {
 				readBases();
 				LOG_DEBUG(5, "FastaStreamParser::readRecord() found " << _nameBuffer[threadNum]);
 			}
 			return getStreamRecordPtr();
 		}
-		RecordPtr readRecord(RecordPtr recordPtr) const {
+		RecordPtr readRecord(RecordPtr _recordPtr) const {
 			int threadNum = omp_get_thread_num();
+			if (isPastPartition()) {
+				resetBuffers();
+				return NULL;
+			}
+			RecordPtr recordPtr = _recordPtr;
 			if (*recordPtr != _marker) {
 				throw std::invalid_argument("Could not FastaStreamParser::readRecord()");
 			}
@@ -696,6 +738,7 @@ public:
 					_isMultiline[threadNum] = true;
 			}
 			_qualsBuffer[threadNum].assign(_basesBuffer[threadNum].length(), Read::REF_QUAL);
+			setPos(getPos() + (recordPtr - _recordPtr));
 
 			return recordPtr;
 		}
@@ -756,9 +799,9 @@ public:
      		RecordPtr qualPtr = _qualParser.getStreamRecordPtr();
      		translate[fastaPtr] = qualPtr;
 			if (readName().empty()) {
-				_basesBuffer[threadNum].clear();
-				_qualsBuffer[threadNum].clear();
+				resetBuffers();
 				LOG_DEBUG(5, "FastaQualStreamParser::readRecord() found the end");
+				return NULL;
 			} else {
 			    readBases();
 			    readQuals();
@@ -767,13 +810,19 @@ public:
 			}
 			return getStreamRecordPtr();
 		}
-		RecordPtr readRecord(RecordPtr recordPtr) const {
+		RecordPtr readRecord(RecordPtr _recordPtr) const {
 			int threadNum = omp_get_thread_num();
+			if (isPastPartition()) {
+				resetBuffers();
+				return NULL;
+			}
+			RecordPtr recordPtr = _recordPtr;
 			RecordPtr qualPtr = translate.find(recordPtr)->second;
 			FastaStreamParser::readRecord(recordPtr);
 			_qualParser.readRecord( qualPtr );
 			_qualsBuffer[threadNum] = _qualParser.getQuals();
 			_isMultiline[threadNum] = _isMultiline[threadNum] || _qualParser.isMultiline();
+			setPos(getPos() + (recordPtr - _recordPtr));
 			return recordPtr;
 		}
 

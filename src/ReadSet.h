@@ -371,7 +371,7 @@ public:
 		return os;
 	}
 	inline std::ostream &writeAll(std::ostream &os, FormatOutput format = FormatOutput::getDefault()) const {
-		LOG_VERBOSE(1, "ReadSet::writeAll()");
+		LOG_DEBUG(1, "ReadSet::writeAll()");
 		for(ReadSetSizeType i = 0; i < getSize(); i++)
 			write(os, i, 0, MAX_SEQUENCE_LENGTH, "", format);
 		return os;

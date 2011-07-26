@@ -139,13 +139,11 @@ int main(int argc, char *argv[]) {
 	ostream &output = (ops == NULL ? std::cout : *ops);
 	for (unsigned int i = 0 ; i < inputs.size(); i++) {
 		ReadFileReader reader(inputs[i], "");
-		unsigned long lastPos = reader.seekToPartition( SSOptions::getFileNum(), SSOptions::getNumFiles() );
+		reader.seekToPartition( SSOptions::getFileNum(), SSOptions::getNumFiles() );
 		std::string name, bases, quals;
 	    while (reader.nextRead(name, bases, quals)) {
 	        Read read(name, bases, quals);
 	        read.write(output);
-            if (reader.getPos() >= lastPos)
-            	break;
 	    }
 	}
 
