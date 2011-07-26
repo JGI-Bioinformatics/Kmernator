@@ -319,6 +319,13 @@ int main(int argc, char *argv[]) {
 
 		LOG_VERBOSE(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
 		setGlobalReadSetOffsets(world, changedContigs);
+
+		if (!Log::isDebug(1) && ContigExtenderOptions::getContigFile().compare(contigFile) != 0) {
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Removing " << contigFile);
+			if (world.rank() == 0)
+				unlink(contigFile.c_str());
+		}
+
 		if (changedContigs.getGlobalSize() == 0) {
 			LOG_VERBOSE_OPTIONAL(1, true, "No more contigs to extend " << changedContigs.getSize());
 			break;
