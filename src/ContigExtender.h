@@ -94,7 +94,7 @@ public:
 		std::vector<KS> readSpectrums(maxKmerSize+1, KS()), contigSpectrums(maxKmerSize+1, KS());
 		for(kmerSize = minKmerSize ; kmerSize <= maxKmerSize; kmerSize+=2) {
 			KmerSizer::set(kmerSize);
-			LOG_VERBOSE_OPTIONAL(2, true, "Building kmer spectrum for kmer sized: " << kmerSize << " over reads sized " << reads.getSize());
+			LOG_DEBUG_OPTIONAL(1, true, "Building kmer spectrum for kmer sized: " << kmerSize << " over reads sized " << reads.getSize());
 			KS readSpectrum(KS::estimateWeakKmerBucketSize(reads, 64));
 			readSpectrum.buildKmerSpectrum( reads, false );
 			KS contigSpectrum(128);
@@ -121,7 +121,7 @@ public:
 				contigSpectrums[kmerSize].buildKmerSpectrum(thisReadOnlySet,true);
 			}
 
-			int leftTotal = 0, rightTotal = 0;
+			std::string::size_type leftTotal = 0, rightTotal = 0;
 			while (extendLeft | extendRight) {
 				SequenceLengthType len = fasta.length();
 				if (len < minKmerSize)
@@ -155,7 +155,7 @@ public:
 				}
 			}
 
-			std::string newName = read.getName() + "-l" + boost::lexical_cast<std::string>(leftTotal) + "r" + boost::lexical_cast<std::string>(rightTotal);
+			std::string newName = getNewName(read.getName(), leftTotal, rightTotal);
 			LOG_DEBUG_OPTIONAL(1, true, "Extended " << newName << " : " << read.getName() << " left +" << leftTotal << " right +" << rightTotal << " to " << fasta.length());
 			Read newContig(newName, fasta, std::string(fasta.length(), Read::REF_QUAL));
 			newContigs.append(newContig);
@@ -171,6 +171,24 @@ public:
 		return newContigs;
 	}
 
+	static std::string getNewName(std::string oldName, std::string::size_type leftTotal, std::string::size_type rightTotal) {
+		std::string::size_type preLeftTotal = 0, preRightTotal = 0, pos, pos2;
+		std::string newName = oldName;
+		pos = oldName.find_last_of("-l");
+		if (pos != std::string::npos) {
+			pos2 = oldName.find_first_of("r", pos);
+			if (pos2 != std::string::npos) {
+				LOG_DEBUG_OPTIONAL(5, true, "ContigExtender::getNewName: " << oldName << " " << pos << " " << pos2);
+				LOG_DEBUG_OPTIONAL(5, true, oldName.substr(pos+1, pos2-pos-1) << " " << oldName.substr(pos2+1));
+				preLeftTotal = atoi(oldName.substr(pos+1, pos2-pos-1).c_str());
+				preRightTotal = atoi(oldName.substr(pos2+1).c_str());
+				newName = oldName.substr(0, pos-1);
+			}
+		}
+		newName = newName + "-l" + boost::lexical_cast<std::string>(leftTotal+preLeftTotal) + "r" + boost::lexical_cast<std::string>(rightTotal+preRightTotal);
+		LOG_DEBUG_OPTIONAL(1, true, "ContigExtender::getNewName(" << oldName << ", " << leftTotal << ", " << rightTotal << "): " << newName);
+		return newName;
+	}
 	static void getMinMaxKmerSize(const ReadSet &reads, SequenceLengthType &minKmerSize, SequenceLengthType &maxKmerSize) {
 		minKmerSize = Options::getKmerSize();
 		maxKmerSize = std::min(reads.getMaxSequenceLength(), (SequenceLengthType) (reads.getBaseCount() / reads.getSize())) - 1;
