@@ -48,12 +48,19 @@ public:
 	static std::string getVmatchOptions() {
 		return getVarMap()["vmatch-options"].as<std::string>();
 	}
+	static std::string getVmatchIndexPath() {
+		return getVarMap()["vmatch-index-path"].as<std::string>();
+	}
 	static bool parseOpts(int argc, char *argv[]) {
 
 		getDesc().add_options()
 
 		("vmatch-options", po::value<std::string>()->default_value("-d -p -seedlength 10 -l 50 -e 3"),
 				"options with which to call vmatch")
+
+		("vmatch-index-path", po::value<std::string>()->default_value("."),
+				"top level directory under which to create the vmatch index directories for each rank")
+
 				;
 
 		bool ret = ContigExtenderOptions::parseOpts(argc, argv);
@@ -143,7 +150,7 @@ int main(int argc, char *argv[]) {
 	// override the default output format!
 	Options::getFormatOutput() = 3;
 	Options::getMmapInput() = 0;
-	Options::getVerbosity() = 2;
+	Options::getVerbosity() = 1;
 	Options::getMaxThreads() = 1;
 
 	int threadProvided;
@@ -179,7 +186,7 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(2, "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases ");
 	setGlobalReadSetOffsets(world, reads);
 
-	std::string tmpDir = Options::getOutputFile() + "-tmp." + boost::lexical_cast<std::string>(world.size());
+	std::string tmpDir = DistributedNucleatingAssemblerOptions::getVmatchIndexPath() + "/";
 	if (world.rank() == 0)
 		mkdir(tmpDir.c_str(), 0777);
 	world.barrier();
@@ -326,19 +333,25 @@ int main(int argc, char *argv[]) {
 				unlink(contigFile.c_str());
 		}
 
+		if (Log::isDebug(1) && !Options::getOutputFile().empty()) {
+			DistributedOfstreamMap om(world, Options::getOutputFile(), "");
+			om.setBuildInMemory();
+			finalContigs.writeAll(om.getOfstream(""), FormatOutput::FASTA);
+		}
+
 		if (changedContigs.getGlobalSize() == 0) {
 			LOG_VERBOSE_OPTIONAL(1, true, "No more contigs to extend " << changedContigs.getSize());
 			break;
 		}
 
-		std::string filekey = "contig-" + boost::lexical_cast<std::string>(iteration);
-		DistributedOfstreamMap om(world, tmpDir, FormatOutput::getSuffix(FormatOutput::FASTA));
-		om.setBuildInMemory();
-		changedContigs.writeAll(om.getOfstream(filekey), FormatOutput::FASTA);
-		std::string newContigFile = om.getRealFilePath(filekey);
-		om.clear();
-
-		contigFile = newContigFile;
+		{
+			std::string filekey = "contig-" + boost::lexical_cast<std::string>(iteration);
+			DistributedOfstreamMap om(world, tmpDir, FormatOutput::getSuffix(FormatOutput::FASTA));
+			om.setBuildInMemory();
+			changedContigs.writeAll(om.getOfstream(filekey), FormatOutput::FASTA);
+			std::string newContigFile = om.getRealFilePath(filekey);
+			contigFile = newContigFile;
+		}
 	}
 
 	if (!Options::getOutputFile().empty()) {

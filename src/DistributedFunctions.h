@@ -787,7 +787,7 @@ public:
 				_world.recv(i, 0, newKeys);
 				keys.insert(newKeys.begin(), newKeys.end());
 			}
-			LOG_VERBOSE_OPTIONAL(1, true, "getGlobalKeySet(): Collectively writing " << keys.size() << " files");
+			LOG_DEBUG_OPTIONAL(1, true, "getGlobalKeySet(): Collectively writing " << keys.size() << " files");
 			for(KeySet::iterator it = keys.begin(); it != keys.end(); it++)
 				LOG_DEBUG_OPTIONAL(1, true, "File key: " << *it);
 		}
