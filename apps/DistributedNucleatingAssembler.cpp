@@ -304,7 +304,7 @@ int main(int argc, char *argv[]) {
         //#pragma omp parallel for
 		for(ReadSet::ReadSetSizeType i = 0; i < contigs.getSize(); i++) {
 			const Read &oldRead = contigs.getRead(i);
-			LOG_DEBUG_OPTIONAL(1, true, "Extending " << oldRead.getName() << " with " << contigReadSet[i].getSize() << " pool of reads");
+			LOG_VERBOSE_OPTIONAL(1, true, "Extending " << oldRead.getName() << " with " << contigReadSet[i].getSize() << " pool of reads");
 			ReadSet myContig;
 			myContig.append(oldRead);
 			ReadSet newContig;

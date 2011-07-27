@@ -80,7 +80,7 @@ public:
 		getMinMaxKmerSize(reads, minKmerSize, maxKmerSize);
 		return extendContigs(contigs, reads, minKmerSize, maxKmerSize);
 	}
-	static ReadSet extendContigs(const ReadSet &contigs, const ReadSet &reads, SequenceLengthType minKmerSize, SequenceLengthType maxKmerSize) {
+	static ReadSet extendContigs(const ReadSet &contigs, const ReadSet &reads, SequenceLengthType minKmerSize, SequenceLengthType maxKmerSize, SequenceLengthType maxSteps = 5) {
 		SequenceLengthType enteringKmerSize = KmerSizer::getSequenceLength();
 		SequenceLengthType kmerSize = minKmerSize;
 		KmerSizer::set(kmerSize);
@@ -88,11 +88,16 @@ public:
 		double minimumConsensus = ContigExtenderOptions::getMinimumConsensus();
 		double minimumCoverage = ContigExtenderOptions::getMinimumCoverage();
 
-		LOG_DEBUG_OPTIONAL(1, true, "Starting extendContigs with consensus fraction " << minimumConsensus << " and coverage " << minimumCoverage << " using kmers " << minKmerSize << " to " << maxKmerSize);
+		SequenceLengthType kmerStep = maxKmerSize - minKmerSize / maxSteps;
+		// ensure is even
+		kmerStep = (kmerStep & 1) == 1 ? kmerStep + 1 : kmerStep;
+		kmerStep = std::min(2, kmerStep);
+
+		LOG_DEBUG_OPTIONAL(1, true, "Starting extendContigs with consensus fraction " << minimumConsensus << " and coverage " << minimumCoverage << " using kmers " << minKmerSize << " to " << maxKmerSize << " step " << kmerStep << " and " << reads.getSize() << " reads");
 
 		// set scoping of spectrum arrays
 		std::vector<KS> readSpectrums(maxKmerSize+1, KS()), contigSpectrums(maxKmerSize+1, KS());
-		for(kmerSize = minKmerSize ; kmerSize <= maxKmerSize; kmerSize+=2) {
+		for(kmerSize = minKmerSize ; kmerSize <= maxKmerSize; kmerSize+=kmerStep) {
 			KmerSizer::set(kmerSize);
 			LOG_DEBUG_OPTIONAL(1, true, "Building kmer spectrum for kmer sized: " << kmerSize << " over reads sized " << reads.getSize());
 			KS readSpectrum(KS::estimateWeakKmerBucketSize(reads, 64));
@@ -191,9 +196,9 @@ public:
 	}
 	static void getMinMaxKmerSize(const ReadSet &reads, SequenceLengthType &minKmerSize, SequenceLengthType &maxKmerSize) {
 		minKmerSize = Options::getKmerSize();
-		maxKmerSize = std::min(reads.getMaxSequenceLength(), (SequenceLengthType) (reads.getBaseCount() / reads.getSize())) - 1;
-		maxKmerSize = std::min(maxKmerSize, reads.getMaxSequenceLength() - 1);
-		maxKmerSize = std::min(maxKmerSize, 5 * minKmerSize);
+		SequenceLengthType maxLen = std::min(reads.getMaxSequenceLength(), reads.getBaseCount() / reads.getSize());
+		maxKmerSize = std::min((SequenceLengthType) maxLen*0.80, maxLen - 1);
+		maxKmerSize = std::max(minKmerSize, maxKmerSize);
 	}
 };
 
