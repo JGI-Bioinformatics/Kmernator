@@ -198,7 +198,7 @@ public:
 		kmerStep = maxKmerSize - minKmerSize / maxSteps;
 		// ensure is even
 		kmerStep = (kmerStep & 1) == 1 ? kmerStep + 1 : kmerStep;
-		kmerStep = std::min((SequenceLengthType) 2, kmerStep);
+		kmerStep = std::max((SequenceLengthType) 2, kmerStep);
 	}
 };
 
