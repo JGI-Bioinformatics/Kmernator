@@ -15,23 +15,26 @@ $CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall  -Wl,-rpath,${libdir}"
 # for NERSC hopper2:
 module load cmake
 module swap PrgEnv-pgi PrgEnv-gnu
-module swap xt-mpt xt-mpich2
+#module swap xt-mpt xt-mpich2
 cmake $Kmernator -DCMAKE_C_COMPILER=cc -DCMAKE_CXX_COMPILER=CC  \
-  -DMPI_INCLUDE_PATH=${MPICH_DIR}/include   \
-  -DMPI_LIBRARY="libc.a"  -DMPI_LINK_FLAGS="-lmpich"  \
-  -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
+  -DMPI_INCLUDE_PATH="-I." \
+  -DMPI_LIBRARY="libc.a"  -DMPI_LINK_FLAGS=" "  \
+  -DCMAKE_CXX_FLAGS="-O3 -Wall -g"
+  
+#   -DMPI_INCLUDE_PATH=${MPICH_DIR}/include 
+#  -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
 
 # for NERSC hopper.nersc.gov: gcc compilers and MPICH2 xt-mpt, threaded MPI
-module load cmake
-module swap PrgEnv-pgi PrgEnv-gnu 
-export OMP_NUM_THREADS=4
-export MPICH_MAX_THREAD_SAFETY=multiple
-module swap  xt-libsci/10.4.3 xt-libsci/10.4.0
-CC=cc CXX=CC \
-cmake $Kmernator \
-    -DMPI_INCLUDE_PATH=${MPICH_DIR}/include    \
-    -DMPI_LIBRARY="libc.a" -DMPI_LINK_FLAGS="-lmpich_threadm"  \
-    -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
+#module load cmake
+#module swap PrgEnv-pgi PrgEnv-gnu 
+#export OMP_NUM_THREADS=4
+#export MPICH_MAX_THREAD_SAFETY=multiple
+#module swap  xt-libsci/10.4.3 xt-libsci/10.4.0
+#CC=cc CXX=CC \
+#cmake $Kmernator \
+#    -DMPI_INCLUDE_PATH=${MPICH_DIR}/include    \
+#    -DMPI_LIBRARY="libc.a" -DMPI_LINK_FLAGS="-lmpich_threadm"  \
+#    -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
 
 # for NERSC carver
 module unload pgi
