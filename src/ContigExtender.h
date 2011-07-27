@@ -33,10 +33,10 @@ public:
 
 		getDesc().add_options()
 
-		("minimum-consensus", po::value<double>()->default_value(95),
+		("minimum-consensus", po::value<double>()->default_value(85),
 				"minimum percent consensus to call the next base")
 
-		("minimum-coverage", po::value<double>()->default_value(9.9),
+		("minimum-coverage", po::value<double>()->default_value(4.8),
 				"minimum (probability-weighted) coverage to continue calling the next base")
 
 		("contig-file", po::value<std::string>(),

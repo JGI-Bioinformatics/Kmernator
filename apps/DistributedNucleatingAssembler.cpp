@@ -51,9 +51,15 @@ public:
 	static std::string getVmatchIndexPath() {
 		return getVarMap()["vmatch-index-path"].as<std::string>();
 	}
+	static int getMaxIterations() {
+		return getVarMap()["max-iterations"].as<int>();
+	}
 	static bool parseOpts(int argc, char *argv[]) {
 
 		getDesc().add_options()
+
+		("max-iterations", po::value<int>()->default_value(1000),
+				"the maximum number of rounds to extend the set of contigs")
 
 		("vmatch-options", po::value<std::string>()->default_value("-d -p -seedlength 10 -l 50 -e 3"),
 				"options with which to call vmatch")
@@ -181,6 +187,8 @@ int main(int argc, char *argv[]) {
 	}
 	world.barrier();
 
+	long maxIterations = DistributedNucleatingAssemblerOptions::getMaxIterations();
+
 	Options::FileListType inputFiles = Options::getInputFiles();
 	std::string contigFile = ContigExtenderOptions::getContigFile();
 
@@ -206,7 +214,7 @@ int main(int argc, char *argv[]) {
 
 	ReadSet finalContigs;
 	short iteration = 0;
-	while(++iteration > 0) {
+	while(++iteration <= maxIterations) {
 		ReadSet contigs;
 		contigs.appendFastaFile(contigFile, world.rank(), world.size());
 
@@ -304,7 +312,7 @@ int main(int argc, char *argv[]) {
         //#pragma omp parallel for
 		for(ReadSet::ReadSetSizeType i = 0; i < contigs.getSize(); i++) {
 			const Read &oldRead = contigs.getRead(i);
-			LOG_VERBOSE_OPTIONAL(1, true, "Extending " << oldRead.getName() << " with " << contigReadSet[i].getSize() << " pool of reads");
+			LOG_VERBOSE_OPTIONAL(2, true, "Extending " << oldRead.getName() << " with " << contigReadSet[i].getSize() << " pool of reads");
 			ReadSet myContig;
 			myContig.append(oldRead);
 			ReadSet newContig;
@@ -319,33 +327,39 @@ int main(int argc, char *argv[]) {
 
 			//#pragma omp critical
 			{
-				if (newRead.getLength() > oldRead.getLength()) {
-					LOG_DEBUG_OPTIONAL(1, true, "Extended " << oldRead.getName() << " to " << newRead.getName());
+				long deltaLen = newRead.getLength() - oldRead.getLength();
+				LOG_VERBOSE_OPTIONAL(1, true, "Extended " << oldRead.getName() << " " << deltaLen << " bases to " << newRead.getLength() << ": " << newRead.getName() << " with " << contigReadSet[i].getSize() << " reads in the pool");
+				if (deltaLen > 0) {
 					changedContigs.append(newRead);
 				} else {
-					LOG_VERBOSE_OPTIONAL(1, true, "Could not further extend " << oldRead.getName());
 					finalContigs.append(oldRead);
 				}
 			}
 		}
 
-		LOG_VERBOSE(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
+		LOG_DEBUG_OPTIONAL(1, true, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
 		setGlobalReadSetOffsets(world, changedContigs);
+		setGlobalReadSetOffsets(world, finalContigs);
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Changed contigs: " << changedContigs.getGlobalSize() << " finalContigs: " << finalContigs.getGlobalSize());
 
-		if (!Log::isDebug(1)) {
-			if (ContigExtenderOptions::getContigFile().compare(contigFile) != 0) {
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Removing " << contigFile);
-				if (world.rank() == 0)
-					unlink(contigFile.c_str());
-			}
-			// write out the final contigs so far for debugging ...
+		{
+			// write out the final contigs (so far) so we do not loose them
 			DistributedOfstreamMap om(world, Options::getOutputFile(), "");
 			om.setBuildInMemory();
 			finalContigs.writeAll(om.getOfstream(""), FormatOutput::FASTA);
 		}
+		if (!Log::isDebug(1)) {
+			// remove most recent contig file (if not debugging)
+			if (ContigExtenderOptions::getContigFile().compare(contigFile) != 0) {
+				if (world.rank() == 0) {
+					LOG_VERBOSE_OPTIONAL(2, true, "Removing " << contigFile);
+					unlink(contigFile.c_str());
+				}
+			}
+		}
 
 		if (changedContigs.getGlobalSize() == 0) {
-			LOG_VERBOSE_OPTIONAL(1, true, "No more contigs to extend " << changedContigs.getSize());
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 1, "No more contigs to extend " << changedContigs.getSize());
 			break;
 		}
 
@@ -357,13 +371,6 @@ int main(int argc, char *argv[]) {
 			std::string newContigFile = om.getRealFilePath(filekey);
 			contigFile = newContigFile;
 		}
-	}
-
-	{
-		// write out the final contigs
-		DistributedOfstreamMap om(world, Options::getOutputFile(), "");
-		om.setBuildInMemory();
-		finalContigs.writeAll(om.getOfstream(""), FormatOutput::FASTA);
 	}
 
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
