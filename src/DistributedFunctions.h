@@ -74,7 +74,7 @@ void validateMPIWorld(mpi::communicator &world) {
 
 std::string getRankSubdir(mpi::communicator &world, std::string prefix) {
 	std::string subDir = prefix + "/" + boost::lexical_cast<std::string>(world.rank()) + "of" + boost::lexical_cast<std::string>(world.size());
-	LOG_DEBUG(1, "getRankSubdir(" << prefix << "): " << subDir);
+	LOG_DEBUG(2, "getRankSubdir(" << prefix << "): " << subDir);
 	mkdir(subDir.c_str(), 0777);
 	return subDir;
 }

@@ -291,8 +291,7 @@ public:
 			}
 			rankReadIdx = globalReadIdx - _globalOffsets[rank];
 		}
-		LOG_DEBUG_OPTIONAL(1, true, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << ", " << rank << ", " << rankReadIdx << "): " << _globalOffsets[rank]);
-
+		LOG_DEBUG(3, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << ", " << rank << ", " << rankReadIdx << "): " << _globalOffsets[rank]);
 	}
 
 	inline ReadSetSizeType getGlobalSize() const {

@@ -65,6 +65,11 @@ public:
 
 		bool ret = ContigExtenderOptions::parseOpts(argc, argv);
 
+		if (Options::getOutputFile().empty()) {
+			LOG_WARN(1, "You must specify an --output");
+			ret = -1;
+		}
+
 		return ret;
 	}
 };
@@ -327,13 +332,13 @@ int main(int argc, char *argv[]) {
 		LOG_VERBOSE(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
 		setGlobalReadSetOffsets(world, changedContigs);
 
-		if (!Log::isDebug(1) && ContigExtenderOptions::getContigFile().compare(contigFile) != 0) {
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Removing " << contigFile);
-			if (world.rank() == 0)
-				unlink(contigFile.c_str());
-		}
-
-		if (Log::isDebug(1) && !Options::getOutputFile().empty()) {
+		if (!Log::isDebug(1)) {
+			if (ContigExtenderOptions::getContigFile().compare(contigFile) != 0) {
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Removing " << contigFile);
+				if (world.rank() == 0)
+					unlink(contigFile.c_str());
+			}
+			// write out the final contigs so far for debugging ...
 			DistributedOfstreamMap om(world, Options::getOutputFile(), "");
 			om.setBuildInMemory();
 			finalContigs.writeAll(om.getOfstream(""), FormatOutput::FASTA);
@@ -346,7 +351,7 @@ int main(int argc, char *argv[]) {
 
 		{
 			std::string filekey = "contig-" + boost::lexical_cast<std::string>(iteration);
-			DistributedOfstreamMap om(world, tmpDir, FormatOutput::getSuffix(FormatOutput::FASTA));
+			DistributedOfstreamMap om(world, Options::getOutputFile(), FormatOutput::getSuffix(FormatOutput::FASTA));
 			om.setBuildInMemory();
 			changedContigs.writeAll(om.getOfstream(filekey), FormatOutput::FASTA);
 			std::string newContigFile = om.getRealFilePath(filekey);
@@ -354,7 +359,8 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (!Options::getOutputFile().empty()) {
+	{
+		// write out the final contigs
 		DistributedOfstreamMap om(world, Options::getOutputFile(), "");
 		om.setBuildInMemory();
 		finalContigs.writeAll(om.getOfstream(""), FormatOutput::FASTA);
