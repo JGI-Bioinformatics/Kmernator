@@ -200,8 +200,8 @@ int main(int argc, char *argv[]) {
 
 	Vmatch myVmatch = Vmatch(rankOutputDir + "/myReads", reads);
 
-	SequenceLengthType minKmerSize, maxKmerSize;
-	ContigExtender<KS>::getMinMaxKmerSize(reads, minKmerSize, maxKmerSize);
+	SequenceLengthType minKmerSize, maxKmerSize, kmerStep;
+	ContigExtender<KS>::getMinMaxKmerSize(reads, minKmerSize, maxKmerSize, kmerStep);
 	maxKmerSize = boost::mpi::all_reduce(world, maxKmerSize, mpi::minimum<SequenceLengthType>());
 
 	ReadSet finalContigs;
@@ -310,10 +310,10 @@ int main(int argc, char *argv[]) {
 			ReadSet newContig;
 			SequenceLengthType myKmerSize = minKmerSize;
 			SequenceLengthType newLen = 0;
-			while (newLen <= oldRead.getLength() && myKmerSize < maxKmerSize) {
+			while (newLen <= oldRead.getLength() && myKmerSize <= maxKmerSize) {
 				newContig = ContigExtender<KS>::extendContigs(myContig, contigReadSet[i], myKmerSize, myKmerSize);
 				newLen = newContig.getRead(0).getLength();
-				myKmerSize +=2;
+				myKmerSize += kmerStep;
 			}
 			const Read &newRead = newContig.getRead(0);
 
