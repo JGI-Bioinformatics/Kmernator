@@ -91,7 +91,7 @@ public:
 		SequenceLengthType kmerStep = maxKmerSize - minKmerSize / maxSteps;
 		// ensure is even
 		kmerStep = (kmerStep & 1) == 1 ? kmerStep + 1 : kmerStep;
-		kmerStep = std::min(2, kmerStep);
+		kmerStep = std::min((SequenceLengthType) 2, kmerStep);
 
 		LOG_DEBUG_OPTIONAL(1, true, "Starting extendContigs with consensus fraction " << minimumConsensus << " and coverage " << minimumCoverage << " using kmers " << minKmerSize << " to " << maxKmerSize << " step " << kmerStep << " and " << reads.getSize() << " reads");
 
@@ -196,8 +196,8 @@ public:
 	}
 	static void getMinMaxKmerSize(const ReadSet &reads, SequenceLengthType &minKmerSize, SequenceLengthType &maxKmerSize) {
 		minKmerSize = Options::getKmerSize();
-		SequenceLengthType maxLen = std::min(reads.getMaxSequenceLength(), reads.getBaseCount() / reads.getSize());
-		maxKmerSize = std::min((SequenceLengthType) maxLen*0.80, maxLen - 1);
+		SequenceLengthType maxLen = std::min((SequenceLengthType) reads.getMaxSequenceLength(), (SequenceLengthType) (reads.getBaseCount() / reads.getSize()));
+		maxKmerSize = std::min((SequenceLengthType) (maxLen*0.80), maxLen - 1);
 		maxKmerSize = std::max(minKmerSize, maxKmerSize);
 	}
 };
