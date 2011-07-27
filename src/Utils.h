@@ -566,11 +566,10 @@ public:
 			int status = pclose(_pipe);
 			if (status != 0) {
 				LOG_WARN(1, "OPipestream::close() '" << _cmd << "' closed with an error: " << status);
-				//throw;
 			}
 		} catch(...) {
-			// ignoring this pipe closure error.  pclose is the proper way to close this..
-			LOG_DEBUG_OPTIONAL(1, true, "OPipestream::close(): Potentially failed to close pipe properly");
+			// ignoring this pipe closure error.
+			LOG_WARN(1, "OPipestream::close(): Potentially failed to close pipe properly");
 		}
 	}
 	~OPipestream() {
@@ -591,16 +590,16 @@ public:
 		assert(is_open());
 	}
 	void close() {
+		int status = 0;
 		try {
-			int status = pclose(_pipe);
+			this->set_auto_close(true);
+			status = pclose(_pipe);
 			if (status != 0) {
 				LOG_WARN(1, "IPipestream::close() '" << _cmd << "' closed with an error: " << status);
-				//throw;
 			}
-			base::close();
 		} catch(...) {
-			// ignoring this pipe closure error.  pclose is the proper way to close this..
-			LOG_DEBUG_OPTIONAL(1, true, "IPipestream::close(): Potentially failed to close pipe properly");
+			// ignoring this pipe closure error.
+			LOG_WARN(1, "IPipestream::close(): Potentially failed to close pipe properly");
 		}
 	}
 	~IPipestream() {
