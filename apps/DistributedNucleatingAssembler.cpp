@@ -115,7 +115,7 @@ private:
 public:
 	Vmatch(std::string indexName, ReadSet &inputs) : _indexName(indexName) {
 		if (FileUtils::getFileSize(indexName + ".suf") > 0) {
-			LOG_VERBOSE_OPTIONAL(1, true, "Vmatch(" << indexName << ", reads(" << inputs.getSize() << ")): Index already exists: " << indexName);
+			LOG_DEBUG(1, "Vmatch(" << indexName << ", reads(" << inputs.getSize() << ")): Index already exists: " << indexName);
 		} else {
 			buildVmatchIndex(indexName, inputs);
 		}
@@ -126,12 +126,12 @@ public:
 		inputs.writeAll(ofm.getOfstream(""), FormatOutput::FASTA);
 		ofm.clear();
 		buildVmatchIndex(indexName, inputFile);
-		LOG_DEBUG_OPTIONAL(1, true, "Removing temporary inputFile" << inputFile);
+		LOG_DEBUG(1, "Removing temporary inputFile" << inputFile);
 		unlink(inputFile.c_str());
 	}
 	static void buildVmatchIndex(std::string indexName, std::string inputFasta) {
 		std::string cmd("mkvtree -dna -allout -pl -indexname " + indexName + " -db " + inputFasta);
-		LOG_VERBOSE_OPTIONAL(1, true, "Building vmatch index " << indexName << " : " << cmd);
+		LOG_DEBUG(1, "Building vmatch index " << indexName << " : " << cmd);
 		int ret = system(cmd.c_str());
 		if (ret != 0)
 			LOG_THROW("mkvtree failed to build(" << ret << "): " << cmd);
@@ -139,7 +139,7 @@ public:
 	MatchResults &match(std::string queryFile, std::string options = "") {
 		_results.clear();
 		std::string cmd("vmatch " + options + " -q " + queryFile + " " + _indexName);
-		LOG_DEBUG_OPTIONAL(1, true, "Executing vmatch: " << cmd);
+		LOG_DEBUG(1, "Executing vmatch: " << cmd);
 		IPipestream vmatchOutput(cmd);
 		std::string line;
 		while (!vmatchOutput.eof()) {
@@ -150,7 +150,7 @@ public:
 				continue;
 			_results.push_back(FieldsType(line));
 		}
-		LOG_DEBUG_OPTIONAL(1, true, "Vmatch::match(,): Found " << _results.size() << " results");
+		LOG_DEBUG(2, "Vmatch::match(,): Found " << _results.size() << " results");
 		return _results;
 	}
 };
@@ -164,6 +164,7 @@ int main(int argc, char *argv[]) {
 	Options::getMmapInput() = 0;
 	Options::getVerbosity() = 1;
 	Options::getMaxThreads() = 1;
+	double timing1, timing2;
 
 	int threadProvided;
 	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
@@ -186,33 +187,36 @@ int main(int argc, char *argv[]) {
 		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
 		exit(1);
 	}
-	world.barrier();
-
-	long maxIterations = DistributedNucleatingAssemblerOptions::getMaxIterations();
+	timing1 = MPI_Wtime();
 
 	Options::FileListType inputFiles = Options::getInputFiles();
 	std::string contigFile = ContigExtenderOptions::getContigFile();
 	std::string finalContigFile;
-
-	ReadSet reads;
-	LOG_VERBOSE(1, "Reading Input Files" );
-	reads.appendAllFiles(inputFiles, world.rank(), world.size());
-
-	setGlobalReadSetOffsets(world, reads);
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 1, "loaded " << reads.getGlobalSize() << " Reads");
-
+	long maxIterations = DistributedNucleatingAssemblerOptions::getMaxIterations();
 	std::string tmpDir = DistributedNucleatingAssemblerOptions::getVmatchIndexPath() + "/";
 	if (world.rank() == 0)
 		mkdir(tmpDir.c_str(), 0777);
+
 	world.barrier();
 
-	std::string rankOutputDir = getRankSubdir(world, tmpDir);
+	ReadSet reads;
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files" );
+	reads.appendAllFiles(inputFiles, world.rank(), world.size());
 
+	setGlobalReadSetOffsets(world, reads);
+	timing2 = MPI_Wtime();
+
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 1, "loaded " << reads.getGlobalSize() << " Reads in " << (timing2-timing1) << " seconds" );
+
+	std::string rankOutputDir = getRankSubdir(world, tmpDir);
 	Vmatch myVmatch = Vmatch(rankOutputDir + "/myReads", reads);
 
 	SequenceLengthType minKmerSize, maxKmerSize, kmerStep;
 	ContigExtender<KS>::getMinMaxKmerSize(reads, minKmerSize, maxKmerSize, kmerStep);
 	maxKmerSize = boost::mpi::all_reduce(world, maxKmerSize, mpi::minimum<SequenceLengthType>());
+
+	timing1 = timing2; timing2 = MPI_Wtime();
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Prepared vmatch indexes in " << (timing2-timing1) << " seconds");
 
 	ReadSet finalContigs;
 	ReadSet contigs;
