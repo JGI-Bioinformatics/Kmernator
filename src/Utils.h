@@ -219,6 +219,13 @@ protected:
 #ifdef _USE_MPI
     mpi::communicator *_world;
 #endif
+	virtual void close() {
+		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::close()");
+		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
+			OStreamPtr &_osp = it->second;
+			_osp.close();
+		}
+	}
 
 public:
 	static bool &getDefaultAppend() {
@@ -274,13 +281,6 @@ public:
 	}
 	void _clear() {
 		_map->clear();
-	}
-	virtual void close() {
-		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::close()");
-		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
-			OStreamPtr &_osp = it->second;
-			_osp.close();
-		}
 	}
 	virtual std::string getRank() const {
 		return std::string();

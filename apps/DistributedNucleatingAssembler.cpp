@@ -36,6 +36,7 @@
 #include "DuplicateFragmentFilter.h"
 #include "ContigExtender.h"
 #include "DistributedFunctions.h"
+#include "MemoryUtils.h"
 #include "Log.h"
 
 using namespace std;
@@ -191,13 +192,14 @@ int main(int argc, char *argv[]) {
 
 	Options::FileListType inputFiles = Options::getInputFiles();
 	std::string contigFile = ContigExtenderOptions::getContigFile();
+	std::string finalContigFile;
 
 	ReadSet reads;
 	LOG_VERBOSE(1, "Reading Input Files" );
 	reads.appendAllFiles(inputFiles, world.rank(), world.size());
 
-	LOG_VERBOSE(2, "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount() << " Bases ");
 	setGlobalReadSetOffsets(world, reads);
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 1, "loaded " << reads.getGlobalSize() << " Reads");
 
 	std::string tmpDir = DistributedNucleatingAssemblerOptions::getVmatchIndexPath() + "/";
 	if (world.rank() == 0)
@@ -213,20 +215,18 @@ int main(int argc, char *argv[]) {
 	maxKmerSize = boost::mpi::all_reduce(world, maxKmerSize, mpi::minimum<SequenceLengthType>());
 
 	ReadSet finalContigs;
+	ReadSet contigs;
+	contigs.appendFastaFile(contigFile, world.rank(), world.size());
+
 	short iteration = 0;
 	while(++iteration <= maxIterations) {
 		double startIterationTime = MPI_Wtime();
-
-		ReadSet contigs;
-		contigs.appendFastaFile(contigFile, world.rank(), world.size());
-
-		double readContigsTime = MPI_Wtime() - startIterationTime;
 
 		setGlobalReadSetOffsets(world, contigs);
 
 		double setOffsetsTime = MPI_Wtime() - startIterationTime;
 
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Reading Contig File: " << contigFile << ". loaded " << contigs.getGlobalSize() << " Reads");
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Contig File: " << contigFile << ". contains " << contigs.getGlobalSize() << " Reads");
 		if (contigs.getGlobalSize() == 0) {
 			LOG_VERBOSE_OPTIONAL(1, true, "There are no contigs to extend in " << contigFile);
 			break;
@@ -256,8 +256,6 @@ int main(int argc, char *argv[]) {
 		}
 		contigReadHits.clear();
 
-		double processHitsTime = MPI_Wtime() - startIterationTime;
-
 		int sendBytes[world.size()], recvBytes[world.size()], sendDisp[world.size()], recvDisp[world.size()];
 		int totalSend = 0, totalRecv = 0;
 
@@ -283,7 +281,7 @@ int main(int argc, char *argv[]) {
 
 		MPI_Alltoall(sendBytes, 1, MPI_INT, recvBytes, 1, MPI_INT, world);
 
-		double exchangeTime = MPI_Wtime() - startIterationTime;
+		double exchangeSizesTime = MPI_Wtime() - startIterationTime;
 
 		for(int rank = 0; rank < world.size(); rank++) {
 			recvDisp[rank] = totalRecv;
@@ -327,8 +325,6 @@ int main(int argc, char *argv[]) {
 		}
 		free(recvBuf);
 
-		double processReadsTime = MPI_Wtime() - startIterationTime;
-
 		ReadSet changedContigs;
 
         //#pragma omp parallel for
@@ -361,27 +357,44 @@ int main(int argc, char *argv[]) {
 
 		double extendContigsTime = MPI_Wtime() - startIterationTime;
 
-		LOG_DEBUG_OPTIONAL(1, true, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
+		LOG_DEBUG(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
 		setGlobalReadSetOffsets(world, changedContigs);
 		setGlobalReadSetOffsets(world, finalContigs);
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Changed contigs: " << changedContigs.getGlobalSize() << " finalContigs: " << finalContigs.getGlobalSize());
 
+		double calcChangedSizesTime = MPI_Wtime() - startIterationTime;
+
+		std::string oldFinalContigFile = finalContigFile;
+		std::string oldContigFile = contigFile;
 		{
-			// write out the final contigs (so far) so we do not loose them
+			// write out the state of the contig files (so far) so we do not loose them
 			DistributedOfstreamMap om(world, Options::getOutputFile(), "");
 			om.setBuildInMemory();
-			finalContigs.writeAll(om.getOfstream(""), FormatOutput::FASTA);
+			if (finalContigs.getGlobalSize() > 0) {
+				std::string fileKey = "final-" + boost::lexical_cast<std::string>(iteration);
+				finalContigs.writeAll(om.getOfstream(fileKey), FormatOutput::FASTA);
+				finalContigFile = om.getRealFilePath(fileKey);
+			}
+			if (changedContigs.getGlobalSize() > 0) {
+				std::string filekey = "-inputcontigs-" + boost::lexical_cast<std::string>(iteration) + ".fasta";
+				changedContigs.writeAll(om.getOfstream(filekey), FormatOutput::FASTA);
+				contigFile = om.getRealFilePath(filekey);
+			}
+			contigs = changedContigs;
 		}
 
 		double writeFinalTime = MPI_Wtime() - startIterationTime;
 
-		if (!Log::isDebug(1)) {
-			// remove most recent contig file (if not debugging)
-			if (ContigExtenderOptions::getContigFile().compare(contigFile) != 0) {
-				if (world.rank() == 0) {
-					LOG_VERBOSE_OPTIONAL(2, true, "Removing " << contigFile);
-					unlink(contigFile.c_str());
-				}
+		if (!Log::isDebug(1) && world.rank() == 0) {
+			// remove most recent contig files (if not debugging)
+			if (!oldFinalContigFile.empty()) {
+				LOG_VERBOSE_OPTIONAL(1, true, "Removing " << oldFinalContigFile);
+				unlink(oldFinalContigFile.c_str());
+			}
+
+			if (ContigExtenderOptions::getContigFile().compare(oldContigFile) != 0) {
+				LOG_VERBOSE_OPTIONAL(1, true, "Removing " << oldContigFile);
+				unlink(oldContigFile.c_str());
 			}
 		}
 
@@ -390,23 +403,48 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 
-		{
-			std::string filekey = "contig-" + boost::lexical_cast<std::string>(iteration);
-			DistributedOfstreamMap om(world, Options::getOutputFile(), FormatOutput::getSuffix(FormatOutput::FASTA));
-			om.setBuildInMemory();
-			changedContigs.writeAll(om.getOfstream(filekey), FormatOutput::FASTA);
-			std::string newContigFile = om.getRealFilePath(filekey);
-			contigFile = newContigFile;
-		}
-
 		double finishIterationTime = MPI_Wtime() - startIterationTime;
 		if (Log::isVerbose(1)) {
 			char buf[1024];
-			sprintf(buf, "Time %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f",
-					readContigsTime, setOffsetsTime, vmatchMatchTime, processHitsTime, prepareSizesTime, exchangeTime, prepareSendTime, exchangeReadsTime, processReadsTime, extendContigsTime, writeFinalTime, finishIterationTime);
-			Log::Verbose(std::string(buf), true);
+			sprintf(buf, "Time SO:%0.2f vm:%0.2f ps:%0.2f EST:%0.2f ps:%0.2f ER:%0.2f ec:%0.2f CCS:%0.2f WF:%0.2f FI:%0.2f total: %0.2f Mem:",
+					setOffsetsTime,
+					vmatchMatchTime - setOffsetsTime,
+					prepareSizesTime - vmatchMatchTime,
+					exchangeSizesTime - prepareSizesTime,
+					prepareSendTime - exchangeSizesTime,
+					exchangeReadsTime - prepareSendTime,
+					extendContigsTime - exchangeReadsTime,
+					calcChangedSizesTime - extendContigsTime,
+					writeFinalTime - calcChangedSizesTime,
+					finishIterationTime - writeFinalTime,
+					finishIterationTime);
+			Log::Verbose(std::string(buf) + MemoryUtils::getMemoryUsage(), false);
 		}
 	}
+
+	if (world.rank() == 0 && !Log::isDebug(1)) {
+		if (ContigExtenderOptions::getContigFile().compare(contigFile) != 0) {
+			LOG_DEBUG_OPTIONAL(1, true, "Removing " << contigFile);
+			unlink(contigFile.c_str());
+		}
+	}
+
+	{
+		// write final contigs (and any unfinished contigs still remaining)
+		std::string tmpFinalFile = finalContigFile;
+		DistributedOfstreamMap om(world, Options::getOutputFile(), "");
+		finalContigs.append(contigs);
+		std::string fileKey = "";
+		finalContigs.writeAll(om.getOfstream(fileKey), FormatOutput::FASTA);
+		om.clear();
+
+		if (world.rank() == 0 && !finalContigFile.empty()) {
+			LOG_DEBUG_OPTIONAL(1, true, "Removing " << finalContigFile);
+			unlink(finalContigFile.c_str());
+		}
+		finalContigFile = om.getRealFilePath(fileKey);
+	}
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Final contigs are in: " << finalContigFile);
 
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 	MPI_Finalize();

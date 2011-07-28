@@ -739,6 +739,17 @@ private:
 	static string getTempPath(std::string tempPath) {
 		return tempPath + UniqueName::generateUniqueName("/.tmp-output");
 	}
+protected:
+	virtual void close() {
+		LOG_VERBOSE_OPTIONAL(2, _world.rank() == 0, "Concatenating all MPI rank files");
+		KeySet keys = getGlobalKeySet();
+		if (isBuildInMemory())
+			writeGlobalFiles(keys);
+		OfstreamMap::close();
+		if (!isBuildInMemory())
+			concatenateMPI(keys);
+	}
+
 public:
 	DistributedOfstreamMap(mpi::communicator &world, std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix(), std::string tempPath = Options::getTmpDir())
 	 :  OfstreamMap(getTempPath(tempPath), suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
@@ -762,15 +773,6 @@ public:
 	}
 	virtual std::string getRealFilePath(std::string key) const {
 		return _realOutputPrefix + key + getSuffix();
-	}
-	virtual void close() {
-		LOG_VERBOSE_OPTIONAL(2, _world.rank() == 0, "Concatenating all MPI rank files");
-		KeySet keys = getGlobalKeySet();
-		if (isBuildInMemory())
-			writeGlobalFiles(keys);
-		OfstreamMap::close();
-		if (!isBuildInMemory())
-			concatenateMPI(keys);
 	}
 	// gets global keys to rank0.  All other ranks may have partial set...
 	KeySet getGlobalKeySet() {

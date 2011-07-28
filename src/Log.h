@@ -112,8 +112,9 @@ public:
 			try {
 				mpi::gather(w, msg, out, 0);
 			} catch (...) {
-				*_os << "ERROR: Failed to gather all messages: " << msg;
-				throw;
+				std::string errMsg("ERROR: Failed to gather all messages: " + msg);
+				*_os << errMsg << std::endl;
+				throw(errMsg);
 			}
 			std::stringstream ss;
 			for(int i = 0 ; i < w.size(); i++)
