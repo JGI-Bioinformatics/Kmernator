@@ -150,7 +150,7 @@ public:
 				continue;
 			_results.push_back(FieldsType(line));
 		}
-		LOG_DEBUG(2, "Vmatch::match(,): Found " << _results.size() << " results");
+		LOG_DEBUG(1, "Vmatch::match(,): Found " << _results.size() << " results");
 		return _results;
 	}
 };

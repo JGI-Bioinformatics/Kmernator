@@ -151,20 +151,20 @@ public:
 				LOG_THROW("Could not open " << filePath << " for writing! " << of->rdstate());
 		}
 		OStreamPtr(std::string _filePath) : filePath(_filePath) {
-			LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr(): In-memory writing to " << filePath);
+			LOG_DEBUG_OPTIONAL(2, true, "OfstreamMap::OStreamPtr(): In-memory writing to " << filePath);
 			ss.reset(new std::stringstream());
 			assert(isStringStream());
 		}
 		void close() {
 			if (isFileStream()) {
-				LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr::close(): Closing " << getFilePath());
+				LOG_DEBUG_OPTIONAL(2, true, "OfstreamMap::OStreamPtr::close(): Closing " << getFilePath());
 				of->flush();
 				of->close();
 				if (of->fail())
 					LOG_WARN(1, "Could not properly close: " << getFilePath());
 			}
 			if (isStringStream()) {
-				LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr::close(): Writing out in-memory : " << getFilePath());
+				LOG_DEBUG_OPTIONAL(2, true, "OfstreamMap::OStreamPtr::close(): Writing out in-memory : " << getFilePath());
 				OStreamPtr osp(getFilePath(), false);
 				assert(osp.isFileStream());
 				*osp << *ss;
@@ -200,7 +200,7 @@ public:
 		std::string getFinalString() {
 			assert(isStringStream());
 			long long int bytes = ss->tellp();
-			LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr::getFinalString(): Writing out " << bytes << " bytes in-memory for virtual file: " << getFilePath());
+			LOG_DEBUG(3, "OfstreamMap::OStreamPtr::getFinalString(): Writing out " << bytes << " bytes in-memory for virtual file: " << getFilePath());
 			std::string s = ss->str();
 			reset();
 			return s;
@@ -220,7 +220,7 @@ protected:
     mpi::communicator *_world;
 #endif
 	virtual void close() {
-		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::close()");
+		LOG_DEBUG_OPTIONAL(2, true, "Calling OfstreamMap::close()");
 		for(Iterator it = _map->begin() ; it != _map->end(); it++) {
 			OStreamPtr &_osp = it->second;
 			_osp.close();
@@ -275,7 +275,7 @@ public:
 		return _append;
 	}
 	virtual void clear() {
-		LOG_DEBUG_OPTIONAL(1, true, "Calling OfstreamMap::clear() " << _map->size() << " " << _outputFilePathPrefix);
+		LOG_DEBUG_OPTIONAL(2, true, "Calling OfstreamMap::clear() " << _map->size() << " " << _outputFilePathPrefix);
 		this->close();
 		_clear();
 	}

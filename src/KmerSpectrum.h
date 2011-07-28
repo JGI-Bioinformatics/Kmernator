@@ -1688,7 +1688,7 @@ public:
 					}
 					char base = TwoBitSequence::uncompressBase(i);
 					fasta.insert(toRight ? fasta.length() : 0, 1, base);
-					LOG_DEBUG_OPTIONAL(1, true, dir << " extended " << base << "\t" << fasta);
+					LOG_DEBUG_OPTIONAL(2, true, dir << " extended " << base << "\t" << fasta);
 					wasExtended = true;
 					break;
 				}

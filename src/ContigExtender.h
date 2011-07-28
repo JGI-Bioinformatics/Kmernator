@@ -186,7 +186,7 @@ public:
 			}
 		}
 		newName = newName + "-l" + boost::lexical_cast<std::string>(leftTotal+preLeftTotal) + "r" + boost::lexical_cast<std::string>(rightTotal+preRightTotal);
-		LOG_DEBUG_OPTIONAL(1, true, "ContigExtender::getNewName(" << oldName << ", " << leftTotal << ", " << rightTotal << "): " << newName);
+		LOG_DEBUG_OPTIONAL(2, true, "ContigExtender::getNewName(" << oldName << ", " << leftTotal << ", " << rightTotal << "): " << newName);
 		return newName;
 	}
 	static void getMinMaxKmerSize(const ReadSet &reads, SequenceLengthType &minKmerSize, SequenceLengthType &maxKmerSize, SequenceLengthType &kmerStep, SequenceLengthType maxSteps = 5) {

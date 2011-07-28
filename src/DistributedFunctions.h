@@ -776,7 +776,7 @@ public:
 	}
 	// gets global keys to rank0.  All other ranks may have partial set...
 	KeySet getGlobalKeySet() {
-		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::getGlobalKeySet()");
+		LOG_DEBUG_OPTIONAL(2, _world.rank()==0, "Calling DistributedOfstreamMap::getGlobalKeySet()");
 
 		// Send all filenames (minus Rank) to master
 		KeySet keys = getKeySet();
@@ -797,7 +797,7 @@ public:
 		return keys;
 	}
 	void writeGlobalFiles(KeySet &keys) {
-		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::writeGlobalFiles()");
+		LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "Calling DistributedOfstreamMap::writeGlobalFiles()");
 		assert(isBuildInMemory());
 
 		int size = _world.size();
@@ -840,7 +840,7 @@ public:
 				totalSize += recvPos[i];
 			}
 
-			LOG_DEBUG(1, "Opening " << fullPath);
+			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "Opening " << fullPath);
 			int err;
 			MPI_File ourFile;
 			err = MPI_File_open(world, const_cast<char*>(fullPath.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &ourFile);
@@ -868,7 +868,7 @@ public:
 
 	}
 	void concatenateMPI(KeySet &keys) {
-		LOG_DEBUG_OPTIONAL(1, true, "Calling DistributedOfstreamMap::concatenateMPI()");
+		LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "Calling DistributedOfstreamMap::concatenateMPI()");
 
 		// synchronize all files
 		int numFiles = keys.size();
