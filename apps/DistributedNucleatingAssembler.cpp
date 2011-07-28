@@ -215,10 +215,17 @@ int main(int argc, char *argv[]) {
 	ReadSet finalContigs;
 	short iteration = 0;
 	while(++iteration <= maxIterations) {
+		double startIterationTime = MPI_Wtime();
+
 		ReadSet contigs;
 		contigs.appendFastaFile(contigFile, world.rank(), world.size());
 
+		double readContigsTime = MPI_Wtime() - startIterationTime;
+
 		setGlobalReadSetOffsets(world, contigs);
+
+		double setOffsetsTime = MPI_Wtime() - startIterationTime;
+
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Reading Contig File: " << contigFile << ". loaded " << contigs.getGlobalSize() << " Reads");
 		if (contigs.getGlobalSize() == 0) {
 			LOG_VERBOSE_OPTIONAL(1, true, "There are no contigs to extend in " << contigFile);
@@ -227,6 +234,8 @@ int main(int argc, char *argv[]) {
 
 		ReadSet::ReadSetVector contigReadSet(contigs.getGlobalSize(), ReadSet());
 		Vmatch::MatchResults matches = myVmatch.match(contigFile, DistributedNucleatingAssemblerOptions::getVmatchOptions());
+
+		double vmatchMatchTime = MPI_Wtime() - startIterationTime;
 
 		std::vector< std::set<long> > contigReadHits(contigs.getGlobalSize());
 		for(Vmatch::MatchResults::iterator match = matches.begin(); match != matches.end(); match++) {
@@ -246,6 +255,8 @@ int main(int argc, char *argv[]) {
 			}
 		}
 		contigReadHits.clear();
+
+		double processHitsTime = MPI_Wtime() - startIterationTime;
 
 		int sendBytes[world.size()], recvBytes[world.size()], sendDisp[world.size()], recvDisp[world.size()];
 		int totalSend = 0, totalRecv = 0;
@@ -268,7 +279,11 @@ int main(int argc, char *argv[]) {
 			LOG_DEBUG_OPTIONAL(3, true, "Sending to rank " << rank << " sendBytes " << sendBytes[rank] << " sendDisp[] " << sendDisp[rank] << ". 0 == recvBytes[] "<< recvBytes[rank]);
 		}
 
+		double prepareSizesTime = MPI_Wtime() - startIterationTime;
+
 		MPI_Alltoall(sendBytes, 1, MPI_INT, recvBytes, 1, MPI_INT, world);
+
+		double exchangeTime = MPI_Wtime() - startIterationTime;
 
 		for(int rank = 0; rank < world.size(); rank++) {
 			recvDisp[rank] = totalRecv;
@@ -276,7 +291,7 @@ int main(int argc, char *argv[]) {
 			LOG_DEBUG_OPTIONAL(3, true, "to/from rank " << rank << ": sendDisp[] " << sendDisp[rank] << " sendBytes[] " << sendBytes[rank] << " recvDisp[] " << recvDisp[rank] << " recvBytes[] " << recvBytes[rank] );
 		}
 		LOG_DEBUG_OPTIONAL(3, true, "Sending " << totalSend << " Receiving " << totalRecv);
-		world.barrier();
+
 		char *sendBuf = (char*) malloc(totalSend == 0 ? 8 : totalSend);
 		if (sendBuf == NULL)
 			LOG_THROW("Could not allocate totalSend bytes! " << totalSend);
@@ -289,7 +304,12 @@ int main(int argc, char *argv[]) {
 		if (recvBuf == NULL)
 			LOG_THROW("Could not allocate totalRecv bytes! " << totalRecv);
 
+		double prepareSendTime = MPI_Wtime() - startIterationTime;
+
 		MPI_Alltoallv(sendBuf, sendBytes, sendDisp, MPI_BYTE, recvBuf, recvBytes, recvDisp, MPI_BYTE, world);
+
+		double exchangeReadsTime = MPI_Wtime() - startIterationTime;
+
 		free(sendBuf);
 		// set contigReadSet to hold read sets for local set of contigs
 		contigReadSet.resize(contigs.getSize(), ReadSet());
@@ -306,6 +326,8 @@ int main(int argc, char *argv[]) {
 			}
 		}
 		free(recvBuf);
+
+		double processReadsTime = MPI_Wtime() - startIterationTime;
 
 		ReadSet changedContigs;
 
@@ -337,6 +359,8 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		double extendContigsTime = MPI_Wtime() - startIterationTime;
+
 		LOG_DEBUG_OPTIONAL(1, true, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
 		setGlobalReadSetOffsets(world, changedContigs);
 		setGlobalReadSetOffsets(world, finalContigs);
@@ -348,6 +372,9 @@ int main(int argc, char *argv[]) {
 			om.setBuildInMemory();
 			finalContigs.writeAll(om.getOfstream(""), FormatOutput::FASTA);
 		}
+
+		double writeFinalTime = MPI_Wtime() - startIterationTime;
+
 		if (!Log::isDebug(1)) {
 			// remove most recent contig file (if not debugging)
 			if (ContigExtenderOptions::getContigFile().compare(contigFile) != 0) {
@@ -370,6 +397,14 @@ int main(int argc, char *argv[]) {
 			changedContigs.writeAll(om.getOfstream(filekey), FormatOutput::FASTA);
 			std::string newContigFile = om.getRealFilePath(filekey);
 			contigFile = newContigFile;
+		}
+
+		double finishIterationTime = MPI_Wtime() - startIterationTime;
+		if (Log::isVerbose(1)) {
+			char buf[1024];
+			sprintf(buf, "Time %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f",
+					readContigsTime, setOffsetsTime, vmatchMatchTime, processHitsTime, prepareSizesTime, exchangeTime, prepareSendTime, exchangeReadsTime, processReadsTime, extendContigsTime, writeFinalTime, finishIterationTime);
+			Log::Verbose(std::string(buf), true);
 		}
 	}
 
