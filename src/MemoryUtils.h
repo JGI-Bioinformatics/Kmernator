@@ -177,8 +177,17 @@ public:
 		time(&copy);
 		return copy - getLastCall();
 	}
-
 	static std::string getMemoryUsage() {
+		pid_t pid = getpid();
+		char filename[128];
+		sprintf(filename, "/proc/%d/statm", pid);
+		std::fstream statm(filename, std::fstream::in);
+		std::string buffer;
+		getline(statm, buffer);
+		statm.close();
+		return std::string("statm: " + buffer);
+	}
+	static std::string getMemoryUsage2() {
 		std::stringstream ss;
 		rusage usage;
 		if (getrusage(RUSAGE_SELF, &usage) != 0)
@@ -197,15 +206,47 @@ public:
 			ss << " ixrss: " << usage.ru_ixrss;
 			ss << " idrss: " << usage.ru_idrss;
 			ss << " isrss: " << usage.ru_isrss;
+
 		} else {
-			pid_t pid = getpid();
-			char buffer[1024];
-			sprintf(buffer, "/proc/%d/statm", pid);
-			std::fstream statm(buffer, std::fstream::in);
-			statm.getline(buffer, 1024);
-			statm.close();
-			ss << " statm: " << buffer;
+			ss << " " << getMemoryUsage();
 		}
+		return ss.str();
+	}
+
+	static std::string getMmapUsage() {
+		std::stringstream ss;
+		std::string buffer;
+		pid_t pid = getpid();
+		ss << "smaps for " << pid << ": " << std::endl;
+		std::fstream meminfo("/proc/meminfo", std::fstream::in);
+		while ( !meminfo.eof() ) {
+			getline(meminfo, buffer);
+			if (buffer.length() == 0)
+				break;
+			ss << buffer << std::endl;
+		}
+		meminfo.close();
+
+		char filename[128];
+		sprintf(filename, "/proc/%d/smaps", pid);
+		std::fstream smaps(filename, std::fstream::in);
+		std::string record;
+		while ( !smaps.eof() ) {
+			getline(smaps, buffer);
+			if (buffer.length() == 0)
+				break;
+			if (buffer.find(" kB") == std::string::npos) {
+				if (record.find("/") != std::string::npos && record.find("lib") == std::string::npos)
+					ss << record.substr(record.find("/")) << std::endl;
+				record = buffer + "\t";
+			} else {
+				if (buffer.find(" 0 kB") == std::string::npos && buffer.find("PageSize:") == std::string::npos)
+					record = record + buffer + "\t";
+			}
+		}
+		smaps.close();
+		if (record.find("/") != std::string::npos && record.find("lib") == std::string::npos)
+			ss << record.substr(record.find("/")) << std::endl;
 
 		return ss.str();
 	}

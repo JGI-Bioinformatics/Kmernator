@@ -296,7 +296,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	    }
 	}
 	unsigned long lastPos = reader.getPos();
-	LOG_DEBUG(1, "Finished reading " << (lastPos - firstPos)/1024 << " KB, " << getSize() << " reads");
+	LOG_DEBUG(2, "Finished reading " << (lastPos - firstPos)/1024 << " KB, " << getSize() << " reads");
 	return reader.getParser();
 }
 

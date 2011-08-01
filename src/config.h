@@ -149,6 +149,7 @@ namespace Kmernator {
    typedef boost::iostreams::stream< MmapSource > MmapIStream;
    typedef boost::iostreams::filtering_istreambuf FilteredIStream;
    typedef std::vector< MmapFile > MmapFileVector;
+   typedef std::vector< MmapSource > MmapSourceVector;
 
 
 };

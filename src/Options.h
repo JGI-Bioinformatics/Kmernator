@@ -156,10 +156,10 @@ public:
 		return getOptions().minKmerQuality;
 	}
 	static inline unsigned int &getVerbosity() {
-		return Log::Verbose().getLevel();
+		return Log::Verbose().setLevel();
 	}
 	static inline unsigned int &getDebug() {
-		return Log::Debug().getLevel();
+		return Log::Debug().setLevel();
 	}
 	static inline unsigned int &getMinQuality() {
 		return getOptions().minQuality;

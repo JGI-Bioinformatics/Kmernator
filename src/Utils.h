@@ -144,7 +144,7 @@ public:
 			else
 				mode |= std::ios_base::trunc;
 
-			LOG_DEBUG_OPTIONAL(1, true, "OfstreamMap::OStreamPtr(): Writing to " << filePath);
+			LOG_DEBUG_OPTIONAL(2, true, "OfstreamMap::OStreamPtr(): Writing to " << filePath);
 			of.reset(new std::ofstream(filePath.c_str(), mode));
 			assert(isFileStream());
 			if (of->fail() || !of->is_open() || !of->good())
@@ -554,16 +554,20 @@ class OPipestream : public boost::iostreams::stream< boost::iostreams::file_desc
 {
 public:
 	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_sink > base ;
+	explicit OPipestream() : _pipe(NULL) {}
 	explicit OPipestream( const std::string command ) : base( fileno( _pipe = popen( command.c_str(), "w" ) ) ), _cmd(command) {
 		assert(_pipe != NULL);
 		assert(fileno(_pipe) >= 0);
 		assert(is_open());
 	}
 	void close() {
+		if (_pipe == NULL)
+			return;
 		try {
 			this->flush();
 			base::close();
 			int status = pclose(_pipe);
+			_pipe = NULL;
 			if (status != 0) {
 				LOG_WARN(1, "OPipestream::close() '" << _cmd << "' closed with an error: " << status);
 			}
@@ -572,7 +576,7 @@ public:
 			LOG_WARN(1, "OPipestream::close(): Potentially failed to close pipe properly");
 		}
 	}
-	~OPipestream() {
+	virtual ~OPipestream() {
 		close();
 	}
 private :
@@ -584,16 +588,20 @@ class IPipestream : public boost::iostreams::stream< boost::iostreams::file_desc
 {
 public:
 	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_source > base ;
+	explicit IPipestream() : _pipe(NULL) {}
 	explicit IPipestream( const std::string command ) : base( fileno( _pipe = popen( command.c_str(), "r" ) ) ), _cmd(command) {
 		assert(_pipe != NULL);
 		assert(fileno(_pipe) >= 0);
 		assert(is_open());
 	}
 	void close() {
+		if (_pipe == NULL)
+			return;
+		this->set_auto_close(true);
 		int status = 0;
 		try {
-			this->set_auto_close(true);
 			status = pclose(_pipe);
+			_pipe = NULL;
 			if (status != 0) {
 				LOG_WARN(1, "IPipestream::close() '" << _cmd << "' closed with an error: " << status);
 			}
@@ -602,7 +610,7 @@ public:
 			LOG_WARN(1, "IPipestream::close(): Potentially failed to close pipe properly");
 		}
 	}
-	~IPipestream() {
+	virtual ~IPipestream() {
 		close();
 	}
 private :

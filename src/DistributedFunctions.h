@@ -50,6 +50,7 @@
 #error "mpi is required for this library"
 #endif
 
+// collective
 void reduceOMPThreads(mpi::communicator &world) {
 	Options::validateOMPThreads();
 #ifdef _USE_OPENMP
@@ -60,6 +61,7 @@ void reduceOMPThreads(mpi::communicator &world) {
 #endif
 }
 
+// collective
 void validateMPIWorld(mpi::communicator &world) {
 	int provided;
 	MPI_Query_thread(&provided);
@@ -72,13 +74,24 @@ void validateMPIWorld(mpi::communicator &world) {
 	reduceOMPThreads(world);
 }
 
+// collective
 std::string getRankSubdir(mpi::communicator &world, std::string prefix) {
-	std::string subDir = prefix + "/" + boost::lexical_cast<std::string>(world.rank()) + "of" + boost::lexical_cast<std::string>(world.size());
-	LOG_DEBUG(2, "getRankSubdir(" << prefix << "): " << subDir);
-	mkdir(subDir.c_str(), 0777);
-	return subDir;
+	int subRank = world.rank() / 256;
+	std::stringstream ss;
+	ss << prefix << "/rank-subdirs-" << world.size() << "-0x" << std::hex << subRank;
+	std::string subDir = ss.str();
+	if (world.rank() == subRank * 256) {
+		LOG_VERBOSE_OPTIONAL(1, true, "Making rank-subdirs: " << subDir);
+		mkdir(subDir.c_str(), 0777);
+	}
+	std::string subSubDir = subDir + "/" + boost::lexical_cast<std::string>(world.rank()) + "of" + boost::lexical_cast<std::string>(world.size());
+	LOG_DEBUG(2, "getRankSubdir(" << prefix << "): " << subSubDir);
+	world.barrier();
+	mkdir(subSubDir.c_str(), 0777);
+	return subSubDir;
 }
 
+// collective
 void niceBarrier(mpi::communicator &world, int waitMs = 1) {
 	mpi::communicator tmpWorld(world, mpi::comm_duplicate);
 	int rank = tmpWorld.rank();
@@ -89,7 +102,7 @@ void niceBarrier(mpi::communicator &world, int waitMs = 1) {
 	mpi::request rreq, rreq2;
 	mpi::request sreq, sreq2;
 
-	LOG_DEBUG(2, "Entering niceBarrier");
+	LOG_DEBUG_OPTIONAL(2, true, "Entering niceBarrier");
 	if (rank == 0)
 		sreq = tmpWorld.isend((rank+1) % size, 0, buf);
 
@@ -120,10 +133,11 @@ void niceBarrier(mpi::communicator &world, int waitMs = 1) {
 		boost::this_thread::sleep( boost::posix_time::milliseconds(waitMs) );
 	}
 
-	LOG_DEBUG(1, "Exiting niceBarrier");
+	LOG_DEBUG_OPTIONAL(2, true, "Exiting niceBarrier");
 
 }
 
+// collective
 void setGlobalReadSetOffsets(mpi::communicator &world, ReadSet &store) {
 	// share ReadSet sizes for globally unique readIdx calculations
 	ReadSet::ReadSetSizeType readSetSize = store.getSize();
@@ -789,9 +803,9 @@ public:
 				_world.recv(i, 0, newKeys);
 				keys.insert(newKeys.begin(), newKeys.end());
 			}
-			LOG_DEBUG_OPTIONAL(1, true, "getGlobalKeySet(): Collectively writing " << keys.size() << " files");
+			LOG_DEBUG_OPTIONAL(2, true, "getGlobalKeySet(): Collectively writing " << keys.size() << " files");
 			for(KeySet::iterator it = keys.begin(); it != keys.end(); it++)
-				LOG_DEBUG_OPTIONAL(1, true, "File key: " << *it);
+				LOG_DEBUG(3, "File key: " << *it);
 		}
 
 		return keys;
@@ -853,7 +867,7 @@ public:
 				LOG_ERROR(1, "Could not set the size for " << fullPath << " to " << totalSize);
 				throw;
 			}
-			LOG_DEBUG(1, "Writing " << mySize << " at " << myStart << " to " << fullPath);
+			LOG_DEBUG(2, "Writing " << mySize << " at " << myStart << " to " << fullPath);
 			char *data = const_cast<char*>(contents.data());
 			long long int  offset = 0;
 			long long int maxwrite = 0xf000000; // keep writes to less than max int size at a time to avoid MPI overflows
@@ -862,7 +876,7 @@ public:
 				MPI_File_write_at(ourFile, myStart+offset, data+offset, thisWriteSize, MPI_BYTE, MPI_STATUS_IGNORE);
 				offset += thisWriteSize;
 			}
-			LOG_DEBUG(1, "Closing " << fullPath);
+			LOG_DEBUG_OPTIONAL(1, _world.rank()==0, "Closing " << fullPath);
 			MPI_File_close(&ourFile);
 		}
 
@@ -931,13 +945,11 @@ public:
 		MPI_File ourFile;
 		err = MPI_File_open(world, const_cast<char*>(globalFile.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
 		if (err != MPI_SUCCESS) {
-			LOG_ERROR(1, "Could not open " << globalFile << " collectively");
-			throw;
+			LOG_THROW("Could not open " << globalFile << " collectively");
 		}
 		err = MPI_File_set_size(ourFile, totalSize);
 		if (err != MPI_SUCCESS) {
-			LOG_ERROR(1, "Could not set the size for " << globalFile << " to " << totalSize);
-			throw;
+			LOG_THROW("Could not set the size for " << globalFile << " to " << totalSize);
 		}
 
 		MPI_Status status;
@@ -946,8 +958,7 @@ public:
 		while (myPos < myStart + mySize) {
 			err = MPI_File_read(myFile, buf[bufId % 2], bufSize, MPI_BYTE, &status);
 			if (err != MPI_SUCCESS) {
-				LOG_ERROR(1, "Could not read from " << rankFile);
-				throw;
+				LOG_THROW("Could not read from " << rankFile);
 			}
 			int sendBytes;
 			err = MPI_Get_count(&status, MPI_BYTE, &sendBytes);
@@ -956,13 +967,11 @@ public:
 
 			err = MPI_Wait(&writeRequest, MPI_STATUS_IGNORE);
 			if (err != MPI_SUCCESS) {
-				LOG_ERROR(1, "Could not wait for write of " << globalFile);
-				throw;
+				LOG_THROW("Could not wait for write of " << globalFile);
 			}
 			err = MPI_File_iwrite_at(ourFile, myPos, buf[bufId++ % 2], sendBytes, MPI_BYTE, &writeRequest);
 			if (err != MPI_SUCCESS) {
-				LOG_ERROR(1, "Could not write to " << globalFile);
-				throw;
+				LOG_THROW("Could not write to " << globalFile);
 			}
 			myPos += sendBytes;
 		}

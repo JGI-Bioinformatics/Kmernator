@@ -58,11 +58,11 @@ class Logger
 	OstreamPtr _os;
 	std::string _attribute;
 	unsigned int _level;
-	int _thisLevel;
+	mutable int _thisLevel;
 	static void *_world;
 	static bool _debugGather;
 
-	inline std::string getRank() {
+	inline std::string getRank() const {
 #ifdef _USE_MPI
 		if (_world != NULL)
 			return " R" + boost::lexical_cast<std::string>( ((mpi::communicator*)_world)->rank() );
@@ -70,14 +70,14 @@ class Logger
 #endif
 			return std::string();
 	}
-	inline std::string getThread() {
+	inline std::string getThread() const {
 #ifdef _USE_OPENMP
 		return " T" + boost::lexical_cast<std::string>( omp_get_thread_num() );
 #else
 		return std::string();
 #endif
 	}
-	inline std::string getTime() {
+	inline std::string getTime() const {
 		time_t rawtime;
 		struct tm *timeinfo;
 		time (&rawtime);
@@ -147,7 +147,7 @@ public:
 			return true;
 #endif
 	}
-	inline bool isActive(unsigned int level = 1) {
+	inline bool isActive(unsigned int level = 1) const {
 		bool isActive = _os != NULL && _level >= level;
 		if (isActive && _thisLevel < (int) level)
 			_thisLevel = level;
@@ -156,16 +156,20 @@ public:
 	inline void setOstream(std::ostream &os) {
 		_os = &os;
 	}
-	inline void setLevel(unsigned int level) {
+	inline unsigned int &setLevel(unsigned int level) {
 		_level = level;
+		return _level;
 	}
-	inline unsigned int &getLevel() {
+	inline unsigned int &setLevel() {
+		return _level;
+	}
+	inline unsigned int getLevel() const {
 		return _level;
 	}
 	inline void setThisLevel(int level) {
 		_thisLevel = level;
 	}
-	inline std::string getThisLevel() {
+	inline std::string getThisLevel() const {
 		std::string val;
 		if (_thisLevel >= 0) {
 			val = boost::lexical_cast<std::string>(_thisLevel);
@@ -176,19 +180,21 @@ public:
 	inline void unsetOstream() {
 		_os = NULL;
 	}
-	inline std::string getStamp(std::string attribLabel = "") {
+	inline std::string getStamp(std::string attribLabel = "") const {
 		return getTime() + " " + _attribute + getThisLevel() + attribLabel + getRank() + getThread() + ": ";
 	}
 	template<typename T>
 	inline std::ostream &operator<<(T log) {
 		if (isActive()) {
-			std::stringstream ss;
-			ss << getStamp() << log;
-			std::string s;
-			s = ss.str();
-			return *_os << s;
+			return *_os << toString(log);
 		} else
 			return misuseWarning();
+	}
+	template<typename T>
+	inline std::string toString(T log) const {
+		std::stringstream ss;
+		ss << getStamp() << log;
+		return ss.str();
 	}
 	// cast to ostream
 	inline operator std::ostream&() {
@@ -205,18 +211,18 @@ public:
 class Log
 {
 	static Logger verboseOstream;
-	static inline Logger &getVerboseOstream() {
-		return verboseOstream;
-	}
 	static Logger debugOstream;
+	static Logger warningOstream;
+	static Logger errorOstream;
 	static inline Logger &getDebugOstream() {
 		return debugOstream;
 	}
-	static Logger warningOstream;
+	static inline Logger &getVerboseOstream() {
+		return verboseOstream;
+	}
 	static inline Logger &getWarningOstream() {
 		return warningOstream;
 	}
-	static Logger errorOstream;
 	static inline Logger &getErrorOstream() {
 		return errorOstream;
 	}
@@ -237,6 +243,19 @@ class Log
 		return log;
 	}
 public:
+	static inline const Logger &getDebug() {
+		return debugOstream;
+	}
+	static inline const Logger &getVerbose() {
+		return verboseOstream;
+	}
+	static inline const Logger &getWarning() {
+		return warningOstream;
+	}
+	static inline const Logger &getError() {
+		return errorOstream;
+	}
+
 	static inline void setVerboseOstream(std::ostream &os) {
 		getVerboseOstream().setOstream(os);
 	}
@@ -293,5 +312,8 @@ public:
 
 #define LOG_VERBOSE_OPTIONAL(level, test, log) if ( test && Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), true); }
 #define LOG_DEBUG_OPTIONAL(level,   test, log) if ( test && Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), true); }
+
+//#define LOG_VERBOSE_APPEND(level, appendString, log) if ( Log::isVerbose(level) ) { std::stringstream ss; ss << log << std::endl; appendString += Log::getVerbose().toString( ss.str() ); }
+//#define LOG_DEBUG_APPEND(level, appendString, log) if ( Log::isVerbose(level) ) { std::stringstream ss; ss << log << std::endl; appendString += Log::getDebug().toString( ss.str() ); }
 
 #endif /* LOG_H_ */

@@ -261,7 +261,7 @@ public:
 	unsigned long getBlockSize(unsigned int numThreads) {
 		unsigned long fileSize = getFileSize();
 		unsigned long blockSize = fileSize / numThreads;
-		LOG_DEBUG_OPTIONAL(1, true, "getBlockSize(" << numThreads <<"): " << blockSize << " out of " << fileSize);
+		LOG_DEBUG(3, "ReadFileReader(" << _path << ")::getBlockSize(" << numThreads <<"): " << blockSize << " out of " << fileSize);
 		return blockSize;
 	}
 
@@ -292,7 +292,7 @@ public:
 			firstPos = getPos();
 		}
 		setLastPos(lastPos);
-		LOG_DEBUG(1, "Seeked to position " << firstPos << ", reading until " << lastPos << " on file " << getFilePath());
+		LOG_DEBUG(2, "ReadFileReader(" << _path <<")::seekToPartition(" << rank << ", " << size << ") " << firstPos << ", reading until " << lastPos);
 	}
 
 	void setLastPos(unsigned long lastPos) {

@@ -173,6 +173,8 @@ public:
 
 	static std::string getNewName(std::string oldName, std::string::size_type leftTotal, std::string::size_type rightTotal) {
 		std::string::size_type preLeftTotal = 0, preRightTotal = 0, pos, pos2;
+		if (leftTotal + rightTotal == 0)
+			return oldName;
 		std::string newName = oldName;
 		pos = oldName.find_last_of("-l");
 		if (pos != std::string::npos) {

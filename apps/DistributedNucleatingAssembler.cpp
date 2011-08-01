@@ -37,6 +37,7 @@
 #include "ContigExtender.h"
 #include "DistributedFunctions.h"
 #include "MemoryUtils.h"
+#include "Utils.h"
 #include "Log.h"
 
 using namespace std;
@@ -112,13 +113,20 @@ public:
 private:
 	std::string _indexName;
 	MatchResults _results;
+	Kmernator::MmapSourceVector _mmaps;
+
 public:
-	Vmatch(std::string indexName, ReadSet &inputs) : _indexName(indexName) {
+	Vmatch(std::string indexName, ReadSet &inputs, bool cacheIndexes = true) : _indexName(indexName) {
 		if (FileUtils::getFileSize(indexName + ".suf") > 0) {
 			LOG_DEBUG(1, "Vmatch(" << indexName << ", reads(" << inputs.getSize() << ")): Index already exists: " << indexName);
 		} else {
 			buildVmatchIndex(indexName, inputs);
 		}
+		if (cacheIndexes)
+			mapIndexes();
+	}
+	virtual ~Vmatch() {
+		clearMaps();
 	}
 	static void buildVmatchIndex(std::string indexName, ReadSet &inputs) {
 		std::string inputFile = indexName + ".tmp.input";
@@ -137,6 +145,7 @@ public:
 			LOG_THROW("mkvtree failed to build(" << ret << "): " << cmd);
 	}
 	MatchResults &match(std::string queryFile, std::string options = "") {
+		double time = MPI_Wtime();
 		_results.clear();
 		std::string cmd("vmatch " + options + " -q " + queryFile + " " + _indexName);
 		LOG_DEBUG(1, "Executing vmatch: " << cmd);
@@ -145,13 +154,50 @@ public:
 		while (!vmatchOutput.eof()) {
 			getline(vmatchOutput, line);
 			if (line.length() == 0)
-				break;
+				continue;
 			if (line[0] == '#')
 				continue;
 			_results.push_back(FieldsType(line));
 		}
-		LOG_DEBUG(1, "Vmatch::match(,): Found " << _results.size() << " results");
+		LOG_VERBOSE_OPTIONAL(1, true, "Vmatch::match(,): Found " << _results.size() << " results in " << (MPI_Wtime() - time) << " sec");
 		return _results;
+	}
+	void mapIndexes(bool _flush = true) {
+		LOG_DEBUG(2, "memory mapping vmatch index files for " << _indexName);
+		long size = 0;
+		const std::string suffixes[] = {"prj", "al1", "tis", "ssp", "suf", "lcp", "bck", "sti1"};
+		double time = MPI_Wtime(), time2, firstTime = 0, secondTime = 0;
+		for(int i = 0 ; i < 8 ; i++) {
+			std::string filePath = _indexName + "." + suffixes[i];
+			LOG_DEBUG(3, "mmaping " << filePath);
+			Kmernator::MmapSource mmap(filePath, FileUtils::getFileSize(filePath));
+			madvise(const_cast<char*>(mmap.data()), mmap.size(), MADV_WILLNEED);
+			size += mmap.size();
+
+			if (_flush) {
+				time2 = MPI_Wtime();
+				flush(mmap.data(), mmap.size());
+				firstTime += MPI_Wtime() - time2;
+				time2 = MPI_Wtime();
+				flush(mmap.data(), mmap.size());
+				secondTime += MPI_Wtime() - time2;
+			}
+
+			_mmaps.push_back(mmap);
+		}
+		LOG_DEBUG(2, MemoryUtils::getMmapUsage());
+		LOG_VERBOSE(1, "Vmatch(): memory mapped " << size << " bytes for " << _indexName << " in " << (MPI_Wtime()-time) << " sec " << firstTime << " " << secondTime);
+	}
+	void clearMaps() {
+		_mmaps.clear();
+	}
+	static long flush(const char *data, long size) {
+		const long *p =(const long*) data;
+		size /= sizeof(long);
+		long c = 0;
+		for (long j = 0 ; j < size; j++)
+			c += *(p++);
+		return c;
 	}
 };
 
@@ -331,6 +377,7 @@ int main(int argc, char *argv[]) {
 
 		ReadSet changedContigs;
 
+		std::stringstream extendLog;
         //#pragma omp parallel for
 		for(ReadSet::ReadSetSizeType i = 0; i < contigs.getSize(); i++) {
 			const Read &oldRead = contigs.getRead(i);
@@ -350,7 +397,7 @@ int main(int argc, char *argv[]) {
 			//#pragma omp critical
 			{
 				long deltaLen = newRead.getLength() - oldRead.getLength();
-				LOG_VERBOSE_OPTIONAL(1, true, "Extended " << oldRead.getName() << " " << deltaLen << " bases to " << newRead.getLength() << ": " << newRead.getName() << " with " << contigReadSet[i].getSize() << " reads in the pool");
+				extendLog << std::endl << "Extended " << oldRead.getName() << " " << deltaLen << " bases to " << newRead.getLength() << ": " << newRead.getName() << " with " << contigReadSet[i].getSize() << " reads in the pool K " << (myKmerSize-kmerStep);
 				if (deltaLen > 0) {
 					changedContigs.append(newRead);
 				} else {
@@ -360,6 +407,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		double extendContigsTime = MPI_Wtime() - startIterationTime;
+		LOG_VERBOSE(1, (extendLog.str()));
 
 		LOG_DEBUG(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
 		setGlobalReadSetOffsets(world, changedContigs);
@@ -410,7 +458,7 @@ int main(int argc, char *argv[]) {
 		double finishIterationTime = MPI_Wtime() - startIterationTime;
 		if (Log::isVerbose(1)) {
 			char buf[1024];
-			sprintf(buf, "Time SO:%0.2f vm:%0.2f ps:%0.2f EST:%0.2f ps:%0.2f ER:%0.2f ec:%0.2f CCS:%0.2f WF:%0.2f FI:%0.2f total: %0.2f Mem:",
+			sprintf(buf, "Time SO:%0.2f vm:%0.2f ps:%0.2f EST:%0.2f ps:%0.2f ER:%0.2f ec:%0.2f CCS:%0.2f WF:%0.2f FI:%0.2f total: %0.2f Mem: ",
 					setOffsetsTime,
 					vmatchMatchTime - setOffsetsTime,
 					prepareSizesTime - vmatchMatchTime,
@@ -437,6 +485,7 @@ int main(int argc, char *argv[]) {
 		// write final contigs (and any unfinished contigs still remaining)
 		std::string tmpFinalFile = finalContigFile;
 		DistributedOfstreamMap om(world, Options::getOutputFile(), "");
+		om.setBuildInMemory();
 		finalContigs.append(contigs);
 		std::string fileKey = "";
 		finalContigs.writeAll(om.getOfstream(fileKey), FormatOutput::FASTA);
