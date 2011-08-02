@@ -73,8 +73,10 @@ public:
 		if (_ifs.fail())
 			throw runtime_error("Could not open : " + _path);
 
-		if (Options::getIgnoreQual())
+		if (Options::getIgnoreQual()) {
 			qualFilePath.clear();
+			_qs.close();
+		}
 
 		if (!qualFilePath.empty()) {
 			_qs.open(qualFilePath.c_str());
@@ -84,6 +86,7 @@ public:
 		     if (!Options::getIgnoreQual()) {
 			   // test for an implicit qual file
 			   _qs.open((_path + ".qual").c_str());
+			   LOG_DEBUG(3, "ReadFileReader() opened " << _path << ".qual " << _qs.good());
 			 }
 		}
 		LOG_DEBUG(2, "ReadFileReader(" << _path << ", " << qualFilePath << ")");
@@ -144,12 +147,12 @@ public:
 		return _parser;
 	}
 	void setParser(istream &fs1, istream &fs2) {
-		if (fs2.fail() || !fs2.good()) {
+		if (fs2.fail() || fs2.eof() || !fs2.good() ) {
 			setParser(fs1);
 		} else {
+			LOG_DEBUG(3, "setParser(istream,istream) FastaQualStreamParser");
 			_parser = SequenceStreamParserPtr(new FastaQualStreamParser(fs1, fs2));
 		}
-		LOG_DEBUG(3, "setParser(istream,istream) FastaQualStreamParser");
 	}
 	void setParser(MmapSource &mmap1, MmapSource &mmap2) {
 		_parser = SequenceStreamParserPtr(new FastaQualStreamParser(mmap1, mmap2));
@@ -350,6 +353,7 @@ public:
 				return buffer;
 			getline(*_stream, buffer);
 			_pos += buffer.length() + 1;
+			LOG_DEBUG(6, "SequenceStreamParser::nextLine(" << buffer << ") position at: " << _pos);
 			return buffer;
 		}
 		inline string &nextLine() {
@@ -459,20 +463,22 @@ public:
 			std::string &name = getName();
 			nextLine( name );
 
+			int count = 0;
 			while (name.length() == 0 || name[0] != _marker) // skip empty lines at end of stream
 			{
-				LOG_DEBUG(5, "SequenceStreamParser::readName() found nothing on the last line: " << name << " " << getPos());
+				LOG_DEBUG(5, "SequenceStreamParser::readName() found nothing on the last line: " << name << " looking for '" << _marker << "' at " << getPos());
 				if (isPastPartition() || endOfStream()) {
 					name.clear();
 					return name;
 				}
 				nextLine( name );
+				if (++count > 100000)
+					break;
 			}
 			LOG_DEBUG(5, "SequenceStreamParser::readName() found " << name << " at " << getPos());
 
-			if (name[0] != _marker)
-				throw runtime_error(
-						(string("Missing name marker '") + _marker + "'").c_str());
+			if (name.length() == 0 || name[0] != _marker)
+				LOG_THROW("Missing name marker '" << _marker << "'" << " in '" << name << "' at " << getPos() << " after " << count << " attempts to find the marker");
 
 			// remove marker and any extra comments or fields
             SequenceRecordParser::trimName( name );
