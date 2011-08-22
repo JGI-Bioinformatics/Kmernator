@@ -38,6 +38,7 @@
 #include "Sequence.h"
 #include "ReadSet.h"
 #include "Options.h"
+#include "Utils.h"
 #include "Log.h"
 
 using namespace std;
@@ -156,6 +157,11 @@ int main(int argc, char *argv[]) {
 	}	
 
 	LOG_DEBUG(1, "detecting by pair: " << byPair);
+	OfstreamMap *ofm = NULL;
+	if (!Options::getOutputFile().empty()) {
+		ofm = new OfstreamMap(Options::getOutputFile(), "");
+	}
+	ostream &output = (ofm == NULL ? std::cout : ofm->getOfstream(""));
 
 	unsigned long count = 0;
 	unsigned long lastPos = fileSize;
@@ -177,14 +183,17 @@ int main(int argc, char *argv[]) {
 		std::string name, bases, quals;
 		rfr.nextRead(name, bases, quals);
 		Read read(name, bases, quals);
-		read.write(std::cout);
+		read.write(output);
 		if (byPair) {
 			rfr.nextRead(name, bases, quals);
 			Read read2(name, bases, quals);
-			read2.write(std::cout);
+			read2.write(output);
 		}
 		count++;
 	}
+	if (ofm != NULL)
+		delete ofm;
+
 	if (count < numSamples) {
 		LOG_WARN(1, "Could not select all samples. " << count << " selected.");
 	}
