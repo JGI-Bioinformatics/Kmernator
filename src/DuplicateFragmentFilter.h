@@ -30,7 +30,7 @@ public:
 	typedef ReadSet::Pair Pair;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 
-	static void _buildDuplicateFragmentMap(KSV &ksv, ReadSet &reads, unsigned char bytes, bool useReverseComplement, bool paired, unsigned int startOffset = Options::getDeDupStartOffset()) {
+	static void _buildDuplicateFragmentMap(KSV &ksv, ReadSet &reads, unsigned char bytes, bool useReverseComplement, bool paired, unsigned int startOffset = Options::getOptions().getDeDupStartOffset()) {
 		// build one KS per thread, then merge, skipping singletons
         // no need to include quality scores
 
@@ -153,7 +153,7 @@ public:
 	}
 
 	// TODO make useWeights an Option::
-	static void _mergeNodesWithinEditDistance(KS &ks, unsigned int cutoffThreshold, unsigned int editDistance, bool useWeights = true) {
+	static void _mergeNodesWithinEditDistance(KS &ks, unsigned int cutoffThreshold, unsigned int editDistance) {
 		// TODO honor edit distance > 1
 		LOG_VERBOSE(1, "Merging kmers within edit-distance of " << editDistance << " " << MemoryUtils::getMemoryUsage());
 
@@ -182,7 +182,7 @@ public:
 			for(KSElementVector__reverse_iterator it = elems.rbegin(); it != elems.rend(); it++) {
 				KSElementType &elem = *it;
 				if (elem.isValid() && elem.value().getCount() >= cutoffThreshold) {
-					ks.consolidate(elem.key(), useWeights);
+					ks.consolidate(elem.key());
 				}
 			}
 
@@ -198,7 +198,7 @@ public:
 				if (elem.isValid()) {
 					TD &value = elem.value();
 					if (value > 0 && value.getCount() < cutoffThreshold) {
-						ks.consolidate(elem.key(), useWeights);
+						ks.consolidate(elem.key());
 					}
 				}
 			}
@@ -213,7 +213,7 @@ public:
 		LOG_VERBOSE(1, "Building consensus reads. ");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-		unsigned char minQual = Options::getMinQuality();
+		unsigned char minQual = Options::getOptions().getMinQuality();
 
 		ReadSetSizeType affectedCount = 0;
 
@@ -263,7 +263,7 @@ public:
 		LOG_VERBOSE(1, "Building consensus reads. ");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-		unsigned char minQual = Options::getMinQuality();
+		unsigned char minQual = Options::getOptions().getMinQuality();
 
 		ReadSetSizeType affectedCount = 0;
 		ReadSetSizeType pairSize = reads.getPairSize();
@@ -343,7 +343,7 @@ public:
 
 		SequenceLengthType affectedCount = 0;
 
-        bool useReverseComplement = (Options::getDeDupMode() == 2);
+        bool useReverseComplement = (Options::getOptions().getDeDupMode() == 2);
 
 		// build the paired duplicate fragment map
 		_buildDuplicateFragmentMap(ksv, reads, bytes, useReverseComplement, paired);
@@ -363,14 +363,14 @@ public:
 			affectedCount += _buildConsensusUnPairedReads(ks, reads, newReads, cutoffThreshold);
 		}
 
-		if (Options::getSkipArtifactFilter() == 0) {
+		if (Options::getOptions().getSkipArtifactFilter() == 0) {
 			LOG_VERBOSE(1, "Preparing artifact filter on new consensus reads: ");
 			FilterKnownOddities filter;
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			// ignore user settings for outputing any filtered new consensus reads
-			int oldFilterOutput = Options::getFilterOutput();
-			Options::getFilterOutput() = 0;
+			int oldFilterOutput = Options::getOptions().getFilterOutput();
+			Options::getOptions().getFilterOutput() = 0;
 
 			LOG_VERBOSE(2, "Applying sequence artifact filter to new consensus reads");
 			unsigned long filtered = filter.applyFilter(newReads);
@@ -378,7 +378,7 @@ public:
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			// reset user settings
-			Options::getFilterOutput() = oldFilterOutput;
+			Options::getOptions().getFilterOutput() = oldFilterOutput;
 		}
 
 		reads.append(newReads);
@@ -390,9 +390,9 @@ public:
 		return affectedCount;
 	}
 
-	static ReadSetSizeType filterDuplicateFragments(ReadSet &reads, unsigned char sequenceLength = Options::getDeDupLength(), unsigned int cutoffThreshold = 2, unsigned int editDistance = Options::getDeDupEditDistance()) {
+	static ReadSetSizeType filterDuplicateFragments(ReadSet &reads, unsigned char sequenceLength = Options::getOptions().getDeDupLength(), unsigned int cutoffThreshold = 2, unsigned int editDistance = Options::getOptions().getDeDupEditDistance()) {
 
-	  if ( Options::getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
+	  if ( Options::getOptions().getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
 		  LOG_VERBOSE(1, "Skipping filter and merge of duplicate fragments");
 		  return 0;
 	  }
@@ -408,7 +408,7 @@ public:
 
 	  affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, true);
 
-	  if (Options::getDeDupSingle() == 1)
+	  if (Options::getOptions().getDeDupSingle() == 1)
 		  affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, false);
 
       KmerSizer::set(oldKmerSize);

@@ -54,7 +54,7 @@
 using namespace std;
 
 // TODO add outputformat of fasta
-class FilterReadsOptions : public Options {
+class _FilterReadsOptions : public OptionsBaseInterface {
 public:
 	static int getMaxKmerDepth() {
 		return getVarMap()["max-kmer-output-depth"].as<int> ();
@@ -65,12 +65,12 @@ public:
 	static bool getBothPairs() {
 		return getVarMap()["min-passing-in-pair"].as<int>() == 2;
 	}
-	static bool parseOpts(int argc, char *argv[]) {
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
 		// set options specific to this program
-		getPosDesc().add("kmer-size", 1);
-		getPosDesc().add("input-file", -1);
+		p.add("kmer-size", 1);
+		p.add("input-file", -1);
 
-		getDesc().add_options()
+		desc.add_options()
 
 		("max-kmer-output-depth", po::value<int>()->default_value(-1),
 				"maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output")
@@ -89,12 +89,12 @@ public:
 			{
 				throw std::invalid_argument("You can not specify both max-kmer-depth and partition-by-depth");
 			}
-			if (Options::getOutputFile().empty() && Logger::isMaster())
+			if (Options::getOptions().getOutputFile().empty() && Logger::isMaster())
 			{
 				LOG_WARN(1, "no output file specified... This is a dry run!");
 			}
 
-			if (Options::getInputFiles().empty() && Logger::isMaster()) {
+			if (Options::getOptions().getInputFiles().empty() && Logger::isMaster()) {
 				LOG_ERROR(1, "Please specify at least one input file");
 				ret = false;
 			}
@@ -102,18 +102,19 @@ public:
 		return ret;
 	}
 };
+typedef OptionsBaseTemplate< _FilterReadsOptions > FilterReadsOptions;
 
 template<typename _ReadSelector>
 long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector, std::string outputFilename)
 {
 	typedef typename _ReadSelector::OFM OFM;
-	LOG_VERBOSE_OPTIONAL(1, true, "selectReads with minDepth " << minDepth << ", minLength " << Options::getMinReadLength() << ": " << reads.getSize() << " reads");
+	LOG_VERBOSE_OPTIONAL(1, true, "selectReads with minDepth " << minDepth << ", minLength " << Options::getOptions().getMinReadLength() << ": " << reads.getSize() << " reads");
 	LOG_DEBUG_OPTIONAL(1, true, MemoryUtils::getMemoryUsage());
 
 	long oldPicked = 0;
 	long picked = 0;
 
-	int maximumKmerDepth = FilterReadsOptions::getMaxKmerDepth();
+	int maximumKmerDepth = FilterReadsOptions::getOptions().getMaxKmerDepth();
 
 
 	if (maximumKmerDepth > 0) {
@@ -122,10 +123,10 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			LOG_VERBOSE_OPTIONAL(2, true, "Picking depth " << depth << " layer of reads");
 			if (reads.hasPairs())
 				picked += selector.pickBestCoveringSubsetPairs(depth,
-						minDepth, Options::getMinReadLength(), FilterReadsOptions::getBothPairs());
+						minDepth, Options::getOptions().getMinReadLength(), FilterReadsOptions::getOptions().getBothPairs());
 			else
 				picked += selector.pickBestCoveringSubsetReads(depth,
-						minDepth, Options::getMinReadLength());
+						minDepth, Options::getOptions().getMinReadLength());
 			LOG_DEBUG_OPTIONAL(1, true, MemoryUtils::getMemoryUsage());
 		}
 
@@ -139,7 +140,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 
 	} else {
 
-		int maxDepth = FilterReadsOptions::getPartitionByDepth();
+		int maxDepth = FilterReadsOptions::getOptions().getPartitionByDepth();
 		if (maxDepth < 0) {
 			maxDepth = 1;
 		}
@@ -152,7 +153,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			}
 			OFM ofmap = selector.getOFM(ofname);
 			float tmpMinDepth = std::max(minDepth, depth);
-			if (Options::getKmerSize() == 0) {
+			if (Options::getOptions().getKmerSize() == 0) {
 				tmpMinDepth = 0;
 				depth = 0;
 			}
@@ -160,11 +161,11 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 
 			if (reads.hasPairs()) {
 				picked = selector.pickAllPassingPairs(tmpMinDepth,
-						Options::getMinReadLength(),
-						FilterReadsOptions::getBothPairs());
+						Options::getOptions().getMinReadLength(),
+						FilterReadsOptions::getOptions().getBothPairs());
 			} else {
 				picked = selector.pickAllPassingReads(tmpMinDepth,
-						Options::getMinReadLength());
+						Options::getOptions().getMinReadLength());
 			}
 			LOG_VERBOSE(2, "At or above coverage: " << depth << " Picked " << picked
 			<< " / " << reads.getSize() << " reads");

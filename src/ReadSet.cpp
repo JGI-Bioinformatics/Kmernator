@@ -121,7 +121,7 @@ ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 }
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFile(string filePath, string filePath2, int rank, int size) {
-	if (size == 1 && Options::getMmapInput() > 0)
+	if (size == 1 && Options::getOptions().getMmapInput() > 0)
 		return appendAnyFileMmap(filePath, filePath2);
 	LOG_DEBUG(2, "appendAnyFile(" << filePath << ", " << filePath2 << ", " << rank << ", " << size << ")");
 	ReadFileReader reader(filePath, filePath2);
@@ -155,7 +155,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFileMmap(string fastaFilePath
 	return reader.getParser();
 }
 
-void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
+void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank, int size) {
 
 #ifdef _USE_OPENMP
 	int fileCount = files.size();
@@ -179,7 +179,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 		LOG_DEBUG(2, "reading " << files[i] << " using " << omp_get_max_threads() << " threads per file");
 
 		string qualFile;
-		if (!Options::getIgnoreQual()) {
+		if (!Options::getOptions().getIgnoreQual()) {
 			// test for an implicit qual file
 			qualFile = files[i] + ".qual";
 			ifstream _qs;
@@ -211,7 +211,7 @@ void ReadSet::appendAllFiles(Options::FileListType &files, int rank, int size) {
 #endif
 
 	// Let the kernel know how these pages will be used
-	if (Options::getMmapInput() == 0)
+	if (Options::getOptions().getMmapInput() == 0)
 		madviseMmapsDontNeed();
 	else
 		madviseMmapsNormal();
@@ -267,7 +267,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	LOG_DEBUG(2, "appendFasta(reader, " << rank << ", " << size << ")");
 	reader.seekToPartition(rank,size);
 	unsigned long firstPos = reader.getPos();
-	if (reader.isMmaped() && Options::getMmapInput() != 0) {
+	if (reader.isMmaped() && Options::getOptions().getMmapInput() != 0) {
 	    RecordPtr recordPtr = reader.getStreamRecordPtr();
 	    RecordPtr qualPtr = reader.getStreamQualRecordPtr();
 	    RecordPtr nextRecordPtr = recordPtr;
@@ -395,7 +395,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 			lastPos = 0;
 		}
 
-		if (reader.isMmaped() && Options::getMmapInput() != 0) {
+		if (reader.isMmaped() && Options::getOptions().getMmapInput() != 0) {
 		    RecordPtr recordPtr = reader.getStreamRecordPtr();
 		    RecordPtr qualPtr = reader.getStreamQualRecordPtr();
 		    RecordPtr nextRecordPtr = recordPtr;
@@ -472,10 +472,10 @@ ReadSet::ReadPtr ReadSet::parseMmapedRead(ReadSetSizeType index) const {
 }
 
 string ReadSet::_getReadFileNamePrefix(unsigned int filenum) const {
-	if (filenum > Options::getInputFiles().size()) {
+	if (filenum > Options::getOptions().getInputFiles().size()) {
 		return std::string("consensus-") + boost::lexical_cast<std::string>(filenum);
 	} else {
-		return Options::getInputFileSubstring(filenum-1);
+		return Options::getOptions().getInputFileSubstring(filenum-1);
 	}
 }
 string ReadSet::getReadFileNamePrefix(ReadSetSizeType index) const {

@@ -69,12 +69,6 @@ public:
 	};
 	typedef std::vector<ReadPositionWeight> ReadPositionWeightVector;
 
-	static WeightType minimumWeight;
-	static CountType minimumDepth;
-	static unsigned long discarded;
-
-	static CountType maxCount;
-	static WeightType maxWeightedCount;
 
 	static void resetGlobalCounters() {
 		discarded = 0;
@@ -101,6 +95,40 @@ public:
 		} else
 			return false;
 	}
+	static inline bool useWeighted() {
+		return useWeightedByDefault;
+	}
+	static void setUseWeighted(bool _useWeighted = true) {
+		useWeightedByDefault = _useWeighted;
+	}
+	static void setMinimumWeight(WeightType _minimumWeight) {
+		minimumWeight = _minimumWeight;
+	}
+	static inline WeightType getMinimumWeight() {
+		return minimumWeight;
+	}
+	static void setMinimumDepth(CountType _minimumDepth) {
+		minimumDepth = _minimumDepth;
+	}
+	static inline CountType getMinimumDepth() {
+		return minimumDepth;
+	}
+	static void discard() {
+		discarded++;
+	}
+	static unsigned long getDiscarded() {
+		return discarded;
+	}
+
+private:
+	static WeightType minimumWeight;
+	static CountType minimumDepth;
+	static unsigned long discarded;
+
+	static CountType maxCount;
+	static WeightType maxWeightedCount;
+	static bool useWeightedByDefault;
+
 
 protected:
 	CountType count;

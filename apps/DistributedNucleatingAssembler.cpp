@@ -45,7 +45,7 @@ typedef TrackingDataMinimal4f DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 
 
-class DistributedNucleatingAssemblerOptions : public ContigExtenderOptions {
+class _DistributedNucleatingAssemblerOptions : public _ContigExtenderOptions  {
 public:
 	static std::string getVmatchOptions() {
 		return getVarMap()["vmatch-options"].as<std::string>();
@@ -56,9 +56,12 @@ public:
 	static int getMaxIterations() {
 		return getVarMap()["max-iterations"].as<int>();
 	}
-	static bool parseOpts(int argc, char *argv[]) {
+	static bool getVmatchPreload() {
+		return getVarMap()["vmatch-preload"].as<bool>();
+	}
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
 
-		getDesc().add_options()
+		desc.add_options()
 
 		("max-iterations", po::value<int>()->default_value(1000),
 				"the maximum number of rounds to extend the set of contigs")
@@ -69,11 +72,14 @@ public:
 		("vmatch-index-path", po::value<std::string>()->default_value("."),
 				"top level directory under which to create the vmatch index directories for each rank")
 
+		("vmatch-preload", po::value<bool>()->default_value(false),
+				"pre-load the necessary vmatch files in a mmap")
+
 				;
 
 		bool ret = ContigExtenderOptions::parseOpts(argc, argv);
 
-		if (Options::getOutputFile().empty()) {
+		if (Options::getOptions().getOutputFile().empty()) {
 			LOG_WARN(1, "You must specify an --output");
 			ret = -1;
 		}
@@ -81,7 +87,7 @@ public:
 		return ret;
 	}
 };
-
+typedef OptionsBaseTemplate< _DistributedNucleatingAssemblerOptions > DistributedNucleatingAssemblerOptions;
 
 #include <stdlib.h>
 #include "Utils.h"
@@ -116,7 +122,7 @@ private:
 	Kmernator::MmapSourceVector _mmaps;
 
 public:
-	Vmatch(std::string indexName, ReadSet &inputs, bool cacheIndexes = true) : _indexName(indexName) {
+	Vmatch(std::string indexName, ReadSet &inputs, bool cacheIndexes = DistributedNucleatingAssemblerOptions::getOptions().getVmatchPreload()) : _indexName(indexName) {
 		if (FileUtils::getFileSize(indexName + ".suf") > 0) {
 			LOG_DEBUG(1, "Vmatch(" << indexName << ", reads(" << inputs.getSize() << ")): Index already exists: " << indexName);
 		} else {
@@ -147,9 +153,12 @@ public:
 	MatchResults &match(std::string queryFile, std::string options = "") {
 		double time = MPI_Wtime();
 		_results.clear();
-		std::string cmd("vmatch " + options + " -q " + queryFile + " " + _indexName);
-		LOG_DEBUG(1, "Executing vmatch: " << cmd);
-		IPipestream vmatchOutput(cmd);
+		std::string cmd = "vmatch " + options + " -q " + queryFile + " " + _indexName;
+		if (Log::isDebug(2))
+			cmd = "strace -tt -T " + cmd;
+
+		LOG_DEBUG_OPTIONAL(1, true, "Executing vmatch: " << cmd);
+		IPipestream vmatchOutput(cmd, Log::isDebug(2));
 		std::string line;
 		while (!vmatchOutput.eof()) {
 			getline(vmatchOutput, line);
@@ -159,14 +168,18 @@ public:
 				continue;
 			_results.push_back(FieldsType(line));
 		}
+		vmatchOutput.close();
 		LOG_VERBOSE_OPTIONAL(1, true, "Vmatch::match(,): Found " << _results.size() << " results in " << (MPI_Wtime() - time) << " sec");
+		if (Log::isDebug(2)) {
+			LOG_DEBUG(1, "Vmatch::match() strace:\n" << vmatchOutput.getStdErr());
+		}
 		return _results;
 	}
 	void mapIndexes(bool _flush = true) {
 		LOG_DEBUG(2, "memory mapping vmatch index files for " << _indexName);
 		long size = 0;
 		const std::string suffixes[] = {"prj", "al1", "tis", "ssp", "suf", "lcp", "bck", "sti1"};
-		double time = MPI_Wtime(), time2, firstTime = 0, secondTime = 0;
+		double time = MPI_Wtime(), time2, firstTime = 0;
 		for(int i = 0 ; i < 8 ; i++) {
 			std::string filePath = _indexName + "." + suffixes[i];
 			LOG_DEBUG(3, "mmaping " << filePath);
@@ -178,15 +191,12 @@ public:
 				time2 = MPI_Wtime();
 				flush(mmap.data(), mmap.size());
 				firstTime += MPI_Wtime() - time2;
-				time2 = MPI_Wtime();
-				flush(mmap.data(), mmap.size());
-				secondTime += MPI_Wtime() - time2;
 			}
 
 			_mmaps.push_back(mmap);
 		}
 		LOG_DEBUG(2, MemoryUtils::getMmapUsage());
-		LOG_VERBOSE(1, "Vmatch(): memory mapped " << size << " bytes for " << _indexName << " in " << (MPI_Wtime()-time) << " sec " << firstTime << " " << secondTime);
+		LOG_VERBOSE(1, "Vmatch(): memory mapped " << size << " bytes for " << _indexName << " in " << (MPI_Wtime()-time) << " sec.  touched in " << firstTime << " sec");
 	}
 	void clearMaps() {
 		_mmaps.clear();
@@ -204,12 +214,12 @@ public:
 
 int main(int argc, char *argv[]) {
 	// do not apply artifact filtering by default
-	Options::getSkipArtifactFilter() = 1;
+	Options::getOptions().getSkipArtifactFilter() = 1;
 	// override the default output format!
-	Options::getFormatOutput() = 3;
-	Options::getMmapInput() = 0;
-	Options::getVerbosity() = 1;
-	Options::getMaxThreads() = 1;
+	Options::getOptions().getFormatOutput() = 3;
+	Options::getOptions().getMmapInput() = 0;
+	Options::getOptions().getVerbose() = 1;
+	Options::getOptions().getMaxThreads() = 1;
 	double timing1, timing2;
 
 	int threadProvided;
@@ -225,21 +235,22 @@ int main(int argc, char *argv[]) {
 		if (!DistributedNucleatingAssemblerOptions::parseOpts(argc, argv))
 			throw std::invalid_argument("Please fix the command line arguments");
 
-		if (Options::getGatheredLogs())
-			Logger::setWorld(&world, Options::getDebug() >= 2);
+		if (Options::getOptions().getGatheredLogs())
+			Logger::setWorld(&world, Options::getOptions().getDebug() >= 3);
 
 	} catch (...) {
-		std::cerr << DistributedNucleatingAssemblerOptions::getDesc() << std::endl;
+		std::cerr << OptionsBaseInterface::getDesc() << std::endl;
 		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
 		exit(1);
 	}
 	timing1 = MPI_Wtime();
 
-	Options::FileListType inputFiles = Options::getInputFiles();
-	std::string contigFile = ContigExtenderOptions::getContigFile();
+	OptionsBaseInterface::FileListType inputFiles = Options::getOptions().getInputFiles();
+	std::string contigFile = ContigExtenderOptions::getOptions().getContigFile();
 	std::string finalContigFile;
-	long maxIterations = DistributedNucleatingAssemblerOptions::getMaxIterations();
-	std::string tmpDir = DistributedNucleatingAssemblerOptions::getVmatchIndexPath() + "/";
+	double minimumCoverage = ContigExtenderOptions::getOptions().getMinimumCoverage();
+	long maxIterations = DistributedNucleatingAssemblerOptions::getOptions().getMaxIterations();
+	std::string tmpDir = DistributedNucleatingAssemblerOptions::getOptions().getVmatchIndexPath() + "/";
 	if (world.rank() == 0)
 		mkdir(tmpDir.c_str(), 0777);
 
@@ -257,9 +268,11 @@ int main(int argc, char *argv[]) {
 	std::string rankOutputDir = getRankSubdir(world, tmpDir);
 	Vmatch myVmatch = Vmatch(rankOutputDir + "/myReads", reads);
 
-	SequenceLengthType minKmerSize, maxKmerSize, kmerStep;
+	SequenceLengthType minKmerSize, maxKmerSize, kmerStep, maxExtend;
 	ContigExtender<KS>::getMinMaxKmerSize(reads, minKmerSize, maxKmerSize, kmerStep);
 	maxKmerSize = boost::mpi::all_reduce(world, maxKmerSize, mpi::minimum<SequenceLengthType>());
+	LOG_VERBOSE(1, "Kmer size ranges: " << minKmerSize << "\t" << maxKmerSize << "\t" << kmerStep);
+	maxExtend = maxKmerSize;
 
 	timing1 = timing2; timing2 = MPI_Wtime();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Prepared vmatch indexes in " << (timing2-timing1) << " seconds");
@@ -283,7 +296,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		ReadSet::ReadSetVector contigReadSet(contigs.getGlobalSize(), ReadSet());
-		Vmatch::MatchResults matches = myVmatch.match(contigFile, DistributedNucleatingAssemblerOptions::getVmatchOptions());
+		Vmatch::MatchResults matches = myVmatch.match(contigFile, DistributedNucleatingAssemblerOptions::getOptions().getVmatchOptions());
 
 		double vmatchMatchTime = MPI_Wtime() - startIterationTime;
 
@@ -381,29 +394,37 @@ int main(int argc, char *argv[]) {
         //#pragma omp parallel for
 		for(ReadSet::ReadSetSizeType i = 0; i < contigs.getSize(); i++) {
 			const Read &oldRead = contigs.getRead(i);
-			LOG_VERBOSE_OPTIONAL(2, true, "Extending " << oldRead.getName() << " with " << contigReadSet[i].getSize() << " pool of reads");
-			ReadSet myContig;
-			myContig.append(oldRead);
-			ReadSet newContig;
+			Read newRead;
+			SequenceLengthType oldLen = oldRead.getLength(), newLen = 0;
+			ReadSet::ReadSetSizeType poolSize = contigReadSet[i].getSize();
 			SequenceLengthType myKmerSize = minKmerSize;
-			SequenceLengthType newLen = 0;
-			while (newLen <= oldRead.getLength() && myKmerSize <= maxKmerSize) {
-				newContig = ContigExtender<KS>::extendContigs(myContig, contigReadSet[i], myKmerSize, myKmerSize);
-				newLen = newContig.getRead(0).getLength();
-				myKmerSize += kmerStep;
-			}
-			const Read &newRead = newContig.getRead(0);
+			if (poolSize > minimumCoverage) {
+				LOG_VERBOSE_OPTIONAL(2, true, "Extending " << oldRead.getName() << " with " << poolSize << " pool of reads");
+				ReadSet myContig;
+				myContig.append(oldRead);
+				ReadSet newContig;
 
-			//#pragma omp critical
-			{
-				long deltaLen = newRead.getLength() - oldRead.getLength();
-				extendLog << std::endl << "Extended " << oldRead.getName() << " " << deltaLen << " bases to " << newRead.getLength() << ": " << newRead.getName() << " with " << contigReadSet[i].getSize() << " reads in the pool K " << (myKmerSize-kmerStep);
-				if (deltaLen > 0) {
-					changedContigs.append(newRead);
-				} else {
-					finalContigs.append(oldRead);
+				while (newLen <= oldLen && myKmerSize <= maxKmerSize) {
+					newContig = ContigExtender<KS>::extendContigs(myContig, contigReadSet[i], maxExtend, myKmerSize, myKmerSize);
+					newLen = newContig.getRead(0).getLength();
+					myKmerSize += kmerStep;
 				}
+				newRead = newContig.getRead(0);
+			} else {
+				newRead = oldRead;
 			}
+			long deltaLen = newLen - oldLen;
+			if (deltaLen > 0) {
+				extendLog << std::endl << "Extended " << oldRead.getName() << " " << deltaLen << " bases to " << newRead.getLength() << ": " << newRead.getName() << " with " << poolSize << " reads in the pool K " << (myKmerSize-kmerStep);
+				//#pragma omp critical
+				changedContigs.append(newRead);
+			} else {
+				extendLog << std::endl << "Did not extend " << oldRead.getName() << " with " << poolSize << " reads in the pool";
+				//#pragma omp critical
+				finalContigs.append(oldRead);
+
+			}
+
 		}
 
 		double extendContigsTime = MPI_Wtime() - startIterationTime;
@@ -420,7 +441,7 @@ int main(int argc, char *argv[]) {
 		std::string oldContigFile = contigFile;
 		{
 			// write out the state of the contig files (so far) so we do not loose them
-			DistributedOfstreamMap om(world, Options::getOutputFile(), "");
+			DistributedOfstreamMap om(world, Options::getOptions().getOutputFile(), "");
 			om.setBuildInMemory();
 			if (finalContigs.getGlobalSize() > 0) {
 				std::string fileKey = "final-" + boost::lexical_cast<std::string>(iteration);
@@ -444,7 +465,7 @@ int main(int argc, char *argv[]) {
 				unlink(oldFinalContigFile.c_str());
 			}
 
-			if (ContigExtenderOptions::getContigFile().compare(oldContigFile) != 0) {
+			if (ContigExtenderOptions::getOptions().getContigFile().compare(oldContigFile) != 0) {
 				LOG_VERBOSE_OPTIONAL(1, true, "Removing " << oldContigFile);
 				unlink(oldContigFile.c_str());
 			}
@@ -475,7 +496,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (world.rank() == 0 && !Log::isDebug(1)) {
-		if (ContigExtenderOptions::getContigFile().compare(contigFile) != 0) {
+		if (ContigExtenderOptions::getOptions().getContigFile().compare(contigFile) != 0) {
 			LOG_DEBUG_OPTIONAL(1, true, "Removing " << contigFile);
 			unlink(contigFile.c_str());
 		}
@@ -484,7 +505,7 @@ int main(int argc, char *argv[]) {
 	{
 		// write final contigs (and any unfinished contigs still remaining)
 		std::string tmpFinalFile = finalContigFile;
-		DistributedOfstreamMap om(world, Options::getOutputFile(), "");
+		DistributedOfstreamMap om(world, Options::getOptions().getOutputFile(), "");
 		om.setBuildInMemory();
 		finalContigs.append(contigs);
 		std::string fileKey = "";

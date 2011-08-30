@@ -54,9 +54,9 @@ int main(int argc, char *argv[]) {
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	ReadSet reads;
-	KmerSizer::set(Options::getKmerSize());
+	KmerSizer::set(Options::getOptions().getKmerSize());
 
-	Options::FileListType inputs = Options::getInputFiles();
+	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	cerr << "Reading Input Files" << endl;
 	reads.appendAllFiles(inputs);
 	cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 
 	KS spectrumSolid(0), spectrumNormal(0), spectrumParts(0);
 
-	if (Options::getKmerSize() > 0) {
+	if (Options::getOptions().getKmerSize() > 0) {
 
 	  long numBuckets = 64*64;
 	  cerr << "targeting " << numBuckets << " buckets for reads " << endl;
@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
 
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	  TrackingData::minimumWeight = 0;
+	  TrackingData::setMinimumWeight(0);
 	  TrackingData::resetGlobalCounters();
 
 	  cerr << "building solid spectrum " << endl << MemoryUtils::getMemoryUsage() << endl;
@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
 	  TrackingData::resetGlobalCounters();
 	  cerr << "building normal spectrum in parts" << endl << MemoryUtils::getMemoryUsage() << endl;
 	  spectrumParts = KS(numBuckets);
-	  Kmernator::MmapFileVector mmaps = spectrumParts.buildKmerSpectrumInParts(reads, Options::getBuildPartitions());
+	  Kmernator::MmapFileVector mmaps = spectrumParts.buildKmerSpectrumInParts(reads, Options::getOptions().getBuildPartitions());
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 	  for(Kmer::IndexType i = 0; i < spectrumParts.weak.getNumBuckets(); i++) {
 		  cerr << i << ": " << spectrumParts.weak.getBucket(i).size() << endl;

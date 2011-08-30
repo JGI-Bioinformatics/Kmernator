@@ -40,8 +40,8 @@ typedef DistributedReadSelector<DataType> RS;
 int main(int argc, char *argv[]) {
 
 	// assign defaults
-	Options::getMmapInput() = 0;
-	Options::getVerbosity() = 2;
+	Options::getOptions().getMmapInput() = 0;
+	Options::getOptions().getVerbose() = 2;
 
 	int threadProvided;
 	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
@@ -56,11 +56,11 @@ int main(int argc, char *argv[]) {
 		if (!FilterReadsOptions::parseOpts(argc, argv))
 			throw std::invalid_argument("Please fix the command line arguments");
 
-		if (FilterReadsOptions::getMaxKmerDepth() > 0 && world.size() > 1)
+		if (FilterReadsOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
 			throw std::invalid_argument("Distributed version does not support max-kmer-output-depth option");
 
-		if (Options::getGatheredLogs())
-			Logger::setWorld(&world, Options::getDebug() >= 2);
+		if (Options::getOptions().getGatheredLogs())
+			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);
 
 		validateMPIWorld(world);
 
@@ -72,12 +72,12 @@ int main(int argc, char *argv[]) {
 	world.barrier();
 
 	MemoryUtils::getMemoryUsage();
-	std::string outputFilename = Options::getOutputFile();
+	std::string outputFilename = Options::getOptions().getOutputFile();
 
 	ReadSet reads;
-	KmerSizer::set(Options::getKmerSize());
+	KmerSizer::set(Options::getOptions().getKmerSize());
 
-	Options::FileListType inputs = Options::getInputFiles();
+	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
 	reads.appendAllFiles(inputs, world.rank(), world.size());
@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
 
 	setGlobalReadSetOffsets(world, reads);
 
-	if (Options::getSkipArtifactFilter() == 0) {
+	if (Options::getOptions().getSkipArtifactFilter() == 0) {
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Preparing artifact filter: ");
 
@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	if ( Options::getDeDupMode() > 0 && Options::getDeDupEditDistance() >= 0) {
+	if ( Options::getOptions().getDeDupMode() > 0 && Options::getOptions().getDeDupEditDistance() >= 0) {
 		if (world.size() == 1) {
 			LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
 			unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	long numBuckets = 0;
-	if (Options::getKmerSize() > 0) {
+	if (Options::getOptions().getKmerSize() > 0) {
 
 		numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
 
@@ -147,39 +147,39 @@ int main(int argc, char *argv[]) {
 	}
 	KS spectrum(world, numBuckets);
 	Kmernator::MmapFileVector spectrumMmaps;
-	if (Options::getKmerSize() > 0 && !Options::getLoadKmerMmap().empty()) {
-		spectrum.restoreMmap(Options::getLoadKmerMmap());
-	} else if (Options::getKmerSize() > 0) {
+	if (Options::getOptions().getKmerSize() > 0 && !Options::getOptions().getLoadKmerMmap().empty()) {
+		spectrum.restoreMmap(Options::getOptions().getLoadKmerMmap());
+	} else if (Options::getOptions().getKmerSize() > 0) {
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-		TrackingData::minimumWeight = Options::getMinKmerQuality();
+		TrackingData::setMinimumWeight( Options::getOptions().getMinKmerQuality() );
 
 		spectrum.buildKmerSpectrum(reads);
 		if (Log::isVerbose(1)) {
 			std::string hist = spectrum.getHistogram(false);
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Histogram\n" << hist);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
 		}
 	}
-	if (Options::getKmerSize() > 0) {
+	if (Options::getOptions().getKmerSize() > 0) {
 
-		if (Options::getVariantSigmas() > 0.0) {
+		if (Options::getOptions().getVariantSigmas() > 0.0) {
 			long purgedVariants = spectrum.purgeVariants();
 			long totalPurgedVariants = all_reduce(world, purgedVariants, std::plus<long>());
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << totalPurgedVariants << " kmer variants");
 
 			std::string hist = spectrum.getHistogram(false);
 
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Variant Purged Histogram\n" << hist);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Variant Purged Kmer Histogram\n" << hist);
 			world.barrier();
 
 		}
 
-		if (!outputFilename.empty() && Options::getSaveKmerMmap() > 0) {
+		if (!outputFilename.empty() && Options::getOptions().getSaveKmerMmap() > 0) {
 			spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
         }
 
-		if (Options::getMinDepth() > 1) {
+		if (Options::getOptions().getMinDepth() > 1) {
 			LOG_DEBUG(1, "Clearing singletons from memory");
 			spectrum.singleton.clear();
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
@@ -187,8 +187,8 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	unsigned int minDepth = Options::getMinDepth();
-	unsigned int depthRange = Options::getDepthRange();
+	unsigned int minDepth = Options::getOptions().getMinDepth();
+	unsigned int depthRange = Options::getOptions().getDepthRange();
 	unsigned int depthStep = 2;
 	if (depthRange < minDepth) {
 		depthRange = minDepth;
@@ -197,11 +197,11 @@ int main(int argc, char *argv[]) {
 	if (!outputFilename.empty()) {
 		for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
 			std::string pickOutputFilename = outputFilename;
-			if (Options::getKmerSize() > 0) {
+			if (Options::getOptions().getKmerSize() > 0) {
 				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << thisDepth);
 			} else {
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << Options::getMinReadLength());
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << Options::getOptions().getMinReadLength());
 			}
 			RS selector(world, reads, spectrum.weak);
 			selector.scoreAndTrimReads(minDepth);

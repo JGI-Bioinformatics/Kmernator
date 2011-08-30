@@ -130,9 +130,9 @@ public:
 	_needDuplicateCheck(false),
 	_lastSortedPick(0)
 	{
-		_bimodalSigmas = Options::getBimodalSigmas();
+		_bimodalSigmas = Options::getOptions().getBimodalSigmas();
 		// Let the kernel know how these pages will be used
-		if (Options::getMmapInput() != 0)
+		if (Options::getOptions().getMmapInput() != 0)
 			ReadSet::madviseMmapsNormal();
 
 	}
@@ -431,7 +431,7 @@ public:
 		setNeedDuplicateCheck();
 	}
 
-	ReadSetSizeType pickBestCoveringSubsetPairs(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = Options::getMinReadLength(), bool bothPass = false) {
+	ReadSetSizeType pickBestCoveringSubsetPairs(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = Options::getOptions().getMinReadLength(), bool bothPass = false) {
 		_initPickBestCoveringSubset();
 		ReadSetSizeType picked = 0;
 
@@ -559,7 +559,7 @@ public:
 		return picked;
 	}
 
-	ReadSetSizeType pickBestCoveringSubsetReads(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = Options::getMinReadLength()) {
+	ReadSetSizeType pickBestCoveringSubsetReads(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = Options::getOptions().getMinReadLength()) {
 		_initPickBestCoveringSubset();
 		ReadSetSizeType picked = 0;
 
@@ -741,7 +741,7 @@ public:
 
 	virtual void scoreAndTrimReads(ScoreType minimumKmerScore) {
 		_trims.resize(_reads.getSize());
-		bool useKmers = Options::getKmerSize() != 0;
+		bool useKmers = Options::getOptions().getKmerSize() != 0;
 
 		long readsSize = _reads.getSize();
 		#pragma omp parallel for schedule(dynamic)
@@ -785,26 +785,26 @@ public:
 		_lastSortedPick = _picks.size();
 	}
 
-	long _intendedWriteSize(ReadSetSizeType readIdx, const ReadTrimType &trim, int format = Options::getFormatOutput()) const {
+	long _intendedWriteSize(ReadSetSizeType readIdx, const ReadTrimType &trim, int format = Options::getOptions().getFormatOutput()) const {
 		return _reads.getRead(readIdx).getIntendedWriteSize(trim.trimLength, trim.label, format);
 	}
-	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, int format = Options::getFormatOutput()) const {
+	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, int format = Options::getOptions().getFormatOutput()) const {
 		if (readIdx == ReadSet::MAX_READ_IDX)
 			return os;
 		const ReadTrimType &trim = _trims[readIdx];
 		return _writePickRead(os, readIdx, trim, format);
 	}
-	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, const ReadTrimType &trim, int format = Options::getFormatOutput()) const {
+	std::ostream &_writePickRead(std::ostream &os, ReadSetSizeType readIdx, const ReadTrimType &trim, int format = Options::getOptions().getFormatOutput()) const {
 		return _reads.write(os, readIdx, trim.trimOffset, trim.trimLength, trim.label, format);
 	}
-	std::ostream &writePick(std::ostream &os, ReadSetSizeType pickIdx, int format = Options::getFormatOutput()) const {
+	std::ostream &writePick(std::ostream &os, ReadSetSizeType pickIdx, int format = Options::getOptions().getFormatOutput()) const {
 		const Pair &pair = _picks[pickIdx];
 		_writePickRead(os, pair.read1, format);
 		_writePickRead(os, pair.read2, format);
 		return os;
 	}
 
-	void writePicks(OFM &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = (Options::getSeparateOutputs() == 1), int format = Options::getFormatOutput() ) const {
+	void writePicks(OFM &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = (Options::getOptions().getSeparateOutputs() == 1), int format = Options::getOptions().getFormatOutput() ) const {
 		_writePicks(ofstreamMap, offset, _picks.size() - offset, byInputFile, format);
 	}
 	void _writePicks(OFM &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, int format) const {
@@ -814,7 +814,7 @@ public:
 			writePick(ofstreamMap, pair.read2, byInputFile, format);
 		}
 	}
-	void writePick(OFM &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = (Options::getSeparateOutputs() == 1), int format = Options::getFormatOutput()) const {
+	void writePick(OFM &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = (Options::getOptions().getSeparateOutputs() == 1), int format = Options::getOptions().getFormatOutput()) const {
 		if (readIdx == ReadSet::MAX_READ_IDX)
 			return;
 		const ReadTrimType &trim = _trims[ readIdx ];

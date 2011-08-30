@@ -50,14 +50,15 @@ using namespace std;
 
 typedef KmerSpectrum<TrackingData, TrackingDataWithAllReads> KS;
 
-class Ktest2Options: Options {
+class _Ktest2Options : public OptionsBaseInterface {
 public:
-	static bool parseOpts(int argc, char *argv[]) {
-		getPosDesc().add("kmer-size", 1);
-		getPosDesc().add("input-file", -1);
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+		p.add("kmer-size", 1);
+		p.add("input-file", -1);
 		return Options::parseOpts(argc, argv);
 	}
 };
+typedef OptionsBaseTemplate< _Ktest2Options > Ktest2Options;
 
 int main(int argc, char *argv[]) {
 
@@ -69,9 +70,9 @@ int main(int argc, char *argv[]) {
 	MemoryUtils::getMemoryUsage();
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	KmerSizer::set(Options::getKmerSize());
-	Options::FileListType references = Options::getReferenceFiles();
-	Options::FileListType inputs = Options::getInputFiles();
+	KmerSizer::set(Options::getOptions().getKmerSize());
+	OptionsBaseInterface::FileListType references = Options::getOptions().getReferenceFiles();
+	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 
 	TrackingDataWithAllReads test;
 	test.track(0.99, true, 1, 2);
@@ -119,8 +120,8 @@ int main(int argc, char *argv[]) {
 	KS spectrum(numBuckets);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	TrackingData::minimumDepth = Options::getMinDepth();
-	TrackingData::minimumWeight = Options::getMinKmerQuality();
+	TrackingData::setMinimumDepth( Options::getOptions().getMinDepth() );
+	TrackingData::setMinimumWeight( Options::getOptions().getMinKmerQuality() );
 
 	cerr << "building spectrum" << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;
@@ -132,14 +133,14 @@ int main(int argc, char *argv[]) {
 		//spectrum.getErrorRates(refSpectrum.solid);
 	}
 
-	unsigned long promoted = 0; //spectrum.autoPromote();//spectrum.promote( Options::getSolidQuantile() );
+	unsigned long promoted = 0; //spectrum.autoPromote();//spectrum.promote( Options::getOptions().getSolidQuantile() );
 
 	cerr << "Promoted " << promoted << " kmers" << endl;
 
 	if (refReads.getSize() > 0) {
 		cerr << "Contrasted to reference kmer-spectrum:" << endl;
 		cerr << spectrum.contrastSpectrums(cerr, refSpectrum) << endl;
-	} else if (Options::getVerbosity() > 0) {
+	} else if (Options::getOptions().getVerbose() > 0) {
 		cerr << "Dumping kmer spectrum" << endl;
 		cerr << "Solid:" << endl;
 		for (KS::SolidMapType::Iterator it = spectrum.solid.begin(); it

@@ -73,7 +73,7 @@ public:
 		if (_ifs.fail())
 			throw runtime_error("Could not open : " + _path);
 
-		if (Options::getIgnoreQual()) {
+		if (Options::getOptions().getIgnoreQual()) {
 			qualFilePath.clear();
 			_qs.close();
 		}
@@ -83,7 +83,7 @@ public:
 			if (_qs.fail())
 				throw runtime_error("Could not open : " + qualFilePath);
 		} else {
-		     if (!Options::getIgnoreQual()) {
+		     if (!Options::getOptions().getIgnoreQual()) {
 			   // test for an implicit qual file
 			   _qs.open((_path + ".qual").c_str());
 			   LOG_DEBUG(3, "ReadFileReader() opened " << _path << ".qual " << _qs.good());
@@ -684,7 +684,7 @@ public:
 		string &readQuals() {
 			int threadNum = omp_get_thread_num();
 			nextLine(_qualsBuffer[threadNum]);
-			if (Options::getIgnoreQual()) {
+			if (Options::getOptions().getIgnoreQual()) {
 				_qualsBuffer[threadNum].assign(_qualsBuffer[threadNum].length(), Read::REF_QUAL);
 			}
 			return _qualsBuffer[threadNum];

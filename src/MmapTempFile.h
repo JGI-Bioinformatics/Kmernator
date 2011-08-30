@@ -81,7 +81,7 @@ public:
 	static FileHandle buildNew(size_type size, std::string permanentFile) {
 		std::string filename;
 		if (permanentFile.empty())
-			filename = Options::getTmpDir() + UniqueName::generateUniqueName("/.tmp-Kmmap-");
+			filename = Options::getOptions().getTmpDir() + UniqueName::generateUniqueName("/.tmp-Kmmap-");
 		else
 			filename = permanentFile;
 		LOG_DEBUG_OPTIONAL(1, true, "Creating new file: " << filename << " " << size);

@@ -134,10 +134,10 @@ public:
 	{
 		// set the minimum weight that will be used to track kmers
 		// based on the given options
-		TrackingData::minimumWeight = Options::getMinKmerQuality();
-		TrackingData::minimumDepth = Options::getMinDepth();
+		TrackingData::setMinimumWeight( Options::getOptions().getMinKmerQuality() );
+		TrackingData::setMinimumDepth( Options::getOptions().getMinDepth() );
 		// apply the minimum quality automatically
-		Read::setMinQualityScore( Options::getMinQuality(), Read::FASTQ_START_CHAR );
+		Read::setMinQualityScore( Options::getOptions().getMinQuality(), Read::FASTQ_START_CHAR );
 	}
 	~KmerSpectrum() {}
 	KmerSpectrum(const KmerSpectrum &copy) {
@@ -169,7 +169,7 @@ public:
 			savedMmaps.push_back(solid.store(mmapFilename + "-solid"));
 		}
 		savedMmaps.push_back(weak.store(mmapFilename));
-		if (Options::getMinDepth() <= 1) {
+		if (Options::getOptions().getMinDepth() <= 1) {
 			LOG_VERBOSE(1, "Saving singleton kmer spectrum");
 			savedMmaps.push_back(singleton.store(mmapFilename + "-singleton"));
 		}
@@ -320,7 +320,7 @@ public:
 				singletonElem = spectrum->getIfExistsSingleton(kmer);
 			}
 		}
-		double getCount(bool useWeights = false) const {
+		double getCount(bool useWeights) {
 			if (useWeights) {
 				if (spectrum->hasSolids && solidElem.isValid())
 					return solidElem.value().getWeightedCount();
@@ -341,36 +341,51 @@ public:
 					return 0.0;
 			}
 		}
+		double getCount() const {
+			return getCount(TrackingData::useWeighted());
+		}
 	};
 
 	// returns the count for a single kmer
-	double getCount(const Kmer &kmer, bool useWeights = false) {
+	double getCount(const Kmer &kmer, bool useWeights) {
 		DataPointers pointer(*this, kmer);
 		return getCount(pointer, useWeights);
 	}
-	double getCount(DataPointers &pointer, bool useWeights = false) {
+	double getCount(const Kmer &kmer) {
+		return getCount(kmer, TrackingData::useWeighted());
+	}
+	double getCount(DataPointers &pointer, bool useWeights) {
 		return pointer.getCount(useWeights);
+	}
+	double getCount(DataPointers &pointer) {
+		return getCount(pointer, TrackingData::useWeighted());
 	}
 
 	// sets the counts for each kmer
-	void getCounts(KmerWeights &weights, bool useWeights = false) {
+	void getCounts(KmerWeights &weights, bool useWeights) {
 		DataPointers pointers(*this);
 		for(SequenceLengthType idx = 0; idx < weights.size(); idx++) {
 			pointers.set(weights[idx]);
 			weights.valueAt(idx) = pointers.getCount(useWeights);
 		}
 	}
+	void getCounts(KmerWeights &weights) {
+		getCounts(weights, TrackingData::useWeighted());
+	}
 
-	void consolidate(const Kmer &myKmer, bool useWeights = false) {
+	void consolidate(const Kmer &myKmer, bool useWeights) {
 		// find all matches to this spectrum
 		KmerWeights weights = KmerWeights::permuteBases(myKmer, useWeights);
 		getCounts(weights, useWeights);
 		double myCount = getCount(myKmer, useWeights);
 		consolidate(myKmer, myCount, weights);
 	}
+	void consolidate(const Kmer &myKmer) {
+		consolidate(myKmer, TrackingData::useWeighted());
+	}
 
 	// test and optionally shuffle lesser kmer counts from 1st degree permutations into myKmer
-	void consolidate(const Kmer &myKmer, double myCount, const KmerWeights &weights, bool useWeights = false) {
+	void consolidate(const Kmer &myKmer, double myCount, const KmerWeights &weights, bool useWeights) {
 		SequenceLengthType size = weights.size();
 		for(SequenceLengthType idx = 0; idx < size; idx++) {
 			double testCount = weights.valueAt(idx);
@@ -386,7 +401,9 @@ public:
 			}
 		}
 	}
-
+	void consolidate(const Kmer &myKmer, double myCount, const KmerWeights &weight) {
+		consolidate(myKmer, myCount, weight, TrackingData::useWeighted());
+	}
 	// adds/moves tracking from one kmer to another
 	void migrateKmerData(const Kmer &srcKmer, const Kmer &dstKmer) {
 		bool trans = false;
@@ -847,7 +864,7 @@ public:
 	}
 */
 /*
-	MeanVectorType getErrorRates( SolidMapType &solidReference, bool useWeighted = false ) {
+	MeanVectorType getErrorRates( SolidMapType &solidReference, bool useWeighted) {
 
 		std::vector< StdAccumulatorType > accumulators;
 		for( SolidIterator it = solidReference.begin(); it != solidReference.end(); it++) {
@@ -865,8 +882,12 @@ public:
 		}
 		return rates;
 	}
+	MeanVectorType getErrorRates( SolidMapType &solidReference ) {
+	    return getErrorRates(solidReference, TrackingData::useWeighted());
+	}
 */
-	std::vector< double > getErrorRatios(const Kmer &kmer, bool useWeighted = false) {
+	std::vector< double > getErrorRatios(const Kmer &kmer) {
+		bool useWeighted = TrackingData::useWeighted();
 		std::vector< double > errorRatios;
 		double baseValue;
 		DataPointers pointers( *this, kmer );
@@ -1079,7 +1100,7 @@ public:
 				missingSolid++;
 			}
 		}
-		if (Options::getVerbosity() > 2) {
+		if (Options::getOptions().getVerbose() > 2) {
 			for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
 				if (! reference.solid.exists( it->key() ))
 				os << "TW " << prettyW( it->key(), it->value());
@@ -1175,7 +1196,7 @@ public:
 		os << pos << " reads" << "\t";
 		if (fullStats) {
 			os << ", " << solid.size() << " solid / " << weak.size() << " weak / "
-			<< TrackingData::discarded << " discarded / "
+			<< TrackingData::getDiscarded() << " discarded / "
 			<< singleton.size() + purgedSingletons << " singleton (" << purgedSingletons << " purged) - kmers so far \n";
 		}
 		os << MemoryUtils::getMemoryUsage() << std::endl;
@@ -1261,7 +1282,7 @@ public:
 	}
 
 	unsigned long resetSingletons() {
-		if (Options::getMinDepth() <= 1) {
+		if (Options::getOptions().getMinDepth() <= 1) {
 			return 0;
 		}
 		unsigned long singletonCount = singleton.size();
@@ -1287,16 +1308,16 @@ public:
 			buildKmerSpectrum(store, isSolid);
 
 			// purge
-			purgeMinDepth(Options::getMinDepth());
+			purgeMinDepth(Options::getOptions().getMinDepth());
 
-			if (Options::getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
+			if (Options::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
 				mmaps = storeMmap(mmapFileNamePrefix);
 			}
 			return mmaps;
 		}
 
 		assert(numParts > 1);
-		if (Options::getSaveKmerMmap() == 0) {
+		if (Options::getOptions().getSaveKmerMmap() == 0) {
 			LOG_WARN(1, "Can not honor --save-kmer-mmap=0 option, as spectrum is building in parts. Temporary mmaps will be made at " << mmapFileNamePrefix);
 		}
 		mmaps.resize(numParts*2);
@@ -1309,12 +1330,12 @@ public:
 			buildKmerSpectrum(store, isSolid, partIdx, numParts);
 
 			// purge
-			purgeMinDepth(Options::getMinDepth());
+			purgeMinDepth(Options::getOptions().getMinDepth());
 
 			std::string mmapFilename = mmapFileNamePrefix + boost::lexical_cast<std::string>(partIdx) + "-tmpKmer";
 			mmaps[partIdx] = weak.store(mmapFilename);
 			unlink(mmapFilename.c_str());
-			if (Options::getMinDepth() <= 1) {
+			if (Options::getOptions().getMinDepth() <= 1) {
 				mmaps[partIdx + numParts] = singleton.store(mmapFilename);
 				unlink(mmapFilename.c_str());
 			} else
@@ -1327,7 +1348,7 @@ public:
 
 
 		// first free up memory
-		if (Options::getMinDepth() <= 1) {
+		if (Options::getOptions().getMinDepth() <= 1) {
 			LOG_DEBUG(2, "Clearing memory from singletons\n"  << MemoryUtils::getMemoryUsage());
 		    singleton.clear();
 		}
@@ -1348,12 +1369,12 @@ public:
 			}
 		}
 		weak.swap( const_cast<WeakMapType&>(constWeak) );
-		if (Options::getMinDepth() <= 1)
+		if (Options::getOptions().getMinDepth() <= 1)
 			singleton.swap( const_cast<SingletonMapType&>( constSingleton) );
 
 		LOG_VERBOSE(2, "Finished merging partial spectrums\n" << MemoryUtils::getMemoryUsage());
 
-		if (Options::getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
+		if (Options::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
 			mmaps = storeMmap(mmapFileNamePrefix);
 		}
 
@@ -1507,9 +1528,9 @@ public:
 		    singleton.reset(false);
 		}
 
-		long purgeEvery = Options::getPeriodicSingletonPurge();
+		long purgeEvery = Options::getOptions().getPeriodicSingletonPurge();
 		long purgeCount = 0;
-		long batch = Options::getBatchSize();
+		long batch = Options::getOptions().getBatchSize();
 
 		if (omp_get_max_threads() > 1) {
 #ifdef _USE_OPENMP
@@ -1529,7 +1550,7 @@ public:
 		pointers.set( kmer );
 		WeakElementType &w = pointers.weakElem;
 		if (w.isValid()) {
-			v = w.value().getWeightedCount();
+			v = TrackingData::useWeighted() ? w.value().getWeightedCount() : w.value().getCount();
 			if (v > 0.0 && v < threshold) {
 				w.value().reset();
 				LOG_DEBUG(4, "Purged Variant " << kmer.toFasta() << " " << v);
@@ -1588,7 +1609,7 @@ public:
 		maxDepth = (-b + sqrt(b*b - 4*a*c)) / (2.0*a);
 		return maxDepth;
 	}
-	long purgeVariants(double variantSigmas = Options::getVariantSigmas(), short editDistance = 2) {
+	long purgeVariants(double variantSigmas = Options::getOptions().getVariantSigmas(), short editDistance = 2) {
 		if (variantSigmas < 0.0)
 			return 0;
 		long purgedKmers = 0;
@@ -1597,7 +1618,7 @@ public:
 		if (hasSolids) {
 			throw; // TODO unsupported
 		}
-		double minDepth = Options::getMinDepth();
+		double minDepth = Options::getOptions().getMinDepth();
 		int numThreads = omp_get_max_threads();
 		this->_preVariants(variantSigmas, minDepth);
 		LOG_DEBUG(1, "Purging with " << numThreads << " threads");
@@ -1622,7 +1643,7 @@ public:
 				int threadId = omp_get_thread_num();
 
 				for(WeakIterator it = weak.beginThreaded(); it != weak.endThreaded(); it++) {
-					double count = it->value().getWeightedCount();
+					double count = TrackingData::useWeighted() ? it->value().getWeightedCount() : it->value().getCount();
 					if (count <= lastDepth)
 						continue;
 					if (count > maxDepth) {
@@ -1645,14 +1666,14 @@ public:
 		LOG_DEBUG(3, "Finished processing variants: " << purgedKmers << " waiting for _postVariants");
 		purgedKmers = this->_postVariants(purgedKmers);
 
-		LOG_DEBUG(1, "Purging to min depth: " << Options::getMinDepth());
-		this->purgeMinDepth(Options::getMinDepth());
+		LOG_DEBUG(1, "Purging to min depth: " << Options::getOptions().getMinDepth());
+		this->purgeMinDepth(Options::getOptions().getMinDepth());
 
 		return purgedKmers;
 	}
 
 
-	bool extendContig(std::string &fasta, bool toRight, double minimumCoverage, double minimumConsensus, const KmerSpectrum *excludeSpectrum = NULL) const {
+	bool extendContig(std::string &fasta, bool toRight, double minimumCoverage, double minimumConsensus, double maximumDeltaRatio, const KmerSpectrum *excludeSpectrum = NULL) const {
 
 		SequenceLengthType kmerSize = KmerSizer::getSequenceLength();
 		if (fasta.length() <= kmerSize)
@@ -1660,44 +1681,57 @@ public:
 
 		TEMP_KMER(tmp);
 		std::string dir = toRight ? "Right" : "Left";
+		std::string logHeader = "KmerSpectrum::extendContig(): ";
 
 		std::string kmerString = toRight ? fasta.substr(fasta.length()-kmerSize, kmerSize) : fasta.substr(0, kmerSize);
 		TwoBitSequence::compressSequence(kmerString, tmp.getTwoBitSequence());
-		LOG_DEBUG(2, dir << " extending " << tmp.toFasta());
+		LOG_DEBUG_OPTIONAL(2, true, logHeader << dir << " extending " << tmp.toFasta());
 
+		double edgeKmerValue = 0.0;
+		{
+			TEMP_KMER(tmp2);
+			tmp.buildLeastComplement(tmp2);
+			WeakElementType elem = getIfExistsWeak(tmp2);
+			if (elem.isValid())
+				edgeKmerValue = TrackingData::useWeighted() ? elem.value().getWeightedCount() : elem.value().getCount();
+		}
+		if (edgeKmerValue == 0.0) {
+			LOG_DEBUG_OPTIONAL(1, true, logHeader << " no value for edge kmer...");
+			return false;
+		}
 		KmerWeights ext = KmerWeights::extendKmer(tmp, toRight, true);
 		double total = 0.0;
 		for(unsigned int i = 0; i < ext.size(); i++) {
 			WeakElementType elem = getIfExistsWeak(ext[i]);
 			if (elem.isValid()) {
-				total += ext.valueAt(i) = elem.value().getWeightedCount();
+				total += ext.valueAt(i) = TrackingData::useWeighted() ? elem.value().getWeightedCount() : elem.value().getCount();
 			}
 		}
 		bool wasExtended = false;
 
 		double best = 0;
-		if (total >= minimumCoverage) {
+		if (total >= minimumCoverage && (total / edgeKmerValue) > maximumDeltaRatio) {
 			for(unsigned int i = 0; i < ext.size(); i++) {
 				double consensus = ext.valueAt(i) / total;
 				best = std::max(consensus, best);
 				if (consensus >= minimumConsensus) {
 					// do not allow repeats
 					if (excludeSpectrum != NULL && excludeSpectrum->getIfExistsSolid(ext[i]).isValid()) {
-						LOG_VERBOSE_OPTIONAL(1, true, dir << " detected repeat/exclusion: " << ext[i].toFasta() << " with kmer " << KmerSizer::getSequenceLength());
+						LOG_DEBUG_OPTIONAL(1, true, logHeader << dir << " detected repeat/exclusion: " << ext[i].toFasta() << " with kmer " << KmerSizer::getSequenceLength());
 						break;
 					}
 					char base = TwoBitSequence::uncompressBase(i);
 					fasta.insert(toRight ? fasta.length() : 0, 1, base);
-					LOG_DEBUG_OPTIONAL(2, true, dir << " extended " << base << "\t" << fasta);
+					LOG_DEBUG_OPTIONAL(1, true, logHeader << dir << " extended " << base << "\t" << consensus << " / " << total << " " << ext.toString() << " " << fasta);
 					wasExtended = true;
 					break;
 				}
 			}
 			if (! wasExtended ) {
-				LOG_DEBUG_OPTIONAL(1, true, "Ambiguous " << dir << " extension " << best << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength())
+				LOG_DEBUG_OPTIONAL(1, true, logHeader << "Ambiguous " << dir << " extension " << best << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength())
 			}
 		} else {
-			LOG_DEBUG_OPTIONAL(1, true, "Not enough coverage to extend " << dir << " " << total << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength());
+			LOG_DEBUG_OPTIONAL(1, true, logHeader << "Not enough coverage to extend " << dir << " " << total << " " << ext.toString() << " with kmer " << KmerSizer::getSequenceLength());
 		}
 
 		return wasExtended;

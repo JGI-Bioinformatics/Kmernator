@@ -43,7 +43,7 @@
 
 using namespace std;
 
-class RSOptions : public Options {
+class _RSOptions : public OptionsBaseInterface {
 public:
 	static int getByPair() {
 		return getVarMap()["by-pair"].as<int> ();
@@ -54,10 +54,10 @@ public:
 	static int getMinBytesPerRecord() {
 		return getVarMap()["min-bytes-per-record"].as<int> ();
 	}
-	static bool parseOpts(int argc, char *argv[]) {
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
 		// set options specific to this program
-		getPosDesc().add("input-file", -1);
-		getDesc().add_options()("help", "produce help message")
+		p.add("input-file", -1);
+		desc.add_options()("help", "produce help message")
 				("by-pair", po::value<int>()->default_value(1), "If set, pairs are sampled, if not set, reads are sampled")
 				("num-samples",  po::value<int>()->default_value(1000), "The number of samples to output")
 				("min-bytes-per-record", po::value<int>()->default_value(900), "The minimum number of bytes between two records (should be >2x greatest record size)"
@@ -65,13 +65,14 @@ public:
 
 
 		bool ret = Options::parseOpts(argc, argv);
-		if (getInputFiles().empty() || getInputFiles().size() > 1) {
+		if (Options::getOptions().getInputFiles().empty() || Options::getOptions().getInputFiles().size() > 1) {
 			ret = false;
 			LOG_ERROR(1, "Please specify at a single input file");
 		}
 		return ret;
 	}
 };
+typedef OptionsBaseTemplate< _RSOptions > RSOptions;
 
 unsigned long longRand() {
 	return (((unsigned long)(std::rand() & 0xFF)) << 56) |
@@ -85,22 +86,22 @@ unsigned long longRand() {
 }
 
 int main(int argc, char *argv[]) {
-	Options::getVerbosity() = 0;
-	Options::getMmapInput() = 0;
+	Options::getOptions().getVerbose() = 0;
+	Options::getOptions().getMmapInput() = 0;
 	if (!RSOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
 	std::srand(static_cast<unsigned>(std::time(0)));
-	Options::FileListType inputs = Options::getInputFiles();
-	std::string file = Options::getInputFiles()[0];
+	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+	std::string file = Options::getOptions().getInputFiles()[0];
 	ReadSet reads;
 	LOG_VERBOSE(1, "Selecting Input File positions");
 	ReadFileReader rfr(file, "");
 
 	unsigned long fileSize = rfr.getFileSize();
 	LOG_DEBUG(1, "FileSize of " << file << " is " << fileSize);
-	unsigned long minBytes = RSOptions::getMinBytesPerRecord();
-	unsigned long numSamples = RSOptions::getNumSamples();
+	unsigned long minBytes = RSOptions::getOptions().getMinBytesPerRecord();
+	unsigned long numSamples = RSOptions::getOptions().getNumSamples();
 	if (fileSize * 0.333 < minBytes * numSamples) {
 		minBytes = fileSize * 0.333 / numSamples;
 		LOG_DEBUG(1, "Overriding minBytes: " << minBytes);
@@ -143,7 +144,7 @@ int main(int argc, char *argv[]) {
 		LOG_DEBUG(2, "Picked positions(" << positions.size() << "):" << s);
 	}
 
-	bool byPair = (RSOptions::getByPair() == 1);
+	bool byPair = (RSOptions::getOptions().getByPair() == 1);
 
 	if (rfr.seekToNextRecord(0, true)) {
 		LOG_DEBUG(1, "Reading first two records to determine inherent pairing");
@@ -158,8 +159,8 @@ int main(int argc, char *argv[]) {
 
 	LOG_DEBUG(1, "detecting by pair: " << byPair);
 	OfstreamMap *ofm = NULL;
-	if (!Options::getOutputFile().empty()) {
-		ofm = new OfstreamMap(Options::getOutputFile(), "");
+	if (!Options::getOptions().getOutputFile().empty()) {
+		ofm = new OfstreamMap(Options::getOptions().getOutputFile(), "");
 	}
 	ostream &output = (ofm == NULL ? std::cout : ofm->getOfstream(""));
 

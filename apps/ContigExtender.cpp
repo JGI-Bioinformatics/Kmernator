@@ -49,16 +49,16 @@ typedef KmerSpectrum<DataType, DataType> KS;
 
 int main(int argc, char *argv[]) {
 	// do not apply artifact filtering by default
-	Options::getSkipArtifactFilter() = 1;
+	Options::getOptions().getSkipArtifactFilter() = 1;
 	// override the default output format!
-	Options::getFormatOutput() = 3;
+	Options::getOptions().getFormatOutput() = 3;
 
 	if (!ContigExtenderOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
-	Options::FileListType inputFiles = Options::getInputFiles();
-	Options::FileListType contigFiles;
-	contigFiles.push_back(ContigExtenderOptions::getContigFile());
+	OptionsBaseInterface::FileListType inputFiles = Options::getOptions().getInputFiles();
+	OptionsBaseInterface::FileListType contigFiles;
+	contigFiles.push_back(ContigExtenderOptions::getOptions().getContigFile());
 
 	ReadSet reads;
 	LOG_VERBOSE(1, "Reading Input Files" );
@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
 	contigs.appendAllFiles(contigFiles);
 	LOG_VERBOSE(1, "loaded " << contigs.getSize() << " Reads, " << contigs.getBaseCount() << " Bases ");
 
-	if (Options::getDeDupMode() > 0 && Options::getDeDupEditDistance() >= 0) {
+	if (Options::getOptions().getDeDupMode() > 0 && Options::getOptions().getDeDupEditDistance() >= 0) {
 	  LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
 	  unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
 	  LOG_VERBOSE(1, "filter removed duplicate fragment pair reads: " << duplicateFragments);
@@ -80,9 +80,9 @@ int main(int argc, char *argv[]) {
 
 	ReadSet newContigs = ContigExtender<KS>::extendContigs(contigs, reads);
 
-	string outputFilename = Options::getOutputFile();
+	string outputFilename = Options::getOptions().getOutputFile();
 	OfstreamMap ofmap(outputFilename,"");
-	Options::getFormatOutput() = FormatOutput::FASTA_UNMASKED;
+	Options::getOptions().getFormatOutput() = FormatOutput::FASTA_UNMASKED;
 	if (!outputFilename.empty()) {
 		for(unsigned long i = 0; i < newContigs.getSize(); i++)
 			newContigs.getRead(i).write(ofmap.getOfstream(""));

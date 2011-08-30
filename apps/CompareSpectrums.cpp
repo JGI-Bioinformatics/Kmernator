@@ -49,7 +49,7 @@ typedef KmerSpectrum<DataType, DataType> KS;
 using namespace std;
 
 
-class CS_Options : public Options {
+class _CS_Options : public OptionsBaseInterface {
 
 	// cache of variables (for inline lookup and defaults)
 
@@ -58,13 +58,13 @@ public:
 	static bool getCircularReference() { return  getVarMap()["circular-reference"].as<unsigned int>() != 0; }
 	static bool getPerRead() { return getVarMap()["per-read"].as<unsigned int>() != 0; }
 
-	static bool parseOpts(int argc, char *argv[]) {
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
 		// set options specific to this program
-		getPosDesc().add("kmer-size", 1);
-		getPosDesc().add("reference-file", 1);
-		getPosDesc().add("input-file", -1);
+		p.add("kmer-size", 1);
+		p.add("reference-file", 1);
+		p.add("input-file", -1);
 
-		getDesc().add_options()
+		desc.add_options()
 		 ("circular-reference", po::value<unsigned int>()->default_value(0),
 				 "reference file should be treated as circular")
 		 ("per-read", po::value<unsigned int>()->default_value(0),
@@ -79,6 +79,8 @@ public:
 	}
 
 };
+
+typedef OptionsBaseTemplate< _CS_Options > CS_Options;
 
 typedef std::vector<unsigned long> NumbersVector;
 
@@ -117,16 +119,16 @@ int main(int argc, char *argv[]) {
 	MemoryUtils::getMemoryUsage();
 	ReadSet readSet1, readSet2;
 
-	OfstreamMap om(Options::getOutputFile(), "");
+	OfstreamMap om(Options::getOptions().getOutputFile(), "");
 	std::ostream *outPtr = &std::cout;
-	if (! Options::getOutputFile().empty() ) {
+	if (! Options::getOptions().getOutputFile().empty() ) {
 		outPtr = &om.getOfstream("");
 	}
 
 
-	KmerSizer::set(CS_Options::getKmerSize());
-	CS_Options::FileListType fileList1 = CS_Options::getReferenceFiles();
-	CS_Options::FileListType fileList2 = CS_Options::getInputFiles();
+	KmerSizer::set(Options::getOptions().getKmerSize());
+	OptionsBaseInterface::FileListType fileList1 = Options::getOptions().getReferenceFiles();
+	OptionsBaseInterface::FileListType fileList2 = Options::getOptions().getInputFiles();
 
 	LOG_VERBOSE(1, "Reading 1st file set:");
 	readSet1.appendAllFiles(fileList1);
@@ -134,7 +136,7 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(1, " loaded " << readSet1.getSize() << " Reads, "
 			<< readSet1.getBaseCount() << " Bases ");
 
-	if (CS_Options::getCircularReference())
+	if (CS_Options::getOptions().getCircularReference())
 		readSet1.circularize(KmerSizer::getSequenceLength());
 
 	LOG_VERBOSE(1, "Reading 2nd file set:");
@@ -159,7 +161,7 @@ int main(int argc, char *argv[]) {
 	*outPtr << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
 
 
-	if (CS_Options::getPerRead()) {
+	if (CS_Options::getOptions().getPerRead()) {
 		evaluatePerRead(*outPtr, ks1, ks2, readSet1);
 	} else {
 		LOG_VERBOSE(1, "Building map 1");

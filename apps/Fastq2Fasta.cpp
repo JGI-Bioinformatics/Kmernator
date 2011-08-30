@@ -40,7 +40,7 @@
 
 using namespace std;
 
-class Fastq2FastaOptions : Options {
+class _Fastq2FastaOptions : public OptionsBaseInterface {
 public:
 	static int getSplitSizeMegaBase() {
 		return getVarMap()["split-size-mbase"].as<int> ();
@@ -48,14 +48,14 @@ public:
 	static int getSplitPairs() {
 		return getVarMap()["split-pairs"].as<int>();
 	}
-	static bool parseOpts(int argc, char *argv[]) {
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
 		// override the default output format!
-		Options::getFormatOutput() = 3;
+		Options::getOptions().getFormatOutput() = 3;
 
 		// set options specific to this program
-		getPosDesc().add("input-file", -1);
+		p.add("input-file", -1);
 
-		getDesc().add_options()
+		desc.add_options()
 
 		("split-pairs", po::value<int>()->default_value(0),
 				"if set, pairs will be directed into separate files")
@@ -68,13 +68,14 @@ public:
 		return ret;
 	}
 };
+typedef OptionsBaseTemplate< _Fastq2FastaOptions > Fastq2FastaOptions;
 
 int main(int argc, char *argv[]) {
 	if (!Fastq2FastaOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
-	Options::FileListType inputs = Options::getInputFiles();
-	long splitSizeBase = Fastq2FastaOptions::getSplitSizeMegaBase() * 1000000;
+	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+	long splitSizeBase = Fastq2FastaOptions::getOptions().getSplitSizeMegaBase() * 1000000;
 
 	ReadSet reads;
 	LOG_VERBOSE(1, "Reading Input Files" );
@@ -87,7 +88,7 @@ int main(int argc, char *argv[]) {
 
 	long currentBase = 0;
 	OfstreamMap ofmap;
-	string outputFilename = Options::getOutputFile();
+	string outputFilename = Options::getOptions().getOutputFile();
 	bool hasOfMap = false;
 	ostream *out = &cout;
 
@@ -99,7 +100,7 @@ int main(int argc, char *argv[]) {
 		splitSizeBase = 0; // do not support splitting when no output is specified
 	}
 
-	bool splitPairs = Fastq2FastaOptions::getSplitPairs() != 0;
+	bool splitPairs = Fastq2FastaOptions::getOptions().getSplitPairs() != 0;
 	string filekey;
 	for(ReadSet::ReadSetSizeType pairIdx = 0 ; pairIdx < reads.getPairSize(); pairIdx++) {
 		ReadSet::Pair pair = reads.getPair(pairIdx);

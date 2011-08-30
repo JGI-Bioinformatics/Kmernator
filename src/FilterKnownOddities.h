@@ -66,7 +66,7 @@ private:
 	int numErrors;
 
 public:
-	FilterKnownOddities(int _length = Options::getArtifactFilterMatchLength(), int _numErrors = Options::getArtifactFilterEditDistance()) :
+	FilterKnownOddities(int _length = Options::getOptions().getArtifactFilterMatchLength(), int _numErrors = Options::getOptions().getArtifactFilterEditDistance()) :
 		length(_length), filter(512*1024), numErrors(_numErrors) {
 		if (length > 28) {
 			throw std::invalid_argument("FilterKnownOddities must use 7 bytes or less (<= 28 bases)");
@@ -80,20 +80,20 @@ public:
 
 		std::string fasta = getArtifactFasta();
 		sequences.appendFastaData(fasta);
-		if (Options::getMaskSimpleRepeats()) {
+		if (Options::getOptions().getMaskSimpleRepeats()) {
 			fasta = getSimpleRepeatFasta();
 			getSimpleRepeatBegin() = sequences.getSize();
 			sequences.appendFastaData(fasta);
 			getSimpleRepeatEnd() = sequences.getSize();
 		}
-		if (Options::getPhiXOutput()) {
+		if (Options::getOptions().getPhiXOutput()) {
 			fasta = getPhiX();
 			getPhiXReadIdx() = sequences.getSize();
 			sequences.appendFastaData(fasta);
 		}
 		sequences.circularize(length);
 
-		Options::FileListType artifacts = Options::getArtifactReferenceFiles();
+		OptionsBaseInterface::FileListType artifacts = Options::getOptions().getArtifactReferenceFiles();
 		if (!artifacts.empty()) {
 			getReferenceReadIdx() = sequences.getSize();
 			for(unsigned int i = 0 ; i < artifacts.size(); i++)
@@ -133,7 +133,7 @@ public:
 		LOG_DEBUG(2, "Processed " << sequences.getSize() << " artifact reads. " << filter.size() << " " << MemoryUtils::getMemoryUsage())
 
 		int maxErrors = numErrors;
-		int buildEdits = Options::getBuildArtifactEditsInFilter();
+		int buildEdits = Options::getOptions().getBuildArtifactEditsInFilter();
 		for (int error = 0; error < maxErrors; error++) {
 			if (buildEdits == 1 || (buildEdits == 2 && (filter.size() < 750000))) {
 				numErrors--;
@@ -272,7 +272,7 @@ public:
 
 		// Validate quality scores
 		std::string quals = read.getQuals();
-		char minQual = Read::FASTQ_START_CHAR + Options::getMinQuality();
+		char minQual = Read::FASTQ_START_CHAR + Options::getOptions().getMinQuality();
 		for(unsigned int i = 0 ; i < quals.size() ; i++) {
 			if (quals[i] < minQual) {
 				minAffected = maxQualityPass = i;
@@ -361,7 +361,7 @@ public:
 		if (value < sequences.getSize()) {
 			return sequences.getRead(value).getName();
 		} else {
-			return std::string("MinQualityTrim" + boost::lexical_cast<std::string>(Options::getMinQuality()));
+			return std::string("MinQualityTrim" + boost::lexical_cast<std::string>(Options::getOptions().getMinQuality()));
 		}
 	}
 	void recordAffectedRead(ReadSet &reads, Recorder &recorder, FilterResults results1, ReadSet::ReadSetSizeType readIdx1, FilterResults results2 = FilterResults(), ReadSet::ReadSetSizeType readIdx2 = ReadSet::MAX_READ_IDX) {
@@ -467,17 +467,17 @@ public:
 		Recorder recorder( *this );
 		unsigned long affectedCount = 0;
 
-		OfstreamMap _omPhiX(Options::getOutputFile(), "-PhiX.fastq");
-		if (Options::getPhiXOutput()) {
+		OfstreamMap _omPhiX(Options::getOptions().getOutputFile(), "-PhiX.fastq");
+		if (Options::getOptions().getPhiXOutput()) {
 			recorder.omPhiX = &_omPhiX;
 		}
-		OfstreamMap _omArtifact(Options::getOutputFile(), "-Artifact.fastq");
-		if (Options::getFilterOutput()) {
+		OfstreamMap _omArtifact(Options::getOptions().getOutputFile(), "-Artifact.fastq");
+		if (Options::getOptions().getFilterOutput()) {
 			recorder.omArtifact = &_omArtifact;
 		}
 
 		SequenceLengthType &minReadPos = recorder.minReadPos;
-		minReadPos = Options::getMinReadLength();
+		minReadPos = Options::getOptions().getMinReadLength();
 		if (minReadPos != 0 && minReadPos != MAX_SEQUENCE_LENGTH) {
 			minReadPos -= 1;
 		}

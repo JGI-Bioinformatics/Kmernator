@@ -47,26 +47,120 @@ namespace po = boost::program_options;
 
 #define PASSES_LENGTH(length, readLength, minimumLength) ((minimumLength == MAX_SEQUENCE_LENGTH) ? (length == readLength) : (length >= minimumLength))
 
-// put common, universal options in this class
-// extend the class for specific options for each application
-class Options {
+class OptionsInstance {
+public:
+	static po::options_description &getDesc() {
+		static po::options_description _desc;
+		return _desc;
+	}
+	static po::positional_options_description &getPosDesc() {
+		static po::positional_options_description _p;
+		return _p;
+	}
+	static po::variables_map &getVarMap() {
+		static po::variables_map _vm;
+		return _vm;
+	}
+private:
+	OptionsInstance();
+	~OptionsInstance();
+};
+
+class OptionsBaseInterface {
 public:
 	typedef std::vector<std::string> StringListType;
 	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
 	typedef StringListType FileListType;
 
-protected:
-	static inline Options &getOptions() {
-		static Options singleton;
-		return singleton;
+	static po::options_description &getDesc() {
+		return OptionsInstance::getDesc();
+	}
+	static po::positional_options_description &getPosDesc() {
+		return OptionsInstance::getPosDesc();
+	}
+	static po::variables_map &getVarMap() {
+		return OptionsInstance::getVarMap();
+	}
+	static unsigned int &getVerbose() {
+		return Log::Verbose().setLevel();
+	}
+	static unsigned int &getDebug() {
+		return Log::Debug().setLevel();
+	}
+	template<typename U>
+	static void setOpt(std::string key, U &val, bool print = false) {
+		po::variables_map &vm = getVarMap();
+		if (vm.count(key.c_str())) {
+			val = vm[key.c_str()].as<U>();
+			if (print) {
+				LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " is: " << val );
+			}
+		} else if (print) {
+			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " was not specified.");
+		}
+	}
+	static std::string getHostname() {
+		char hostname[256];
+		gethostname(hostname, 256);
+		return std::string(hostname);
 	}
 
-private:
-	po::options_description desc;
-	po::positional_options_description p;
-	po::variables_map vm;
+	virtual void _setOptions(po::options_description &desc, po::positional_options_description &p) {}
+	virtual bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+		return true;
+	}
+};
 
-	// cache of variables (for inline lookup and defaults)
+// Singleton template class
+template <class T>
+class OptionsBaseTemplate {
+public:
+	static T& getOptions() {
+		static T _instance;
+		return _instance;
+	}
+	static po::options_description &getDesc() {
+		return OptionsInstance::getDesc();
+	}
+	static po::positional_options_description &getPosDesc() {
+		return OptionsInstance::getPosDesc();
+	}
+	static po::variables_map &getVarMap() {
+		return OptionsInstance::getVarMap();
+	}
+	static bool parseOpts(int argc, char *argv[]) {
+		getOptions()._setOptions(getDesc(), getPosDesc());
+		return getOptions()._parseOpts(getDesc(), getPosDesc(), getVarMap(),
+				argc, argv);
+	}
+
+
+protected:
+
+	OptionsBaseTemplate() {} // hidden constructor
+	virtual ~OptionsBaseTemplate() {}  // hidden destructor
+	OptionsBaseTemplate(OptionsBaseTemplate const&); // disabled
+	OptionsBaseTemplate& operator=(OptionsBaseTemplate const&); // disabled
+};
+
+class _GeneralOptions : public OptionsBaseInterface {
+public:
+	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), buildOutputInMemory(false), kmerSize(21), minKmerQuality(0.10),
+	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
+	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
+	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
+	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
+	mmapInput(1), saveKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
+	{
+		 char *tmpPath;
+		 tmpPath = getenv ("TMPDIR");
+		 if (tmpPath != NULL) {
+			 tmpDir = std::string(tmpPath);
+		 }
+	}
+	virtual ~_GeneralOptions() {}
+
+private:
     int          maxThreads;
 	FileListType referenceFiles;
 	FileListType inputFiles;
@@ -109,187 +203,12 @@ private:
 	unsigned int batchSize;
 	unsigned int separateOutputs;
 
-	Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), buildOutputInMemory(false), kmerSize(21), minKmerQuality(0.10),
-	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
-	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
-	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
-	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
-	mmapInput(1), saveKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
-	{
-		 char *tmpPath;
-		 tmpPath = getenv ("TMPDIR");
-		 if (tmpPath != NULL) {
-			 tmpDir = std::string(tmpPath);
-		 }
-	}
-
 public:
-
-	static inline int &getMaxThreads() {
-		return getOptions().maxThreads;
-	}
-	static inline FileListType &getReferenceFiles() {
-		return getOptions().referenceFiles;
-	}
-	static inline FileListType &getInputFiles() {
-		return getOptions().inputFiles;
-	}
-	static inline std::string &getOutputFile() {
-		return getOptions().outputFile;
-	}
-	static inline std::string &getLogFile() {
-		return getOptions().logFile;
-	}
-	static inline std::string &getTmpDir() {
-		return getOptions().tmpDir;
-	}
-	static inline unsigned int &getFormatOutput() {
-		return getOptions().formatOutput;
-	}
-	static inline bool &getBuildOutputInMemory() {
-		return getOptions().buildOutputInMemory;
-	}
-	static inline unsigned int &getKmerSize() {
-		return getOptions().kmerSize;
-	}
-	static inline double &getMinKmerQuality() {
-		return getOptions().minKmerQuality;
-	}
-	static inline unsigned int &getVerbosity() {
-		return Log::Verbose().setLevel();
-	}
-	static inline unsigned int &getDebug() {
-		return Log::Debug().setLevel();
-	}
-	static inline unsigned int &getMinQuality() {
-		return getOptions().minQuality;
-	}
-	static inline unsigned int &getMinDepth() {
-		return getOptions().minDepth;
-	}
-	static inline unsigned int &getDepthRange() {
-		return getOptions().depthRange;
-	}
-	static inline unsigned int &getMinReadLength() {
-		return getOptions().minReadLength;
-	}
-	static inline double &getBimodalSigmas() {
-		return getOptions().bimodalSigmas;
-	}
-	static inline double &getVariantSigmas() {
-		return getOptions().variantSigmas;
-	}
-	static inline unsigned int &getIgnoreQual() {
-		return getOptions().ignoreQual;
-	}
-	static inline unsigned int &getPeriodicSingletonPurge() {
-		return getOptions().periodicSingletonPurge;
-	}
-	static inline unsigned int &getSkipArtifactFilter() {
-		return getOptions().skipArtifactFilter;
-	}
-	static inline unsigned int &getArtifactFilterMatchLength() {
-		return getOptions().artifactFilterMatchLength;
-	}
-	static inline unsigned int &getArtifactFilterEditDistance() {
-		return getOptions().artifactFilterEditDistance;
-	}
-	static inline unsigned int &getBuildArtifactEditsInFilter() {
-		return getOptions().buildArtifactEditsInFilter;
-	}
-	static inline unsigned int &getMaskSimpleRepeats() {
-		return getOptions().maskSimpleRepeats;
-	}
-	static inline unsigned int &getPhiXOutput(){
-		return getOptions().phiXOutput;
-	}
-	static inline FileListType &getArtifactReferenceFiles() {
-		return getOptions().artifactReferenceFiles;
-	}
-	static inline unsigned int &getFilterOutput(){
-		return getOptions().filterOutput;
-	}
-	static inline unsigned int &getDeDupMode() {
-		return getOptions().deDupMode;
-	}
-	static inline unsigned int &getDeDupSingle() {
-		return getOptions().deDupSingle;
-	}
-	static inline unsigned int &getDeDupEditDistance() {
-		return getOptions().deDupEditDistance;
-	}
-	static inline unsigned int &getDeDupStartOffset() {
-		return getOptions().deDupStartOffset;
-	}
-	static inline unsigned int &getDeDupLength() {
-		return getOptions().deDupLength;
-	}
-	static inline unsigned int &getMmapInput() {
-		return getOptions().mmapInput;
-	}
-	static inline unsigned int &getSaveKmerMmap() {
-		return getOptions().saveKmerMmap;
-	}
-	static inline std::string  &getLoadKmerMmap() {
-		return getOptions().loadKmerMmap;
-	}
-	static inline unsigned int &getBuildPartitions() {
-		return getOptions().buildPartitions;
-	}
-	static inline unsigned int &getGCHeatMap() {
-		return getOptions().gcHeatMap;
-	}
-	static inline unsigned int &getGatheredLogs() {
-		return getOptions().gatheredLogs;
-	}
-	static inline unsigned int &getBatchSize() {
-		return getOptions().batchSize;
-	}
-	static inline unsigned int &getSeparateOutputs() {
-		return getOptions().separateOutputs;
-	}
-
-	static std::string &getInputFileSubstring(unsigned int fileIdx) {
-		if (getOptions().inputFilePrefixes.empty()) {
-			// populate all the file indexes
-			for(FileListType::iterator it = getOptions().inputFiles.begin(); it != getOptions().inputFiles.end(); it++) {
-				size_t start = it->find_last_of('/');
-				if (start == std::string::npos)
-					start = 0;
-				else
-					start++;
-				size_t end = it->find_last_of('.');
-				if (end == std::string::npos)
-					end = it->length() - 1;
-
-				std::string fileprefix = it->substr( start, end-start );
-				LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "InputFilePrefix: " << fileprefix );
-				
-				getOptions().inputFilePrefixes.push_back( fileprefix );
-			}
-		}
-		return getOptions().inputFilePrefixes[fileIdx];
-	}
-
-	static void validateOMPThreads() {
-#ifdef _USE_OPENMP
-		int maxThreads = omp_get_max_threads();
-		LOG_DEBUG(2, "validating OpenMP threads: " << maxThreads);
-
-		if (getMaxThreads() > maxThreads) {
-			LOG_DEBUG(2, "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads);
-			getMaxThreads() = maxThreads;
-		}
-		omp_set_num_threads(getMaxThreads());
-#endif
-	}
-
-protected:
-	void setOptions() {
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 
 		desc.add_options()("help", "produce help message")
 
-		("verbose", po::value<unsigned int>()->default_value(getVerbosity()),
+		("verbose", po::value<unsigned int>()->default_value(getVerbose()),
 				"level of verbosity (0+)")
 
 		("debug", po::value<unsigned int>()->default_value(getDebug()),
@@ -410,50 +329,9 @@ protected:
 		;
 
 	}
-
-public:
-
-	static std::string getHostname() {
-		char hostname[256];
-		gethostname(hostname, 256);
-		return std::string(hostname);
-	}
-
-	template<typename T>
-	static void setOpt(std::string key, T &val, bool print = false) {
-		po::variables_map &vm = getOptions().vm;
-		if (vm.count(key.c_str())) {
-			val = vm[key.c_str()].as<T>();
-			if (print) {
-				LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " is: " << val );
-			}
-		} else if (print) {
-			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " was not specified.");
-		}
-
-	}
-
-	static po::options_description &getDesc() {
-		return getOptions().desc;
-	}
-	static po::positional_options_description &getPosDesc() {
-		return getOptions().p;
-	}
-	static po::variables_map &getVarMap() {
-		return getOptions().vm;
-	}
-
-	static bool parseOpts(int argc, char *argv[]) {
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
 		try {
-			getOptions().setOptions();
-
-			po::options_description & desc = getDesc();
-			po::positional_options_description & p = getPosDesc();
-
-			po::variables_map & vm = getVarMap();
-			po::store(
-					po::command_line_parser(argc, argv). options(desc).positional(
-							p).run(), vm);
+			po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
 			po::notify(vm);
 
 			if (vm.count("help")) {
@@ -462,18 +340,18 @@ public:
 			}
 
 
-			setOpt<unsigned int>("verbose", getVerbosity());
+			setOpt<unsigned int>("verbose", getVerbose());
 			setOpt<unsigned int>("debug", getDebug());
 			setOpt<std::string>("log-file", getLogFile(), false);
 			if ( ! getLogFile().empty() ) {
-				getOptions().logFileStream.reset( new std::ofstream(getLogFile().c_str(), std::ios_base::out | std::ios_base::ate) );
-				Log::Verbose().setOstream( *getOptions().logFileStream );
-				Log::Debug().setOstream( *getOptions().logFileStream );
+				logFileStream.reset( new std::ofstream(getLogFile().c_str(), std::ios_base::out | std::ios_base::ate) );
+				Log::Verbose().setOstream( *logFileStream );
+				Log::Debug().setOstream( *logFileStream );
 				LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "log-file is: " << getLogFile().c_str());
 			}
 
-			if (getVerbosity() > 0)
-				LOG_VERBOSE(1, "Starting on " << getHostname());
+			if (getVerbose() > 0)
+				LOG_VERBOSE(1, "Starting on " << OptionsBaseInterface::getHostname());
 
 			bool print = Logger::isMaster() && ((Log::isVerbose(1) || Log::isDebug(1)));
 
@@ -636,146 +514,452 @@ public:
 
 		return true;
 	}
+
+public:
+	std::string &getInputFileSubstring(unsigned int fileIdx) {
+		if (inputFilePrefixes.empty()) {
+			// populate all the file indexes
+			for(FileListType::iterator it = inputFiles.begin(); it != inputFiles.end(); it++) {
+				size_t start = it->find_last_of('/');
+				if (start == std::string::npos)
+					start = 0;
+				else
+					start++;
+				size_t end = it->find_last_of('.');
+				if (end == std::string::npos)
+					end = it->length() - 1;
+
+				std::string fileprefix = it->substr( start, end-start );
+				LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "InputFilePrefix: " << fileprefix );
+
+				inputFilePrefixes.push_back( fileprefix );
+			}
+		}
+		return inputFilePrefixes[fileIdx];
+	}
+
+	void validateOMPThreads() {
+#ifdef _USE_OPENMP
+		int maxThreads = omp_get_max_threads();
+		LOG_DEBUG(2, "validating OpenMP threads: " << maxThreads);
+
+		if (getMaxThreads() > maxThreads) {
+			LOG_DEBUG(2, "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads);
+			getMaxThreads() = maxThreads;
+		}
+		omp_set_num_threads(getMaxThreads());
+#endif
+	}
+
+	unsigned int &getArtifactFilterEditDistance()
+	{
+	    return artifactFilterEditDistance;
+	}
+
+	unsigned int &getArtifactFilterMatchLength()
+	{
+	    return artifactFilterMatchLength;
+	}
+
+	FileListType &getArtifactReferenceFiles()
+	{
+	    return artifactReferenceFiles;
+	}
+
+	unsigned int &getBatchSize()
+	{
+	    return batchSize;
+	}
+
+	double &getBimodalSigmas()
+	{
+	    return bimodalSigmas;
+	}
+
+	unsigned int &getBuildArtifactEditsInFilter()
+	{
+	    return buildArtifactEditsInFilter;
+	}
+
+	bool &getBuildOutputInMemory()
+	{
+	    return buildOutputInMemory;
+	}
+
+	unsigned int &getBuildPartitions()
+	{
+	    return buildPartitions;
+	}
+
+	unsigned int &getDeDupEditDistance()
+	{
+	    return deDupEditDistance;
+	}
+
+	unsigned int &getDeDupLength()
+	{
+	    return deDupLength;
+	}
+
+	unsigned int &getDeDupMode()
+	{
+	    return deDupMode;
+	}
+
+	unsigned int &getDeDupSingle()
+	{
+	    return deDupSingle;
+	}
+
+	unsigned int &getDeDupStartOffset()
+	{
+	    return deDupStartOffset;
+	}
+
+	unsigned int &getDepthRange()
+	{
+	    return depthRange;
+	}
+
+	unsigned int &getFilterOutput()
+	{
+	    return filterOutput;
+	}
+
+	unsigned int &getFormatOutput()
+	{
+	    return formatOutput;
+	}
+
+	unsigned int &getGatheredLogs()
+	{
+	    return gatheredLogs;
+	}
+
+	unsigned int &getGCHeatMap()
+	{
+	    return gcHeatMap;
+	}
+
+	unsigned int &getIgnoreQual()
+	{
+	    return ignoreQual;
+	}
+
+	FileListType &getInputFilePrefixes()
+	{
+	    return inputFilePrefixes;
+	}
+
+	FileListType &getInputFiles()
+	{
+	    return inputFiles;
+	}
+
+	unsigned int &getKmerSize()
+	{
+	    return kmerSize;
+	}
+
+	std::string &getLoadKmerMmap()
+	{
+	    return loadKmerMmap;
+	}
+
+	std::string &getLogFile()
+	{
+	    return logFile;
+	}
+
+	OStreamPtr &getLogFileStream()
+	{
+	    return logFileStream;
+	}
+
+	unsigned int &getMaskSimpleRepeats()
+	{
+	    return maskSimpleRepeats;
+	}
+
+	int &getMaxThreads()
+	{
+	    return maxThreads;
+	}
+
+	unsigned int &getMinDepth()
+	{
+	    return minDepth;
+	}
+
+	double &getMinKmerQuality()
+	{
+	    return minKmerQuality;
+	}
+
+	unsigned int &getMinQuality()
+	{
+	    return minQuality;
+	}
+
+	unsigned int &getMinReadLength()
+	{
+	    return minReadLength;
+	}
+
+	unsigned int &getMmapInput()
+	{
+	    return mmapInput;
+	}
+
+	std::string &getOutputFile()
+	{
+	    return outputFile;
+	}
+
+	unsigned int &getPeriodicSingletonPurge()
+	{
+	    return periodicSingletonPurge;
+	}
+
+	unsigned int &getPhiXOutput()
+	{
+	    return phiXOutput;
+	}
+
+	FileListType &getReferenceFiles()
+	{
+	    return referenceFiles;
+	}
+
+	unsigned int &getSaveKmerMmap()
+	{
+	    return saveKmerMmap;
+	}
+
+	unsigned int &getSeparateOutputs()
+	{
+	    return separateOutputs;
+	}
+
+	unsigned int &getSkipArtifactFilter()
+	{
+	    return skipArtifactFilter;
+	}
+
+	std::string &getTmpDir()
+	{
+	    return tmpDir;
+	}
+
+	double &getVariantSigmas()
+	{
+	    return variantSigmas;
+	}
+
+
+};
+
+typedef OptionsBaseTemplate< _GeneralOptions > Options;
+
+// extend the class for specific options for each application
+// put common, universal options in this class
+class _Options : public OptionsBaseInterface, public OptionsBaseTemplate<_Options> {
+	friend class OptionsBaseTemplate<_Options>;
+private:
+	// cache of variables (for inline lookup and defaults)
+    int          maxThreads;
+	FileListType referenceFiles;
+	FileListType inputFiles;
+	FileListType inputFilePrefixes;
+	std::string  outputFile;
+	std::string  logFile;
+	OStreamPtr   logFileStream;
+	std::string  tmpDir;
+	unsigned int formatOutput;
+	bool         buildOutputInMemory;
+	unsigned int kmerSize;
+	double       minKmerQuality;
+	unsigned int minQuality;
+	unsigned int minDepth;
+	unsigned int depthRange;
+	unsigned int minReadLength;
+	double       bimodalSigmas;
+	double       variantSigmas;
+	unsigned int ignoreQual;
+	unsigned int periodicSingletonPurge;
+	unsigned int skipArtifactFilter;
+	unsigned int artifactFilterMatchLength;
+	unsigned int artifactFilterEditDistance;
+	unsigned int buildArtifactEditsInFilter;
+	unsigned int maskSimpleRepeats;
+	unsigned int phiXOutput;
+	FileListType artifactReferenceFiles;
+	unsigned int filterOutput;
+	unsigned int deDupMode;
+	unsigned int deDupSingle;
+	unsigned int deDupEditDistance;
+	unsigned int deDupStartOffset;
+	unsigned int deDupLength;
+	unsigned int mmapInput;
+	unsigned int saveKmerMmap;
+	std::string  loadKmerMmap;
+	unsigned int buildPartitions;
+	unsigned int gcHeatMap;
+	unsigned int gatheredLogs;
+	unsigned int batchSize;
+	unsigned int separateOutputs;
+
+	_Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), buildOutputInMemory(false), kmerSize(21), minKmerQuality(0.10),
+	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
+	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
+	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
+	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
+	mmapInput(1), saveKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
+	{
+		 char *tmpPath;
+		 tmpPath = getenv ("TMPDIR");
+		 if (tmpPath != NULL) {
+			 tmpDir = std::string(tmpPath);
+		 }
+	}
+	virtual ~_Options() {}
+
+public:
+
+	static inline int &getMaxThreads() {
+		return getOptions().maxThreads;
+	}
+	static inline FileListType &getReferenceFiles() {
+		return getOptions().referenceFiles;
+	}
+	static inline FileListType &getInputFiles() {
+		return getOptions().inputFiles;
+	}
+	static inline std::string &getOutputFile() {
+		return getOptions().outputFile;
+	}
+	static inline std::string &getLogFile() {
+		return getOptions().logFile;
+	}
+	static inline std::string &getTmpDir() {
+		return getOptions().tmpDir;
+	}
+	static inline unsigned int &getFormatOutput() {
+		return getOptions().formatOutput;
+	}
+	static inline bool &getBuildOutputInMemory() {
+		return getOptions().buildOutputInMemory;
+	}
+	static inline unsigned int &getKmerSize() {
+		return getOptions().kmerSize;
+	}
+	static inline double &getMinKmerQuality() {
+		return getOptions().minKmerQuality;
+	}
+	static inline unsigned int &getVerbose() {
+		return Log::Verbose().setLevel();
+	}
+	static inline unsigned int &getDebug() {
+		return Log::Debug().setLevel();
+	}
+	static inline unsigned int &getMinQuality() {
+		return getOptions().minQuality;
+	}
+	static inline unsigned int &getMinDepth() {
+		return getOptions().minDepth;
+	}
+	static inline unsigned int &getDepthRange() {
+		return getOptions().depthRange;
+	}
+	static inline unsigned int &getMinReadLength() {
+		return getOptions().minReadLength;
+	}
+	static inline double &getBimodalSigmas() {
+		return getOptions().bimodalSigmas;
+	}
+	static inline double &getVariantSigmas() {
+		return getOptions().variantSigmas;
+	}
+	static inline unsigned int &getIgnoreQual() {
+		return getOptions().ignoreQual;
+	}
+	static inline unsigned int &getPeriodicSingletonPurge() {
+		return getOptions().periodicSingletonPurge;
+	}
+	static inline unsigned int &getSkipArtifactFilter() {
+		return getOptions().skipArtifactFilter;
+	}
+	static inline unsigned int &getArtifactFilterMatchLength() {
+		return getOptions().artifactFilterMatchLength;
+	}
+	static inline unsigned int &getArtifactFilterEditDistance() {
+		return getOptions().artifactFilterEditDistance;
+	}
+	static inline unsigned int &getBuildArtifactEditsInFilter() {
+		return getOptions().buildArtifactEditsInFilter;
+	}
+	static inline unsigned int &getMaskSimpleRepeats() {
+		return getOptions().maskSimpleRepeats;
+	}
+	static inline unsigned int &getPhiXOutput(){
+		return getOptions().phiXOutput;
+	}
+	static inline FileListType &getArtifactReferenceFiles() {
+		return getOptions().artifactReferenceFiles;
+	}
+	static inline unsigned int &getFilterOutput(){
+		return getOptions().filterOutput;
+	}
+	static inline unsigned int &getDeDupMode() {
+		return getOptions().deDupMode;
+	}
+	static inline unsigned int &getDeDupSingle() {
+		return getOptions().deDupSingle;
+	}
+	static inline unsigned int &getDeDupEditDistance() {
+		return getOptions().deDupEditDistance;
+	}
+	static inline unsigned int &getDeDupStartOffset() {
+		return getOptions().deDupStartOffset;
+	}
+	static inline unsigned int &getDeDupLength() {
+		return getOptions().deDupLength;
+	}
+	static inline unsigned int &getMmapInput() {
+		return getOptions().mmapInput;
+	}
+	static inline unsigned int &getSaveKmerMmap() {
+		return getOptions().saveKmerMmap;
+	}
+	static inline std::string  &getLoadKmerMmap() {
+		return getOptions().loadKmerMmap;
+	}
+	static inline unsigned int &getBuildPartitions() {
+		return getOptions().buildPartitions;
+	}
+	static inline unsigned int &getGCHeatMap() {
+		return getOptions().gcHeatMap;
+	}
+	static inline unsigned int &getGatheredLogs() {
+		return getOptions().gatheredLogs;
+	}
+	static inline unsigned int &getBatchSize() {
+		return getOptions().batchSize;
+	}
+	static inline unsigned int &getSeparateOutputs() {
+		return getOptions().separateOutputs;
+	}
+
+
+protected:
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+
+	}
+
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+		return false;
+	}
 };
 
 #endif
 
-//
-// $Log: Options.h,v $
-// Revision 1.19  2010-08-18 17:50:39  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.18.4.1  2010-07-21 18:06:11  regan
-// added options to change unique mask offset and length for de-duplication
-//
-// Revision 1.18  2010-06-23 22:15:15  regan
-// added --threads option
-//
-// Revision 1.17  2010-06-23 20:58:02  regan
-// fixed minimum read length logic
-//
-// Revision 1.16  2010-05-24 21:48:46  regan
-// merged changes from RNADedupMods-20100518
-//
-// Revision 1.15.2.2  2010-05-19 22:43:49  regan
-// bugfixes
-//
-// Revision 1.15.2.1  2010-05-19 00:20:46  regan
-// refactored fomat output options
-// added options to fastq2fasta
-//
-// Revision 1.15  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.14.6.4  2010-05-18 16:43:47  regan
-// added GC heatmap output .. still refining
-//
-// Revision 1.14.6.3  2010-05-12 20:47:06  regan
-// minor refactor.  adjusted defaults
-//
-// Revision 1.14.6.2  2010-05-12 19:52:10  regan
-// refactored options
-// removed obsolete parameters
-// added new ones
-//
-// Revision 1.14.6.1  2010-05-07 22:59:32  regan
-// refactored base type declarations
-//
-// Revision 1.14  2010-05-04 23:49:21  regan
-// merged changes for FixConsensusOutput-201000504
-//
-// Revision 1.13.6.2  2010-05-04 23:41:30  regan
-// checkpoint
-//
-// Revision 1.13.6.1  2010-05-04 21:51:47  regan
-// checkpoint
-//
-// Revision 1.13  2010-05-01 21:57:53  regan
-// merged head with serial threaded build partitioning
-//
-// Revision 1.12.4.14  2010-05-01 05:57:40  regan
-// made edit distance for dedup fragment pairs optional
-//
-// Revision 1.12.4.13  2010-04-30 16:33:21  regan
-// better option descriptions
-//
-// Revision 1.12.4.12  2010-04-29 20:33:29  regan
-// bugfix
-//
-// Revision 1.12.4.11  2010-04-29 16:54:07  regan
-// bugfixes
-//
-// Revision 1.12.4.10  2010-04-29 06:58:55  regan
-// modified default optoins
-//
-// Revision 1.12.4.9  2010-04-29 04:26:44  regan
-// phix changes
-//
-// Revision 1.12.4.8  2010-04-28 22:28:10  regan
-// refactored writing routines
-//
-// Revision 1.12.4.7  2010-04-28 16:57:00  regan
-// bugfix in output filenames
-//
-// Revision 1.12.4.6  2010-04-27 23:17:50  regan
-// fixed naming of output files
-//
-// Revision 1.12.4.5  2010-04-27 22:53:20  regan
-// reworked defaults
-//
-// Revision 1.12.4.4  2010-04-27 18:25:20  regan
-// bugfix in temp directory usage
-//
-// Revision 1.12.4.3  2010-04-27 05:48:46  regan
-// added bulild in parts to main code and options
-//
-// Revision 1.12.4.2  2010-04-26 22:56:26  regan
-// bugfix
-//
-// Revision 1.12.4.1  2010-04-26 22:53:08  regan
-// added more global options
-//
-// Revision 1.12  2010-04-16 22:44:18  regan
-// merged HEAD with changes for mmap and intrusive pointer
-//
-// Revision 1.11.2.2  2010-04-15 17:59:52  regan
-// made mmap optional
-//
-// Revision 1.11.2.1  2010-04-15 17:47:19  regan
-// added option to skip artifact filter
-//
-// Revision 1.11  2010-03-15 07:42:39  regan
-// added kmer of 0 to skip kmer calculations
-//
-// Revision 1.10  2010-03-10 13:18:19  regan
-// added quality ignore and singleton purge to save memory
-//
-// Revision 1.9  2010-03-03 17:08:52  regan
-// fixed options to support -1 in min read length
-//
-// Revision 1.8  2010-03-02 15:03:33  regan
-// added debug option and reformatted
-//
-// Revision 1.7  2010-02-26 13:01:16  regan
-// reformatted
-//
-// Revision 1.6  2010-02-22 14:40:05  regan
-// added optoin
-//
-// Revision 1.5  2010-01-16 01:06:28  regan
-// refactored
-//
-// Revision 1.4  2010-01-14 01:17:48  regan
-// working out options
-//
-// Revision 1.3  2010-01-14 00:47:44  regan
-// added two common options
-//
-// Revision 1.2  2009-11-09 19:37:17  regan
-// enhanced some debugging / analysis output
-//
-// Revision 1.1  2009-11-06 04:10:21  regan
-// refactor of cmd line option handling
-// added methods to evaluate spectrums
-//
-//

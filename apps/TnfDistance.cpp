@@ -48,7 +48,7 @@ typedef TrackingDataMinimal4f DataType;
 typedef KmerMap<DataType> KM;
 typedef KmerSpectrum<DataType, DataType> KS;
 
-class TnfDistanceOptions : public Options {
+class _TnfDistanceBaseOptions : public OptionsBaseInterface {
 public:
 	static string getInterFile() {
 		return getVarMap()["inter-distance-file"].as<string> ();
@@ -65,10 +65,10 @@ public:
 	static double getClusterThreshold() {
 		return getVarMap()["cluster-threshold-distance"].as<double>();
 	}
-	static bool parseOpts(int argc, char *argv[]) {
+
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
-		getPosDesc().add("input-file", -1);
-		getDesc().add_options()
+		desc.add_options()
 
 		("inter-distance-file", po::value<string>()->default_value(""),
 				"output inter-distance LT matrix to this filename")
@@ -85,13 +85,23 @@ public:
 		("cluster-threshold-distance", po::value<double>()->default_value(0.175),
 				"Euclidean distance threshold for clusters")
 		;
-
-		bool ret = Options::parseOpts(argc, argv);
-
-		return ret;
 	}
-
 };
+
+class _TnfDistanceOptions : public _TnfDistanceBaseOptions, public _GeneralOptions {
+public:
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		p.add("input-file", -1);
+		((_TnfDistanceBaseOptions*)this)->_setOptions(desc,p);
+		((_GeneralOptions*)this)->_setOptions(desc,p);
+	}
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+		return((_TnfDistanceBaseOptions*)this)->_parseOpts(desc,p,vm,argc,argv)
+				& ((_GeneralOptions*)this)->_parseOpts(desc,p,vm,argc,argv);
+	}
+};
+
+typedef OptionsBaseTemplate< _TnfDistanceOptions > TnfDistanceOptions;
 
 class TNF {
 public:
@@ -376,7 +386,7 @@ public:
 } mvo;
 
 int main(int argc, char *argv[]) {
-	Options::getVerbosity() = 0;
+	Options::getOptions().getVerbose() = 0;
 	if (!TnfDistanceOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
@@ -385,7 +395,7 @@ int main(int argc, char *argv[]) {
 	KmerSizer::set(4);
 	TNF::initStdMap();
 
-	Options::FileListType inputs = Options::getInputFiles();
+	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	reads.appendAllFiles(inputs);
 
 	KS ksRef;
@@ -394,11 +404,11 @@ int main(int argc, char *argv[]) {
 	TNFS readTnfs = buildTnfs(reads, true);
 
 	ostream *out = &cout;
-	OfstreamMap om(Options::getOutputFile(), "");
-	if (!Options::getOutputFile().empty()) {
+	OfstreamMap om(Options::getOptions().getOutputFile(), "");
+	if (!Options::getOptions().getOutputFile().empty()) {
 		out = &om.getOfstream("");
 	}
-	Options::FileListType referenceInputs = Options::getReferenceFiles();
+	OptionsBaseInterface::FileListType referenceInputs = Options::getOptions().getReferenceFiles();
 	if (!referenceInputs.empty()) {
 		// compare distances from reference to each read in the input
 		refs.appendAllFiles(referenceInputs);
@@ -423,7 +433,7 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	string interFile = TnfDistanceOptions::getInterFile();
+	string interFile = TnfDistanceOptions::getOptions().getInterFile();
 	if (!interFile.empty()) {
 		OfstreamMap om(interFile, "");
 		ostream &os = om.getOfstream("");
@@ -437,11 +447,11 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	string intraFile = TnfDistanceOptions::getIntraFile();
+	string intraFile = TnfDistanceOptions::getOptions().getIntraFile();
 	if (!intraFile.empty()) {
 		OfstreamMap om(intraFile, "");
 		ostream &os = om.getOfstream("");
-		long window = TnfDistanceOptions::getIntraWindow();
+		long window = TnfDistanceOptions::getOptions().getIntraWindow();
 		long step = window / 10;
 		for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < reads.getSize(); readIdx++) {
 			Read read = reads.getRead(readIdx);
@@ -457,7 +467,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	string clusterFile = TnfDistanceOptions::getClusterFile();
+	string clusterFile = TnfDistanceOptions::getOptions().getClusterFile();
 	if (!clusterFile.empty()) {
 		bool debug = Log::isDebug(1);
 		long size = readTnfs.size();
@@ -473,7 +483,7 @@ int main(int argc, char *argv[]) {
 		//TODO optimize this and the the while loop (use LT, and directed updates to minVec)
 		vector< vector<double>::iterator > minVec;
 		minVec.resize( size );
-		float clusterThreshold = TnfDistanceOptions::getClusterThreshold();
+		float clusterThreshold = TnfDistanceOptions::getOptions().getClusterThreshold();
 
 
         #pragma omp parallel for schedule(dynamic)

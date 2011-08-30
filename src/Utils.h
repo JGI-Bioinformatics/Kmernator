@@ -82,7 +82,7 @@ public:
 	static const int FASTA_UNMASKED = 3;
 
 	static inline FormatOutput getDefault() {
-		return FormatOutput(Options::getFormatOutput());
+		return FormatOutput(Options::getOptions().getFormatOutput());
 	}
 	static std::string getDefaultSuffix() {
 		return getDefault().getSuffix();
@@ -119,7 +119,7 @@ public:
 	static std::string generateUniqueName(std::string filename = "") {
 		filename += boost::lexical_cast<std::string>( getpid() );
 		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
-		filename += Options::getHostname();
+		filename += OptionsBaseInterface::getHostname();
 		return filename;
 	}
 
@@ -233,10 +233,10 @@ public:
 		return _defaultAppend;
 	}
 
-	OfstreamMap(std::string outputFilePathPrefix = Options::getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
+	OfstreamMap(std::string outputFilePathPrefix = Options::getOptions().getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
 	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix), _append(false), _isStdout(false), _buildInMemory(false) {
 		_append = getDefaultAppend();
-		if (Options::getOutputFile() == std::string("-")) {
+		if (Options::getOptions().getOutputFile() == std::string("-")) {
 			_isStdout = true;
 			LOG_VERBOSE_OPTIONAL(1, true, "Writing output(s) to stdout");
 		}
@@ -550,12 +550,84 @@ public:
 	}
 };
 
-class OPipestream : public boost::iostreams::stream< boost::iostreams::file_descriptor_sink >
+// does not work across pipe!
+class StdErrInterceptor2 {
+public:
+	StdErrInterceptor2(bool _intercept = false)
+	    : _stderrBuffer(), _olderr(_intercept ? std::cerr.flush().rdbuf(_stderrBuffer.rdbuf()) : NULL)
+	{
+	}
+	virtual ~StdErrInterceptor2() {
+		reset();
+	}
+	inline bool isIntercepted() const {
+		return _olderr != NULL;
+	}
+	void reset() {
+		if (isIntercepted()) {
+			std::cerr.rdbuf( _olderr );
+		}
+		_olderr = NULL;
+	}
+	std::string getStdErr () {
+		return _stderrBuffer.str();
+	}
+private:
+	std::stringstream _stderrBuffer;
+	std::streambuf *_olderr;
+};
+
+// works across a pipe!
+class StdErrInterceptor {
+public:
+	StdErrInterceptor(bool _intercept = false)
+	    : _errFileName( _intercept ? getNewFile() : "")
+	{
+	}
+	virtual ~StdErrInterceptor() {
+		reset();
+	}
+	inline bool isIntercepted() const {
+		return !_errFileName.empty();
+	}
+	void reset() {
+		if (isIntercepted())
+			unlink(_errFileName.c_str());
+		_errFileName.clear();
+	}
+	std::string getErrIntercept() const {
+		if (isIntercepted())
+			return " 2> " + _errFileName + " ";
+		else
+			return "";
+	}
+	std::string getStdErr () {
+		std::stringstream ss;
+		std::fstream strace(_errFileName.c_str(), std::ios_base::in);
+		std::string buffer;
+		while (strace.good()) {
+			getline(strace, buffer);
+			ss << buffer << std::endl;
+		}
+		reset();
+		return ss.str();
+	}
+	static std::string getNewFile() {
+		return Options::getOptions().getTmpDir() + UniqueName::generateUniqueName("/.tmp-stderr-");
+	}
+private:
+	std::string _errFileName;
+};
+
+
+class OPipestream : public StdErrInterceptor, public boost::iostreams::stream< boost::iostreams::file_descriptor_sink >
 {
 public:
 	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_sink > base ;
 	explicit OPipestream() : _pipe(NULL) {}
-	explicit OPipestream( const std::string command ) : base( fileno( _pipe = popen( command.c_str(), "w" ) ) ), _cmd(command) {
+	explicit OPipestream( const std::string command, bool interceptStderr = false)
+	    : StdErrInterceptor(interceptStderr),
+	      base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "w" ) ) ), _cmd(command+getErrIntercept()) {
 		assert(_pipe != NULL);
 		assert(fileno(_pipe) >= 0);
 		assert(is_open());
@@ -569,11 +641,11 @@ public:
 			int status = pclose(_pipe);
 			_pipe = NULL;
 			if (status != 0) {
-				LOG_WARN(1, "OPipestream::close() '" << _cmd << "' closed with an error: " << status);
+				LOG_WARN(1, "OPipestream::close() '" << _cmd << "' closed with an error: " << status << "." << getStdErr());
 			}
 		} catch(...) {
 			// ignoring this pipe closure error.
-			LOG_WARN(1, "OPipestream::close(): Potentially failed to close pipe properly");
+			LOG_WARN(1, "OPipestream::close(): Potentially failed to close pipe properly." << getStdErr() );
 		}
 	}
 	virtual ~OPipestream() {
@@ -584,15 +656,20 @@ private :
 	std::string _cmd;
 };
 
-class IPipestream : public boost::iostreams::stream< boost::iostreams::file_descriptor_source >
+class IPipestream : public StdErrInterceptor, public boost::iostreams::stream< boost::iostreams::file_descriptor_source >
 {
 public:
 	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_source > base ;
-	explicit IPipestream() : _pipe(NULL) {}
-	explicit IPipestream( const std::string command ) : base( fileno( _pipe = popen( command.c_str(), "r" ) ) ), _cmd(command) {
+	explicit IPipestream() : StdErrInterceptor(), _pipe(NULL) {}
+	explicit IPipestream( const std::string command, bool interceptStderr = false )
+	    : StdErrInterceptor( interceptStderr ),
+	      base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "r" ) ) ),
+	      _cmd(command+getErrIntercept()) {
+
 		assert(_pipe != NULL);
 		assert(fileno(_pipe) >= 0);
 		assert(is_open());
+
 	}
 	void close() {
 		if (_pipe == NULL)
@@ -603,11 +680,12 @@ public:
 			status = pclose(_pipe);
 			_pipe = NULL;
 			if (status != 0) {
-				LOG_WARN(1, "IPipestream::close() '" << _cmd << "' closed with an error: " << status);
+				LOG_WARN(1, "IPipestream::close() '" << _cmd << "' closed with an error: " << status << "." << getStdErr());
 			}
 		} catch(...) {
 			// ignoring this pipe closure error.
-			LOG_WARN(1, "IPipestream::close(): Potentially failed to close pipe properly");
+			LOG_WARN(1, "IPipestream::close(): Potentially failed to close pipe properly." << getStdErr());
+
 		}
 	}
 	virtual ~IPipestream() {

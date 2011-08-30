@@ -149,7 +149,7 @@ private:
 				if (getSize() > 10000) {
 					Log::Warn() << "detected standard fastq only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
 				}
-				Read::setMinQualityScore(Options::getMinQuality(), Kmernator::FASTQ_START_CHAR_STD);
+				Read::setMinQualityScore(Options::getOptions().getMinQuality(), Kmernator::FASTQ_START_CHAR_STD);
 			}
 		}
 	}
@@ -242,7 +242,7 @@ public:
 	}
 	void circularize(long extraLength);
 
-	void appendAllFiles(Options::FileListType &files, int rank = 0, int size = 1);
+	void appendAllFiles(OptionsBaseInterface::FileListType &files, int rank = 0, int size = 1);
 	SequenceStreamParserPtr appendAnyFile(std::string filePath, std::string filePath2 = "", int rank = 0, int size = 1);
 	SequenceStreamParserPtr appendAnyFileMmap(string fastaFilePath, string qualFilePath = "", int rank = 0, int size = 1);
 	SequenceStreamParserPtr appendFastaFile(std::string &is, int rank = 0, int size = 1);
@@ -338,10 +338,10 @@ public:
 
 	const ReadIdxVector getReadIdxVector() const;
 
-	ProbabilityBases getProbabilityBases(unsigned char minQual = Options::getMinQuality()) const;
+	ProbabilityBases getProbabilityBases(unsigned char minQual = Options::getOptions().getMinQuality()) const;
 	ReadSetSizeType getCentroidRead() const;
 	ReadSetSizeType getCentroidRead(const ProbabilityBases &probs) const;
-	Read getConsensusRead(unsigned char minQual = Options::getMinQuality()) const;
+	Read getConsensusRead(unsigned char minQual = Options::getOptions().getMinQuality()) const;
 	static Read getConsensusRead(const ProbabilityBases &probs, std::string name);
 
 	inline std::ostream &write(std::ostream &os, ReadSetSizeType readIdx,

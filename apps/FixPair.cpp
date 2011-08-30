@@ -41,28 +41,28 @@
 
 using namespace std;
 
-class FixPair : Options {
+class _FixPair : public OptionsBaseInterface {
 public:
 	static int getSplitSizeMegaBase() {
 		return getVarMap()["split-size-mbase"].as<int> ();
 	}
-	static bool parseOpts(int argc, char *argv[]) {
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
 		// set options specific to this program
-		getPosDesc().add("input-file", -1);
+		p.add("input-file", -1);
 
 		bool ret = Options::parseOpts(argc, argv);
 
 		return ret;
 	}
 };
-
+typedef OptionsBaseTemplate< _FixPair > FixPair;
 
 int main(int argc, char *argv[]) {
 	if (!FixPair::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
-	Options::FileListType inputs = Options::getInputFiles();
-	std::string outputFilename = Options::getOutputFile();
+	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+	std::string outputFilename = Options::getOptions().getOutputFile();
 	if (outputFilename.empty())
 		throw std::invalid_argument("Please specify an --ouput-file");
 	ReadSet reads;

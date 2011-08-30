@@ -37,7 +37,7 @@ typedef ReadSelector<DataType> RS;
 
 int main(int argc, char *argv[]) {
 
-	Options::getSaveKmerMmap() = 0;
+	Options::getOptions().getSaveKmerMmap() = 0;
 	try {
 		if (!FilterReadsOptions::parseOpts(argc, argv))
 			throw invalid_argument("Please fix the command line arguments");
@@ -48,12 +48,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	MemoryUtils::getMemoryUsage();
-    std::string outputFilename = Options::getOutputFile();
+    std::string outputFilename = Options::getOptions().getOutputFile();
 
 	ReadSet reads;
-	KmerSizer::set(Options::getKmerSize());
+	KmerSizer::set(Options::getOptions().getKmerSize());
 
-	Options::FileListType inputs = Options::getInputFiles();
+	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	LOG_VERBOSE(1, "Reading Input Files");
 	reads.appendAllFiles(inputs);
 	LOG_VERBOSE(1, "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(1, "Pairs + single = " << numPairs);
 	LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-	if (Options::getSkipArtifactFilter() == 0) {
+	if (Options::getOptions().getSkipArtifactFilter() == 0) {
 
 	  LOG_VERBOSE(1, "Preparing artifact filter: ");
       FilterKnownOddities filter;
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	}
-	if (Options::getDeDupMode() > 0 && Options::getDeDupEditDistance() >= 0) {
+	if (Options::getOptions().getDeDupMode() > 0 && Options::getOptions().getDeDupEditDistance() >= 0) {
 	  LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
 	  unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
 	  LOG_VERBOSE(1, "filter removed duplicate fragment pair reads: " << duplicateFragments);
@@ -87,9 +87,9 @@ int main(int argc, char *argv[]) {
 	KS spectrum(0);
 
 	Kmernator::MmapFileVector spectrumMmaps;
-	if (Options::getKmerSize() > 0 && !Options::getLoadKmerMmap().empty()) {
-		spectrum.restoreMmap(Options::getLoadKmerMmap());
-	} else if (Options::getKmerSize() > 0) {
+	if (Options::getOptions().getKmerSize() > 0 && !Options::getOptions().getLoadKmerMmap().empty()) {
+		spectrum.restoreMmap(Options::getOptions().getLoadKmerMmap());
+	} else if (Options::getOptions().getKmerSize() > 0) {
 
 	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
 	  LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
@@ -97,31 +97,31 @@ int main(int argc, char *argv[]) {
 	  spectrum = KS(numBuckets);
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-	  TrackingData::minimumWeight = Options::getMinKmerQuality();
+	  TrackingData::setMinimumWeight( Options::getOptions().getMinKmerQuality() );
 
-	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
+	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, Options::getOptions().getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
 	  if (Log::isVerbose(1))
-		  spectrum.printHistograms(Log::Verbose("Histogram"));
+		  spectrum.printHistograms(Log::Verbose("Kmer Histogram"));
 
-	  if (Options::getVariantSigmas() > 0.0) {
+	  if (Options::getOptions().getVariantSigmas() > 0.0) {
 		  spectrum.purgeVariants();
 		  if (Log::isVerbose(1)) {
-			  spectrum.printHistograms(Log::Verbose("Variant-Removed Histogram"));
+			  spectrum.printHistograms(Log::Verbose("Variant-Removed Kmer Histogram"));
 		  }
 	  }
 	}
 
-	if (Options::getKmerSize() > 0) {
+	if (Options::getOptions().getKmerSize() > 0) {
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-	  if (Options::getGCHeatMap() && ! outputFilename.empty()) {
+	  if (Options::getOptions().getGCHeatMap() && ! outputFilename.empty()) {
 		  LOG_VERBOSE(1, "Creating GC Heat Map ");
 		  LOG_DEBUG(1,  MemoryUtils::getMemoryUsage());
 		  OfstreamMap ofmap(outputFilename + "-GC", ".txt");
 		  spectrum.printGC(ofmap.getOfstream(""));
 	  }
 
-	  if (Options::getMinDepth() > 1) {
+	  if (Options::getOptions().getMinDepth() > 1) {
 		  LOG_DEBUG(1, "Clearing singletons from memory");
 		  spectrum.singleton.clear();
 		  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
@@ -129,8 +129,8 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	unsigned int minDepth = Options::getMinDepth();
-	unsigned int depthRange = Options::getDepthRange();
+	unsigned int minDepth = Options::getOptions().getMinDepth();
+	unsigned int depthRange = Options::getOptions().getDepthRange();
 	unsigned int depthStep = 2;
 	if (depthRange < minDepth) {
 		depthRange = minDepth;
@@ -140,11 +140,11 @@ int main(int argc, char *argv[]) {
 
 		for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
 			std::string pickOutputFilename = outputFilename;
-			if (Options::getKmerSize() > 0) {
+			if (Options::getOptions().getKmerSize() > 0) {
 				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
 				LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
 			} else {
-				LOG_VERBOSE(1, "Trimming reads that pass Artifact Filter with length: " << Options::getMinReadLength());
+				LOG_VERBOSE(1, "Trimming reads that pass Artifact Filter with length: " << Options::getOptions().getMinReadLength());
 			}
 
 			RS selector(reads, spectrum.weak);

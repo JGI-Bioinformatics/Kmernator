@@ -49,9 +49,9 @@
 
 using namespace std;
 
-class SSOptions : public Options {
+class _SSOptions : public OptionsBaseInterface {
 public:
-	typedef Options::StringListType StringListType;
+	typedef OptionsBaseInterface::StringListType StringListType;
 
 	static int &getDefaultNumFiles() {
 		static int dummy = 0;
@@ -93,10 +93,10 @@ public:
 		}
 		return output;
 	}
-	static bool parseOpts(int argc, char *argv[]) {
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
 		// set options specific to this program
-		getPosDesc().add("input-file", -1);
-		getDesc().add_options()("help", "produce help message")
+		p.add("input-file", -1);
+		desc.add_options()("help", "produce help message")
 				("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
 				("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))")
 				("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
@@ -104,42 +104,42 @@ public:
 				;
 
 		bool ret = Options::parseOpts(argc, argv);
-		if (getInputFiles().empty() || getNumFiles() == 0 || getFileNum() >= getNumFiles()) {
+		if (Options::getOptions().getInputFiles().empty() || getNumFiles() == 0 || getFileNum() >= getNumFiles()) {
 			ret = false;
 			LOG_ERROR(1, "Please specify num-files, file-num and at least one input file.\nnum-files=" << getNumFiles() << "\nfile-num=" << getFileNum());
 		}
 		return ret;
 	}
 };
-
+typedef OptionsBaseTemplate< _SSOptions > SSOptions;
 
 int main(int argc, char *argv[]) {
-	Options::getVerbosity() = 0;
-	Options::getMmapInput() = 0;
+	Options::getOptions().getVerbose() = 0;
+	Options::getOptions().getMmapInput() = 0;
 
 #ifdef ENABLE_MPI
 	MPI_Init(&argc, &argv);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
-	SSOptions::getDefaultNumFiles() = world.size();
-	SSOptions::getDefaultFileNum() = world.rank();
+	SSOptions::getOptions().getDefaultNumFiles() = world.size();
+	SSOptions::getOptions().getDefaultFileNum() = world.rank();
 	Logger::setWorld(&world);
 #endif
 	if (!SSOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
 	OPipestream *ops = NULL;
-	std::string pipeCommand = SSOptions::getPipeCommand();
+	std::string pipeCommand = SSOptions::getOptions().getPipeCommand();
 	if (!pipeCommand.empty()) {
 		ops = new OPipestream(pipeCommand);
 	}
 
-	Options::FileListType inputs = Options::getInputFiles();
+	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 
 	ostream &output = (ops == NULL ? std::cout : *ops);
 	for (unsigned int i = 0 ; i < inputs.size(); i++) {
 		ReadFileReader reader(inputs[i], "");
-		reader.seekToPartition( SSOptions::getFileNum(), SSOptions::getNumFiles() );
+		reader.seekToPartition( SSOptions::getOptions().getFileNum(), SSOptions::getOptions().getNumFiles() );
 		std::string name, bases, quals;
 	    while (reader.nextRead(name, bases, quals)) {
 	        Read read(name, bases, quals);
@@ -153,7 +153,7 @@ int main(int argc, char *argv[]) {
 
 #ifdef ENABLE_MPI
 	niceBarrier(world);
-	Options::StringListType merges = SSOptions::getMergeList();
+	OptionsBaseInterface::StringListType merges = SSOptions::getOptions().getMergeList();
 	for(unsigned int i = 0; i < merges.size(); i++) {
 		std::string &merge = merges[i];
 		size_t pos = merge.find(' ');
