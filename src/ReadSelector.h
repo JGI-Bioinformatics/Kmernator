@@ -631,7 +631,7 @@ public:
 		while (it != buffEnd) {
 			ScoreType score = *(it++);
 			if (Log::isDebug(2))
-				ss << (score > 1 ? (int) log(score) : (int) 0) << " ";
+				ss <<  ('@' + (score > 1 ? (int) log(score) : (int) 0));
 			if (score >= minimumKmerScore) {
 				test.trimLength++;
 				test.score += score;
@@ -648,7 +648,7 @@ public:
 			best = test;
 		}
 		if (Log::isDebug(2))
-			trim.label += ss.str();
+			trim.label += "LS:" + ss.str();
 
 		if (best.trimLength >= 3 && _bimodalSigmas >= 0.0) {
 			Statistics::MeanStdCount f, s;

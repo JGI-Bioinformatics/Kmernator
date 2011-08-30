@@ -1021,7 +1021,7 @@ done when empty cycle is received
 
  		// store response in kmer value vector
 		int processRespond(ReqRespKmerMessageHeader *msg, MessagePackage &msgPkg) {
-			LOG_DEBUG(3, "RespondKmerMessage: " << msg->requestId << " " << msg->getScore() << " recv Source: " << msgPkg.source << " recvTag: " << msgPkg.tag);
+			LOG_DEBUG(5, "RespondKmerMessage: " << msg->requestId << " " << msg->getScore() << " recv Source: " << msgPkg.source << " recvTag: " << msgPkg.tag);
 			assert( msgPkg.tag == omp_get_thread_num() + _numThreads);
 			_kmerValues[omp_get_thread_num()][msg->requestId] = msg->getScore();
 			return sizeof(ScoreType);
@@ -1032,7 +1032,7 @@ done when empty cycle is received
 			int destSource = msgPkg.source;
 			int destTag = msgPkg.tag + _numThreads;
 			ScoreType score = _readSelector->getValue( *msg->getKmer() );
-			LOG_DEBUG(3, "RequestKmerMessage: " << msg->getKmer()->toFasta() << " " << msg->requestId << " " << score << " destTag: " << destTag);
+			LOG_DEBUG(5, "RequestKmerMessage: " << msg->getKmer()->toFasta() << " " << msg->requestId << " " << score << " destTag: " << destTag);
 			assert(msgPkg.tag == omp_get_thread_num());
 
 			((ReqRespKmerMessageBuffer*)msgPkg.bufferCallback)->bufferMessage(destSource, destTag, sizeof(ScoreType))->set(msg->requestId, score);
@@ -1163,6 +1163,8 @@ done when empty cycle is received
 
 				this->setTrimHeaders(trim, useKmers);
 			}
+
+			reqRespBuffer->finalize();
 
 			//LOG_DEBUG(2, "Finished assigning trim values: " << batchReadIdx);
 			batchReadIdx += batchSize;

@@ -317,19 +317,19 @@ public:
 			return *this;
 		}
 		inline void reset(int _threadSource = 0, int _tag = 0) {
-			LOG_DEBUG(3, "MessageHeader::reset(" << _threadSource << ", " << _tag << "):" << (void*) this);
+			LOG_DEBUG(5, "MessageHeader::reset(" << _threadSource << ", " << _tag << "):" << (void*) this);
 			offset = 0;
 			threadSource = _threadSource;
 			tag = _tag;
 			setDummy();
 		}
 		inline void resetOffset() {
-			LOG_DEBUG(3, "MessageHeader::resetOffset():" << (void*) this << " from: " << offset);
+			LOG_DEBUG(5, "MessageHeader::resetOffset():" << (void*) this << " from: " << offset);
 			offset = 0;
 			setDummy();
 		}
 		int append(int dataSize) {
-			LOG_DEBUG(3, "MessageHeader::append(" << dataSize << "):" << (void*) this << " " << offset);
+			LOG_DEBUG(5, "MessageHeader::append(" << dataSize << "):" << (void*) this << " " << offset);
 			offset += dataSize;
 			setDummy();
 			return offset;
@@ -486,7 +486,7 @@ public:
 					int size = bb.header.getOffset();
 					buildSize += size;
 					outSize += size + headerSize;
-					LOG_DEBUG(3, "sendReceive(): sending (" << rankDest << ", " << threadDest << "): " << size << " bytes, outSize: " << outSize << " buildSize: " << buildSize);
+					LOG_DEBUG(4, "sendReceive(): sending (" << rankDest << ", " << threadDest << "): " << size << " bytes, outSize: " << outSize << " buildSize: " << buildSize);
 
 				}
 			}
@@ -556,7 +556,7 @@ public:
 			while (begin != end) {
 				assert(begin < end);
 				MessageHeader *header = (MessageHeader*) begin;
-				LOG_DEBUG(3, "sendReceive(): " << (void*) begin << " " << header->toString());
+				LOG_DEBUG(4, "sendReceive(): " << (void*) begin << " " << header->toString());
 
 				assert(header->validate());
 
@@ -625,7 +625,7 @@ public:
 		int msgSize = this->getMessageSize() + trailingBytes;
 		bb.header.append( msgSize );
 		this->newMessage();
-		LOG_DEBUG(3, "bufferMessage(" << rankDest << ", " << tagDest << ", " << wasSent << ", " << messages << ", " << trailingBytes << "): " << (void*) buf << " size: " << msgSize);
+		LOG_DEBUG(5, "bufferMessage(" << rankDest << ", " << tagDest << ", " << wasSent << ", " << messages << ", " << trailingBytes << "): " << (void*) buf << " size: " << msgSize);
 		return buf;
 	}
 
