@@ -125,11 +125,24 @@ public:
 
 };
 
-template <typename C, typename B = MPIMessageBufferBase>
+class MessagePackage {
+public:
+	typedef char * Buffer;
+	Buffer buffer;
+	int size;
+	int source;
+	int tag;
+	MPIMessageBufferBase *bufferCallback;
+	MessagePackage(Buffer b, int s, int src, int t, MPIMessageBufferBase *m) : buffer(b), size(s), source(src), tag(t), bufferCallback(m) {}
+};
+
+
+template <typename C>
 class DummyProcessor {
 public:
-	int process(C *msg, B *buffer) { return 0; }
+	int process(C *msg, MessagePackage &buffer) { return 0; }
 };
+
 template <typename C, typename CProcessor = DummyProcessor<C>, int BufferSize = MPI_BUFFER_DEFAULT_SIZE >
 class MPIMessageBuffer : public MPIMessageBufferBase {
 public:
@@ -138,17 +151,9 @@ public:
 
 	typedef C MessageClass;
 	typedef CProcessor MessageClassProcessor;
-	typedef char * Buffer;
+	typedef typename MessagePackage::Buffer Buffer;
 	typedef std::vector< Buffer > FreeBufferCache;
 	typedef std::vector< FreeBufferCache > ThreadedFreeBufferCache;
-	class MessagePackage {
-	public:
-		Buffer buffer;
-		int size;
-		int source;
-		int tag;
-		MessagePackage(Buffer b, int s, int src, int t) : buffer(b), size(s), source(src), tag(t) {}
-	};
 	typedef std::list<MessagePackage> MessagePackageQueue;
 
 protected:
@@ -163,13 +168,15 @@ protected:
 	int _numThreads;
 	int _worldSize;
 	int _numWorldThreads;
-	int _recvSource;
-	int _recvTag;
-	int _recvSize;
+//	int _recvSource;
+//	int _recvTag;
+//	int _recvSize;
 
 public:
 	MPIMessageBuffer(mpi::communicator &world, int messageSize, MessageClassProcessor processor = MessageClassProcessor(), double _softRatio = 0.75)
-	: _world(world), _messageSize(messageSize), _processor(processor), _softMaxBufferSize(MESSAGE_BUFFER_SIZE * _softRatio), _numCheckpoints(0), _bufferSize(MESSAGE_BUFFER_SIZE), _recvSource(mpi::any_source), _recvTag(mpi::any_tag), _recvSize(0)  {
+	: _world(world), _messageSize(messageSize), _processor(processor), _softMaxBufferSize(MESSAGE_BUFFER_SIZE * _softRatio), _numCheckpoints(0), _bufferSize(MESSAGE_BUFFER_SIZE)
+	//, _recvSource(mpi::any_source), _recvTag(mpi::any_tag), _recvSize(0)
+	{
 		_message = new char[ MESSAGE_BUFFER_SIZE ];
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
 		assert(_softRatio >= 0.0 && _softRatio <= 1.0);
@@ -207,15 +214,15 @@ public:
 	inline int getMessageSize() {
 		return _messageSize;
 	}
-	inline int &getRecvSource() {
-		return _recvSource;
-	}
-	inline int &getRecvTag() {
-		return _recvTag;
-	}
-	inline int &getRecvSize() {
-		return _recvSize;
-	}
+//	inline int &getRecvSource() {
+//		return _recvSource;
+//	}
+//	inline int &getRecvTag() {
+//		return _recvTag;
+//	}
+//	inline int &getRecvSize() {
+//		return _recvSize;
+//	}
 	inline MessageClassProcessor &getProcessor() {
 		return _processor;
 	}
@@ -257,18 +264,15 @@ public:
 		}
 	}
 
-	long processMessagePackage(MessagePackage MessagePackage) {
-		Buffer msg, start = MessagePackage.buffer;
-		this->_recvSize = MessagePackage.size;
-		this->_recvSource = MessagePackage.source;
-		this->_recvTag = MessagePackage.tag;
+	long processMessagePackage(MessagePackage &messagePackage) {
+		Buffer msg, start = messagePackage.buffer;
 
 		long count = 0;
 		int offset = 0;
-		while (offset < MessagePackage.size) {
+		while (offset < messagePackage.size) {
 			msg = start + offset;
-			LOG_DEBUG(3, "processMessagePackage(): (" << this->_recvSource << ", " << this->_recvTag << "): " << (void*) msg << " offset: " << offset);
-			int trailingBytes = _processor.process((MessageClass*) msg, this);
+			LOG_DEBUG(3, "processMessagePackage(): (" << messagePackage.source << ", " << messagePackage.tag << "): " << (void*) msg << " offset: " << offset);
+			int trailingBytes = _processor.process((MessageClass*) msg, messagePackage);
 			offset += this->getMessageSize() + trailingBytes;
 			this->newMessage();
 			count++;
@@ -298,7 +302,6 @@ class MPIAllToAllMessageBuffer : public MPIMessageBuffer<C, CProcessor, BufferSi
 public:
 	typedef MPIMessageBuffer<C, CProcessor, BufferSize> BufferBase;
 	typedef typename BufferBase::Buffer Buffer;
-	typedef typename BufferBase::MessagePackage MessagePackage;
 	typedef typename BufferBase::MessagePackageQueue MessagePackageQueue;
 	typedef C MessageClass;
 	typedef CProcessor MessageClassProcessor;
@@ -465,10 +468,10 @@ public:
 		Buffer outBuffers[numThreads * numWorldThreads * numTags];
 		long numReceived = 0;
 
-#pragma omp atomic
+        #pragma omp atomic
 		threadsSending++;
 
-#pragma omp critical
+        #pragma omp critical
 		{
 			// allocate the out message headers
 			for(int rankDest = 0 ; rankDest < worldSize ; rankDest++) {
@@ -505,9 +508,9 @@ public:
 			}
 		}
 
-#pragma omp barrier
+        #pragma omp barrier
 
-#pragma omp master
+        #pragma omp master
 		{
 			if (isFinalized && buildSize == 0) {
 				for(int destRank = 0; destRank < worldSize ; destRank++) {
@@ -535,7 +538,8 @@ public:
 			this->newMessageDelivery();
 			threadsSending = 0;
 		}
-#pragma omp barrier
+
+		#pragma omp barrier
 
 		for(int sourceRank = 0 ; sourceRank < worldSize ; sourceRank++) {
 			int transmitSize = getInOutSize(sourceRank, in);
@@ -563,7 +567,8 @@ public:
 				begin = ((Buffer)(header)) + headerSize + header->getOffset();
 			}
 		}
-#pragma omp barrier
+
+		#pragma omp barrier
 
 		numReceived += this->sendReceiveAll(isFinalized);
 
@@ -574,7 +579,7 @@ public:
 		assert(header->validate());
 
 		Buffer buf = (Buffer) (header+1);
-		MessagePackage msgPkg(buf, header->getOffset(), sourceRank, header->getTag());
+		MessagePackage msgPkg(buf, header->getOffset(), sourceRank, header->getTag(), this);
 		return this->processMessagePackage(msgPkg);
 	}
 
@@ -587,7 +592,7 @@ public:
 	}
 	bool isReadyToSend(int offset, int trailingBytes) {
 		return offset > 0 &&
-				(offset + trailingBytes + this->getMessageSize() >= this->getSoftMaxBufferSize() || threadsSending > this->getNumThreads() - 1);
+				(offset + trailingBytes + this->getMessageSize() >= this->getSoftMaxBufferSize() || threadsSending > 0);
 	}
 
 	MessageClass *bufferMessage(int rankDest, int tagDest) {
@@ -612,7 +617,7 @@ public:
 		int threadId = omp_get_thread_num();
 		BuildBuffer &bb = buildsTWT[threadId][rankDest][tagDest];
 
-		if (isReadyToSend(bb.header.getOffset(), trailingBytes))
+		while (isReadyToSend(bb.header.getOffset(), trailingBytes))
 			messages += sendReceive(false);
 
 		assert(bb.buffer != NULL);
@@ -633,7 +638,6 @@ public:
 	typedef MPIMessageBuffer<C, CProcessor, BufferSize> BufferBase;
 
 	typedef typename BufferBase::Buffer Buffer;
-	typedef typename BufferBase::MessagePackage MessagePackage;
 	typedef typename BufferBase::MessagePackageQueue MessagePackageQueue;
 	typedef C MessageClass;
 	typedef CProcessor MessageClassProcessor;
@@ -801,7 +805,7 @@ private:
 			Buffer &bufLoc = getBuffer(source);
 			Buffer buf = bufLoc;
 			bufLoc = NULL;
-			MessagePackage MessagePackage( buf, size, source, tag );
+			MessagePackage MessagePackage( buf, size, source, tag, this );
 
 			_MessagePackageQueue.push_back( MessagePackage );
 

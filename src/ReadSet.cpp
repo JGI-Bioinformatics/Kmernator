@@ -46,19 +46,22 @@
 ReadSet::MmapSourceVector ReadSet::mmapSources;
 void ReadSet::madviseMmaps(int advise) {
 
-	#pragma omp critical (readset_madvise_map)
-	for(MmapSourceVector::iterator it = mmapSources.begin(); it != mmapSources.end(); it++) {
-		if (it->first.is_open())
-			madvise(const_cast<char*>(it->first.data()), it->first.size(), advise);
-		if (it->second.is_open())
-			madvise(const_cast<char*>(it->second.data()), it->second.size(), advise);
+    #pragma omp critical (readset_madvise_map)
+	{
+		for(MmapSourceVector::iterator it = mmapSources.begin(); it != mmapSources.end(); it++) {
+			if (it->first.is_open())
+				madvise(const_cast<char*>(it->first.data()), it->first.size(), advise);
+			if (it->second.is_open())
+				madvise(const_cast<char*>(it->second.data()), it->second.size(), advise);
+		}
 	}
 }
 void ReadSet::addMmaps(MmapSourcePair mmaps) {
 
 	#pragma omp critical (readset_madvise_map)
-	mmapSources.push_back(mmaps);
-
+	{
+		mmapSources.push_back(mmaps);
+	}
 	madviseMmapsSequential();
 }
 

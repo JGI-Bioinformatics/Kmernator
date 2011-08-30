@@ -89,7 +89,7 @@ public:
 		if (weight < minimumWeight) {
 
 			#pragma omp atomic
-			    discarded++;
+			discarded++;
 
 			return true;
 		} else

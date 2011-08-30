@@ -37,8 +37,8 @@ class TextMessageProcessor;
 typedef MPIMessageBuffer< TextMessage, TextMessageProcessor > TextMessageBufferBase;
 class TextMessageProcessor {
 public:
-	long process(TextMessage *msg, TextMessageBufferBase *_bufferCallback) {
-		LOG_DEBUG(4, "TextMessageProcessor::process(): length: " << msg->length << " recvSize: " << _bufferCallback->getRecvSize() << " msg#: " << _bufferCallback->getNumMessages() << " deliver#: " << _bufferCallback->getNumDeliveries() << " " << std::string(msg->getText(), msg->length))
+	long process(TextMessage *msg, MessagePackage &msgPkg) {
+		LOG_DEBUG(4, "TextMessageProcessor::process(): length: " << msg->length << " recvSize: " << msgPkg.size << " msg#: " << msgPkg.bufferCallback->getNumMessages() << " deliver#: " << msgPkg.bufferCallback->getNumDeliveries() << " " << std::string(msg->getText(), msg->length))
 		return msg->length;
 	}
 };

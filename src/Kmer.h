@@ -942,9 +942,11 @@ public:
 
 		if (memChanged) {
 			if (newCapacity > oldCapacity) {
+				// change begin first
 				_begin = newBegin;
 				_capacity = newCapacity;
 			} else {
+				// change size & capacity first
 				_size = size;
 				_capacity = newCapacity;
 				_begin = newBegin;

@@ -314,15 +314,17 @@ public:
 			*(getKmer()) = _kmer;
 		}
 	};
-	class StoreKmerMessageHeaderProcessor;
-	typedef MPIMessageBuffer< StoreKmerMessageHeader, StoreKmerMessageHeaderProcessor > StoreKmerMessageBuffersBase;
+
 	class  StoreKmerMessageHeaderProcessor {
 	public:
 		DistributedKmerSpectrum &_spectrum;
-		DataPointers _pointers;
-		StoreKmerMessageHeaderProcessor(DistributedKmerSpectrum &spectrum, bool isSolid = false) : _spectrum(spectrum), _pointers(spectrum), _isSolid(isSolid) {}
+		std::vector<DataPointers> _pointers;
+		StoreKmerMessageHeaderProcessor(DistributedKmerSpectrum &spectrum, bool isSolid = false) : _spectrum(spectrum), _isSolid(isSolid) {
+			assert(!omp_in_parallel());
+			_pointers.resize(omp_get_max_threads(), DataPointers(spectrum));
+		}
 		inline DataPointers &getDataPointer() {
-			return _pointers;
+			return _pointers[omp_get_thread_num()];
 		}
 		inline DistributedKmerSpectrum &getSpectrum() {
 			return _spectrum;
@@ -331,7 +333,8 @@ public:
 			return _isSolid;
 		}
 		bool _isSolid;
-		int process(StoreKmerMessageHeader *msg, StoreKmerMessageBuffersBase *bufferCallback) {
+		int process(StoreKmerMessageHeader *msg, MessagePackage &msgPkg) {
+			assert(msgPkg.tag == omp_get_thread_num());
 			LOG_DEBUG(4, "StoreKmerMessage: " << msg->readIdx << " " << msg->readPos << " " << msg->weight << " " << msg->getKmer()->toFasta());
 			getSpectrum().append(getDataPointer(), *msg->getKmer(), msg->weight, msg->readIdx, msg->readPos, isSolid());
 			return 0;
@@ -551,7 +554,6 @@ public:
 	};
 	class PurgeVariantKmerMessageHeaderProcessor;
 
-	typedef MPIMessageBuffer< PurgeVariantKmerMessageHeader, PurgeVariantKmerMessageHeaderProcessor > PurgeVariantKmerMessageBuffersBase;
 	class PurgeVariantKmerMessageHeaderProcessor {
 	public:
 		DistributedKmerSpectrum &_spectrum;
@@ -572,7 +574,7 @@ public:
 		inline double getMinDepth() {
 			return _minDepth;
 		}
-		int process(PurgeVariantKmerMessageHeader *msg, PurgeVariantKmerMessageBuffersBase *bufferCallback) {
+		int process(PurgeVariantKmerMessageHeader *msg, MessagePackage &msgPkg) {
 			LOG_DEBUG(4, "PurgeVariantKmerMessage: " << msg->threshold << " " << msg->getKmer()->toFasta());
 			DistributedKmerSpectrum &spectrum = getSpectrum();
 			DataPointers &pointers = getDataPointer();
@@ -585,8 +587,6 @@ public:
 		}
 	};
 
-//	typedef MPIRecvMessageBuffer< PurgeVariantKmerMessageHeader, PurgeVariantKmerMessageHeaderProcessor > RecvPurgeVariantKmerMessageBuffer;
-//	typedef MPISendMessageBuffer< PurgeVariantKmerMessageHeader, PurgeVariantKmerMessageHeaderProcessor > SendPurgeVariantKmerMessageBuffer;
 	typedef MPIAllToAllMessageBuffer< PurgeVariantKmerMessageHeader, PurgeVariantKmerMessageHeaderProcessor > PurgeVariantKmerMessageBuffer;
 
 	void variantWasPurged(long count = 1) {
@@ -594,8 +594,6 @@ public:
 		_purgedVariants += count;
 	}
 private:
-	//std::vector<SendPurgeVariantKmerMessageBuffer*> sendPurgeVariant;
-	//std::vector<RecvPurgeVariantKmerMessageBuffer*> recvPurgeVariant;
 	PurgeVariantKmerMessageBuffer *msgPurgeVariant;
 
 	long _purgedVariants;
@@ -607,37 +605,14 @@ private:
 		_purgedVariants = 0;
 		long messageSize = sizeof(PurgeVariantKmerMessageHeader) + KmerSizer::getByteSize();
 
-		//int &numThreads = _variantNumThreads = omp_get_max_threads();
-		//sendPurgeVariant.resize(numThreads*numThreads, NULL);
-		//recvPurgeVariant.resize(numThreads, NULL);
 		msgPurgeVariant = new PurgeVariantKmerMessageBuffer(world, messageSize, PurgeVariantKmerMessageHeaderProcessor(*this, variantSigmas, minDepth));
 
-		//#pragma omp parallel num_threads(numThreads)
-		//{
-		//	int threadId = omp_get_thread_num();
-			//recvPurgeVariant[threadId] = new RecvPurgeVariantKmerMessageBuffer(world, messageSize, threadId, PurgeVariantKmerMessageHeaderProcessor(*this, variantSigmas, minDepth));
-			//for (int t = 0 ; t < numThreads; t++) {
-			//	sendPurgeVariant[threadId*numThreads+t] = new SendPurgeVariantKmerMessageBuffer(world, messageSize, PurgeVariantKmerMessageHeaderProcessor(*this, variantSigmas, minDepth));
-			//	sendPurgeVariant[threadId*numThreads+t]->addReceiveAllCallback( recvPurgeVariant[threadId] );
-			//}
-		//}
 		LOG_DEBUG(2, "_preVariants(): barrier");
 		world.barrier();
 	}
 
 	long _postVariants(long purgedKmers) {
 		_purgedVariants += this->KS::_postVariants(purgedKmers);
-		//int &numThreads = _variantNumThreads;
-		//#pragma omp parallel num_threads(numThreads)
-		//{
-		//	int threadId = omp_get_thread_num();
-			//for(int t = 0 ; t < numThreads; t++) {
-			//	delete sendPurgeVariant[threadId*numThreads+t];
-			//}
-			//delete recvPurgeVariant[threadId];
-		//}
-		//sendPurgeVariant.clear();
-		//recvPurgeVariant.clear();
 		delete msgPurgeVariant;
 
 		return _purgedVariants;
@@ -646,22 +621,7 @@ private:
 		// call parent
 		this->KS::_variantThreadSync(processed, remaining, maxDepth);
 
-		//int &numThreads = _variantNumThreads;
-		//int threadId = omp_get_thread_num();
 		msgPurgeVariant->finalize();
-
-		//recvPurgeVariant[threadId]->receiveAllIncomingMessages();
-		//for (int t = 0 ; t < numThreads; t++) {
-		//	sendPurgeVariant[threadId*numThreads+t]->flushAllMessageBuffers(t);
-		//	LOG_DEBUG(3, "Flushed: " << t);
-		//}
-		//recvPurgeVariant[threadId]->receiveAllIncomingMessages();
-		//LOG_DEBUG(3, "Received all incoming");
-		//for (int t = 0 ; t < numThreads; t++) {
-		//	sendPurgeVariant[threadId*numThreads+t]->finalize(t);
-		//}
-		//recvPurgeVariant[threadId]->finalize(numThreads);
-		//LOG_DEBUG(3, "_variantThreadSync() finished:" << maxDepth);
 	}
 	long _variantBatchSync(long remaining, long purgedKmers, double maxDepth, double threshold) {
 		// call parent
@@ -682,8 +642,6 @@ private:
 	long _purgeVariants(DataPointers &pointers, const Kmer &kmer, WeakBucketType &variants, double threshold, short editDistance) {
 		int rank = world.rank();
 		int worldSize = world.size();
-		//int threadId = omp_get_thread_num();
-		//int &numThreads = _variantNumThreads;
 		if (editDistance == 0)
 			return 0;
 
@@ -699,7 +657,6 @@ private:
 				if (this->_setPurgeVariant(pointers, varKmer, threshold, dummy))
 					variantWasPurged();
 			} else {
-				//sendPurgeVariant[threadId*numThreads+threadDest]->bufferMessage(rankDest, threadDest)->set(threshold, varKmer);
 				msgPurgeVariant->bufferMessage(rankDest, threadDest)->set(threshold, varKmer);
 			}
 		}
@@ -1051,13 +1008,7 @@ done when empty cycle is received
 	};
 
 
-	//class RequestKmerMessageHeaderProcessor;
-	//class RespondKmerMessageHeaderProcessor;
 	class ReqRespKmerMessageHeaderProcessor;
-
-	//typedef MPIMessageBuffer< RequestKmerMessageHeader, RequestKmerMessageHeaderProcessor > RequestKmerMessageBuffersBase;
-	//typedef MPIMessageBuffer< RespondKmerMessageHeader, RespondKmerMessageHeaderProcessor > RespondKmerMessageBuffersBase;
-    typedef MPIMessageBuffer< ReqRespKmerMessageHeader, ReqRespKmerMessageHeaderProcessor > ReqRespKmerMessageBufferBase;
     typedef MPIAllToAllMessageBuffer< ReqRespKmerMessageHeader, ReqRespKmerMessageHeaderProcessor > ReqRespKmerMessageBuffer;
 
     class ReqRespKmerMessageHeaderProcessor {
@@ -1069,41 +1020,34 @@ done when empty cycle is received
 		ReqRespKmerMessageHeaderProcessor(KmerValueVectorVector &kmerValues, RS &readSelector, int numThreads): _kmerValues(kmerValues), _readSelector(&readSelector), _numThreads(numThreads)  {}
 
  		// store response in kmer value vector
-		int processRespond(ReqRespKmerMessageHeader *msg, ReqRespKmerMessageBufferBase *bufferCallback) {
-			LOG_DEBUG(3, "RespondKmerMessage: " << msg->requestId << " " << msg->getScore() << " recvTag: " << bufferCallback->getRecvTag());
-			assert( bufferCallback->getRecvTag() == omp_get_thread_num() + _numThreads);
+		int processRespond(ReqRespKmerMessageHeader *msg, MessagePackage &msgPkg) {
+			LOG_DEBUG(3, "RespondKmerMessage: " << msg->requestId << " " << msg->getScore() << " recv Source: " << msgPkg.source << " recvTag: " << msgPkg.tag);
+			assert( msgPkg.tag == omp_get_thread_num() + _numThreads);
 			_kmerValues[omp_get_thread_num()][msg->requestId] = msg->getScore();
 			return sizeof(ScoreType);
 		}
 
 		// lookup kmer in map and build response message
-		int processRequest(ReqRespKmerMessageHeader *msg, ReqRespKmerMessageBufferBase *bufferCallback) {
-			int destSource = bufferCallback->getRecvSource();
-			int destTag = bufferCallback->getRecvTag() + _numThreads;
+		int processRequest(ReqRespKmerMessageHeader *msg, MessagePackage &msgPkg) {
+			int destSource = msgPkg.source;
+			int destTag = msgPkg.tag + _numThreads;
 			ScoreType score = _readSelector->getValue( *msg->getKmer() );
 			LOG_DEBUG(3, "RequestKmerMessage: " << msg->getKmer()->toFasta() << " " << msg->requestId << " " << score << " destTag: " << destTag);
-			assert(bufferCallback->getRecvTag() == omp_get_thread_num());
+			assert(msgPkg.tag == omp_get_thread_num());
 
-			((ReqRespKmerMessageBuffer*)bufferCallback)->bufferMessage(destSource, destTag, sizeof(ScoreType))->set(msg->requestId, score);
+			((ReqRespKmerMessageBuffer*)msgPkg.bufferCallback)->bufferMessage(destSource, destTag, sizeof(ScoreType))->set(msg->requestId, score);
 			return KmerSizer::getByteSize();
 		}
 
-		int process(ReqRespKmerMessageHeader *msg, ReqRespKmerMessageBufferBase *bufferCallback) {
-			int recvTag = bufferCallback->getRecvTag();
+		int process(ReqRespKmerMessageHeader *msg, MessagePackage &msgPkg) {
+			int recvTag = msgPkg.tag;
 			if (recvTag >= _numThreads)
-				return processRespond(msg, bufferCallback);
+				return processRespond(msg, msgPkg);
 			else
-				return processRequest(msg, bufferCallback);
+				return processRequest(msg, msgPkg);
 		}
 	};
 
-
-	//typedef MPIRecvMessageBuffer< RespondKmerMessageHeader, RespondKmerMessageHeaderProcessor  > RecvRespondKmerMessageBuffer;
-	//typedef MPISendMessageBuffer< RespondKmerMessageHeader, RespondKmerMessageHeaderProcessor  > SendRespondKmerMessageBuffer;
-
-
-	//typedef MPIRecvMessageBuffer< RequestKmerMessageHeader, RequestKmerMessageHeaderProcessor > RecvRequestKmerMessageBuffer;
-	//typedef MPISendMessageBuffer< RequestKmerMessageHeader, RequestKmerMessageHeaderProcessor > SendRequestKmerMessageBuffer;
 
 	int _batchKmerLookup(const Read &read, SequenceLengthType markupLength, ReadSetSizeType offset, KmerValueVector &batchBuffer,
 			ReqRespKmerMessageBuffer &sendReq, int &thisThreadId, int &numThreads, int &rank, int &worldSize) {
@@ -1144,9 +1088,6 @@ done when empty cycle is received
 		int reserveBB = ((batchSize * maxKmers) / numThreads) + 1;
 		int reserveOffsets = (batchSize / numThreads) + 1;
 
-		//int respondMessageSize = sizeof(RespondKmerMessageHeader);
-		//int requestMessageSize = sizeof(RequestKmerMessageHeader) + KmerSizer::getTwoBitLength();
-
 		LOG_DEBUG(1, "Starting scoreAndTrimReadsMPI - trimming: " << readsSize << " using " << numThreads << " threads");
 
 		KmerValueVectorVector batchBuffer; batchBuffer.resize(numThreads);
@@ -1154,11 +1095,6 @@ done when empty cycle is received
 		ReadIdxVector readOffsetBuffer[ numThreads ];
 
 		ReqRespKmerMessageBuffer *reqRespBuffer;
-		//RecvRequestKmerMessageBuffer *recvReq[numThreads];
-		//SendRequestKmerMessageBuffer *sendReq[numThreads];
-
-		//RecvRespondKmerMessageBuffer *recvResp[numThreads];
-		//SendRespondKmerMessageBuffer *sendResp[numThreads];
 
 		LOG_DEBUG(2, "scoreAndTrimReads(): all_reduce: " << readsSize);
 		ReadSetSizeType mostReads = mpi::all_reduce(_world, readsSize, mpi::maximum<ReadSetSizeType>());
@@ -1166,28 +1102,6 @@ done when empty cycle is received
 
 		reqRespBuffer = new ReqRespKmerMessageBuffer(_world, sizeof(ReqRespKmerMessageHeader),
 				ReqRespKmerMessageHeaderProcessor(batchBuffer, *this, numThreads), 0.4, 2);
-
-		//#pragma omp parallel num_threads(numThreads)
-		//{
-			//int threadId = omp_get_thread_num();
-
-			// initialize message buffers
-
-			//recvResp[threadId] = new RecvRespondKmerMessageBuffer(_world, respondMessageSize, threadId + numThreads,
-			//                RespondKmerMessageHeaderProcessor( batchBuffer[threadId] ));
-			//sendResp[threadId] = new SendRespondKmerMessageBuffer(_world, respondMessageSize,
-			//                RespondKmerMessageHeaderProcessor( batchBuffer[threadId] ));
-			//sendResp[threadId]->addReceiveAllCallback( recvResp[threadId] );
-
-			//recvReq[threadId] = new RecvRequestKmerMessageBuffer(_world, requestMessageSize, threadId,
-			//                RequestKmerMessageHeaderProcessor(*sendResp[threadId], *this, numThreads));
-			//sendReq[threadId] = new SendRequestKmerMessageBuffer(_world, requestMessageSize,
-			//                RequestKmerMessageHeaderProcessor(*sendResp[threadId], *this, numThreads));
-			//sendReq[threadId]->addReceiveAllCallback( recvReq[threadId] );
-			//sendReq[threadId]->addReceiveAllCallback( recvResp[threadId] );
-
-			//recvReq[threadId]->addFlushAllCallback( sendResp[threadId], threadId + numThreads);
-		//}
 
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier. message buffers ready");
 		_world.barrier();
@@ -1233,35 +1147,6 @@ done when empty cycle is received
 			}
 			assert(readOffsetBuffer[threadId].size() == readIndexBuffer[threadId].size());
 
-			//LOG_DEBUG(3, "Starting communication sync for kmer lookups: " << batchReadIdx);
-
-			//sendReq[threadId]->flushAllMessageBuffers(threadId);
-			//while (sendReq[threadId]->getNumMessages() != recvResp[threadId]->getNumMessages()) {
-			//	recvReq[threadId]->receiveAllIncomingMessages();
-			//	sendResp[threadId]->flushAllMessageBuffers(threadId+numThreads);
-			//	recvResp[threadId]->receiveAllIncomingMessages();
-			//}
-
-			//LOG_DEBUG(3, "Finishing communication sync for kmer lookups: " << batchReadIdx);
-			//LOG_DEBUG(4, "readIndexBuffer: " << readIndexBuffer[threadId].size() << "/" << readIndexBuffer[threadId][readIndexBuffer[threadId].size()-1]);
-			//LOG_DEBUG(4, "batchBuffer: " << batchBuffer[threadId].size());
-			//LOG_DEBUG(4, "Waiting for Request buffers to finalize");
-
-			//sendReq[threadId]->finalize(threadId);
-			//recvReq[threadId]->finalize();
-
-			//LOG_DEBUG(4, "Waiting for Response buffers to finalize");
-
-			//sendResp[threadId]->finalize(threadId+numThreads);
-			//recvResp[threadId]->finalize();
-
-			//LOG_DEBUG(4, "Delivery Request sent: " << sendReq[threadId]->getNumDeliveries() << " received: " << recvReq[threadId]->getNumDeliveries() << " "
-			//		 <<  "Response sent: " << sendResp[threadId]->getNumDeliveries() << " received: " << recvResp[threadId]->getNumDeliveries());
-			//LOG_DEBUG(4, "Messages request/response: " << sendReq[threadId]->getNumMessages() << "/" << recvResp[threadId]->getNumMessages() << " "
-			//		 << recvReq[threadId]->getNumMessages() << "/" << sendResp[threadId]->getNumMessages());
-			//assert( sendReq[threadId]->getNumMessages() == recvResp[threadId]->getNumMessages() );
-			//assert( recvReq[threadId]->getNumMessages() == sendResp[threadId]->getNumMessages() );
-			reqRespBuffer->sendReceive(false);
 			reqRespBuffer->finalize();
 
 			LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
@@ -1288,29 +1173,7 @@ done when empty cycle is received
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier.  Finished trimming, waiting for remote processes");
 		_world.barrier();
 
-		//std::stringstream ss;
-		//#pragma omp parallel num_threads(numThreads)
-		//{
-		//	int threadId = omp_get_thread_num();
-			// initialize message buffers
-
-		//	LOG_DEBUG(2, "Releasing Request/Response message buffers");
-		//	#pragma omp critical
-		//	{
-			//	ss		<< "recvResp["<<threadId<<"] received " << recvResp[threadId]->getNumDeliveries() << "/" << recvResp[threadId]->getNumMessages()
-			//			<< "sendResp["<<threadId<<"] sent     " << sendResp[threadId]->getNumDeliveries() << "/" << sendResp[threadId]->getNumMessages()
-			//			<< "recvReq["<<threadId<<"] received " << recvReq[threadId]->getNumDeliveries() << "/" << recvReq[threadId]->getNumMessages()
-			//			<< "sendReq["<<threadId<<"] sent     " << sendReq[threadId]->getNumDeliveries() << "/" << sendReq[threadId]->getNumMessages() << std::endl;
-		//	}
-			//delete recvResp[threadId];
-			//delete sendResp[threadId];
-
-			//delete recvReq[threadId];
-			//delete sendReq[threadId];
-		//}
 		delete reqRespBuffer;
-		//std::string s = ss.str();
-		//LOG_DEBUG(1, s);
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier.  Finished scoreAndTrimReadsMPI");
 		_world.barrier();
 	}

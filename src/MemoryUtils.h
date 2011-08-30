@@ -183,7 +183,7 @@ public:
 		sprintf(filename, "/proc/%d/statm", pid);
 		std::fstream statm(filename, std::fstream::in);
 		std::string buffer;
-		getline(statm, buffer);
+		statm >> buffer;
 		statm.close();
 		return std::string("statm: " + buffer);
 	}

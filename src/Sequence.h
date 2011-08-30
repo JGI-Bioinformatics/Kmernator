@@ -224,7 +224,7 @@ public:
 	Sequence &operator=(const Sequence &other);
 	Sequence clone(bool usePreAllocation = false) const;
 
-	~Sequence();
+	virtual ~Sequence();
 
 
 public:
@@ -391,6 +391,8 @@ public:
 	Read(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false);
 	Read(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	Read(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart = NULL);
+	virtual ~Read() {}
+
 	Read &operator=(const Read &other);
 	Read clone(bool usePreAllocation = false) const;
 
