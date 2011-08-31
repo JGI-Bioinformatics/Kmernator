@@ -90,7 +90,7 @@ int main(int argc, char **argv)
 	  send[threadId]->addReceiveAllCallback(recv[threadId]);
   }
 
-  int spamMax = TextMessageBufferBase::MESSAGE_BUFFER_SIZE;
+  int spamMax = recv[0]->getBufferSize();
   char spam[spamMax];
 
   #pragma omp parallel for
@@ -154,11 +154,11 @@ int main(int argc, char **argv)
   world.barrier();
   start = boost::posix_time::microsec_clock::local_time();
 
-  for(int i = 0; i < mb*1024*1024 / TextMessageBufferBase::MESSAGE_BUFFER_SIZE / world.size(); i++) {
+  for(int i = 0; i < mb*1024*1024 / spamMax / world.size(); i++) {
 	  for(int w = 0 ; w < world.size(); w++) {
-		  inSize[w] = outSize[w] = TextMessageBufferBase::MESSAGE_BUFFER_SIZE;
-		  inDisp[w] = outDisp[w] = TextMessageBufferBase::MESSAGE_BUFFER_SIZE * w;
-		  memcpy(out + outDisp[w], spam, TextMessageBufferBase::MESSAGE_BUFFER_SIZE);
+		  inSize[w] = outSize[w] = spamMax;
+		  inDisp[w] = outDisp[w] = spamMax * w;
+		  memcpy(out + outDisp[w], spam, spamMax);
 	  }
 	  LOG_DEBUG_OPTIONAL(2, world.rank() == 0, "All2All: " << i);
 	  MPI_Alltoallv(out, outSize, outDisp, MPI_BYTE, in, inSize, inDisp, MPI_BYTE, world);

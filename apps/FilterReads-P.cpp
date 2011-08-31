@@ -37,6 +37,18 @@ typedef TrackingDataWithDirection DataType;
 typedef DistributedKmerSpectrum<DataType, DataType> KS;
 typedef DistributedReadSelector<DataType> RS;
 
+class _MPIFilterReadsOptions : public _FilterReadsOptions, public _MPIOptions {
+public:
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		_FilterReadsOptions::_setOptions(desc, p);
+		_MPIOptions::_setOptions(desc,p);
+	}
+	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+		return _MPIOptions::_parseOpts(desc, p, vm, argc, argv) && _FilterReadsOptions::_parseOpts(desc, p, vm, argc, argv);
+	}
+};
+typedef OptionsBaseTemplate< _MPIFilterReadsOptions > MPIFilterReadsOptions;
+
 int main(int argc, char *argv[]) {
 
 	// assign defaults
@@ -53,10 +65,10 @@ int main(int argc, char *argv[]) {
 	try {
 		Logger::setWorld(&world);
 
-		if (!FilterReadsOptions::parseOpts(argc, argv))
+		if (!MPIFilterReadsOptions::parseOpts(argc, argv))
 			throw std::invalid_argument("Please fix the command line arguments");
 
-		if (FilterReadsOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
+		if (MPIFilterReadsOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
 			throw std::invalid_argument("Distributed version does not support max-kmer-output-depth option");
 
 		if (Options::getOptions().getGatheredLogs())
@@ -65,7 +77,7 @@ int main(int argc, char *argv[]) {
 		validateMPIWorld(world);
 
 	} catch (...) {
-		std::cerr << FilterReadsOptions::getDesc() << std::endl;
+		std::cerr << MPIFilterReadsOptions::getDesc() << std::endl;
 		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
 		exit(1);
 	}
