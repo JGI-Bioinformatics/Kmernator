@@ -422,9 +422,7 @@ public:
 
 		delete msgBuffers;
 
-		std::string s = ss.str();
-		LOG_DEBUG(1, s);
-		LOG_DEBUG(2, "_buildKmerSpectrumMPI() final barrier");
+		LOG_DEBUG(3, "_buildKmerSpectrumMPI() final barrier");
 		world.barrier();
 		LOG_DEBUG(1, "finished _buildKmerSpectrumMPI");
 	}
@@ -479,8 +477,6 @@ public:
 
 		_buildKmerSpectrumMPI(store, isSolid);
 
-		std::string hist = getHistogram(isSolid);
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective raw histogram\n" << hist);
 		LOG_DEBUG(2, "buildKmerSpectrum() barrier");
 		world.barrier();
 
@@ -1101,7 +1097,7 @@ done when empty cycle is received
 		LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "Largest number of reads to batch: " << mostReads);
 
 		reqRespBuffer = new ReqRespKmerMessageBuffer(_world, sizeof(ReqRespKmerMessageHeader),
-				ReqRespKmerMessageHeaderProcessor(batchBuffer, *this, numThreads), 0.4, 2);
+				ReqRespKmerMessageHeaderProcessor(batchBuffer, *this, numThreads), 2);
 
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier. message buffers ready");
 		_world.barrier();
@@ -1163,8 +1159,6 @@ done when empty cycle is received
 
 				this->setTrimHeaders(trim, useKmers);
 			}
-
-			reqRespBuffer->finalize();
 
 			//LOG_DEBUG(2, "Finished assigning trim values: " << batchReadIdx);
 			batchReadIdx += batchSize;

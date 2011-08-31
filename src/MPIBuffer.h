@@ -44,7 +44,9 @@
 
 #include <vector>
 
-#define MPI_BUFFER_DEFAULT_SIZE (8 * 1024)
+// use about 32MB of memory total to batch & queue up messages between communications
+// this is split up across world * thread * thread arrays7
+#define MPI_BUFFER_DEFAULT_SIZE (32 * 1024 * 1024)
 
 class MPIMessageBufferBase
 {
@@ -58,10 +60,17 @@ protected:
 	CallbackVector _sendReceiveCallbacks;
 	long _deliveries;
 	long _numMessages;
+	long _syncPoints;
+	double _startTime;
 
 public:
-	MPIMessageBufferBase() : _deliveries(0), _numMessages(0) {}
-	virtual ~MPIMessageBufferBase() {}
+	MPIMessageBufferBase() : _deliveries(0), _numMessages(0), _syncPoints(0) {
+		_startTime = MPI_Wtime();
+	}
+	virtual ~MPIMessageBufferBase() {
+		LOG_VERBOSE(2, "~MPIMessageBufferBase(): " << _deliveries << " deliveries, "
+				<< _numMessages << " messages, " << _syncPoints << " syncs in " << (MPI_Wtime() - _startTime) << " seconds");
+	}
 	static bool isThreadSafe() {
 		int threadlevel;
 		MPI_Query_thread(&threadlevel);
@@ -122,6 +131,10 @@ public:
 		#pragma omp atomic
 		_numMessages++;
 	}
+	inline void syncPoint() {
+        #pragma omp atomic
+		_syncPoints++;
+	}
 
 };
 
@@ -158,42 +171,38 @@ public:
 
 protected:
 	mpi::communicator _world;
+	int _bufferSize;
 	int _messageSize;
 	MessageClassProcessor _processor;
+	float _softRatio;
 	int _softMaxBufferSize;
 	int _numCheckpoints;
-	Buffer _message;
 	ThreadedFreeBufferCache _freeBuffers;
-	int _bufferSize;
 	int _numThreads;
 	int _worldSize;
 	int _numWorldThreads;
-//	int _recvSource;
-//	int _recvTag;
-//	int _recvSize;
 
 public:
-	MPIMessageBuffer(mpi::communicator &world, int messageSize, MessageClassProcessor processor = MessageClassProcessor(), double _softRatio = 0.75)
-	: _world(world), _messageSize(messageSize), _processor(processor), _softMaxBufferSize(MESSAGE_BUFFER_SIZE * _softRatio), _numCheckpoints(0), _bufferSize(MESSAGE_BUFFER_SIZE)
-	//, _recvSource(mpi::any_source), _recvTag(mpi::any_tag), _recvSize(0)
+	MPIMessageBuffer(mpi::communicator &world, int messageSize, MessageClassProcessor processor = MessageClassProcessor(), float softRatio = 0.75)
+	: _world(world), _bufferSize(MESSAGE_BUFFER_SIZE / _world.size()), _messageSize(messageSize), _processor(processor), _softRatio(softRatio),
+	  _numCheckpoints(0)
 	{
-		_message = new char[ MESSAGE_BUFFER_SIZE ];
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
 		assert(_softRatio >= 0.0 && _softRatio <= 1.0);
-		assert(_softMaxBufferSize >= 0 && _softMaxBufferSize <= MESSAGE_BUFFER_SIZE);
+		_worldSize = _world.size();
 		if (omp_in_parallel())
 			_numThreads = omp_get_num_threads();
 		else
 			_numThreads = omp_get_max_threads();
-		_worldSize = _world.size();
+		_bufferSize /= (_numThreads * _numThreads);
+		setSoftMaxBufferSize();
+
 		_numWorldThreads = _worldSize * _numThreads;
 		_freeBuffers.resize(_numThreads);
 		for(int threadId = 0; threadId < _numThreads; threadId++)
 			_freeBuffers[threadId].reserve(BUFFER_QUEUE_SOFT_LIMIT * _numWorldThreads + 1);
-		setSoftMaxBufferSize( Options::getOptions().getBatchSize() * messageSize );
 	}
 	~MPIMessageBuffer() {
-		delete [] _message;
 		for(ThreadedFreeBufferCache::iterator it = _freeBuffers.begin(); it != _freeBuffers.end(); it++)
 			for(FreeBufferCache::iterator it2 = it->begin(); it2 != it->end() ; it2++)
 				delete [] *it2;
@@ -214,35 +223,28 @@ public:
 	inline int getMessageSize() {
 		return _messageSize;
 	}
-//	inline int &getRecvSource() {
-//		return _recvSource;
-//	}
-//	inline int &getRecvTag() {
-//		return _recvTag;
-//	}
-//	inline int &getRecvSize() {
-//		return _recvSize;
-//	}
 	inline MessageClassProcessor &getProcessor() {
 		return _processor;
 	}
 	void setMessageProcessor(MessageClassProcessor processor) {
 		_processor = processor;
 	}
-	inline int getMaxBufferSize() const {
+	inline int getTotalBufferSize() const {
 		return MESSAGE_BUFFER_SIZE;
 	}
 	inline int getSoftMaxBufferSize() const {
 		return _softMaxBufferSize;
 	}
-	void setSoftMaxBufferSize(int size) {
-		_softMaxBufferSize = std::max(getMessageSize(), std::min(size, getMaxBufferSize()));
+	void setSoftMaxBufferSize() {
+		_softMaxBufferSize = std::max(getMessageSize(), (int) (_bufferSize * _softRatio));
+		assert(_softMaxBufferSize >= 0 && _softMaxBufferSize <= _bufferSize);
 	}
-	MessageClass *getTmpMessage() {
-		return (MessageClass*) this->_message;
+	inline int getBufferSize() const {
+		return _bufferSize;
 	}
 	void setBufferSize(int bufferSize) {
 		_bufferSize = bufferSize;
+		setSoftMaxBufferSize();
 	}
 	Buffer getNewBuffer() {
 		int threadId = omp_get_thread_num();
@@ -387,13 +389,13 @@ private:
 	int inoutDataSize;
 
 public:
-	MPIAllToAllMessageBuffer(mpi::communicator &world, int messageSize, MessageClassProcessor processor = MessageClassProcessor(), double softRatio = 0.75, int _numTags = 1)
+	MPIAllToAllMessageBuffer(mpi::communicator &world, int messageSize, MessageClassProcessor processor = MessageClassProcessor(), int _numTags = 1, double softRatio = 0.85)
 	: BufferBase(world, messageSize, processor, softRatio), numTags(_numTags), threadsSending(0) {
 		assert(!omp_in_parallel());
 		int worldSize = this->getWorldSize();
 		int numThreads = this->getNumThreads();
 
-		inoutDataSize = sizeof(int) + numThreads * (numThreads * numTags) * (headerSize + BufferSize);
+		inoutDataSize = sizeof(int) + numThreads * (numThreads * numTags) * (headerSize + this->getBufferSize());
 		int inoutSize = getInOutHeaderSize() + worldSize * inoutDataSize;
 		buildsTWT.resize(numThreads);
 		for(int threadId = 0 ; threadId < numThreads; threadId++) {
@@ -589,10 +591,11 @@ public:
 		while (!this->reachedCheckpoint(this->getNumThreads())) {
 			sendReceive(true);
 		}
+		this->syncPoint();
 	}
 	bool isReadyToSend(int offset, int trailingBytes) {
-		return offset > 0 &&
-				(offset + trailingBytes + this->getMessageSize() >= this->getSoftMaxBufferSize() || threadsSending > 0);
+		return offset >= this->getSoftMaxBufferSize() &&
+				(threadsSending > 0 || (offset + trailingBytes + this->getMessageSize()) >= this->getBufferSize());
 	}
 
 	MessageClass *bufferMessage(int rankDest, int tagDest) {
@@ -774,6 +777,7 @@ public:
 
 		LOG_DEBUG_OPTIONAL(3, true, "Recv " << _tag << ": Finished finalize checkpoint: " << this->getNumCheckpoints());
 		this->resetCheckpoints();
+		this->syncPoint();
 	}
 
 
@@ -784,7 +788,7 @@ private:
 #ifdef OPENMP_CRITICAL_MPI
 #pragma omp critical (MPI_buffer_irecv)
 #endif
-		oreq = this->getWorld().irecv(sourceRank, _tag, getBuffer(sourceRank), BufferBase::MESSAGE_BUFFER_SIZE);
+		oreq = this->getWorld().irecv(sourceRank, _tag, getBuffer(sourceRank), this->getBufferSize());
 		assert(!!oreq);
 		_requestAttempts[sourceRank] = 0;
 		return oreq;
@@ -1113,7 +1117,7 @@ public:
 		flushAllMessagesUntilEmpty(tagDest);
 
 		LOG_DEBUG_OPTIONAL(3, true,"Send " << tagDest << ": finished finalize()");
-
+		this->syncPoint();
 	}
 	long processPending() {
 		return checkSentBuffers(false);
