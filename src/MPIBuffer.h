@@ -219,6 +219,7 @@ protected:
 	MessageClassProcessor _processor;
 	float _softRatio;
 	int _softMaxBufferSize;
+	int _softNumThreads;
 	int _numCheckpoints;
 	ThreadedFreeBufferCache _freeBuffers;
 	int _numThreads;
@@ -229,10 +230,10 @@ public:
 	MPIMessageBuffer(mpi::communicator &world, int messageSize,
 			MessageClassProcessor processor = MessageClassProcessor(),
 			int totalBufferSize = MPIOptions::getOptions().getTotalBufferSize(),
-			float softRatio = 0.75) :
+			float softRatio = 0.90) :
 		_world(world), _bufferSize(totalBufferSize / _world.size()),
 				_messageSize(messageSize), _processor(processor), _softRatio(
-						softRatio), _numCheckpoints(0) {
+						softRatio), _softNumThreads(0), _numCheckpoints(0) {
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
 		assert(_softRatio >= 0.0 && _softRatio <= 1.0);
 		_worldSize = _world.size();
@@ -240,6 +241,7 @@ public:
 			_numThreads = omp_get_num_threads();
 		else
 			_numThreads = omp_get_max_threads();
+		_softNumThreads = std::max(_numThreads * 3 / 4, 1);
 		_bufferSize /= (_numThreads * _numThreads);
 		setSoftMaxBufferSize();
 
@@ -259,16 +261,19 @@ public:
 	inline mpi::communicator &getWorld() {
 		return _world;
 	}
-	inline int getNumThreads() {
+	inline int getNumThreads() const {
 		return _numThreads;
 	}
-	inline int getNumWorldThreads() {
+	inline int getSoftNumThreads() const {
+		return _softNumThreads;
+	}
+	inline int getNumWorldThreads() const {
 		return _numWorldThreads;
 	}
-	inline int getWorldSize() {
+	inline int getWorldSize() const {
 		return _worldSize;
 	}
-	inline int getMessageSize() {
+	inline int getMessageSize() const {
 		return _messageSize;
 	}
 	inline MessageClassProcessor &getProcessor() {
@@ -332,12 +337,11 @@ public:
 		return count;
 	}
 
-	inline int getNumCheckpoints() {
+	inline int getNumCheckpoints() const {
 		return _numCheckpoints;
 	}
-	bool reachedCheckpoint(int checkpointFactor = 1) {
-		return getNumCheckpoints() == this->getWorld().size()
-				* checkpointFactor;
+	bool reachedCheckpoint(int checkpointFactor = 1) const {
+		return getNumCheckpoints() == _worldSize * checkpointFactor;
 	}
 	void resetCheckpoints() {
 		_numCheckpoints = 0;
@@ -457,7 +461,7 @@ private:
 public:
 	MPIAllToAllMessageBuffer(mpi::communicator &world, int messageSize,
 			MessageClassProcessor processor = MessageClassProcessor(),
-			int _numTags = 1, int totalBufferSize = MPIOptions::getOptions().getTotalBufferSize(), double softRatio = 0.85) :
+			int _numTags = 1, int totalBufferSize = MPIOptions::getOptions().getTotalBufferSize(), double softRatio = 0.90) :
 		BufferBase(world, messageSize, processor, totalBufferSize, softRatio),
 				numTags(_numTags), threadsSending(0) {
 		assert(!omp_in_parallel());
@@ -613,7 +617,7 @@ public:
 		this->syncPoint();
 	}
 	bool isReadyToSend(int offset, int trailingBytes) {
-		return offset >= this->getSoftMaxBufferSize() && (threadsSending > 0
+		return offset >= this->getSoftMaxBufferSize() && (threadsSending >= this->getSoftNumThreads()
 				|| (offset + trailingBytes + this->getMessageSize())
 						>= this->getBufferSize());
 	}
