@@ -138,13 +138,6 @@ public:
 		LOG_DEBUG(4, "flushAll() with count " << count);
 		return count;
 	}
-	long sendReceiveAll(bool isFinalized) {
-		long count = 0;
-		for (unsigned int i = 0; i < _sendReceiveCallbacks.size(); i++)
-			count += _sendReceiveCallbacks[i].first->sendReceive(isFinalized);
-		LOG_DEBUG(4, "sendReceiveAll() with count " << count);
-		return count;
-	}
 
 	inline long getNumDeliveries() {
 		return _deliveries;
@@ -204,6 +197,7 @@ template<typename C, typename CProcessor = DummyProcessor<C> >
 class MPIMessageBuffer: public MPIMessageBufferBase {
 public:
 	static const int BUFFER_QUEUE_SOFT_LIMIT = 5;
+	static const int BUFFER_INSTANCES = 3;
 
 	typedef C MessageClass;
 	typedef CProcessor MessageClassProcessor;
@@ -231,7 +225,7 @@ public:
 			MessageClassProcessor processor = MessageClassProcessor(),
 			int totalBufferSize = MPIOptions::getOptions().getTotalBufferSize(),
 			float softRatio = 0.90) :
-		_world(world), _bufferSize(totalBufferSize / _world.size()),
+		_world(world), _bufferSize(totalBufferSize / _world.size() / BUFFER_INSTANCES),
 				_messageSize(messageSize), _processor(processor), _softRatio(
 						softRatio), _softNumThreads(0), _numCheckpoints(0) {
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
@@ -362,6 +356,7 @@ public:
 	typedef typename BufferBase::MessagePackageQueue MessagePackageQueue;
 	typedef C MessageClass;
 	typedef CProcessor MessageClassProcessor;
+	static const int NUM_BUFFERS = 4;
 
 	class MessageHeader {
 	public:
@@ -448,17 +443,147 @@ public:
 				delete[] buffer;
 		}
 	};
-	static const int headerSize = sizeof(MessageHeader);
+	class TransmitBuffer {
+	public:
+		TransmitBuffer(int _numThreads, int _worldSize, int _numTags, int bufferSize) :
+		numThreads(_numThreads), worldSize(_worldSize), numTags(_numTags), buildSize(0), readyThreads(_numThreads) {
+			dataSize = sizeof(int) + numThreads * (numThreads * numTags)
+					* (sizeof(MessageHeader) + bufferSize);
+			totalSize = getHeaderSize() + worldSize * dataSize;
+			jumps = new int[numThreads * worldSize * numThreads * numTags];
+			xmit = new char[totalSize];
+			// in/out displacements do not change
+			for (int rankDest = 0; rankDest < worldSize; rankDest++) {
+				getOffset(rankDest) = rankDest * dataSize;
+			}
+			prepOut();
+		}
+		~TransmitBuffer() {
+			delete [] jumps;
+			delete [] xmit;
+		}
+		inline int getJump(int rankDest, int threadDest, int threadId = 0) {
+			return threadId * worldSize * numThreads * numTags + rankDest
+					* numThreads * numTags + threadDest;
+		}
+		inline Buffer getJumpBuffer(int rankDest, int threadDest, int threadId) {
+			return getBuffer(rankDest) + jumps[getJump(rankDest,threadDest,threadId)];
+		}
+		inline int &getSize(int rankDest) {
+			int *o = (int*) xmit;
+			return *(o + rankDest);
+		}
+		inline int &getOffset(int rankDest) {
+			int *o = (int*) xmit;
+			return *(o + worldSize + rankDest);
+		}
+		inline int &getDataSize(int rankDest) {
+			int *o = (int*) xmit;
+			Buffer buf = (Buffer) (o + worldSize * 2);
+			return *((int*) (buf + rankDest * dataSize));
+		}
+		inline int getHeaderSize() {
+			return worldSize * sizeof(int) * 2;
+		}
+		inline Buffer getBuffer(int rankDest) {
+			return (Buffer) (&getDataSize(rankDest) + 1);
+		}
+		inline int getBuildSize() const {
+			return buildSize;
+		}
+		inline bool isIncoming() const {
+			return _isIncoming;
+		}
+		inline bool isReady() const {
+			return readyThreads == numThreads;
+		}
+		void setReady() {
+			assert(omp_get_max_threads() == 1 || omp_in_parallel());
+			#pragma omp atomic
+			readyThreads++;
+		}
+		void setReady(int n) {
+			readyThreads = n;
+		}
+		void prepOut() {
+			assert(omp_get_thread_num() == 0);
+			assert(isReady());
+			for (int rankDest = 0; rankDest < worldSize; rankDest++) {
+				getSize(rankDest) = 0;
+			}
+			buildSize = 0;
+			readyThreads = 0;
+			_isIncoming = false;
+		}
+		void prepIn() {
+			assert(omp_get_thread_num() == 0);
+			for (int rankDest = 0; rankDest < worldSize; rankDest++) {
+				getSize(rankDest) = dataSize;
+			}
+			buildSize = 0;
+			readyThreads = 0;
+			_isIncoming = true;
+		}
+		static void AllToAll(TransmitBuffer &out, TransmitBuffer &in, mpi::communicator &world) {
+			// mpi_alltoall
+			assert(out.isReady());
+			MPI_Alltoallv(out.xmit + out.getHeaderSize(), &out.getSize(0),
+					&out.getOffset(0), MPI_BYTE, in.xmit
+							+ in.getHeaderSize(), &in.getSize(0),
+					&in.getOffset(0), MPI_BYTE, world);
+			// reset out sizes
+			in.buildSize = out.buildSize;
+			out.prepOut();
+		}
+		// must be in critical section!
+		void setSize(int rankDest, int threadDest, int threadId, BuildBuffer &bb) {
+
+			int jump = getJump(rankDest, threadDest, threadId);
+			int &outSize = getSize(rankDest);
+
+			jumps[jump] = outSize;
+			int size = bb.header.getOffset();
+			buildSize += size;
+			outSize += size + sizeof(MessageHeader);
+			LOG_DEBUG(4, "sendReceive(): sending (" << rankDest << ", "
+					<< threadDest << "): " << size
+					<< " bytes, outSize: " << outSize << " buildSize: "
+					<< buildSize);
+		}
+		void setTransmitSizes(bool isFinalized) {
+			if (isFinalized && buildSize == 0) {
+				for (int destRank = 0; destRank < worldSize; destRank++) {
+					getDataSize(destRank) = 0; // send no MessageHeaders
+					// add the (int) datasize to the total length sent so something is always sent
+					getSize(destRank) = sizeof(int);
+				}
+			} else {
+				// set transmitted sizes
+				for (int destRank = 0; destRank < worldSize; destRank++) {
+					int dataSize = getSize(destRank);
+					getDataSize(destRank) = dataSize; // includes MessageHeaders
+					// add the (int) datasize to the total length sent
+					getSize(destRank) += sizeof(int);
+				}
+			}
+		}
+	private:
+		int numThreads, worldSize, numTags, buildSize, dataSize, totalSize;
+		Buffer xmit;
+		int *jumps;
+		int readyThreads;
+		bool _isIncoming;
+	};
 
 private:
-	Buffer out, in;
+	TransmitBuffer* buffers[NUM_BUFFERS];
+	int currentBuffer;
 	std::vector<std::vector<std::vector<BuildBuffer> > > buildsTWT;
 	int numTags;
 	int threadsSending;
-	int buildSize;
-	int inoutDataSize;
 
 public:
+
 	MPIAllToAllMessageBuffer(mpi::communicator &world, int messageSize,
 			MessageClassProcessor processor = MessageClassProcessor(),
 			int _numTags = 1, int totalBufferSize = MPIOptions::getOptions().getTotalBufferSize(), double softRatio = 0.90) :
@@ -468,15 +593,14 @@ public:
 		int worldSize = this->getWorldSize();
 		int numThreads = this->getNumThreads();
 
-		inoutDataSize = sizeof(int) + numThreads * (numThreads * numTags)
-				* (headerSize + this->getBufferSize());
-		int inoutSize = getInOutHeaderSize() + worldSize * inoutDataSize;
 		buildsTWT.resize(numThreads);
 		for (int threadId = 0; threadId < numThreads; threadId++) {
 			buildsTWT[threadId].resize(worldSize);
 		}
-		out = new char[inoutSize];
-		in = new char[inoutSize];
+		for(int i = 0; i < NUM_BUFFERS; i++)
+			buffers[i] = new TransmitBuffer(numThreads, worldSize, numTags, this->getBufferSize());
+		currentBuffer = 0;
+
 		for (int rankDest = 0; rankDest < worldSize; rankDest++) {
 			for (int threadId = 0; threadId < numThreads; threadId++) {
 				buildsTWT[threadId][rankDest].resize(numThreads * numTags,
@@ -487,114 +611,91 @@ public:
 					bb.buffer = this->getNewBuffer();
 				}
 			}
-			// set in/out size headers
-			getInOutSize(rankDest, out) = 0;
-			getInOutSize(rankDest, in) = inoutDataSize;
-			// in/out displacements do not change
-			getInOutOffset(rankDest, out) = rankDest * inoutDataSize;
-			getInOutOffset(rankDest, in) = rankDest * inoutDataSize;
 		}
-		buildSize = 0;
 	}
 	~MPIAllToAllMessageBuffer() {
 		assert(!omp_in_parallel());
-		delete[] in;
-		delete[] out;
-	}
-	inline int getJump(int rank, int thread, int threadId = 0) {
-		return threadId * this->getNumWorldThreads() * numTags + rank
-				* this->getNumThreads() * numTags + thread;
-	}
-
-	inline int getInOutHeaderSize() {
-		return this->getWorldSize() * sizeof(int) * 2;
-	}
-	inline int &getInOutSize(int rankDest, Buffer buf) {
-		int *o = (int*) buf;
-		return *(o + rankDest);
-	}
-	inline int &getInOutOffset(int rankDest, Buffer buf) {
-		int *o = (int*) buf;
-		return *(o + this->getWorldSize() + rankDest);
-	}
-	inline int &getInOutDataSize(int rankDest, Buffer buf) {
-		int *o = (int*) buf;
-		buf = (Buffer) (o + this->getWorldSize() * 2);
-		return *((int*) (buf + rankDest * inoutDataSize));
-	}
-	inline Buffer getInOutBuffer(int rankDest, Buffer buf) {
-		return (Buffer) (&getInOutDataSize(rankDest, buf) + 1);
+		for(int i = 0; i < NUM_BUFFERS; i++)
+			delete buffers[i];
 	}
 	long sendReceive(bool isFinalized) {
 		assert(omp_get_max_threads() == 1 || omp_in_parallel());
-		int numThreads = this->getNumThreads();
-		int worldSize = this->getWorldSize();
-		int numWorldThreads = this->getNumWorldThreads();
 		if (isFinalized)
 			this->syncAttempt();
+
+		double waitTime;
 
 		LOG_DEBUG(3, "sendReceive(" << isFinalized << ") "
 				<< this->getNumMessages() << " messages "
 				<< this->getNumDeliveries() << " deliveries.");
 
-		Buffer outBuffers[numThreads * numWorldThreads * numTags];
+		TransmitBuffer &last  = *buffers[(currentBuffer+0) % NUM_BUFFERS];
+		TransmitBuffer &in    = *buffers[(currentBuffer+1) % NUM_BUFFERS];
+		TransmitBuffer &last2 = *buffers[(currentBuffer+2) % NUM_BUFFERS];
+		TransmitBuffer &out   = *buffers[(currentBuffer+3) % NUM_BUFFERS];
 
-#pragma omp atomic
+		assert(!in.isIncoming());
+		assert(!out.isIncoming());
+
+		#pragma omp atomic
 		threadsSending++;
 
-		_prepBuffersByThread(outBuffers);
+		_prepBuffersByThread(out);
 
-		double waitTime = MPI_Wtime();
-#pragma omp barrier
-#pragma omp master
-		{
-			this->threadWait( MPI_Wtime() - waitTime );
-
-			if (isFinalized && buildSize == 0) {
-				for (int destRank = 0; destRank < worldSize; destRank++) {
-					getInOutDataSize(destRank, out) = 0;
-					// add the (int) datasize to the total length sent so something is always sent
-					getInOutSize(destRank, out) = sizeof(int);
-				}
-			} else {
-				// set transmitted sizes
-				for (int destRank = 0; destRank < worldSize; destRank++) {
-					int dataSize = getInOutSize(destRank, out);
-					getInOutDataSize(destRank, out) = dataSize;
-					// add the (int) datasize to the total length sent
-					getInOutSize(destRank, out) += sizeof(int);
-				}
-			}
-			waitTime = MPI_Wtime();
-			// mpi_alltoall
-			MPI_Alltoallv(out + getInOutHeaderSize(), &getInOutSize(0, out),
-					&getInOutOffset(0, out), MPI_BYTE, in
-							+ getInOutHeaderSize(), &getInOutSize(0, in),
-					&getInOutOffset(0, in), MPI_BYTE, this->getWorld());
-
-			this->transit(MPI_Wtime() - waitTime);
-
-			// reset out sizes
-			for (int destRank = 0; destRank < worldSize; destRank++)
-				getInOutSize(destRank, out) = 0;
-			buildSize = 0;
+		// reset checkpoints before processing 'last'
+		if (omp_get_thread_num() == 0) {
 			this->resetCheckpoints();
-			this->newMessageDelivery();
-			threadsSending = 0;
-
-			waitTime = MPI_Wtime();
 		}
 
-#pragma omp barrier
+		// ensure last buffer is ready and all threads have reset checkpoints
+		waitTime = MPI_Wtime();
+		#pragma omp barrier
+		assert(threadsSending == numThreads);
+		assert(out.isReady());
+
+		while ( last.isIncoming() && !last.isReady() )
+			assert(false); // spin lock should not be necessary
 		this->threadWait( MPI_Wtime() - waitTime );
 
-		long numReceived = _processBuffersByThread(outBuffers);
+		// make sure all threads get here before incrementing the buffer
+
+		if (omp_get_thread_num() == 0) {
+            #pragma omp atomic
+			currentBuffer++;
+			in.prepIn();
+			last2.prepOut(); // prep last2 to be the next in
+		}
+
+		long numReceived = 0;
+		if (last.isIncoming())
+			numReceived += _processBuffersByThread(last);
+
+		#pragma omp atomic
+		threadsSending--;
+
+		if (threadsSending == 0)
+			last.prepOut(); // prep last to be the next out
 
 		waitTime = MPI_Wtime();
-#pragma omp barrier
+		#pragma omp barrier
 		this->threadWait( MPI_Wtime() - waitTime );
+		// make sure all threads always use the same currentBuffer
+		// reset last now that all threads are done
 
-		numReceived += this->sendReceiveAll(isFinalized);
+		if (omp_get_thread_num() == 0)
+		{
+			out.setTransmitSizes(isFinalized);
+			if (isFinalized && out.getBuildSize() == 0 && this->reachedCheckpoint(this->getNumThreads()))
+				return numReceived; // do not make another delivery
+
+			waitTime = MPI_Wtime();
+			// mpi_alltoall
+			TransmitBuffer::AllToAll(out, in, this->getWorld());
+			in.setReady(this->getNumThreads());
+
+			this->transit(MPI_Wtime() - waitTime);
+			this->newMessageDelivery();
+		}
 
 		return numReceived;
 	}
@@ -663,14 +764,14 @@ public:
 		return buf;
 	}
 private:
-	void _prepBuffersByThread(Buffer *outBuffers) {
+	void _prepBuffersByThread(TransmitBuffer &out) {
 		assert(omp_get_max_threads() == 1 || omp_in_parallel());
 		int threadId = omp_get_thread_num();
 		int numThreads = this->getNumThreads();
 		int worldSize = this->getWorldSize();
 
 		double waitTime = MPI_Wtime();
-#pragma omp critical
+		#pragma omp critical
 		{
 			waitTime = MPI_Wtime() - waitTime;
 			// allocate the out message headers
@@ -678,19 +779,7 @@ private:
 				for (int threadDest = 0; threadDest < (numThreads * numTags); threadDest++) {
 					BuildBuffer &bb = buildsTWT[threadId][rankDest][threadDest];
 					assert(bb.header.validate());
-
-					int jump = getJump(rankDest, threadDest, threadId);
-					int &outSize = getInOutSize(rankDest, out);
-
-					outBuffers[jump] = getInOutBuffer(rankDest, out) + outSize;
-					int size = bb.header.getOffset();
-					buildSize += size;
-					outSize += size + headerSize;
-					LOG_DEBUG(4, "sendReceive(): sending (" << rankDest << ", "
-							<< threadDest << "): " << size
-							<< " bytes, outSize: " << outSize << " buildSize: "
-							<< buildSize);
-
+					out.setSize(rankDest, threadDest, threadId, bb);
 				}
 			}
 		}
@@ -699,11 +788,10 @@ private:
 		// copy any headers and messages to out
 		for (int rankDest = 0; rankDest < worldSize; rankDest++) {
 			for (int threadDest = 0; threadDest < (numThreads * numTags); threadDest++) {
-				int jump = getJump(rankDest, threadDest, threadId);
 				BuildBuffer &bb = buildsTWT[threadId][rankDest][threadDest];
 				assert(bb.header.validate());
 
-				MessageHeader *outHeader = (MessageHeader *) outBuffers[jump];
+				MessageHeader *outHeader = (MessageHeader *) out.getJumpBuffer(rankDest, threadDest, threadId);
 				*outHeader = bb.header;
 				if (bb.header.getOffset() > 0)
 					memcpy(outHeader + 1, bb.buffer, bb.header.getOffset());
@@ -712,9 +800,10 @@ private:
 				bb.header.resetOffset();
 			}
 		}
+		out.setReady();
 	}
 
-	long _processBuffersByThread(Buffer *outBuffers) {
+	long _processBuffersByThread(TransmitBuffer &in) {
 		assert(omp_get_max_threads() == 1 || omp_in_parallel());
 		int threadId = omp_get_thread_num();
 		int numThreads = this->getNumThreads();
@@ -722,16 +811,17 @@ private:
 		long numReceived = 0;
 
 		for (int sourceRank = 0; sourceRank < worldSize; sourceRank++) {
-			int transmitSize = getInOutSize(sourceRank, in);
-			int size = getInOutDataSize(sourceRank, in);
+			int transmitSize = in.getSize(sourceRank);
+			int size = in.getDataSize(sourceRank);
 			assert(size >= 0);
 			LOG_DEBUG(3, "sendReceive(): Received (" << sourceRank << "):"
 					<< size << " bytes, " << transmitSize << " transmitted");
 			if (size == 0) {
+				// no MessageHeaders - set checkpoint
 				this->checkpoint();
 				continue;
 			}
-			Buffer buf = getInOutBuffer(sourceRank, in);
+			Buffer buf = in.getBuffer(sourceRank);
 			Buffer begin = buf;
 			Buffer end = buf + size;
 			while (begin != end) {
@@ -746,7 +836,7 @@ private:
 					if (header->getOffset() > 0)
 						numReceived += processMessages(sourceRank, header);
 				}
-				begin = ((Buffer) (header)) + headerSize + header->getOffset();
+				begin = ((Buffer) (header)) + sizeof(MessageHeader) + header->getOffset();
 			}
 		}
 		return numReceived;

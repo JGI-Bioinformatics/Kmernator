@@ -375,7 +375,14 @@ public:
 			}
 			#pragma omp barrier
 
-			for(long readIdx = threadId ; readIdx < readSetSize; readIdx+=numThreads)
+			int loopThreadId = threadId;
+			int loopNumThreads = numThreads;
+//			if (numThreads > 1) {
+//				loopThreadId--;
+//				loopNumThreads--;
+//			}
+//			if (loopThreadId >= 0)
+			for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
 			{
 
 				const Read &read = store.getRead( readIdx );
@@ -405,7 +412,7 @@ public:
 					}
 				}
 
-				if (threadId == 0 && readIdx % 1000000 == 0) {
+				if (loopThreadId == 0 && readIdx % 1000000 == 0) {
 					if (world.rank() == 0) {
 						LOG_VERBOSE_OPTIONAL(1, true, "distributed processing " << (readIdx * world.size()) << " reads");
 					} else {
@@ -1103,6 +1110,7 @@ done when empty cycle is received
 		_world.barrier();
 
 		#pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
+		{
 		while (batchReadIdx < mostReads) {
 			int threadId = omp_get_thread_num();
 
@@ -1143,7 +1151,8 @@ done when empty cycle is received
 			}
 			assert(readOffsetBuffer[threadId].size() == readIndexBuffer[threadId].size());
 
-			reqRespBuffer->finalize();
+			reqRespBuffer->sendReceive(false); // flush/send all pending requests for this thread's batch
+			reqRespBuffer->sendReceive(false); // receive all pending responses for this threads's batch
 
 			LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
 			for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
@@ -1164,6 +1173,8 @@ done when empty cycle is received
 			batchReadIdx += batchSize;
 
 			// local & world threads are okay to start without sync
+		}
+		reqRespBuffer->finalize();
 		}
 
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier.  Finished trimming, waiting for remote processes");
