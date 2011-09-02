@@ -197,7 +197,7 @@ template<typename C, typename CProcessor = DummyProcessor<C> >
 class MPIMessageBuffer: public MPIMessageBufferBase {
 public:
 	static const int BUFFER_QUEUE_SOFT_LIMIT = 5;
-	static const int BUFFER_INSTANCES = 3;
+	static const int BUFFER_INSTANCES = 5;
 
 	typedef C MessageClass;
 	typedef CProcessor MessageClassProcessor;
@@ -446,7 +446,7 @@ public:
 	class TransmitBuffer {
 	public:
 		TransmitBuffer(int _numThreads, int _worldSize, int _numTags, int bufferSize) :
-		numThreads(_numThreads), worldSize(_worldSize), numTags(_numTags), buildSize(0), readyThreads(_numThreads) {
+		numThreads(_numThreads), worldSize(_worldSize), numTags(_numTags), buildSize(0), readyThreads(0) {
 			dataSize = sizeof(int) + numThreads * (numThreads * numTags)
 					* (sizeof(MessageHeader) + bufferSize);
 			totalSize = getHeaderSize() + worldSize * dataSize;
@@ -506,8 +506,6 @@ public:
 			readyThreads = n;
 		}
 		void prepOut() {
-			assert(omp_get_thread_num() == 0);
-			assert(isReady());
 			for (int rankDest = 0; rankDest < worldSize; rankDest++) {
 				getSize(rankDest) = 0;
 			}
@@ -516,7 +514,6 @@ public:
 			_isIncoming = false;
 		}
 		void prepIn() {
-			assert(omp_get_thread_num() == 0);
 			for (int rankDest = 0; rankDest < worldSize; rankDest++) {
 				getSize(rankDest) = dataSize;
 			}
@@ -650,7 +647,6 @@ public:
 		// ensure last buffer is ready and all threads have reset checkpoints
 		waitTime = MPI_Wtime();
 		#pragma omp barrier
-		assert(threadsSending == numThreads);
 		assert(out.isReady());
 
 		while ( last.isIncoming() && !last.isReady() )

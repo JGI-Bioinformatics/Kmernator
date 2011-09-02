@@ -1153,6 +1153,7 @@ done when empty cycle is received
 
 			reqRespBuffer->sendReceive(false); // flush/send all pending requests for this thread's batch
 			reqRespBuffer->sendReceive(false); // receive all pending responses for this threads's batch
+			//reqRespBuffer->finalize();
 
 			LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
 			for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
