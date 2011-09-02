@@ -51,7 +51,7 @@
 #include "TwoBitSequence.h"
 #include "MemoryUtils.h"
 #include "KmerTrackingData.h"
-#include "lookup8.h"
+#include "lookup3.h"
 #include "MmapTempFile.h"
 #include "Log.h"
 
@@ -293,8 +293,14 @@ public:
 
 	inline NumberType hash() const {
 
-		NumberType number = toNumber();
-		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
+//		NumberType number = toNumber();
+//		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
+		uint64_t hash = 0xDEADBEEF;
+		uint32_t *pc, *pb;
+		pc = (uint32_t*) &hash;
+		pb = pc+1;
+		Lookup3::hashlittle2(this, getTwoBitLength(), pc, pb);
+		return hash;
 
 	}
 
