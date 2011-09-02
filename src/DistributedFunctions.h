@@ -484,6 +484,8 @@ public:
 
 		_buildKmerSpectrumMPI(store, isSolid);
 
+		std::string hist = getHistogram(isSolid);
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Raw Histogram\n" << hist);
 		LOG_DEBUG(2, "buildKmerSpectrum() barrier");
 		world.barrier();
 
