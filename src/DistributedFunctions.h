@@ -1026,7 +1026,7 @@ done when empty cycle is received
 
  		// store response in kmer value vector
 		int processRespond(ReqRespKmerMessageHeader *msg, MessagePackage &msgPkg) {
-			LOG_DEBUG(5, "RespondKmerMessage: " << msg->requestId << " " << msg->getScore() << " recv Source: " << msgPkg.source << " recvTag: " << msgPkg.tag);
+			LOG_DEBUG(3, "RespondKmerMessage: " << msg->requestId << " " << msg->getScore() << " recv Source: " << msgPkg.source << " recvTag: " << msgPkg.tag);
 			assert( msgPkg.tag == omp_get_thread_num() + _numThreads);
 			_kmerValues[omp_get_thread_num()][msg->requestId] = msg->getScore();
 			return sizeof(ScoreType);
@@ -1037,7 +1037,7 @@ done when empty cycle is received
 			int destSource = msgPkg.source;
 			int destTag = msgPkg.tag + _numThreads;
 			ScoreType score = _readSelector->getValue( *msg->getKmer() );
-			LOG_DEBUG(5, "RequestKmerMessage: " << msg->getKmer()->toFasta() << " " << msg->requestId << " " << score << " destTag: " << destTag);
+			LOG_DEBUG(3, "RequestKmerMessage: " << msg->getKmer()->toFasta() << " " << msg->requestId << " " << score << " destSource: " << destSource << " sdestTag: " << destTag);
 			assert(msgPkg.tag == omp_get_thread_num());
 
 			((ReqRespKmerMessageBuffer*)msgPkg.bufferCallback)->bufferMessage(destSource, destTag, sizeof(ScoreType))->set(msg->requestId, score);
@@ -1064,16 +1064,18 @@ done when empty cycle is received
 		assert(offset == batchBuffer.size());
 
 		if (numKmers > 0)
-			batchBuffer.insert(batchBuffer.end(), numKmers, ScoreType(0));
+			batchBuffer.insert(batchBuffer.end(), numKmers, ScoreType(-1));
 
 		for(SequenceLengthType kmerIdx = 0; kmerIdx < numKmers; kmerIdx++) {
 			int localThreadId, distributedThreadId;
 			this->_map.getThreadIds(kmers[kmerIdx], localThreadId, numThreads, distributedThreadId, worldSize);
+			ReadSetSizeType requestId = offset+kmerIdx;
 			if (distributedThreadId == rank) {
 				// handle this directly
-				batchBuffer[offset + kmerIdx] = this->getValue(kmers[kmerIdx]);
+				batchBuffer[requestId] = this->getValue(kmers[kmerIdx]);
 			} else {
-				sendReq.bufferMessage( distributedThreadId, thisThreadId, KmerSizer::getByteSize() )->set( offset + kmerIdx, kmers[kmerIdx]) ;
+				LOG_DEBUG(3, "_batchKmerLookup() sendReq: destRank: " << distributedThreadId << " destTag: " << thisThreadId << " requestId: " << (requestId) << " kmer: " << kmers[kmerIdx].toFasta());
+				sendReq.bufferMessage( distributedThreadId, thisThreadId, KmerSizer::getByteSize() )->set( requestId, kmers[kmerIdx]) ;
 			}
 		}
 		return numKmers;
@@ -1154,7 +1156,9 @@ done when empty cycle is received
 			assert(readOffsetBuffer[threadId].size() == readIndexBuffer[threadId].size());
 
 			reqRespBuffer->sendReceive(false); // flush/send all pending requests for this thread's batch
+			reqRespBuffer->sendReceive(false);
 			reqRespBuffer->sendReceive(false); // receive all pending responses for this threads's batch
+			reqRespBuffer->sendReceive(false);
 			//reqRespBuffer->finalize();
 
 			LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
@@ -1164,6 +1168,9 @@ done when empty cycle is received
 				KmerValueVectorIterator buffBegin = (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i] );
 				KmerValueVectorIterator buffEnd = ( ((i+1) < readOffsetBuffer[threadId].size()) ? (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i+1]) : batchBuffer[threadId].end() );
 				ReadTrimType &trim = this->_trims[readIdx];
+				for(KmerValueVectorIterator it = buffBegin; it != buffEnd; it++)
+					if (*it == -1)
+						LOG_WARN(1, "readIdx: " << readIdx << " pos: " << (it - buffBegin) << " did not get updated!");
 
 				if (useKmers) {
 					this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);

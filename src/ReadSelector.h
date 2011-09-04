@@ -631,7 +631,7 @@ public:
 		while (it != buffEnd) {
 			ScoreType score = *(it++);
 			if (Log::isDebug(2))
-				ss <<  ('@' + (score > 1 ? (int) log(score) : (int) 0));
+				ss <<  (char) ('@' + (score > 1 ? (int) log(score) : (int) 0));
 			if (score >= minimumKmerScore) {
 				test.trimLength++;
 				test.score += score;

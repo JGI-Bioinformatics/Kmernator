@@ -451,9 +451,9 @@ public:
 	};
 	class TransmitBuffer {
 	public:
-		enum StateType { EMPTY_OUT, BUILDING_OUT, READY_OUT, READY_OUT_FINAL, EMPTY_IN, BUILDING_IN, READY_IN, DRAINING_IN, UNUSED };
+		enum StateType { EMPTY_OUT, BUILDING_OUT, READY_OUT, EMPTY_IN, BUILDING_IN, READY_IN, DRAINING_IN, UNUSED };
 		TransmitBuffer(int _numThreads, int _worldSize, int _numTags, int bufferSize) :
-		numThreads(_numThreads), worldSize(_worldSize), numTags(_numTags), buildSize(0) {
+		numThreads(_numThreads), worldSize(_worldSize), numTags(_numTags), buildSize(0), finalCount(0) {
 			dataSize = sizeof(int) + numThreads * (numThreads * numTags)
 					* (sizeof(MessageHeader) + bufferSize);
 			totalSize = getHeaderSize() + worldSize * dataSize;
@@ -478,23 +478,27 @@ public:
 			return getBuffer(rankDest) + jumps[getJump(rankDest,threadDest,threadId)];
 		}
 		inline int &getSize(int rankDest) {
+			// Transmit size for each rank (includes extra int of datasize)
 			int *o = (int*) xmit;
 			return *(o + rankDest);
 		}
 		inline int &getOffset(int rankDest) {
+			// displacement for each rank
 			int *o = (int*) xmit;
 			return *(o + worldSize + rankDest);
 		}
 		inline int &getDataSize(int rankDest) {
+			// total size of the data sent
 			int *o = (int*) xmit;
 			Buffer buf = (Buffer) (o + worldSize * 2);
 			return *((int*) (buf + rankDest * dataSize));
 		}
+		inline Buffer getBuffer(int rankDest) {
+			// the data (immediately after datasize int)
+			return (Buffer) (&getDataSize(rankDest) + 1);
+		}
 		inline int getHeaderSize() {
 			return worldSize * sizeof(int) * 2;
-		}
-		inline Buffer getBuffer(int rankDest) {
-			return (Buffer) (&getDataSize(rankDest) + 1);
 		}
 		inline int getBuildSize() const {
 			return buildSize;
@@ -503,9 +507,11 @@ public:
 			assert( areAllInState(UNUSED) );
 			for (int rankDest = 0; rankDest < worldSize; rankDest++) {
 				getSize(rankDest) = 0;
+				getDataSize(rankDest) = 0;
 			}
 			buildSize = 0;
 			setAllStates(EMPTY_OUT);
+			finalCount = 0;
 		}
 		void prepIn() {
 			assert( areAllInState(UNUSED) );
@@ -514,11 +520,13 @@ public:
 			}
 			buildSize = 0;
 			setAllStates(EMPTY_IN);
+			finalCount = 0;
 		}
 		void reset() {
-			assert( areAllInState(UNUSED) || areAllInState(EMPTY_IN) || areAllInState(READY_OUT_FINAL));
+			assert( areAllInState(UNUSED) || areAllInState(EMPTY_IN) || areAllInState(READY_OUT));
 			buildSize = 0;
 			setAllStates(UNUSED);
+			finalCount = 0;
 		}
 		static void AllToAll(TransmitBuffer &out, TransmitBuffer &in, mpi::communicator &world) {
 			// mpi_alltoall
@@ -529,8 +537,7 @@ public:
 					&out.getOffset(0), MPI_BYTE, in.xmit
 							+ in.getHeaderSize(), &in.getSize(0),
 					&in.getOffset(0), MPI_BYTE, world);
-			// reset out sizes
-			in.buildSize = out.buildSize;
+
 			out.setAllStates(UNUSED);
 			in.setAllStates(READY_IN);
 		}
@@ -581,10 +588,7 @@ public:
 			return true;
 		}
 		bool areAllReadyOut() const {
-			for(int i = 0; i < numThreads; i++)
-				if (threadStates[i] != READY_OUT && threadStates[i] != READY_OUT_FINAL)
-					return false;
-			return true;
+			return areAllInState(READY_OUT);
 		}
 		bool isEmptyOut() const {
 			return inState(EMPTY_OUT);
@@ -604,12 +608,19 @@ public:
 		bool isUnused() const {
 			return inState(UNUSED);
 		}
+		void setFinal() {
+            #pragma omp atomic
+			finalCount++;
+		}
+		bool areAllFinal() {
+			return finalCount == numThreads;
+		}
 		void setThreadBuildingOut() {
 			assert(inState(EMPTY_OUT));
 			setThreadState(BUILDING_OUT);
 		}
 		void setThreadReadyOut() {
-			assert(inState(BUILDING_OUT) || inState(READY_OUT_FINAL));
+			assert(inState(BUILDING_OUT));
 			setThreadState(READY_OUT);
 		}
 		void setThreadDrainingIn() {
@@ -620,27 +631,20 @@ public:
 			assert(inState(DRAINING_IN));
 			setThreadState(UNUSED);
 		}
-		void setThreadFinal() {
-			assert(inState(READY_OUT));
-			setThreadState(READY_OUT_FINAL);
-		}
 		void clearFinal() {
-			LOG_DEBUG_OPTIONAL(1, true, "TransmitBuffer::clearFinal(): " << toString());
-			for(int i = 0; i < numThreads; i++) {
-				assert(inState(READY_OUT, i) || inState(READY_OUT_FINAL, i));
-				threadStates[i] = READY_OUT;
-			}
+			finalCount = 0;
 		}
 		std::string toString() const {
 			std::stringstream ss;
-			ss << "TransmitBuffer(" << (void*) this << "): {totalSize: " << totalSize << ", ";
+			ss << "TransmitBuffer(" << (void*) this << "): {buildSize: " << buildSize << ", ";
+			ss << "finalCount: " << finalCount << ", ";
 			for(int i = 0; i < numThreads; i++)
 				ss << i << ": " << threadStates[i] << ", ";
 			ss << "}";
 			return ss.str();
 		}
 	private:
-		int numThreads, worldSize, numTags, buildSize, dataSize, totalSize;
+		int numThreads, worldSize, numTags, buildSize, dataSize, totalSize, finalCount;
 		Buffer xmit;
 		int *jumps;
 		std::vector< StateType > threadStates;
@@ -725,7 +729,7 @@ public:
 		}
 
 		// spin lock all threads until its last2 buffer is unused (checkpoint is consistent)
-		if (isFinalized) {
+		if (false) {
 			waitTime = MPI_Wtime();
 			iterations = 0;
 			while ( !last2.areAllInState( TransmitBuffer::UNUSED ) )
@@ -751,6 +755,8 @@ public:
             #pragma omp atomic
 			currentBuffer++;
 		}
+		if (isFinalized)
+			out.setFinal();
 
 		iterations = 0;
 		while (! out.isEmptyOut() )
@@ -768,14 +774,11 @@ public:
 		// make sure all threads always use the same currentBuffer (between two barriers)
 		LOG_DEBUG(3, "sendReceive() past barrier2, buffer: " << thisBuffer);
 
-		// now process buffers without any further thread-wide barriers..
+		// now process buffers without any further thread-wide barriers
+		// .. master will block until all out buffers are ready
 		_prepBuffersByThread(out);
 
-		assert( out.isReadyOut() );
-		if (isFinalized)
-			out.setThreadFinal();
 		assert( last.isUnused() || last.isReadyIn() || last.isBuildingIn() );
-		assert( last2.isUnused() ); // the last out should no longer be used.
 
 		// spin lock this thread until its last buffer is ready (last round's communication has finished)
 		waitTime = MPI_Wtime();
@@ -788,6 +791,26 @@ public:
 		if (last.isReadyIn())
 			numReceived += _processBuffersByThread(last);
 
+		if (out.areAllFinal()) {
+			// wait for all to process the last buffer, update checkpoints, then check it
+			LOG_DEBUG_OPTIONAL(1, true, "sendReceive() Starting areAllFinal barrier on buffer: " << thisBuffer << " " << threadsSending);
+			assert(out.isReadyOut());
+			assert(last.isUnused());
+
+			#pragma omp barrier
+
+			if (out.getBuildSize() == 0 && this->reachedCheckpoint(this->getNumThreads())) {
+				if (omp_get_thread_num() == 0) {
+					out.reset();
+					in.reset();
+				}
+				LOG_DEBUG_OPTIONAL(1, true, "sendReceive() Found checkpoint. master stopping on buffer: " << thisBuffer << " " << threadsSending);
+				return numReceived;
+			} else {
+				LOG_DEBUG_OPTIONAL(1, true, "sendReceive() did not reach checkpoint. buffer: " << thisBuffer << " " << threadsSending);
+			}
+		}
+
 		if (omp_get_thread_num() == 0)
 		{
 			// spin lock master until all out buffers are ready (all threads have called _prepBuffersByThread )
@@ -797,27 +820,9 @@ public:
 				WAIT_AND_WARN(iterations, "sendReceive() waiting for out buffer to finish building ( " << TransmitBuffer::READY_OUT << ") on all threads: buffer: " << thisBuffer << " " << out.toString()); // spin lock
 			this->threadWait( MPI_Wtime() - waitTime );
 			assert( in.areAllInState( TransmitBuffer::EMPTY_IN) );
+			assert( out.areAllInState( TransmitBuffer::READY_OUT) );
 
-			// all threads need to be in finalized state for this to be the final round
-			if ( out.areAllInState(TransmitBuffer::READY_OUT_FINAL )) {
-				isFinalized = true;
-			} else {
-				isFinalized = false;
-				out.clearFinal();
-			}
-
-			out.setTransmitSizes(isFinalized);
-			if (isFinalized && out.getBuildSize() == 0 && this->reachedCheckpoint(this->getNumThreads())) {
-				out.reset();
-				in.reset();
-				LOG_DEBUG_OPTIONAL(1, true, "sendReceive() Found checkpoint. master stopping on buffer: " << thisBuffer << " " << threadsSending);
-				return numReceived; // do not make another delivery
-			} else {
-				isFinalized = false;
-				out.clearFinal();
-			}
-
-			assert( out.areAllInState( TransmitBuffer::READY_OUT ) );
+			out.setTransmitSizes(out.areAllFinal());
 
 			LOG_DEBUG(3, "sendReceive(): Starting all2all on buffer: " << thisBuffer << " threadsSending: " << threadsSending);
 			waitTime = MPI_Wtime();
@@ -930,6 +935,7 @@ private:
 				if (bb.header.getOffset() > 0)
 					memcpy(outHeader + 1, bb.buffer, bb.header.getOffset());
 
+				LOG_DEBUG(3, "_prepBuffersByThread(): Prepared for rank " << rankDest << " threadDest " << threadDest << " " << outHeader->toString());
 				// reset the counter
 				bb.header.resetOffset();
 			}
@@ -951,19 +957,20 @@ private:
 			int size = in.getDataSize(sourceRank);
 			assert(size >= 0);
 			LOG_DEBUG(3, "_processBuffersByThread(): Received (" << sourceRank << "):"
-					<< size << " bytes, " << transmitSize << " transmitted");
+					<< size << " bytes, " << transmitSize << " maxTransmitSize");
 			if (size == 0) {
 				// no MessageHeaders - set checkpoint
 				this->checkpoint();
 				continue;
 			}
+			int tagsProcessed = 0;
 			Buffer buf = in.getBuffer(sourceRank);
 			Buffer begin = buf;
 			Buffer end = buf + size;
 			while (begin != end) {
 				assert(begin < end);
 				MessageHeader *header = (MessageHeader*) begin;
-				LOG_DEBUG(4, "sendReceive(): " << (void*) begin << " "
+				LOG_DEBUG(3, "_processBuffersByThread(): source " << sourceRank << " header " << (void*) begin << " "
 						<< header->toString());
 
 				assert(header->validate());
@@ -971,9 +978,14 @@ private:
 				if (threadId == (header->getTag() % numThreads)) {
 					if (header->getOffset() > 0)
 						numReceived += processMessages(sourceRank, header);
+					tagsProcessed++;
+					LOG_DEBUG(3, "_processBuffersByThread(): source " << sourceRank << " processed " << header->getTag() << " at " << header->getOffset() << " " << (void*) header);
 				}
 				begin = ((Buffer) (header)) + sizeof(MessageHeader) + header->getOffset();
 			}
+			if (tagsProcessed != numTags * numThreads)
+				LOG_WARN(1, "_processBuffersByThread(): data count problem! source " << sourceRank << " processed " << tagsProcessed << " out of " << numTags);
+			assert(tagsProcessed == numTags * numThreads);
 		}
 		in.setThreadFinishedIn();
 
