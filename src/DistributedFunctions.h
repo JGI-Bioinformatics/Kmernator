@@ -335,7 +335,7 @@ public:
 		bool _isSolid;
 		int process(StoreKmerMessageHeader *msg, MessagePackage &msgPkg) {
 			assert(msgPkg.tag == omp_get_thread_num());
-			LOG_DEBUG(4, "StoreKmerMessage: " << msg->readIdx << " " << msg->readPos << " " << msg->weight << " " << msg->getKmer()->toFasta());
+			LOG_DEBUG(5, "StoreKmerMessage: " << msg->readIdx << " " << msg->readPos << " " << msg->weight << " " << msg->getKmer()->toFasta());
 			getSpectrum().append(getDataPointer(), *msg->getKmer(), msg->weight, msg->readIdx, msg->readPos, isSolid());
 			return 0;
 		}
@@ -375,15 +375,14 @@ public:
 			}
 			#pragma omp barrier
 
-			int loopThreadId = threadId;
-			int loopNumThreads = numThreads;
-//			if (numThreads > 1) {
-//				loopThreadId--;
-//				loopNumThreads--;
-//			}
-//			if (loopThreadId >= 0)
-			for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
-			{
+			// allow the master thread to only handle communications
+			int loopThreadId = threadId, loopNumThreads = numThreads;
+			if (numThreads > 1) {
+				loopThreadId--; loopNumThreads--;
+			}
+			if (loopThreadId >= 0) {
+			  for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
+			  {
 
 				const Read &read = store.getRead( readIdx );
 
@@ -419,6 +418,7 @@ public:
 						LOG_DEBUG(2, "local processed: " << readIdx << " reads");
 					}
 				}
+			  }
 			}
 
 			LOG_DEBUG(2, "finished generating kmers from reads");
@@ -580,7 +580,7 @@ public:
 			return _minDepth;
 		}
 		int process(PurgeVariantKmerMessageHeader *msg, MessagePackage &msgPkg) {
-			LOG_DEBUG(4, "PurgeVariantKmerMessage: " << msg->threshold << " " << msg->getKmer()->toFasta());
+			LOG_DEBUG(5, "PurgeVariantKmerMessage: " << msg->threshold << " " << msg->getKmer()->toFasta());
 			DistributedKmerSpectrum &spectrum = getSpectrum();
 			DataPointers &pointers = getDataPointer();
 			double dummy;
@@ -1026,7 +1026,7 @@ done when empty cycle is received
 
  		// store response in kmer value vector
 		int processRespond(ReqRespKmerMessageHeader *msg, MessagePackage &msgPkg) {
-			LOG_DEBUG(3, "RespondKmerMessage: " << msg->requestId << " " << msg->getScore() << " recv Source: " << msgPkg.source << " recvTag: " << msgPkg.tag);
+			LOG_DEBUG(5, "RespondKmerMessage: " << msg->requestId << " " << msg->getScore() << " recv Source: " << msgPkg.source << " recvTag: " << msgPkg.tag);
 			assert( msgPkg.tag == omp_get_thread_num() + _numThreads);
 			_kmerValues[omp_get_thread_num()][msg->requestId] = msg->getScore();
 			return sizeof(ScoreType);
@@ -1037,7 +1037,7 @@ done when empty cycle is received
 			int destSource = msgPkg.source;
 			int destTag = msgPkg.tag + _numThreads;
 			ScoreType score = _readSelector->getValue( *msg->getKmer() );
-			LOG_DEBUG(3, "RequestKmerMessage: " << msg->getKmer()->toFasta() << " " << msg->requestId << " " << score << " destSource: " << destSource << " sdestTag: " << destTag);
+			LOG_DEBUG(5, "RequestKmerMessage: " << msg->getKmer()->toFasta() << " " << msg->requestId << " " << score << " destSource: " << destSource << " sdestTag: " << destTag);
 			assert(msgPkg.tag == omp_get_thread_num());
 
 			((ReqRespKmerMessageBuffer*)msgPkg.bufferCallback)->bufferMessage(destSource, destTag, sizeof(ScoreType))->set(msg->requestId, score);
@@ -1074,7 +1074,7 @@ done when empty cycle is received
 				// handle this directly
 				batchBuffer[requestId] = this->getValue(kmers[kmerIdx]);
 			} else {
-				LOG_DEBUG(3, "_batchKmerLookup() sendReq: destRank: " << distributedThreadId << " destTag: " << thisThreadId << " requestId: " << (requestId) << " kmer: " << kmers[kmerIdx].toFasta());
+				LOG_DEBUG(5, "_batchKmerLookup() sendReq: destRank: " << distributedThreadId << " destTag: " << thisThreadId << " requestId: " << (requestId) << " kmer: " << kmers[kmerIdx].toFasta());
 				sendReq.bufferMessage( distributedThreadId, thisThreadId, KmerSizer::getByteSize() )->set( requestId, kmers[kmerIdx]) ;
 			}
 		}
@@ -1115,7 +1115,7 @@ done when empty cycle is received
 
 		#pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
 		{
-		while (batchReadIdx < mostReads) {
+		  while (batchReadIdx < mostReads) {
 			int threadId = omp_get_thread_num();
 
 			// initialize read/kmer buffers
@@ -1130,7 +1130,13 @@ done when empty cycle is received
 
 			LOG_DEBUG(3, "Starting batch for kmer lookups: " << batchReadIdx);
 
-			for(ReadSetSizeType i = threadId ; i < batchSize ; i+=numThreads) {
+			// allow master thread to only handle communications
+			int loopThreadId = threadId, loopNumThreads = numThreads;
+			if (loopNumThreads > 1) {
+				loopThreadId--; loopNumThreads--;
+			}
+			if (loopThreadId >= 0) {
+			  for(ReadSetSizeType i = loopThreadId ; i < batchSize ; i+=loopNumThreads) {
 
 				ReadSetSizeType readIdx = batchReadIdx + i;
 				if (readIdx >= readsSize)
@@ -1151,7 +1157,7 @@ done when empty cycle is received
 				} else {
 					this->trimReadByMarkupLength(read, this->_trims[readIdx], markupLength);
 				}
-
+			  }
 			}
 			assert(readOffsetBuffer[threadId].size() == readIndexBuffer[threadId].size());
 
@@ -1183,8 +1189,8 @@ done when empty cycle is received
 			batchReadIdx += batchSize;
 
 			// local & world threads are okay to start without sync
-		}
-		reqRespBuffer->finalize();
+		  }
+		  reqRespBuffer->finalize();
 		}
 
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier.  Finished trimming, waiting for remote processes");

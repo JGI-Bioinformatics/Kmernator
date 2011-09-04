@@ -347,7 +347,7 @@ public:
 		_numCheckpoints = 0;
 	}
 	void checkpoint() {
-#pragma omp atomic
+		#pragma omp atomic
 		_numCheckpoints++;
 		LOG_DEBUG_OPTIONAL(3, true, "checkpoint received:" << _numCheckpoints);
 	}
@@ -713,7 +713,7 @@ public:
 		TransmitBuffer &last  = *buffers[(thisBuffer+0) % NUM_BUFFERS];
 		TransmitBuffer &in    = *buffers[(thisBuffer+1) % NUM_BUFFERS];
 		TransmitBuffer &out   = *buffers[(thisBuffer+2) % NUM_BUFFERS];
-		TransmitBuffer &last2 = *buffers[(thisBuffer+3) % NUM_BUFFERS];
+		//TransmitBuffer &last2 = *buffers[(thisBuffer+3) % NUM_BUFFERS];
 
 		LOG_DEBUG(3, "sendReceive(" << isFinalized << ") "
 				<< this->getNumMessages() << " messages "
@@ -728,17 +728,6 @@ public:
 			in.prepIn();
 		}
 
-		// spin lock all threads until its last2 buffer is unused (checkpoint is consistent)
-		if (false) {
-			waitTime = MPI_Wtime();
-			iterations = 0;
-			while ( !last2.areAllInState( TransmitBuffer::UNUSED ) )
-				WAIT_AND_WARN(iterations, "sendReceive() waiting for last2 buffer to be unused (" << TransmitBuffer::UNUSED << "): buffer: " << thisBuffer << " " << last2.toString()); // spin lock
-			this->threadWait( MPI_Wtime() - waitTime );
-
-			if (this->reachedCheckpoint(this->getNumThreads()))
-					return 0;
-		}
         #pragma omp atomic
         threadsSending++;
 
@@ -758,7 +747,7 @@ public:
 		if (isFinalized)
 			out.setFinal();
 
-		iterations = 0;
+		iterations = 1;
 		while (! out.isEmptyOut() )
 			WAIT_AND_WARN(iterations, "sendReceive() waiting for out buffer to be prepared!!! (" << TransmitBuffer::EMPTY_OUT << "): buffer: " << thisBuffer << " " << out.toString()); // spin lock
 
@@ -782,7 +771,7 @@ public:
 
 		// spin lock this thread until its last buffer is ready (last round's communication has finished)
 		waitTime = MPI_Wtime();
-		iterations = 0;
+		iterations = 1;
 		while ( last.isBuildingIn() )
 			WAIT_AND_WARN(iterations, "sendReceive() waiting for last buffer to finish building (" << TransmitBuffer::READY_IN << "): buffer: " << thisBuffer << " " << last.toString()); // spin lock
 		this->threadWait( MPI_Wtime() - waitTime );
@@ -815,7 +804,7 @@ public:
 		{
 			// spin lock master until all out buffers are ready (all threads have called _prepBuffersByThread )
 			waitTime = MPI_Wtime();
-			iterations = 0;
+			iterations = 1;
 			while( ! out.areAllReadyOut() )
 				WAIT_AND_WARN(iterations, "sendReceive() waiting for out buffer to finish building ( " << TransmitBuffer::READY_OUT << ") on all threads: buffer: " << thisBuffer << " " << out.toString()); // spin lock
 			this->threadWait( MPI_Wtime() - waitTime );
@@ -824,16 +813,27 @@ public:
 
 			out.setTransmitSizes(out.areAllFinal());
 
-			LOG_DEBUG(3, "sendReceive(): Starting all2all on buffer: " << thisBuffer << " threadsSending: " << threadsSending);
+			LOG_DEBUG(4, "sendReceive(): Starting all2all on buffer: " << thisBuffer << " threadsSending: " << threadsSending);
 			waitTime = MPI_Wtime();
 			// mpi_alltoall
 			TransmitBuffer::AllToAll(out, in, this->getWorld());
 			this->transit(MPI_Wtime() - waitTime);
 			this->newMessageDelivery();
-			LOG_DEBUG(3, "sendReceive(): Finished all2all on buffer: " << thisBuffer << " threadsSending: " << threadsSending);
+			LOG_DEBUG(4, "sendReceive(): Finished all2all on buffer: " << thisBuffer << " threadsSending: " << threadsSending);
 		}
 
 		return numReceived;
+	}
+
+	int getBytesInBuffer() const {
+		int offset = 0;
+		for(int rankDest = 0 ; rankDest < this->getWorldSize(); rankDest++) {
+			for(int tagDest = 0 ; tagDest < (this->getNumThreads() * numTags); tagDest++) {
+				const BuildBuffer &bb = buildsTWT[omp_get_thread_num()][rankDest][tagDest];
+				offset += bb.header.getOffset();
+			}
+		}
+		return offset;
 	}
 
 	int processMessages(int sourceRank, MessageHeader *header) {
@@ -855,7 +855,7 @@ public:
         #pragma omp barrier
 	}
 	bool isReadyToSend(int offset, int trailingBytes) {
-		return offset >= this->getSoftMaxBufferSize() && (threadsSending >= this->getSoftNumThreads()
+		return offset >= this->getSoftMaxBufferSize() && (threadsSending > this->getSoftNumThreads()
 				|| (offset + trailingBytes + this->getMessageSize())
 						>= this->getBufferSize());
 	}
@@ -935,7 +935,7 @@ private:
 				if (bb.header.getOffset() > 0)
 					memcpy(outHeader + 1, bb.buffer, bb.header.getOffset());
 
-				LOG_DEBUG(3, "_prepBuffersByThread(): Prepared for rank " << rankDest << " threadDest " << threadDest << " " << outHeader->toString());
+				LOG_DEBUG(5, "_prepBuffersByThread(): Prepared for rank " << rankDest << " threadDest " << threadDest << " " << outHeader->toString());
 				// reset the counter
 				bb.header.resetOffset();
 			}
@@ -970,7 +970,7 @@ private:
 			while (begin != end) {
 				assert(begin < end);
 				MessageHeader *header = (MessageHeader*) begin;
-				LOG_DEBUG(3, "_processBuffersByThread(): source " << sourceRank << " header " << (void*) begin << " "
+				LOG_DEBUG(5, "_processBuffersByThread(): source " << sourceRank << " header " << (void*) begin << " "
 						<< header->toString());
 
 				assert(header->validate());
@@ -979,7 +979,7 @@ private:
 					if (header->getOffset() > 0)
 						numReceived += processMessages(sourceRank, header);
 					tagsProcessed++;
-					LOG_DEBUG(3, "_processBuffersByThread(): source " << sourceRank << " processed " << header->getTag() << " at " << header->getOffset() << " " << (void*) header);
+					LOG_DEBUG(5, "_processBuffersByThread(): source " << sourceRank << " processed " << header->getTag() << " at " << header->getOffset() << " " << (void*) header);
 				}
 				begin = ((Buffer) (header)) + sizeof(MessageHeader) + header->getOffset();
 			}
@@ -1114,7 +1114,7 @@ private:
 	}
 
 	long _finalize(int checkpointFactor) {
-		long iterations = 0;
+		long iterations = 1;
 		long messages;
 		do {
 			messages = 0;
@@ -1369,7 +1369,7 @@ public:
 		int &offsetLocation = _offsets[rankDest];
 		bool waitForSend = sendZeroMessage == true;
 
-		long iterations = 0;
+		long iterations = 1;
 		messages += checkSentBuffers(waitForSend);
 		while (sendZeroMessage && (offsetLocation > 0 || newMessages != 0)) {
 			// flush all messages until there is nothing in the buffer
