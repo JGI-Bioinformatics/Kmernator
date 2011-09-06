@@ -1570,7 +1570,10 @@ public:
 	}
 	inline int getDistributedThreadId(NumberType hash, NumberType numDistributedThreads) const {
 		// partition in contiguous blocks of 'global' buckets
-		return numDistributedThreads * (hash & BUCKET_MASK) / _buckets.size();
+		if (_buckets.size() > 0)
+			return numDistributedThreads * (hash & BUCKET_MASK) / _buckets.size();
+		else
+			return 0;
 	}
 	inline int getDistributedThreadId(const KeyType &key, NumberType numDistributedThreads) const {
 		return getDistributedThreadId(key.hash(), numDistributedThreads);

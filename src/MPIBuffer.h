@@ -700,6 +700,8 @@ public:
 		for(int i = 0; i < NUM_BUFFERS; i++)
 			delete buffers[i];
 	}
+
+private:
 	long sendReceive(bool isFinalized) {
 		assert(omp_get_max_threads() == 1 || omp_in_parallel());
 
@@ -823,6 +825,10 @@ public:
 		}
 
 		return numReceived;
+	}
+public:
+	long sendReceive() {
+		return sendReceive(false);
 	}
 
 	int getBytesInBuffer() const {

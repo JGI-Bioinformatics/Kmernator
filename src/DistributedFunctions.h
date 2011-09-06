@@ -562,13 +562,15 @@ public:
 	class PurgeVariantKmerMessageHeaderProcessor {
 	public:
 		DistributedKmerSpectrum &_spectrum;
-		DataPointers _pointers;
+		std::vector< DataPointers > _pointers;
 		double _variantSigmas, _minDepth;
 		PurgeVariantKmerMessageHeaderProcessor(DistributedKmerSpectrum &spectrum,  double variantSigmas, double minDepth)
-		: _spectrum(spectrum), _pointers(spectrum), _variantSigmas(variantSigmas), _minDepth(minDepth) {
+		: _spectrum(spectrum), _variantSigmas(variantSigmas), _minDepth(minDepth) {
+			for(int i = 0; i < omp_get_max_threads(); i++)
+				_pointers.push_back( DataPointers(_spectrum) );
 		}
 		inline DataPointers &getDataPointer() {
-			return _pointers;
+			return _pointers[omp_get_thread_num()];
 		}
 		inline DistributedKmerSpectrum &getSpectrum() {
 			return _spectrum;
@@ -665,6 +667,7 @@ private:
 				msgPurgeVariant->bufferMessage(rankDest, threadDest)->set(threshold, varKmer);
 			}
 		}
+		msgPurgeVariant->sendReceive();
 		return 0;
 	}
 
@@ -1161,11 +1164,10 @@ done when empty cycle is received
 			}
 			assert(readOffsetBuffer[threadId].size() == readIndexBuffer[threadId].size());
 
-			reqRespBuffer->sendReceive(false); // flush/send all pending requests for this thread's batch
-			reqRespBuffer->sendReceive(false);
-			reqRespBuffer->sendReceive(false); // receive all pending responses for this threads's batch
-			reqRespBuffer->sendReceive(false);
-			//reqRespBuffer->finalize();
+			reqRespBuffer->sendReceive(); // flush/send all pending requests for this thread's batch
+			reqRespBuffer->sendReceive();
+			reqRespBuffer->sendReceive(); // receive all pending responses for this threads's batch
+			reqRespBuffer->sendReceive();
 
 			LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
 			for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
