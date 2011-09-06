@@ -79,6 +79,7 @@ int main(int argc, char *argv[]) {
 	} catch (...) {
 		std::cerr << MPIFilterReadsOptions::getDesc() << std::endl;
 		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
+		MPI_Finalize();
 		exit(1);
 	}
 	world.barrier();
