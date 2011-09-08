@@ -54,17 +54,26 @@ public:
 	static int getMinBytesPerRecord() {
 		return getVarMap()["min-bytes-per-record"].as<int> ();
 	}
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
-		// set options specific to this program
+	void _resetDefaults() {
+		GeneralOptions::_resetDefaults();
+		GeneralOptions::getOptions().getVerbose() = 0;
+		GeneralOptions::getOptions().getMmapInput() = 0;
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("input-file", -1);
-		desc.add_options()("help", "produce help message")
+		po::options_description opts("Randomly Sample Options");
+		opts.add_options()
 				("by-pair", po::value<int>()->default_value(1), "If set, pairs are sampled, if not set, reads are sampled")
 				("num-samples",  po::value<int>()->default_value(1000), "The number of samples to output")
 				("min-bytes-per-record", po::value<int>()->default_value(900), "The minimum number of bytes between two records (should be >2x greatest record size)"
 				);
+		desc.add(opts);
+		GeneralOptions::_setOptions(desc, p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
 
+		bool ret = GeneralOptions::_parseOptions(vm);
 
-		bool ret = Options::parseOpts(argc, argv);
 		if (Options::getOptions().getInputFiles().empty() || Options::getOptions().getInputFiles().size() > 1) {
 			ret = false;
 			LOG_ERROR(1, "Please specify at a single input file");
@@ -74,20 +83,8 @@ public:
 };
 typedef OptionsBaseTemplate< _RSOptions > RSOptions;
 
-unsigned long longRand() {
-	return (((unsigned long)(std::rand() & 0xFF)) << 56) |
-		   (((unsigned long)(std::rand() & 0xFF)) << 48) |
-		   (((unsigned long)(std::rand() & 0xFF)) << 40) |
-		   (((unsigned long)(std::rand() & 0xFF)) << 32) |
-		   (((unsigned long)(std::rand() & 0xFF)) << 24) |
-		   (((unsigned long)(std::rand() & 0xFF)) << 16) |
-		   (((unsigned long)(std::rand() & 0xFF)) << 8) |
-		   (((unsigned long)(std::rand() & 0xFF)) );
-}
 
 int main(int argc, char *argv[]) {
-	Options::getOptions().getVerbose() = 0;
-	Options::getOptions().getMmapInput() = 0;
 	if (!RSOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
@@ -113,7 +110,7 @@ int main(int argc, char *argv[]) {
 	while (positions.size() < numSamples && attempts++ < maxAttempts) {
 		long newSamples = numSamples - positions.size();
 		for(long i = 0; i < newSamples; i++)
-			positions.push_back( longRand() % fileSize);
+			positions.push_back( LongRand::rand() % fileSize);
 		std::sort(positions.begin(), positions.end());
 		long lastPos = positions[0];
 		std::vector<long> deleteThese;

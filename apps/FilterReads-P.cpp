@@ -37,23 +37,33 @@ typedef TrackingDataWithDirection DataType;
 typedef DistributedKmerSpectrum<DataType, DataType> KS;
 typedef DistributedReadSelector<DataType> RS;
 
-class _MPIFilterReadsOptions : public _FilterReadsOptions, public _MPIOptions {
+class _MPIFilterReadsOptions : public _FilterReadsBaseOptions, public _MPIOptions {
 public:
-	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		_FilterReadsOptions::_setOptions(desc, p);
-		_MPIOptions::_setOptions(desc,p);
+	void _resetDefaults() {
+		_FilterReadsBaseOptions::_resetDefaults();
+		_MPIOptions::_resetDefaults();
+		GeneralOptions::_resetDefaults();
+		// assign defaults
+		GeneralOptions::getOptions().getMmapInput() = 0;
+		GeneralOptions::getOptions().getVerbose() = 2;
 	}
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
-		return _MPIOptions::_parseOpts(desc, p, vm, argc, argv) && _FilterReadsOptions::_parseOpts(desc, p, vm, argc, argv);
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		_FilterReadsBaseOptions::_setOptions(desc, p);
+		_MPIOptions::_setOptions(desc,p);
+		GeneralOptions::_setOptions(desc, p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= _MPIOptions::_parseOptions(vm);
+		ret &= _FilterReadsBaseOptions::_parseOptions(vm);
+		return ret;
 	}
 };
 typedef OptionsBaseTemplate< _MPIFilterReadsOptions > MPIFilterReadsOptions;
 
 int main(int argc, char *argv[]) {
 
-	// assign defaults
-	Options::getOptions().getMmapInput() = 0;
-	Options::getOptions().getVerbose() = 2;
 
 	int threadProvided;
 	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;

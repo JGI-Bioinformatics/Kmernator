@@ -55,11 +55,13 @@ public:
 		return getVarMap()["mpi-buffer-size"].as<int>();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		desc.add_options()
+		po::options_description opts("MPI Options");
+		opts.add_options()
 
 			("mpi-buffer-size", po::value<int>()->default_value(MPI_BUFFER_DEFAULT_SIZE),
 					"total amount of RAM to devote to MPI message batching buffers in bytes")
 			;
+		desc.add(opts);
 	}
 };
 typedef OptionsBaseTemplate< _MPIOptions > MPIOptions;

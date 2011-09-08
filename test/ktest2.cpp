@@ -52,10 +52,15 @@ typedef KmerSpectrum<TrackingData, TrackingDataWithAllReads> KS;
 
 class _Ktest2Options : public OptionsBaseInterface {
 public:
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+	void _resetDefaults() {
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("kmer-size", 1);
 		p.add("input-file", -1);
-		return Options::parseOpts(argc, argv);
+		GeneralOptions::getOptions()._setOptions(desc, p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		return GeneralOptions::getOptions()._parseOptions(vm);
 	}
 };
 typedef OptionsBaseTemplate< _Ktest2Options > Ktest2Options;

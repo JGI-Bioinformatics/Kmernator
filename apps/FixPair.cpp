@@ -46,12 +46,15 @@ public:
 	static int getSplitSizeMegaBase() {
 		return getVarMap()["split-size-mbase"].as<int> ();
 	}
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
-		// set options specific to this program
+	void _resetDefaults() {
+		GeneralOptions::_resetDefaults();
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("input-file", -1);
-
-		bool ret = Options::parseOpts(argc, argv);
-
+		GeneralOptions::_setOptions(desc, p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = GeneralOptions::_parseOptions(vm);
 		return ret;
 	}
 };
@@ -105,7 +108,7 @@ int main(int argc, char *argv[]) {
 			    read2Label.erase( 0, pos +1);
 		}
 
-		reads.write(ofmap, pair, 0, MAX_SEQUENCE_LENGTH, read1Label, 0, MAX_SEQUENCE_LENGTH, read2Label, 2, true);
+		reads.write(ofmap, pair, 0, MAX_SEQUENCE_LENGTH, read1Label, 0, MAX_SEQUENCE_LENGTH, read2Label, FormatOutput::FastqUnmasked(), true);
 	}
 
 }

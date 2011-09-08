@@ -93,17 +93,29 @@ public:
 		}
 		return output;
 	}
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
-		// set options specific to this program
+
+	void _resetDefaults() {
+		GeneralOptions::_resetDefaults();
+		Options::getOptions().getVerbose() = 0;
+		Options::getOptions().getMmapInput() = 0;
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("input-file", -1);
-		desc.add_options()("help", "produce help message")
+		po::options_description opts("Split Sequence Options");
+		opts.add_options()
 				("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
 				("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))")
 				("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
 				("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
 				;
 
-		bool ret = Options::parseOpts(argc, argv);
+		desc.add(opts);
+		GeneralOptions::_setOptions(desc, p);
+
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		// set options specific to this program
+		bool ret = GeneralOptions::_parseOptions(vm);
 		if (Options::getOptions().getInputFiles().empty() || getNumFiles() == 0 || getFileNum() >= getNumFiles()) {
 			ret = false;
 			LOG_ERROR(1, "Please specify num-files, file-num and at least one input file.\nnum-files=" << getNumFiles() << "\nfile-num=" << getFileNum());
@@ -114,8 +126,6 @@ public:
 typedef OptionsBaseTemplate< _SSOptions > SSOptions;
 
 int main(int argc, char *argv[]) {
-	Options::getOptions().getVerbose() = 0;
-	Options::getOptions().getMmapInput() = 0;
 
 #ifdef ENABLE_MPI
 	MPI_Init(&argc, &argv);

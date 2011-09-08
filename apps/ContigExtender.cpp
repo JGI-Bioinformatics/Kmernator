@@ -46,12 +46,32 @@ using namespace std;
 typedef TrackingDataMinimal4f DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 
+class _ContigExtenderOptions : public _ContigExtenderBaseOptions {
+public:
+	void _resetDefaults() {
+		_ContigExtenderBaseOptions::_resetDefaults();
+
+		GeneralOptions::_resetDefaults();
+		// do not apply artifact filtering by default
+		GeneralOptions::getOptions().getSkipArtifactFilter() = 1;
+		// override the default output format!
+		GeneralOptions::getOptions().getFormatOutput() = 3;
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		_ContigExtenderBaseOptions::_setOptions(desc, p);
+		GeneralOptions::_setOptions(desc,p);
+	}
+	// use to post-process options, returning true if everything is okay
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		ret &= _ContigExtenderBaseOptions::_parseOptions(vm);
+		ret &= GeneralOptions::_parseOptions(vm);
+		return ret;
+	}
+};
+typedef OptionsBaseTemplate< _ContigExtenderOptions > ContigExtenderOptions;
 
 int main(int argc, char *argv[]) {
-	// do not apply artifact filtering by default
-	Options::getOptions().getSkipArtifactFilter() = 1;
-	// override the default output format!
-	Options::getOptions().getFormatOutput() = 3;
 
 	if (!ContigExtenderOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");

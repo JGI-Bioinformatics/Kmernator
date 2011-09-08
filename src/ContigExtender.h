@@ -15,7 +15,7 @@
 #include "KmerSpectrum.h"
 #include "Log.h"
 
-class _ContigExtenderOptions : public OptionsBaseInterface {
+class _ContigExtenderBaseOptions : public OptionsBaseInterface {
 public:
 	static std::string getContigFile () {
 		return getVarMap()["contig-file"].as<std::string> ();
@@ -29,12 +29,13 @@ public:
 	static double getMaximumDeltaRatio() {
 		return getVarMap()["maximum-delta-ratio"].as<double>();
 	}
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
-
+	void _resetDefaults() {
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
 		p.add("input-file", -1);
-
-		desc.add_options()
+		po::options_description opts("Contig Extension Options");
+		opts.add_options()
 
 		("minimum-consensus", po::value<double>()->default_value(85),
 				"minimum percent consensus to call the next base")
@@ -48,18 +49,26 @@ public:
 		("contig-file", po::value<std::string>(),
 				"filename of input contigs.fa");
 
-		bool ret = Options::parseOpts(argc, argv);
+		desc.add(opts);
 
-		if (getContigFile().empty() || Options::getOptions().getInputFiles().empty()) {
-			LOG_ERROR(1, "you must specify the --contig-file and one or more input files");
-			ret = false;
+	}
+	bool _parseOptions(po::variables_map &vm) {
+
+		bool ret = true;
+
+		if (getContigFile().empty()) {
+			LOG_ERROR(1, "you must specify the --contig-file");
 		} else {
 			LOG_VERBOSE(1, "contig-file: " << getContigFile());
+		}
+		if (Options::getOptions().getInputFiles().empty()) {
+			LOG_ERROR(1, "you must specify one or more input files");
+			ret = false;
 		}
 		return ret;
 	}
 };
-typedef OptionsBaseTemplate< _ContigExtenderOptions > ContigExtenderOptions;
+typedef OptionsBaseTemplate< _ContigExtenderBaseOptions > ContigExtenderBaseOptions;
 
 
 template <typename KS>
@@ -93,9 +102,9 @@ public:
 		SequenceLengthType kmerSize = minKmerSize;
 		KmerSizer::set(kmerSize);
 
-		double minimumConsensus = ContigExtenderOptions::getOptions().getMinimumConsensus();
-		double minimumCoverage = ContigExtenderOptions::getOptions().getMinimumCoverage();
-		double maximumDeltaRatio = ContigExtenderOptions::getOptions().getMaximumDeltaRatio();
+		double minimumConsensus = ContigExtenderBaseOptions::getOptions().getMinimumConsensus();
+		double minimumCoverage = ContigExtenderBaseOptions::getOptions().getMinimumCoverage();
+		double maximumDeltaRatio = ContigExtenderBaseOptions::getOptions().getMaximumDeltaRatio();
 
 		LOG_DEBUG_OPTIONAL(1, true, "ContigExtender::extendContigs(): Starting extendContigs with consensus fraction " << minimumConsensus << " and coverage " << minimumCoverage << " using kmers " << minKmerSize << " to " << maxKmerSize << " step " << kmerStep << " and " << reads.getSize() << " reads");
 

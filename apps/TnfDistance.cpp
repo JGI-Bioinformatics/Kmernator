@@ -66,9 +66,14 @@ public:
 		return getVarMap()["cluster-threshold-distance"].as<double>();
 	}
 
+	void _resetDefaults() {
+		GeneralOptions::_resetDefaults();
+	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
-		desc.add_options()
+		po::options_description opts("Tetra Nucleotide Distance Options");
+
+		opts.add_options()
 
 		("inter-distance-file", po::value<string>()->default_value(""),
 				"output inter-distance LT matrix to this filename")
@@ -85,19 +90,23 @@ public:
 		("cluster-threshold-distance", po::value<double>()->default_value(0.175),
 				"Euclidean distance threshold for clusters")
 		;
+		desc.add(opts);
+
+		GeneralOptions::_setOptions(desc, p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		return GeneralOptions::_parseOptions(vm);
 	}
 };
 
-class _TnfDistanceOptions : public _TnfDistanceBaseOptions, public _GeneralOptions {
+class _TnfDistanceOptions : public _TnfDistanceBaseOptions {
 public:
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("input-file", -1);
-		((_TnfDistanceBaseOptions*)this)->_setOptions(desc,p);
-		((_GeneralOptions*)this)->_setOptions(desc,p);
+		_TnfDistanceBaseOptions::_setOptions(desc,p);
 	}
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
-		return((_TnfDistanceBaseOptions*)this)->_parseOpts(desc,p,vm,argc,argv)
-				& ((_GeneralOptions*)this)->_parseOpts(desc,p,vm,argc,argv);
+	bool _parseOptions(po::variables_map &vm) {
+		return _TnfDistanceBaseOptions::_parseOptions(vm);
 	}
 };
 

@@ -714,229 +714,34 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
     return Read(name, fasta, qual);
 }
 
-//
-// $Log: ReadSet.cpp,v $
-// Revision 1.42  2010-08-18 17:50:40  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.41.4.1  2010-07-20 20:02:56  regan
-// autodetect fastq quality range
-//
-// Revision 1.41  2010-06-23 20:18:43  regan
-// bugfix to use implicit .qual files when the input is a fasta
-//
-// Revision 1.40  2010-06-22 23:06:31  regan
-// merged changes in CorruptionBugfix-20100622 branch
-//
-// Revision 1.39.4.1  2010-06-22 22:59:30  regan
-// named all critical sections
-//
-// Revision 1.39  2010-05-24 21:48:46  regan
-// merged changes from RNADedupMods-20100518
-//
-// Revision 1.38.2.1  2010-05-24 21:42:34  regan
-// adjusted pairing behavior when duplicated names are encountered
-//
-// Revision 1.38  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.37.2.4  2010-05-12 22:45:00  regan
-// added readset circularize method
-//
-// Revision 1.37.2.3  2010-05-12 18:25:48  regan
-// minor refactor
-//
-// Revision 1.37.2.2  2010-05-10 21:24:29  regan
-// minor refactor moved code into cpp
-//
-// Revision 1.37.2.1  2010-05-07 22:59:33  regan
-// refactored base type declarations
-//
-// Revision 1.37  2010-05-06 22:55:05  regan
-// merged changes from CodeCleanup-20100506
-//
-// Revision 1.36  2010-05-06 21:46:54  regan
-// merged changes from PerformanceTuning-20100501
-//
-// Revision 1.35.2.1  2010-05-06 18:45:35  regan
-// broke it...
-//
-// Revision 1.35  2010-05-06 16:43:56  regan
-// merged changes from ConsensusTesting-20100505
-//
-// Revision 1.34.2.2  2010-05-06 16:39:02  regan
-// minor performance opt
-//
-// Revision 1.34.2.1  2010-05-05 23:46:23  regan
-// checkpoint... seems to compile
-//
-// Revision 1.34  2010-05-05 06:28:35  regan
-// merged changes from FixPairOutput-20100504
-//
-// Revision 1.33.4.1  2010-05-05 05:57:53  regan
-// fixed pairing
-// fixed name to exclude labels and comments after whitespace
-// applied some performance optimizations from other branch
-// created FixPair application
-//
-// Revision 1.33.2.2  2010-05-03 21:34:18  regan
-// more logging
-//
-// Revision 1.33.2.1  2010-05-02 05:40:50  regan
-// added methods and cache variable for fast sequential read pair identification
-//
-// Revision 1.33  2010-05-01 21:57:54  regan
-// merged head with serial threaded build partitioning
-//
-// Revision 1.32.4.1  2010-04-27 22:53:27  regan
-// added madvise calls
-//
-// Revision 1.32  2010-04-16 22:44:18  regan
-// merged HEAD with changes for mmap and intrusive pointer
-//
-// Revision 1.31.2.13.2.2  2010-04-16 21:38:39  regan
-// addressed part of hack where multi-line records are dangerous to read mmaped
-//
-// Revision 1.31.2.13.2.1  2010-04-16 17:42:34  regan
-// fixed parallelism
-//
-// Revision 1.31.2.13  2010-04-15 21:31:50  regan
-// bugfix in markups and duplicate fragment filter
-//
-// Revision 1.31.2.12  2010-04-15 20:48:04  regan
-// honor mmap-input option in parallel read
-//
-// Revision 1.31.2.11  2010-04-15 20:42:35  regan
-// bugfix in parallel fasta/fastq read
-//
-// Revision 1.31.2.10  2010-04-15 17:59:52  regan
-// made mmap optional
-//
-// Revision 1.31.2.9  2010-04-14 22:36:06  regan
-// round of bugfixes
-//
-// Revision 1.31.2.8  2010-04-14 20:53:49  regan
-// checkpoint and passes unit tests!
-//
-// Revision 1.31.2.7  2010-04-14 17:51:43  regan
-// checkpoint
-//
-// Revision 1.31.2.6  2010-04-14 05:35:37  regan
-// checkpoint. compiles but segfaults
-//
-// Revision 1.31.2.5  2010-04-12 22:37:47  regan
-// checkpoint
-//
-// Revision 1.31.2.4  2010-04-12 20:59:45  regan
-// mmap checkpoint
-//
-// Revision 1.31.2.3  2010-04-07 22:33:08  regan
-// checkpoint mmaping input files
-//
-// Revision 1.31.2.2  2010-04-05 05:42:53  regan
-// checkpoint mmaping input files
-//
-// Revision 1.31.2.1  2010-04-05 03:32:10  regan
-// moved read file reader
-//
-// Revision 1.31  2010-03-15 18:06:50  regan
-// minor refactor and added consensus read
-//
-// Revision 1.30  2010-03-15 07:44:30  regan
-// better logging to track down a non-existent bug (file was corrupted)
-//
-// Revision 1.29  2010-03-14 17:16:39  regan
-// bugfix in reading fastq in parallel
-//
-// Revision 1.28  2010-03-14 16:55:55  regan
-// added centroid methods
-//
-// Revision 1.27  2010-03-10 13:17:53  regan
-// fixed quality ignoring
-//
-// Revision 1.26  2010-03-03 17:10:26  regan
-// added ability to recognize which reads came from which files
-//
-// Revision 1.25  2010-02-26 12:57:26  regan
-// added progress to pair id routine
-//
-// Revision 1.24  2010-02-26 12:53:05  regan
-// reformatted
-//
-// Revision 1.23  2010-02-22 15:18:37  regan
-// bugfix
-//
-// Revision 1.22  2010-02-22 14:39:30  regan
-// optimized to not open too many filesystem threads
-// fixed pairing to abort identification when there are duplicate names
-//
-// Revision 1.21  2010-01-14 00:50:07  regan
-// fixes
-//
-// Revision 1.20  2010-01-13 23:47:44  regan
-// made const class modifications
-// fixed identify pairs
-//
-// Revision 1.19  2010-01-13 00:26:49  regan
-// fixed some parallelism
-// started pair indentification
-//
-// Revision 1.18  2010-01-08 06:23:07  regan
-// fixed to support nested parallel reading of files
-//
-// Revision 1.17  2010-01-06 15:20:24  regan
-// code to screen out primers
-//
-// Revision 1.16  2010-01-05 06:44:39  regan
-// fixed warnings
-//
-// Revision 1.15  2009-12-24 00:55:57  regan
-// made const iterators
-// fixed some namespace issues
-// added support to output trimmed reads
-//
-// Revision 1.14  2009-12-23 07:16:52  regan
-// fixed reading of fasta files
-// parallelized reading of multiple files
-//
-// Revision 1.13  2009-12-22 18:31:41  regan
-// parallelized reading fastq if openmp is enabled
-//
-// Revision 1.12  2009-12-21 22:04:38  regan
-// minor optimization
-//
-// Revision 1.11  2009-12-21 07:54:18  regan
-// minor parallelization of reading files step
-//
-// Revision 1.10  2009-11-28 01:00:07  regan
-// fixed bugs and warnings
-//
-// Revision 1.9  2009-11-21 15:58:29  regan
-// changed some types
-// bugfix in reading and using qual files
-//
-// Revision 1.8  2009-11-07 00:28:41  cfurman
-// ReadSet now takes fasta, fastq or  fasta+qual files.
-//
-// Revision 1.7  2009-11-04 20:14:46  cfurman
-// added conversion to uppercase
-//
-// Revision 1.6  2009-11-04 19:32:03  cfurman
-// now reads in fasta (with optional qual) files
-//
-// Revision 1.5  2009-10-31 00:16:35  regan
-// minor changes and optimizations
-//
-// Revision 1.4  2009-10-23 07:06:59  regan
-// more unit testing
-//   ReadSetTest
-//   KmerTest
-//
-// Revision 1.3  2009-10-21 00:00:58  cfurman
-// working on kmers....
-//
-// Revision 1.2  2009-10-20 17:25:50  regan
-// added CVS tags
-//
-//
+ReadSet ReadSet::randomlySample(ReadSet::ReadSetSizeType maxReads) const {
+	ReadSetSizeType size = getSize();
+	std::set< ReadSetSizeType > readIds;
+	ReadSet sampledReadSet;
+	if (size > (3 * maxReads / 2)) {
+		// select reads to include
+		while (readIds.size() < size) {
+			ReadSetSizeType includeCandidate = LongRand::rand() % size;
+			readIds.insert(includeCandidate);
+		}
+		for(ReadSetSizeType i = 0; i < size; i++) {
+			if (readIds.find(i) != readIds.end())
+				sampledReadSet.append( getRead( i ));
+		}
+	} else if (size > maxReads) {
+		// select reads to exclude
+		ReadSetSizeType excludeCount = size - maxReads;
+		while (readIds.size() < excludeCount) {
+			ReadSetSizeType excludeCandidate = LongRand::rand() % size;
+			readIds.insert(excludeCandidate);
+		}
+		for(ReadSetSizeType i = 0; i < size; i++) {
+			if (readIds.find(i) == readIds.end())
+				sampledReadSet.append( getRead( i ));
+		}
+	}
+	assert( sampledReadSet.getSize() == std::min(size, maxReads));
+	return sampledReadSet;
+}
+
 

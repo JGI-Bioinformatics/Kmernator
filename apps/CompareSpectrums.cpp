@@ -58,24 +58,30 @@ public:
 	static bool getCircularReference() { return  getVarMap()["circular-reference"].as<unsigned int>() != 0; }
 	static bool getPerRead() { return getVarMap()["per-read"].as<unsigned int>() != 0; }
 
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+	void _resetDefaults() {
+		GeneralOptions::_resetDefaults();
+	}
+
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
 		p.add("kmer-size", 1);
 		p.add("reference-file", 1);
 		p.add("input-file", -1);
 
-		desc.add_options()
+		po::options_description opts("CompareSpectrum options");
+
+		opts.add_options()
 		 ("circular-reference", po::value<unsigned int>()->default_value(0),
 				 "reference file should be treated as circular")
 		 ("per-read", po::value<unsigned int>()->default_value(0),
 				 "if set, each read in readset1 will be compared to the entire readset2 separately")
 	    ;
+		desc.add(opts);
 
-		bool ret = Options::parseOpts(argc, argv);
-
-		if (ret) {
-		}
-		return ret;
+		GeneralOptions::_setOptions(desc,p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		return GeneralOptions::_parseOptions(vm);
 	}
 
 };

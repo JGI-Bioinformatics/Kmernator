@@ -105,8 +105,12 @@ public:
 		return std::string(hostname);
 	}
 
+	// use to set/overrided any defaults on options that are stored persistently
+	virtual void _resetDefaults() {}
+	// use to set the description of all options
 	virtual void _setOptions(po::options_description &desc, po::positional_options_description &p) {}
-	virtual bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+	// use to post-process options, returning true if everything is okay
+	virtual bool _parseOptions(po::variables_map &vm) {
 		return true;
 	}
 };
@@ -128,10 +132,32 @@ public:
 	static po::variables_map &getVarMap() {
 		return OptionsInstance::getVarMap();
 	}
+
+	static void _resetDefaults() {
+		getOptions()._resetDefaults();
+	}
+	static void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		getOptions()._setOptions(desc, p);
+	}
+	static bool _parseOptions(po::variables_map &vm) {
+		return getOptions()._parseOptions(vm);
+	}
+
 	static bool parseOpts(int argc, char *argv[]) {
-		getOptions()._setOptions(getDesc(), getPosDesc());
-		return getOptions()._parseOpts(getDesc(), getPosDesc(), getVarMap(),
-				argc, argv);
+		// set any defaults
+		_resetDefaults();
+
+		// load all the descriptions
+		_setOptions(getDesc(), getPosDesc());
+
+		// process the command line
+		po::store(po::command_line_parser(argc, argv).options(getDesc()).positional(getPosDesc()).run(), getVarMap());
+
+		// update the varmap
+		po::notify( getVarMap() );
+
+		// post-process
+		return _parseOptions( getVarMap());
 	}
 
 
@@ -158,7 +184,11 @@ public:
 			 tmpDir = std::string(tmpPath);
 		 }
 	}
-	virtual ~_GeneralOptions() {}
+
+// make this final, so preserving the singleton state
+private:
+	~_GeneralOptions() {}
+	friend class OptionsBaseTemplate< _GeneralOptions >;
 
 private:
     int          maxThreads;
@@ -204,9 +234,13 @@ private:
 	unsigned int separateOutputs;
 
 public:
+	void _resetOptions() {
+	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 
-		desc.add_options()("help", "produce help message")
+		po::options_description general("General Options");
+
+		general.add_options()("help", "produce help message")
 
 		("verbose", po::value<unsigned int>()->default_value(getVerbose()),
 				"level of verbosity (0+)")
@@ -328,14 +362,13 @@ public:
 
 		;
 
+		desc.add(general);
 	}
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+	bool _parseOptions(po::variables_map &vm) {
 		try {
-			po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
-			po::notify(vm);
 
 			if (vm.count("help")) {
-				std::cerr << desc << std::endl;
+				std::cerr << getDesc() << std::endl;
 				return false;
 			}
 
@@ -476,13 +509,13 @@ public:
 			// set dedup edit distance
 			setOpt<unsigned int>("dedup-edit-distance", getDeDupEditDistance() , print);
 			if (getDeDupEditDistance() > 1) {
-				LOG_ERROR(1, "Unsupported option dedup-edit-distance > 1!" << std::endl << desc << std::endl << "Unsupported option dedup-edit-distance > 1!");
+				LOG_ERROR(1, "Unsupported option dedup-edit-distance > 1!" << std::endl << getDesc() << std::endl << "Unsupported option dedup-edit-distance > 1!");
 			    return false;
 			}
 			setOpt<unsigned int>("dedup-start-offset", getDeDupStartOffset(), print);
 			setOpt<unsigned int>("dedup-length", getDeDupLength(), print);
 			if (getDeDupStartOffset() % 4 != 0 || getDeDupLength() % 4 != 0) {
-				LOG_ERROR(1, "Unsupported option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl << desc << std::endl << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!");
+				LOG_ERROR(1, "Unsupported option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl << getDesc() << std::endl << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!");
 				return false;
 			}
 
@@ -759,8 +792,10 @@ public:
 
 };
 
-typedef OptionsBaseTemplate< _GeneralOptions > Options;
+typedef OptionsBaseTemplate< _GeneralOptions > GeneralOptions;
+typedef GeneralOptions Options;
 
+/*****
 // extend the class for specific options for each application
 // put common, universal options in this class
 class _Options : public OptionsBaseInterface, public OptionsBaseTemplate<_Options> {
@@ -960,6 +995,8 @@ protected:
 		return false;
 	}
 };
+
+****/
 
 #endif
 

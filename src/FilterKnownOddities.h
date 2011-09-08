@@ -525,7 +525,7 @@ public:
 	}
 
 	static void _writeFilterRead(ostream &os, Read  &read, SequenceLengthType readOffset, SequenceLengthType readLength, std::string readLabel = "") {
-	    read.write(os, readOffset, readLength, readLabel, FormatOutput::FASTQ_UNMASKED);
+	    read.write(os, readOffset, readLength, readLabel, FormatOutput::FastqUnmasked());
 	}
 
 	const ReadSet &getSequences() const {

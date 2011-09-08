@@ -34,6 +34,24 @@
 typedef TrackingDataWithDirection DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 typedef ReadSelector<DataType> RS;
+class _FilterReadsOptions : public _FilterReadsBaseOptions {
+public:
+	void _resetDefaults() {
+		_FilterReadsBaseOptions::_resetDefaults();
+		GeneralOptions::_resetDefaults();
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		_FilterReadsBaseOptions::_setOptions(desc, p);
+		GeneralOptions::_setOptions(desc, p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= _FilterReadsBaseOptions::_parseOptions(vm);
+		return ret;
+	}
+};
+typedef OptionsBaseTemplate< _FilterReadsOptions > FilterReadsOptions;
 
 int main(int argc, char *argv[]) {
 

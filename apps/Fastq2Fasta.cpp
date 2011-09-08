@@ -48,14 +48,18 @@ public:
 	static int getSplitPairs() {
 		return getVarMap()["split-pairs"].as<int>();
 	}
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+	void _resetDefaults() {
+		GeneralOptions::getOptions()._resetDefaults();
+		GeneralOptions::getOptions().getFormatOutput() = 3;
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// override the default output format!
-		Options::getOptions().getFormatOutput() = 3;
 
 		// set options specific to this program
 		p.add("input-file", -1);
 
-		desc.add_options()
+		po::options_description opts("Fastq to Fasta Options");
+		opts.add_options()
 
 		("split-pairs", po::value<int>()->default_value(0),
 				"if set, pairs will be directed into separate files")
@@ -63,9 +67,12 @@ public:
 		("split-size-mbase", po::value<int>()->default_value(0),
 				"maximum size of output fastas.  requires --output-file");
 
-		bool ret = Options::parseOpts(argc, argv);
+		desc.add(opts);
 
-		return ret;
+		GeneralOptions::getOptions()._setOptions(desc, p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		return GeneralOptions::getOptions()._parseOptions(vm);
 	}
 };
 typedef OptionsBaseTemplate< _Fastq2FastaOptions > Fastq2FastaOptions;

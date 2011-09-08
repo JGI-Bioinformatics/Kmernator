@@ -49,6 +49,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <cstdlib>
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
@@ -68,18 +69,13 @@
 
 class FormatOutput
 {
-private:
-	int _type;
-
 public:
-	FormatOutput(int type) : _type(type) {
-		if (type < 0 || type > 3)
-			throw std::invalid_argument("Format can only be 0-3");
-	}
-	static const int FASTQ = 0;
-	static const int FASTA = 1;
-	static const int FASTQ_UNMASKED = 2;
-	static const int FASTA_UNMASKED = 3;
+	enum FormatType {FASTQ, FASTA, FASTQ_UNMASKED, FASTA_UNMASKED};
+
+	static const FormatOutput Fastq() { static FormatOutput singleton = FormatOutput(FASTQ); return singleton; }
+	static const FormatOutput Fasta() { static FormatOutput singleton = FormatOutput(FASTA); return singleton; }
+	static const FormatOutput FastqUnmasked() { static FormatOutput singleton = FormatOutput(FASTQ_UNMASKED); return singleton; }
+	static const FormatOutput FastaUnmasked() { static FormatOutput singleton = FormatOutput(FASTA_UNMASKED); return singleton; }
 
 	static inline FormatOutput getDefault() {
 		return FormatOutput(Options::getOptions().getFormatOutput());
@@ -88,7 +84,7 @@ public:
 		return getDefault().getSuffix();
 	}
 
-	inline int getType() const {
+	inline FormatType getType() const {
 		return _type;
 	}
 	bool inline operator==(const FormatOutput &other) const {
@@ -111,14 +107,32 @@ public:
 		}
 		return ret;
 	}
+private:
+	FormatType _type;
+	FormatOutput(int type) {
+		switch(type) {
+		case(0) : _type = FASTQ; break;
+		case(1) : _type = FASTA; break;
+		case(2) : _type = FASTQ_UNMASKED; break;
+		case(3) : _type = FASTA_UNMASKED; break;
+		default: throw;
+		}
+	}
+
 };
 
 class UniqueName {
-	static int getUnique() { static int id = 0; return id++; }
+	static int getUnique() {
+		static int id = 0;
+#pragma omp atomic
+		id++;
+		return id;
+	}
 public:
 	static std::string generateUniqueName(std::string filename = "") {
 		filename += boost::lexical_cast<std::string>( getpid() );
 		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
+		filename += "-" + boost::lexical_cast<std::string>( omp_get_thread_num() );
 		filename += OptionsBaseInterface::getHostname();
 		return filename;
 	}
@@ -840,185 +854,31 @@ public:
 	};
 };
 
+class LongRand {
+public:
+	// THREAD SAFE
+	static unsigned long rand(unsigned int &seed) {
+		return (((unsigned long)(rand_r(&seed) & 0xFF)) << 56) |
+			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 48) |
+			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 40) |
+			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 32) |
+			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 24) |
+			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 16) |
+			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 8) |
+			   (((unsigned long)(rand_r(&seed) & 0xFF)) );
+	}
+	// NOT THREAD SAFE!
+	static unsigned long rand() {
+		return (((unsigned long)(std::rand() & 0xFF)) << 56) |
+			   (((unsigned long)(std::rand() & 0xFF)) << 48) |
+			   (((unsigned long)(std::rand() & 0xFF)) << 40) |
+			   (((unsigned long)(std::rand() & 0xFF)) << 32) |
+			   (((unsigned long)(std::rand() & 0xFF)) << 24) |
+			   (((unsigned long)(std::rand() & 0xFF)) << 16) |
+			   (((unsigned long)(std::rand() & 0xFF)) << 8) |
+			   (((unsigned long)(std::rand() & 0xFF)) );
+
+	}
+};
 #endif
 
-//
-// $Log: Utils.h,v $
-// Revision 1.40  2010-08-18 17:50:40  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.39.4.1  2010-07-20 20:02:56  regan
-// autodetect fastq quality range
-//
-// Revision 1.39  2010-06-22 23:06:30  regan
-// merged changes in CorruptionBugfix-20100622 branch
-//
-// Revision 1.38.4.1  2010-06-22 23:02:20  regan
-// named all critical sections
-// added a critical section when modifying ostreamap data
-//
-// Revision 1.38  2010-05-24 21:48:46  regan
-// merged changes from RNADedupMods-20100518
-//
-// Revision 1.37.2.1  2010-05-19 00:20:46  regan
-// refactored fomat output options
-// added options to fastq2fasta
-//
-// Revision 1.37  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.36.2.2  2010-05-12 18:25:20  regan
-// refactored
-//
-// Revision 1.36.2.1  2010-05-07 22:59:32  regan
-// refactored base type declarations
-//
-// Revision 1.36  2010-05-06 21:46:54  regan
-// merged changes from PerformanceTuning-20100501
-//
-// Revision 1.34.2.1  2010-05-04 19:49:51  regan
-// minor rework on include headers
-//
-// Revision 1.35  2010-05-05 06:28:35  regan
-// merged changes from FixPairOutput-20100504
-//
-// Revision 1.34.4.1  2010-05-05 05:57:53  regan
-// fixed pairing
-// fixed name to exclude labels and comments after whitespace
-// applied some performance optimizations from other branch
-// created FixPair application
-//
-// Revision 1.34  2010-05-01 21:57:54  regan
-// merged head with serial threaded build partitioning
-//
-// Revision 1.33.2.5  2010-05-01 21:28:44  regan
-// fixed constructor
-//
-// Revision 1.33.2.4  2010-04-28 22:28:10  regan
-// refactored writing routines
-//
-// Revision 1.33.2.3  2010-04-27 18:25:20  regan
-// bugfix in temp directory usage
-//
-// Revision 1.33.2.2  2010-04-26 22:56:36  regan
-// honor temp-dir option
-//
-// Revision 1.33.2.1  2010-04-26 04:59:19  regan
-// more output
-//
-// Revision 1.33  2010-04-21 23:39:17  regan
-// added tempfile util
-//
-// Revision 1.32  2010-04-16 22:44:18  regan
-// merged HEAD with changes for mmap and intrusive pointer
-//
-// Revision 1.31.2.3  2010-04-14 20:53:49  regan
-// checkpoint and passes unit tests!
-//
-// Revision 1.31.2.2  2010-04-14 17:51:43  regan
-// checkpoint
-//
-// Revision 1.31.2.1  2010-04-14 03:51:19  regan
-// checkpoint. compiles but segfaults
-//
-// Revision 1.31  2010-03-04 06:37:42  regan
-// fixed compiler warnings
-//
-// Revision 1.30  2010-03-03 17:10:05  regan
-// added two helper classes
-// partitioning data and ofstream mapper
-//
-// Revision 1.29  2010-02-26 13:01:17  regan
-// reformatted
-//
-// Revision 1.28  2010-01-13 23:48:51  regan
-// refactored
-//
-// Revision 1.27  2010-01-13 07:20:08  regan
-// refactored filter
-// checkpoint on read picker
-//
-// Revision 1.26  2010-01-13 00:25:43  regan
-// use less memory for reference sequences and those without quality
-//
-// Revision 1.25  2010-01-11 19:14:10  regan
-// minor performance enhancements
-//
-// Revision 1.24  2010-01-11 05:40:09  regan
-// believe that FilterKnownOddities is working
-//
-// Revision 1.23  2010-01-08 06:25:18  regan
-// refactored some code
-// still working on FilterKnownOddities
-//
-// Revision 1.22  2010-01-06 15:20:24  regan
-// code to screen out primers
-//
-// Revision 1.21  2010-01-05 06:43:47  regan
-// bugfix
-//
-// Revision 1.20  2009-12-24 00:56:11  regan
-// started class to output picked reads
-//
-// Revision 1.19  2009-12-21 06:34:26  regan
-// used openmp and clever partitioning to speed up building spectrum
-//
-// Revision 1.18  2009-11-28 01:00:07  regan
-// fixed bugs and warnings
-//
-// Revision 1.17  2009-11-26 09:03:29  regan
-// refactored and stuff
-//
-// Revision 1.16  2009-11-24 13:35:29  cfurman
-// removed KmerPtr class.
-//
-// Revision 1.15  2009-11-22 08:16:41  regan
-// some fixes some bugs... optimized vs debug vs deb4/5 give different results
-//
-// Revision 1.14  2009-11-21 18:46:53  regan
-// added bugs
-//
-// Revision 1.13  2009-11-21 15:58:29  regan
-// changed some types
-// bugfix in reading and using qual files
-//
-// Revision 1.12  2009-11-12 17:01:51  regan
-// checkpoint
-//
-// Revision 1.11  2009-11-12 01:29:22  cfurman
-// Solid picking logic bug fixed, params tweaked.
-//
-// Revision 1.10  2009-11-11 17:23:23  regan
-// fixed bugs in heap generation
-// solid picking logic needs work
-//
-// Revision 1.9  2009-11-11 07:57:23  regan
-// built framework for autoPromote (not working) - make_heap is broken
-//
-// Revision 1.8  2009-11-10 07:05:37  regan
-// changes for debugging
-//
-// Revision 1.7  2009-11-09 19:37:17  regan
-// enhanced some debugging / analysis output
-//
-// Revision 1.6  2009-11-06 16:59:11  regan
-// added base substitution/permutations table and build function
-//
-// Revision 1.5  2009-11-06 04:10:21  regan
-// refactor of cmd line option handling
-// added methods to evaluate spectrums
-//
-// Revision 1.4  2009-11-04 18:26:17  regan
-// refactored
-// added statistics calculations and histograms
-//
-// Revision 1.3  2009-11-03 17:15:40  regan
-// minor refactor
-//
-// Revision 1.2  2009-11-02 21:19:25  regan
-// fixed types and boundary tests
-//
-// Revision 1.1  2009-11-02 18:47:34  regan
-// added some code without a permanent home
-//
-//

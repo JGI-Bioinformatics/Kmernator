@@ -54,7 +54,7 @@
 using namespace std;
 
 // TODO add outputformat of fasta
-class _FilterReadsOptions : public OptionsBaseInterface {
+class _FilterReadsBaseOptions : public OptionsBaseInterface {
 public:
 	static int getMaxKmerDepth() {
 		return getVarMap()["max-kmer-output-depth"].as<int> ();
@@ -65,12 +65,14 @@ public:
 	static bool getBothPairs() {
 		return getVarMap()["min-passing-in-pair"].as<int>() == 2;
 	}
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
+	void _resetDefaults() {
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
 		p.add("kmer-size", 1);
 		p.add("input-file", -1);
-
-		desc.add_options()
+		po::options_description opts("General Filtering Options");
+		opts.add_options()
 
 		("max-kmer-output-depth", po::value<int>()->default_value(-1),
 				"maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output")
@@ -81,28 +83,31 @@ public:
 		("min-passing-in-pair", po::value<int>()->default_value(1),
 				"1 or 2 reads in a pair must pass filters");
 
-		bool ret = Options::parseOpts(argc, argv);
+		desc.add(opts);
+	}
+	bool _parseOptions( po::variables_map &vm) {
 
-		if (ret) {
-			// verify mutually exclusive options are not set
-			if ( (getMaxKmerDepth() > 0 && getPartitionByDepth() >  0) )
-			{
-				throw std::invalid_argument("You can not specify both max-kmer-depth and partition-by-depth");
-			}
-			if (Options::getOptions().getOutputFile().empty() && Logger::isMaster())
-			{
-				LOG_WARN(1, "no output file specified... This is a dry run!");
-			}
+		bool ret = true;
 
-			if (Options::getOptions().getInputFiles().empty() && Logger::isMaster()) {
-				LOG_ERROR(1, "Please specify at least one input file");
-				ret = false;
-			}
+		// verify mutually exclusive options are not set
+		if ( (getMaxKmerDepth() > 0 && getPartitionByDepth() >  0) )
+		{
+			throw std::invalid_argument("You can not specify both max-kmer-depth and partition-by-depth");
 		}
+		if (Options::getOptions().getOutputFile().empty() && Logger::isMaster())
+		{
+			LOG_WARN(1, "no output file specified... This is a dry run!");
+		}
+
+		if (Options::getOptions().getInputFiles().empty() && Logger::isMaster()) {
+			LOG_ERROR(1, "Please specify at least one input file");
+			ret = false;
+		}
+
 		return ret;
 	}
 };
-typedef OptionsBaseTemplate< _FilterReadsOptions > FilterReadsOptions;
+typedef OptionsBaseTemplate< _FilterReadsBaseOptions > FilterReadsBaseOptions;
 
 template<typename _ReadSelector>
 long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector, std::string outputFilename)
@@ -114,7 +119,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 	long oldPicked = 0;
 	long picked = 0;
 
-	int maximumKmerDepth = FilterReadsOptions::getOptions().getMaxKmerDepth();
+	int maximumKmerDepth = FilterReadsBaseOptions::getOptions().getMaxKmerDepth();
 
 
 	if (maximumKmerDepth > 0) {
@@ -123,7 +128,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			LOG_VERBOSE_OPTIONAL(2, true, "Picking depth " << depth << " layer of reads");
 			if (reads.hasPairs())
 				picked += selector.pickBestCoveringSubsetPairs(depth,
-						minDepth, Options::getOptions().getMinReadLength(), FilterReadsOptions::getOptions().getBothPairs());
+						minDepth, Options::getOptions().getMinReadLength(), FilterReadsBaseOptions::getOptions().getBothPairs());
 			else
 				picked += selector.pickBestCoveringSubsetReads(depth,
 						minDepth, Options::getOptions().getMinReadLength());
@@ -140,7 +145,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 
 	} else {
 
-		int maxDepth = FilterReadsOptions::getOptions().getPartitionByDepth();
+		int maxDepth = FilterReadsBaseOptions::getOptions().getPartitionByDepth();
 		if (maxDepth < 0) {
 			maxDepth = 1;
 		}
@@ -162,7 +167,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			if (reads.hasPairs()) {
 				picked = selector.pickAllPassingPairs(tmpMinDepth,
 						Options::getOptions().getMinReadLength(),
-						FilterReadsOptions::getOptions().getBothPairs());
+						FilterReadsBaseOptions::getOptions().getBothPairs());
 			} else {
 				picked = selector.pickAllPassingReads(tmpMinDepth,
 						Options::getOptions().getMinReadLength());
