@@ -20,9 +20,6 @@ public:
 	static std::string getVmatchIndexPath() {
 		return getVarMap()["vmatch-index-path"].as<std::string> ();
 	}
-	static int getMaxIterations() {
-		return getVarMap()["max-iterations"].as<int> ();
-	}
 	static bool getVmatchPreload() {
 		return getVarMap()["vmatch-preload"].as<bool> ();
 	}
