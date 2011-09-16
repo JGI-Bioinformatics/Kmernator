@@ -49,6 +49,12 @@ typedef KmerSpectrum<DataType, DataType> KS;
 
 class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions {
 public:
+	static int getMaxIterations() {
+		return getVarMap()["max-iterations"].as<int> ();
+	}
+	static int getMaxContigLength() {
+		return getVarMap()["max-contig-length"].as<int>();
+	}
 	void _resetDefaults() {
 		_Cap3Options::_resetDefaults();
 		_ContigExtenderBaseOptions::_resetDefaults();
@@ -73,6 +79,8 @@ public:
 
 		("max-iterations", po::value<int>()->default_value(1000),
 				"the maximum number of rounds to extend the set of contigs")
+		("max-contig-length", po::value<int>()->default_value(3000),
+				"the maximum size of a contig to continue extending")
 		;
 		desc.add(opts);
 
@@ -193,10 +201,10 @@ std::string extendContigsWithContigExtender(ReadSet & contigs,
 
 void finishLongContigs(long maxContigLength, ReadSet &changedContigs, ReadSet &finalContigs) {
 	ReadSet keepContigs;
-	for(long i = 0; i < changedContigs.getSize(); i++) {
+	for(long i = 0; i < (long) changedContigs.getSize(); i++) {
 		const Read &read = changedContigs.getRead(i);
-		if (read.getLength() >= maxContigLength)
-			finalContigs.appnd(read);
+		if ((long) read.getLength() >= maxContigLength)
+			finalContigs.append(read);
 		else
 			keepContigs.append(read);
 	}

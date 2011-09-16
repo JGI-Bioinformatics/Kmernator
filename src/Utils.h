@@ -381,6 +381,9 @@ private:
 public:
 	PartitioningData() : _partitions() {}
 
+	void swap(PartitioningData &other) {
+		_partitions.swap(other._partitions);
+	}
 	void clear() {
 		_partitions.clear();
 	}
