@@ -807,6 +807,16 @@ public:
 		else
 			return true;
 	}
+	static std::string dumpFile(std::string filePath) {
+		std::stringstream ss;
+		std::fstream f(filePath.c_str(), std::ios_base::in);
+		std::string buf;
+		while (f.good()) {
+			f >> buf;
+			ss << buf;
+		}
+		return ss.str();
+	}
 };
 
 class Statistics

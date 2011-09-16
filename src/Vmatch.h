@@ -111,18 +111,20 @@ public:
 		unlink(inputFile.c_str());
 	}
 	static void buildVmatchIndex(std::string indexName, std::string inputFasta) {
+		std::string logFile = indexName + "-mkvtree.log";
 		std::string cmd("mkvtree -dna -allout -pl -indexname " + indexName
-				+ " -db " + inputFasta);
+				+ " -db " + inputFasta + " >" + logFile + " 2>&1");
 		LOG_DEBUG(1, "Building vmatch index " << indexName << " : " << cmd);
 		int ret = system(cmd.c_str());
 		if (ret != 0)
-			LOG_THROW("mkvtree failed to build(" << ret << "): " << cmd);
+			LOG_THROW("mkvtree failed to build(" << ret << "): " << cmd << FileUtils::dumpFile(logFile));
 	}
 	MatchResults &match(std::string queryFile, std::string options = "") {
 		double time = MPI_Wtime();
 		_results.clear();
+		std::string logFile = _indexName + "-vmatch.log";
 		std::string cmd = "vmatch " + options + " -q " + queryFile + " "
-				+ _indexName;
+				+ _indexName + " 2>" + logFile;
 		if (Log::isDebug(2))
 			cmd = "strace -tt -T " + cmd;
 

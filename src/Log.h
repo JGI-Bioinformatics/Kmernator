@@ -304,7 +304,23 @@ public:
 	}
 };
 
-#define LOG_THROW(log) {  std::stringstream ss ; ss << log; Log::Error(ss.str(), true); throw(ss.str()); }
+class LoggedException : public std::exception {
+public:
+	LoggedException(std::string msg) throw() : _msg(msg) {}
+	LoggedException(const std::exception &e) throw() {
+		_msg = e.what();
+	}
+	LoggedException &operator=(const LoggedException &copy) throw() {
+		_msg = copy._msg;
+		return *this;
+	}
+	virtual ~LoggedException() throw() {}
+	const char* what() const throw() { return _msg.c_str(); }
+private:
+	std::string _msg;
+};
+
+#define LOG_THROW(log) {  std::stringstream ss ; ss << log; Log::Error(ss.str(), true); throw LoggedException(ss.str()); }
 #define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), level >= 3); }
 #define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), level >= 2); }
 #define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { std::stringstream ss ; ss << log; Log::Warn(ss.str(), true); }
