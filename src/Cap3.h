@@ -11,6 +11,8 @@
 #include "Options.h"
 #include "Utils.h"
 #include "ReadSet.h"
+#include "Kmer.h"
+#include "KmerSpectrum.h"
 
 class _Cap3Options : public OptionsBaseInterface {
 public:
@@ -41,41 +43,96 @@ typedef OptionsBaseTemplate< _Cap3Options > Cap3Options;
 
 class Cap3 {
 public:
-	static const int repeatContig = 10;
-	static ReadSet extendContig(const Read &oldContig, const ReadSet &_inputReads) {
-		ReadSet inputReads = _inputReads.randomlySample(Cap3Options::getOptions().getCap3MaxReads());
+	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
+	static const int repeatContig = 1;
+	static const double minOverlapFraction = 0.9;
+	static std::string getNewName(std::string oldName, int deltaLen) {
+		std::string newName;
+		size_t pos = oldName.find_last_of("+");
+		if (pos != oldName.npos) {
+			newName = oldName.substr(0, pos );
+			deltaLen += atoi(oldName.substr(pos).c_str());
+		} else {
+			newName = oldName;
+		}
+
+		return newName + "+" + boost::lexical_cast<std::string>(deltaLen);;
+	}
+	static Read selectBestContig(const ReadSet &candidateContigs, const Read &targetContig) {
+		Read bestRead = targetContig;
+		SequenceLengthType oldSize = KmerSizer::getSequenceLength();
+		KmerSizer::set(16);
+		KmerSpectrum<> tgtSpectrum(16);
+		tgtSpectrum.setSolidOnly();
+		tgtSpectrum.buildKmerSpectrum(targetContig);
+		long tgtKmers = tgtSpectrum.solid.size();
+		LOG_DEBUG(4, "Cap3::selectBestContig(): tgtContig: " << targetContig.getLength() << ", " << tgtKmers);
+
+		for(ReadSetSizeType i = 0; i < candidateContigs.getSize(); i++) {
+			const Read &tgtRead = candidateContigs.getRead(i);
+			KmerWeights readKmers(tgtRead.getTwoBitSequence(), tgtRead.getLength(), true);
+			tgtSpectrum.getCounts(readKmers, false);
+			long readOverlap = readKmers.sumAll();
+			if (readOverlap >= minOverlapFraction * tgtKmers && tgtRead.getLength() >= targetContig.getLength() && bestRead.getLength() < tgtRead.getLength()) {
+				bestRead = tgtRead;
+				bestRead.setName(getNewName(targetContig.getName(), tgtRead.getLength() - targetContig.getLength()));
+			}
+			LOG_DEBUG(4, "Cap3::selectBestContig(): tgtRead: " << tgtRead.getLength() << ", " << readOverlap << ": " << bestRead.getLength());
+		}
+
+		if (bestRead.getLength() > targetContig.getLength()) {
+			LOG_DEBUG_OPTIONAL(1, true, "Cap3 new contig: " << bestRead.getName() << " from " << targetContig.getLength() << " to " << bestRead.getLength());
+		} else {
+			LOG_DEBUG_OPTIONAL(1, true, "Cap3 failed to extend: " << bestRead.getName());
+		}
+		KmerSizer::set(oldSize);
+		return bestRead;
+	}
+	static Read extendContig(const Read &oldContig, const ReadSet &_inputReads) {
+		ReadSet inputReads = _inputReads;
 
 		for(int i = 0; i < repeatContig; i++)
 			inputReads.append(oldContig);
 
 		FormatOutput format = FormatOutput::FastaUnmasked();
 		std::string outputDir = Options::getOptions().getTmpDir() + UniqueName::generateUniqueName("/.cap3-assembly");
-		int status = mkdir(outputDir.c_str(), 0x770);
+		int status = mkdir(outputDir.c_str(), 0777);
+
 		if (status != 0) {
 			LOG_WARN(1, "Could not mkdir: " << outputDir << " bailing...");
-			return ReadSet();
+			return Read();
 		}
-		std::string outputName = outputDir + "input" + format.getSuffix();
+		std::string outputName = outputDir + "/input" + format.getSuffix();
 		{
 			OfstreamMap ofm(outputName, "");
 			inputReads.writeAll(ofm.getOfstream(""), format);
 		}
-		std::string cmd = Cap3Options::getOptions().getCap3Path() + " " + outputName + " > " + outputName + ".log" + " 2>&1";
-		LOG_DEBUG_OPTIONAL(1, true, "Executing: " << cmd);
+		std::string log = outputName + ".log";
+		std::string cmd = Cap3Options::getOptions().getCap3Path() + " " + outputName + " > " + log + " 2>&1";
+		LOG_DEBUG(3, "Executing: " << cmd);
 		status = system(cmd.c_str());
 		if (status == 0) {
-			std::string newContigFile = outputName + ".cap3.contigs.fa";
+			std::string newContigFile = outputName + ".cap.contigs";
 			long fileSize = FileUtils::getFileSize(newContigFile);
 			if (fileSize > 0) {
 				ReadSet newContig;
 				newContig.appendFastaFile(newContigFile);
+				Read bestRead = selectBestContig(newContig, oldContig);
 				clean(outputDir);
-				return newContig;
+				return bestRead;
 			}
 		}
-		LOG_WARN(1, "Could not assemble " << oldContig.getName());
+		std::stringstream ss;
+		fstream logf(log.c_str(), std::ios_base::in);
+		std::string buf;
+		while (logf.good()) {
+			logf >> buf;
+			ss << buf;
+		}
+		LOG_WARN(1, "Could not assemble " << oldContig.getName() << ": " << ss.str());
+
 		clean(outputDir);
-		return ReadSet();
+		return Read();
 	}
 	static void clean(std::string fileDir) {
 		std::string cmd;

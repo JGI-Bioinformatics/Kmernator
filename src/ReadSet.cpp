@@ -720,14 +720,15 @@ ReadSet ReadSet::randomlySample(ReadSet::ReadSetSizeType maxReads) const {
 	ReadSet sampledReadSet;
 	if (size > (3 * maxReads / 2)) {
 		// select reads to include
-		while (readIds.size() < size) {
+		while (readIds.size() < maxReads) {
 			ReadSetSizeType includeCandidate = LongRand::rand() % size;
 			readIds.insert(includeCandidate);
 		}
-		for(ReadSetSizeType i = 0; i < size; i++) {
-			if (readIds.find(i) != readIds.end())
-				sampledReadSet.append( getRead( i ));
+
+		for(std::set< ReadSetSizeType >::iterator it = readIds.begin() ; it != readIds.end(); it++) {
+			sampledReadSet.append( getRead( *it ));
 		}
+		LOG_DEBUG(5, "ReadSet::randomlySample(): included " << readIds.size() << " candidates");
 	} else if (size > maxReads) {
 		// select reads to exclude
 		ReadSetSizeType excludeCount = size - maxReads;
@@ -739,7 +740,11 @@ ReadSet ReadSet::randomlySample(ReadSet::ReadSetSizeType maxReads) const {
 			if (readIds.find(i) == readIds.end())
 				sampledReadSet.append( getRead( i ));
 		}
+		LOG_DEBUG(5, "ReadSet::randomlySample(): excluded " << readIds.size() << " candidates");
+	} else {
+		sampledReadSet = *this;
 	}
+	LOG_DEBUG(4, "ReadSet::randomlySample(): sampled " << size << " to: " << sampledReadSet.getSize());
 	assert( sampledReadSet.getSize() == std::min(size, maxReads));
 	return sampledReadSet;
 }

@@ -172,6 +172,16 @@ public:
 	~ReadSet() {
 	}
 
+	void swap(ReadSet &other) {
+		_reads.swap(other._reads);
+		_filePartitions.swap(other._filePartitions);
+		std::swap(_baseCount, other._baseCount);
+		std::swap(_maxSequenceLength, other._maxSequenceLength);
+		_globalOffsets.swap(other._globalOffsets);
+		_pairs.swap(other._pairs);
+		previousReadName.swap(other.previousReadName);
+	}
+
 	void clear() {
 		_reads.clear();
 		_filePartitions.clear();

@@ -121,14 +121,12 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 			LOG_VERBOSE_OPTIONAL(2, true, "Extending " << oldRead.getName() << " with " << poolSize << " pool of reads");
 
 			ReadSet sampledSet = contigReadSet[i].randomlySample(maxReads);
-			ReadSet newContig = Cap3::extendContig(oldRead, sampledSet);
-			if (newContig.getSize() > 0) {
-				newRead = newContig.getRead(0);
-			}
+			newRead = Cap3::extendContig(oldRead, sampledSet);
+			newLen = newRead.getLength();
 		}
-		long deltaLen = newLen - oldLen;
+		long deltaLen = (long)newLen - (long)oldLen;
 		if (deltaLen > 0) {
-			extendLog << std::endl << "Extended " << oldRead.getName() << " "
+			extendLog << std::endl << "Cap3 Extended " << oldRead.getName() << " "
 					<< deltaLen << " bases to " << newRead.getLength() << ": "
 					<< newRead.getName() << " with " << poolSize
 					<< " reads in the pool";
@@ -160,7 +158,7 @@ std::string extendContigsWithContigExtender(ReadSet & contigs,
 		ReadSet::ReadSetSizeType poolSize = contigReadSet[i].getSize();
 		SequenceLengthType myKmerSize = minKmerSize;
 		if (poolSize > minimumCoverage) {
-			LOG_VERBOSE_OPTIONAL(2, true, "Extending " << oldRead.getName() << " with " << poolSize << " pool of reads");
+			LOG_VERBOSE_OPTIONAL(2, true, "kmer-Extending " << oldRead.getName() << " with " << poolSize << " pool of reads");
 			ReadSet myContig;
 			myContig.append(oldRead);
 			ReadSet newContig;
@@ -175,9 +173,9 @@ std::string extendContigsWithContigExtender(ReadSet & contigs,
 		} else {
 			newRead = oldRead;
 		}
-		long deltaLen = newLen - oldLen;
+		long deltaLen = (long) newLen - (long) oldLen;
 		if (deltaLen > 0) {
-			extendLog << std::endl << "Extended " << oldRead.getName() << " "
+			extendLog << std::endl << "Kmer Extended " << oldRead.getName() << " "
 					<< deltaLen << " bases to " << newRead.getLength() << ": "
 					<< newRead.getName() << " with " << poolSize
 					<< " reads in the pool K " << (myKmerSize - kmerStep);
@@ -191,6 +189,18 @@ std::string extendContigsWithContigExtender(ReadSet & contigs,
 		}
 	}
 	return extendLog.str();
+}
+
+void finishLongContigs(long maxContigLength, ReadSet &changedContigs, ReadSet &finalContigs) {
+	ReadSet keepContigs;
+	for(long i = 0; i < changedContigs.getSize(); i++) {
+		const Read &read = changedContigs.getRead(i);
+		if (read.getLength() >= maxContigLength)
+			finalContigs.appnd(read);
+		else
+			keepContigs.append(read);
+	}
+	changedContigs.swap(keepContigs);
 }
 
 int main(int argc, char *argv[]) {
@@ -236,6 +246,10 @@ int main(int argc, char *argv[]) {
 							+ "/";
 	if (world.rank() == 0)
 		mkdir(tmpDir.c_str(), 0777);
+	tmpDir += UniqueName::generateHashName(inputFiles) + "/";
+	if (world.rank() == 0)
+		mkdir(tmpDir.c_str(), 0777);
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Created temporary directory for ranked vmatch files: " << tmpDir);
 
 	world.barrier();
 
@@ -397,6 +411,8 @@ int main(int argc, char *argv[]) {
 
 		double extendContigsTime = MPI_Wtime() - startIterationTime;
 		LOG_VERBOSE(1, (extendLog));
+
+		finishLongContigs(DistributedNucleatingAssemblerOptions::getOptions().getMaxContigLength(), changedContigs, finalContigs);
 
 		LOG_DEBUG(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
 		setGlobalReadSetOffsets(world, changedContigs);

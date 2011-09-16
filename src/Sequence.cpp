@@ -881,6 +881,10 @@ string Read::getName() const {
 	}
 }
 
+void Read::setName(const std::string name) {
+	setRead(name, getFasta(), getQuals());
+}
+
 string Read::getQuals(SequenceLengthType trimOffset, SequenceLengthType trimLength, bool forPrinting, bool unmasked) const {
 	if ((isDiscarded() || trimLength <= 1) && !unmasked) {
 		// to support printing paired reads where 1 read is trimmed to 0

@@ -65,6 +65,7 @@
 #include "config.h"
 #include "Options.h"
 #include "Log.h"
+#include "lookup3.h"
 
 
 class FormatOutput
@@ -129,12 +130,30 @@ class UniqueName {
 		return id;
 	}
 public:
+	typedef OptionsBaseInterface::StringListType StringListType;
 	static std::string generateUniqueName(std::string filename = "") {
 		filename += boost::lexical_cast<std::string>( getpid() );
 		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
 		filename += "-" + boost::lexical_cast<std::string>( omp_get_thread_num() );
 		filename += OptionsBaseInterface::getHostname();
 		return filename;
+	}
+	static std::string generateHashName(std::string filename) {
+		uint64_t hash = 0xDEADBEEF;
+		uint32_t *pc, *pb;
+		pc = (uint32_t*) &hash;
+		pb = pc+1;
+		Lookup3::hashlittle2(filename.c_str(), filename.size(), pc, pb);
+		std::stringstream ss;
+		ss << std::hex;
+		ss << hash;
+		return ss.str();
+	}
+	static std::string generateHashName(StringListType fileNames) {
+		std::string hash;
+		for(StringListType::iterator it = fileNames.begin(); it != fileNames.end(); it++)
+			hash += *it + "\n";
+		return generateHashName(hash);
 	}
 
 };
@@ -857,6 +876,9 @@ public:
 class LongRand {
 public:
 	// THREAD SAFE
+	static unsigned long rand() {
+		return rand( getSeed() );
+	}
 	static unsigned long rand(unsigned int &seed) {
 		return (((unsigned long)(rand_r(&seed) & 0xFF)) << 56) |
 			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 48) |
@@ -868,7 +890,8 @@ public:
 			   (((unsigned long)(rand_r(&seed) & 0xFF)) );
 	}
 	// NOT THREAD SAFE!
-	static unsigned long rand() {
+	static unsigned long rand2() {
+		assert(omp_get_num_threads() == 1 || !omp_in_parallel());
 		return (((unsigned long)(std::rand() & 0xFF)) << 56) |
 			   (((unsigned long)(std::rand() & 0xFF)) << 48) |
 			   (((unsigned long)(std::rand() & 0xFF)) << 40) |
@@ -879,6 +902,45 @@ public:
 			   (((unsigned long)(std::rand() & 0xFF)) );
 
 	}
+	static void srand(unsigned int seed) {
+		assert(!omp_in_parallel());
+		for(int i = 0 ; i < omp_get_max_threads(); i++) {
+			getSeed(i) = (seed+i) ^ i;
+		}
+	}
+private:
+	typedef std::vector< unsigned int > SeedVector;
+	typedef boost::shared_ptr< SeedVector > SeedPtr;
+	static unsigned int &getSeed(int threadId) {
+		assert(threadId < omp_get_max_threads());
+		static SeedPtr threadSeedsPtr;
+
+		if (threadSeedsPtr.get() == NULL || (int) threadSeedsPtr->size() < omp_get_max_threads()) {
+            #pragma omp critical
+			{
+				unsigned int baseSeed = 0;
+				if (threadSeedsPtr.get() == NULL || (int) threadSeedsPtr->size() < omp_get_max_threads()) {
+					SeedPtr newSeeds;
+					if (threadSeedsPtr.get() != NULL)
+						newSeeds.reset( new SeedVector(*threadSeedsPtr) );
+					else
+						newSeeds.reset( new SeedVector );
+					newSeeds->reserve(omp_get_max_threads());
+
+					while ((int) newSeeds->size() < omp_get_max_threads()) {
+						baseSeed += (time(NULL) + 2*time(NULL)) ^ newSeeds->size();
+						newSeeds->push_back( rand_r(&baseSeed) );
+					}
+					threadSeedsPtr = newSeeds;
+				}
+			}
+		}
+		return (*threadSeedsPtr)[threadId];
+	}
+	static unsigned int &getSeed() {
+		return getSeed(omp_get_thread_num());
+	}
+
 };
 #endif
 

@@ -68,7 +68,7 @@ using namespace boost::accumulators;
 #include "Options.h"
 #include "Log.h"
 
-template<typename So, typename We, typename Si = TrackingDataSingleton>
+template<typename So = TrackingDataMinimal4, typename We = TrackingDataMinimal4, typename Si = TrackingDataSingleton>
 class KmerSpectrum {
 public:
 
@@ -1510,8 +1510,13 @@ public:
 
 	}
 
+	virtual void buildKmerSpectrum( const Read &read) {
+		ReadSet tmpReadSet;
+		tmpReadSet.append(read);
+		buildKmerSpectrum(tmpReadSet);
+	}
 	virtual void buildKmerSpectrum( const ReadSet &store ) {
-		return this->buildKmerSpectrum(store, false);
+		return this->buildKmerSpectrum(store, hasSolids);
 	}
 	virtual void buildKmerSpectrum( const ReadSet &store, bool isSolid ) {
 		return this->buildKmerSpectrum(store, isSolid, 0, 1);
@@ -1962,68 +1967,3 @@ public:
 
 #endif
 
-
-// $Log: KmerSpectrum.h,v $
-// Revision 1.39  2010-08-18 17:50:39  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.38.4.1  2010-07-20 20:02:56  regan
-// autodetect fastq quality range
-//
-// Revision 1.38  2010-06-22 23:06:31  regan
-// merged changes in CorruptionBugfix-20100622 branch
-//
-// Revision 1.37.4.1  2010-06-22 23:00:03  regan
-// named all critical sections
-//
-// Revision 1.37  2010-05-24 21:48:46  regan
-// merged changes from RNADedupMods-20100518
-//
-// Revision 1.36.2.4  2010-05-20 18:26:43  regan
-// attempt to fix a race condition when consolidating/merging edit-distance spectrums
-//
-// Revision 1.36.2.3  2010-05-19 23:41:06  regan
-// re-added memory optimizations
-//
-// Revision 1.36.2.2  2010-05-19 23:38:18  regan
-// bug and performance fixes
-//
-// Revision 1.36.2.1  2010-05-19 21:53:20  regan
-// bugfixes
-//
-// Revision 1.36  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.35.2.8  2010-05-18 16:43:47  regan
-// added GC heatmap output .. still refining
-//
-// Revision 1.35.2.7  2010-05-17 17:52:43  regan
-// working through some optimizations
-//
-// Revision 1.35.2.6  2010-05-13 22:37:10  regan
-// minor performance opt to skip discarded reads when building spectrum
-//
-// Revision 1.35.2.5  2010-05-13 20:29:30  regan
-// new methods to support changes to CompareSpectrum
-//
-// Revision 1.35.2.4  2010-05-12 22:44:00  regan
-// bugfix
-//
-// Revision 1.35.2.3  2010-05-12 19:52:23  regan
-// refactored options
-// removed obsolete parameters
-// added new ones
-//
-// Revision 1.35.2.2  2010-05-10 17:58:08  regan
-// fixing types
-//
-// Revision 1.35.2.1  2010-05-07 22:59:32  regan
-// refactored base type declarations
-//
-// Revision 1.35  2010-05-06 22:55:05  regan
-// merged changes from CodeCleanup-20100506
-//
-// Revision 1.34  2010-05-06 21:46:54  regan
-// merged changes from PerformanceTuning-20100501
-//
-//
