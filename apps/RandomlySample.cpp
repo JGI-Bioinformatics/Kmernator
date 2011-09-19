@@ -110,12 +110,12 @@ int main(int argc, char *argv[]) {
 	while (positions.size() < numSamples && attempts++ < maxAttempts) {
 		long newSamples = numSamples - positions.size();
 		for(long i = 0; i < newSamples; i++)
-			positions.push_back( LongRand::rand() % fileSize);
+			positions.push_back( LongRand::rand() % fileSize );
 		std::sort(positions.begin(), positions.end());
-		long lastPos = positions[0];
+		unsigned long lastPos = positions[0];
 		std::vector<long> deleteThese;
 		for(long i = 1 ; i < (long) positions.size(); i++) {
-			if (positions[i] < lastPos + minBytes || positions[i] >= fileSize - minBytes*50) {
+			if (positions[i] < lastPos + minBytes || positions[i] >= fileSize - (minBytes*50)) {
 				deleteThese.push_back(i);
 			} else {
 				lastPos = positions[i];
@@ -128,6 +128,7 @@ int main(int argc, char *argv[]) {
 		}
 		LOG_DEBUG(1, "Selected " <<  positions.size() << " after removing " << deleteThese.size() << " attempt " << attempts << " of " << maxAttempts);
 	}
+	std::sort(positions.begin(), positions.end());
 
 	if (positions.size() < numSamples) {
 		LOG_WARN(1, "Could not find " << numSamples << ", attempting only " << positions.size());

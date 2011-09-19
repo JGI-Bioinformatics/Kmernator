@@ -14,6 +14,9 @@
 
 class _VmatchOptions : public OptionsBaseInterface {
 public:
+	static std::string getVmatchPath() {
+		return getVarMap()["vmatch-path"].as<std::string>();
+	}
 	static std::string getVmatchOptions() {
 		return getVarMap()["vmatch-options"].as<std::string> ();
 	}
@@ -30,6 +33,9 @@ public:
 
 		po::options_description opts("Vmatch Options");
 		opts.add_options()
+
+		("vmatch-path", po::value<std::string>()->default_value(""),
+				"if specified the path to the directory containing vmatch and mkvtree")
 
 		("vmatch-options", po::value<std::string>()->default_value(
 				"-d -p -seedlength 10 -l 50 -e 3"),
@@ -82,6 +88,7 @@ private:
 	std::string _indexName;
 	MatchResults _results;
 	Kmernator::MmapSourceVector _mmaps;
+	std::string _binaryPath;
 
 public:
 	Vmatch(
@@ -90,10 +97,14 @@ public:
 			bool cacheIndexes =
 					VmatchOptions::getOptions().getVmatchPreload()) :
 		_indexName(indexName) {
+		_binaryPath = VmatchOptions::getOptions().getVmatchPath();
+		if (!_binaryPath.empty())
+			_binaryPath += "/";
+
 		if (FileUtils::getFileSize(indexName + ".suf") > 0) {
 			LOG_DEBUG(1, "Vmatch(" << indexName << ", reads(" << inputs.getSize() << ")): Index already exists: " << indexName);
 		} else {
-			buildVmatchIndex(indexName, inputs);
+			buildVmatchIndex(inputs);
 		}
 		if (cacheIndexes)
 			mapIndexes();
@@ -101,28 +112,30 @@ public:
 	virtual ~Vmatch() {
 		clearMaps();
 	}
-	static void buildVmatchIndex(std::string indexName, ReadSet &inputs) {
-		std::string inputFile = indexName + ".tmp.input";
+	void buildVmatchIndex(ReadSet &inputs) {
+		std::string inputFile = _indexName + ".tmp.input";
 		OfstreamMap ofm(inputFile, "");
 		inputs.writeAll(ofm.getOfstream(""), FormatOutput::FastaUnmasked());
 		ofm.clear();
-		buildVmatchIndex(indexName, inputFile);
+		buildVmatchIndex(inputFile);
 		LOG_DEBUG(1, "Removing temporary inputFile" << inputFile);
 		unlink(inputFile.c_str());
 	}
-	static void buildVmatchIndex(std::string indexName, std::string inputFasta) {
-		std::string cmd("mkvtree -dna -allout -pl -indexname " + indexName
-				+ " -db " + inputFasta);
-		LOG_DEBUG(1, "Building vmatch index " << indexName << " : " << cmd);
+	void buildVmatchIndex(std::string inputFasta) {
+		std::string logFile = _indexName + "-mkvtree.log";
+		std::string cmd(_binaryPath + "mkvtree -dna -allout -pl -indexname " + _indexName
+				+ " -db " + inputFasta + " >" + logFile + " 2>&1");
+		LOG_DEBUG(1, "Building vmatch index " << _indexName << " : " << cmd);
 		int ret = system(cmd.c_str());
 		if (ret != 0)
-			LOG_THROW("mkvtree failed to build(" << ret << "): " << cmd);
+			LOG_THROW("mkvtree failed to build(" << ret << "): " << cmd << " Log:\n" << FileUtils::dumpFile(logFile));
 	}
 	MatchResults &match(std::string queryFile, std::string options = "") {
 		double time = MPI_Wtime();
 		_results.clear();
-		std::string cmd = "vmatch " + options + " -q " + queryFile + " "
-				+ _indexName;
+		std::string logFile = _indexName + "-vmatch.log";
+		std::string cmd = _binaryPath + "vmatch " + options + " -q " + queryFile + " "
+				+ _indexName + " 2>" + logFile;
 		if (Log::isDebug(2))
 			cmd = "strace -tt -T " + cmd;
 

@@ -122,14 +122,7 @@ public:
 				return bestRead;
 			}
 		}
-		std::stringstream ss;
-		fstream logf(log.c_str(), std::ios_base::in);
-		std::string buf;
-		while (logf.good()) {
-			logf >> buf;
-			ss << buf;
-		}
-		LOG_WARN(1, "Could not assemble " << oldContig.getName() << ": " << ss.str());
+		LOG_WARN(1, "Could not assemble " << oldContig.getName() << ": " << FileUtils::dumpFile(log));
 
 		clean(outputDir);
 		return Read();

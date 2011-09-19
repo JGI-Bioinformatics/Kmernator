@@ -807,6 +807,16 @@ public:
 		else
 			return true;
 	}
+	static std::string dumpFile(std::string filePath) {
+		std::stringstream ss;
+		std::fstream f(filePath.c_str(), std::ios_base::in);
+		std::string buf;
+		while (f.good()) {
+			f >> buf;
+			ss << buf;
+		}
+		return ss.str();
+	}
 };
 
 class Statistics
@@ -883,26 +893,19 @@ public:
 		return rand( getSeed() );
 	}
 	static unsigned long rand(unsigned int &seed) {
-		return (((unsigned long)(rand_r(&seed) & 0xFF)) << 56) |
-			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 48) |
-			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 40) |
-			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 32) |
-			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 24) |
-			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 16) |
-			   (((unsigned long)(rand_r(&seed) & 0xFF)) << 8) |
-			   (((unsigned long)(rand_r(&seed) & 0xFF)) );
+		return
+			   (((unsigned long)(rand_r(&seed) & 0xFFFF)) << 48) |
+			   (((unsigned long)(rand_r(&seed) & 0xFFFF)) << 32) |
+			   (((unsigned long)(rand_r(&seed) & 0xFFFF)) << 16) |
+			   (((unsigned long)(rand_r(&seed) & 0xFFFF)) );
 	}
 	// NOT THREAD SAFE!
 	static unsigned long rand2() {
 		assert(omp_get_num_threads() == 1 || !omp_in_parallel());
-		return (((unsigned long)(std::rand() & 0xFF)) << 56) |
-			   (((unsigned long)(std::rand() & 0xFF)) << 48) |
-			   (((unsigned long)(std::rand() & 0xFF)) << 40) |
-			   (((unsigned long)(std::rand() & 0xFF)) << 32) |
-			   (((unsigned long)(std::rand() & 0xFF)) << 24) |
-			   (((unsigned long)(std::rand() & 0xFF)) << 16) |
-			   (((unsigned long)(std::rand() & 0xFF)) << 8) |
-			   (((unsigned long)(std::rand() & 0xFF)) );
+		return (((unsigned long)(std::rand() & 0xFFFF)) << 48) |
+			   (((unsigned long)(std::rand() & 0xFFFF)) << 32) |
+			   (((unsigned long)(std::rand() & 0xFFFF)) << 16) |
+			   (((unsigned long)(std::rand() & 0xFFFF)) );
 
 	}
 	static void srand(unsigned int seed) {
