@@ -33,11 +33,165 @@
 #define _KMER_TRACKING_DATA_H
 
 #include "config.h"
+#include "Log.h"
+
+class Extension {
+public:
+	enum ExtensionType {A = 0, C, G, T, N, X, MAX_EXTENSIONS};
+
+	static char getBase(ExtensionType e) {
+		static const char ExtensionToBase[MAX_EXTENSIONS] = {'A', 'C', 'G', 'T', 'N', 'X'};
+		return ExtensionToBase[e];
+	}
+	Extension() : _base(MAX_EXTENSIONS), _quality(0) {}
+	Extension(char c, int quality) : _base(MAX_EXTENSIONS), _quality((unsigned char) quality) {
+		switch(c) {
+		case 'A' : case 'a' : _base = A; break;
+		case 'C' : case 'c' : _base = C; break;
+		case 'G' : case 'g' : _base = G; break;
+		case 'T' : case 't' : _base = T; break;
+		case 'N' : case 'n' : _base = N; break;
+		case 'X' : case 'x' : _base = X; break;
+		default : LOG_THROW("Invalid Extension type: " << c << " q: " << quality);
+		}
+		if (quality > 255 || quality < 0)
+			LOG_THROW("Invalid Extension quality: " << quality << " type: " << c);
+	}
+	bool isValid() const {
+		return _base < MAX_EXTENSIONS;
+	}
+	bool isBase() const {
+		return _base <= T;
+	}
+	ExtensionType getExtension() const {
+		return _base;
+	}
+	char getBase() const {
+		return getBase(_base);
+	}
+	unsigned char getQuality() const {
+		return _quality;
+	}
+
+private:
+	ExtensionType _base;
+	unsigned char _quality;
+};
+
+
+class ExtensionTracking {
+public:
+	enum DirectionType {Left = 0, Right, MAX_DIRECTIONS};
+
+	static unsigned char &getMinQuality() {
+		static unsigned char _minQuality = 20;
+		return _minQuality;
+	}
+	static void setMinQuality(unsigned char minQuality) {
+		getMinQuality() = minQuality;
+	}
+
+	ExtensionTracking() {
+		for(int j = 0; j < MAX_DIRECTIONS; j++)
+			for(int i = 0; i < Extension::MAX_EXTENSIONS; i++)
+				_extensionCounts[j][i] = 0;
+	}
+	ExtensionTracking(const ExtensionTracking &copy) {
+		*this = copy;
+	}
+	ExtensionTracking &operator=(const ExtensionTracking &copy) {
+		for(int j = 0; j < MAX_DIRECTIONS; j++)
+			for(int i = 0; i < Extension::MAX_EXTENSIONS; i++)
+				_extensionCounts[j][i] = copy._extensionCounts[j][i];
+		return *this;
+	}
+	~ExtensionTracking() {}
+
+	ExtensionTracking &operator+(const ExtensionTracking &other) {
+		for(int j = 0; j < MAX_DIRECTIONS; j++)
+			for(int i = 0; i < Extension::MAX_EXTENSIONS; i++)
+				_extensionCounts[j][i] += other._extensionCounts[j][i];
+		return *this;
+	}
+
+	void trackExtensions(Extension left, Extension right) {
+		trackExtension(left, Left);
+		trackExtension(right, Right);
+	}
+	void trackExtension(Extension ext, DirectionType dir) {
+		if (ext.isValid() && ( ext.getQuality() >= getMinQuality() || !ext.isBase())) {
+			getExtensionCount(ext.getExtension(), dir)++;
+		}
+	}
+	unsigned int &getExtensionCount(Extension::ExtensionType ext, DirectionType dir) {
+		assert(dir < MAX_DIRECTIONS);
+		return _extensionCounts[dir][ext];
+	}
+
+private:
+	unsigned int _extensionCounts[MAX_DIRECTIONS][Extension::MAX_EXTENSIONS];
+};
+
+class ExtensionMessagePacket {
+public:
+	ExtensionMessagePacket() : _leftB('\0'), _rightB('\0'), _leftQ(0), _rightQ(0) {}
+	ExtensionMessagePacket(const ExtensionMessagePacket &copy) {
+		*this = copy;
+	}
+	~ExtensionMessagePacket() {}
+	ExtensionMessagePacket &operator=(const ExtensionMessagePacket &copy) {
+		_leftB = copy._leftB;
+		_rightB = copy._rightB;
+		_leftQ = copy._leftQ;
+		_rightQ = copy._rightQ;
+		return *this;
+	}
+
+	Extension getLeft() const {
+		return Extension(_leftB, _leftQ);
+	}
+	Extension getRight() const {
+		return Extension(_rightB, _rightQ);
+	}
+	void setExtensions(Extension left, Extension right) {
+		_leftB = left.getBase();
+		_leftQ = left.getQuality();
+		_rightB = right.getBase();
+		_rightQ = right.getQuality();
+	}
+	void setExtensions(ExtensionTracking &extTrack) {
+		for(int dir = 0; dir < ExtensionTracking::MAX_DIRECTIONS; dir++) {
+			for(int ext = 0; ext < Extension::MAX_EXTENSIONS; ext++) {
+				Extension::ExtensionType e = (Extension::ExtensionType) ext;
+				ExtensionTracking::DirectionType d = (ExtensionTracking::DirectionType) dir;
+				if (extTrack.getExtensionCount(e, d) > 0) {
+					if (d == ExtensionTracking::Left) {
+						_leftB = Extension::getBase(e);
+					    _leftQ = ExtensionTracking::getMinQuality();
+					} else {
+						_rightB = Extension::getBase(e);
+					    _rightQ = ExtensionTracking::getMinQuality();
+					}
+				}
+			}
+		}
+	}
+private:
+	char _leftB, _rightB;
+	unsigned char _leftQ, _rightQ;
+
+};
+
+class ExtensionTrackingInterface {
+public:
+	void trackExtensions(Extension left, Extension right) {}
+	ExtensionTracking getExtensionTracking() const { return ExtensionTracking(); }
+};
 
 class TrackingDataSingleton;
 class TrackingDataWithAllReads;
 
-class TrackingData {
+class TrackingData : public ExtensionTrackingInterface {
 public:
 	typedef Kmernator::UI16 CountType;
 	typedef Kmernator::ReadSetSizeType ReadIdType;
@@ -331,7 +485,7 @@ public:
 
 };
 
-class TrackingDataSingleton {
+class TrackingDataSingleton : public ExtensionTrackingInterface {
 public:
 	typedef TrackingData::PositionType PositionType;
 	typedef TrackingData::ReadPositionWeight ReadPositionWeight;
@@ -402,7 +556,7 @@ public:
 
 };
 
-class TrackingDataSingletonWithReadPosition {
+class TrackingDataSingletonWithReadPosition : public ExtensionTrackingInterface {
 public:
 	typedef TrackingData::ReadPositionWeight ReadPositionWeight;
 	typedef TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
@@ -489,7 +643,7 @@ public:
 
 };
 
-class TrackingDataWithAllReads {
+class TrackingDataWithAllReads : public ExtensionTrackingInterface {
 public:
 	typedef TrackingData::ReadPositionWeight ReadPositionWeight;
 	typedef TrackingData::ReadPositionWeightVector ReadPositionWeightVector;
@@ -611,8 +765,110 @@ std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
 std::ostream &operator<<(std::ostream &stream, TrackingDataSingleton &ob);
 std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob);
 
+
+class ExtensionTrackingData : public TrackingDataWithDirection {
+public:
+protected:
+	ExtensionTracking _extensionTracking;
+
+public:
+	ExtensionTrackingData(): TrackingDataWithDirection(), _extensionTracking() {}
+	ExtensionTrackingData(const ExtensionTrackingData &copy) {
+		*this = copy;
+	}
+	~ExtensionTrackingData() {}
+
+	void reset() {
+		TrackingDataWithDirection::reset();
+	}
+
+	bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos) {
+		assert(weight <= 1.0);
+
+		bool ret = TrackingDataWithDirection::track(weight,forward,readIdx,readPos);
+
+		return ret;
+	}
+	void trackExtensions(Extension left, Extension right) {
+		_extensionTracking.trackExtensions(left, right);
+	}
+	ExtensionTracking getExtensionTracking() const {
+		return _extensionTracking;
+	}
+
+	template<typename U>
+	ExtensionTrackingData &add(const U &other) {
+		TrackingDataWithDirection::add(other);
+		_extensionTracking = _extensionTracking + other.getExtensionTracking();
+
+		return *this;
+	};
+
+	template<typename U>
+	ExtensionTrackingData &operator=(const U &other) {
+		*((TrackingDataWithDirection*) this) = other;
+		_extensionTracking = other.getExtensionTracking();
+
+		return *this;
+	};
+
+};
+std::ostream &operator<<(std::ostream &stream, ExtensionTrackingData &ob);
+
+
+class ExtensionTrackingDataSingleton : public TrackingDataSingleton {
+public:
+	ExtensionTrackingDataSingleton() : TrackingDataSingleton(), extensionMsgPacket() {}
+	ExtensionTrackingDataSingleton(ExtensionTrackingDataSingleton &copy) {
+		*this = copy;
+	}
+	~ExtensionTrackingDataSingleton() {}
+
+	void reset() {
+		TrackingDataSingleton::reset();
+	}
+
+	bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos) {
+		assert(weight <= 1.0);
+
+		bool ret = TrackingDataSingleton::track(weight,forward,readIdx,readPos);
+
+		return ret;
+	}
+	void trackExtensions(Extension left, Extension right) {
+		extensionMsgPacket.setExtensions(left, right);
+	}
+	ExtensionTracking getExtentionTracking() const {
+		ExtensionTracking extTrack;
+		extTrack.trackExtensions(extensionMsgPacket.getLeft(), extensionMsgPacket.getRight());
+		return extTrack;
+	}
+
+	template<typename U>
+	ExtensionTrackingDataSingleton &add(const U &other) {
+		TrackingDataWithDirection::add(other);
+		ExtensionTracking extensionTracking = other.getExtensionTracking();
+		extensionMsgPacket.setExtensions(extensionTracking);
+		return *this;
+	};
+
+	template<typename U>
+	ExtensionTrackingDataSingleton &operator=(const U &other) {
+		*((TrackingDataWithDirection*) this) = other;
+		ExtensionTracking extensionTracking = other.getExtensionTracking();
+		extensionMsgPacket.setExtensions(extensionTracking);
+		return *this;
+	};
+
+protected:
+	ExtensionMessagePacket extensionMsgPacket;
+};
+
+std::ostream &operator<<(std::ostream &stream, ExtensionTrackingDataSingleton &ob);
+
+
 template<typename T>
-class TrackingDataMinimal {
+class TrackingDataMinimal : public ExtensionTrackingInterface {
 public:
 	typedef T DataType;
     typedef	typename TrackingData::CountType CountType;

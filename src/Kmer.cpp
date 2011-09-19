@@ -56,6 +56,14 @@ std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob) {
 	stream << ob.toString();
 	return stream;
 };
+std::ostream &operator<<(std::ostream &stream, ExtensionTrackingData &ob) {
+	stream << ob.toString();
+	return stream;
+};
+std::ostream &operator<<(std::ostream &stream, ExtensionTrackingDataSingleton &ob) {
+	stream << ob.toString();
+	return stream;
+}
 
 
 ClassicMemory ClassicMemory::singleton;
