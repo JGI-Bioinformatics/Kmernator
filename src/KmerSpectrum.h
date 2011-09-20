@@ -1122,10 +1122,7 @@ public:
 		PositionType readPos = 0;
 		append(pointers, least, weight, readIdx, readPos, true);
 	}
-	inline void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false, NumberType partIdx = 0, NumberType numParts = 1) {
-		append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, numParts);
-	}
-	inline void append(DataPointers &pointers, Kmer &least, WeightType &weight, ReadSetSizeType &readIdx, PositionType &readPos, bool isSolid = false) {
+	inline void append(DataPointers &pointers, Kmer &least, WeightType weight, ReadSetSizeType readIdx, PositionType readPos, bool isSolid = false, Extension left = Extension(), Extension right = Extension()) {
 		bool keepDirection = true;
 		if (weight < 0.0) {
 			keepDirection = false;
@@ -1140,15 +1137,21 @@ public:
 			pointers.reset();
 			SolidElementType elem = getSolid( least );
 			elem.value().track( weight, keepDirection, readIdx, readPos );
+			elem.value().trackExtensions(left, right);
+
 		} else {
 			pointers.set( least );
 
 			if (pointers.solidElem.isValid()) {
 				// track solid stats
 				pointers.solidElem.value().track( weight, keepDirection, readIdx, readPos );
+				pointers.solidElem.value().trackExtensions(left, right);
+
 			} else if (pointers.weakElem.isValid()) {
 				// track weak stats
 				pointers.weakElem.value().track( weight, keepDirection, readIdx, readPos );
+				pointers.weakElem.value().trackExtensions(left, right);
+
 			} else {
 				if ( pointers.singletonElem.isValid() ) {
 
@@ -1159,6 +1162,7 @@ public:
 					WeakElementType weakElem = getWeak( least );
 					weakElem.value() = singleData;
 					weakElem.value().track( weight, keepDirection, readIdx, readPos);
+					weakElem.value().trackExtensions(left, right);
 
 					singleton.remove( least );
 
@@ -1167,15 +1171,37 @@ public:
 					    // record this new singleton
 					    SingletonElementType elem = getSingleton(least);
 					    elem.value().track( weight, keepDirection, readIdx, readPos);
+					    elem.value().trackExtensions(left, right);
 					} else {
 						// record in the weak spectrum
 						WeakElementType weakElem = getWeak( least );
 						weakElem.value().track( weight, keepDirection, readIdx, readPos);
+						weakElem.value().trackExtensions(left, right);
 					}
 				}
 			}
 		}
 
+	}
+	inline void append( KmerWeightedExtensions &kmers, unsigned long readIdx, bool isSolid = false, NumberType partIdx = 0, NumberType numParts = 1) {
+		append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, numParts);
+	}
+	void append( KmerWeightedExtensions &kmers, ReadSetSizeType readIdx, bool isSolid, ReadSetSizeType kmerIdx, PositionType kmerLen, int partIdx, NumberType numParts ) {
+
+		DataPointers pointers(*this);
+		//LOG_DEBUG(1, "append to " << &kmers << " " << readIdx << " " << kmerIdx << " " << kmerLen );
+
+		for(PositionType readPos=0; readPos < kmerLen; readPos++)
+		{
+			Kmer &least = kmers[kmerIdx+readPos];
+			if (numParts > 1 && getDMPThread(least, numParts, true) != partIdx)
+				continue;
+			const WeightedExtensionMessagePacket &v = kmers.valueAt(kmerIdx+readPos);
+			append(pointers, least, v.getWeight(), readIdx, readPos, isSolid, v.getLeft(), v.getRight() );
+		}
+	}
+	inline void append( KmerWeights &kmers, unsigned long readIdx, bool isSolid = false, NumberType partIdx = 0, NumberType numParts = 1) {
+		append(kmers, readIdx, isSolid, 0, kmers.size(), partIdx, numParts);
 	}
 	void append( KmerWeights &kmers, ReadSetSizeType readIdx, bool isSolid, ReadSetSizeType kmerIdx, PositionType kmerLen, int partIdx, NumberType numParts ) {
 
@@ -1187,8 +1213,7 @@ public:
 			Kmer &least = kmers[kmerIdx+readPos];
 			if (numParts > 1 && getDMPThread(least, numParts, true) != partIdx)
 				continue;
-			WeightType weight = kmers.valueAt(kmerIdx+readPos);
-			append(pointers, least, weight, readIdx, readPos, isSolid);
+			append(pointers, least, kmers.valueAt(kmerIdx+readPos), readIdx, readPos, isSolid);
 		}
 	}
 
@@ -1400,7 +1425,7 @@ public:
 		{
 			const Read &read = store.getRead( batchIdx );
 			if ( !read.isDiscarded() ) {
-				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
+				KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
 
 				append(kmers, batchIdx, isSolid, partIdx, numParts);
 			}
@@ -1416,8 +1441,8 @@ public:
 		long numThreads = omp_get_max_threads();
 		long batchIdx = 0;
 
-		// allocate a square matrix of buffers: KmerWeights[writingThread][readingThread]
-		KmerWeights kmerBuffers[ numThreads ][ numThreads ];
+		// allocate a square matrix of buffers: KmerWeightedExtensions[writingThread][readingThread]
+		KmerWeightedExtensions kmerBuffers[ numThreads ][ numThreads ];
 		typedef std::pair< ReadSet::ReadSetSizeType, Sequence::SequenceLengthType > ReadPosType;
 		std::vector< ReadPosType > startReadIdx[ numThreads ][ numThreads ];
 
@@ -1468,7 +1493,7 @@ public:
 				if (read.isDiscarded())
 					continue;
 
-				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
+				KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
 				for (long j = 0; j < numThreads; j++)
 					startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 				for (IndexType j = 0; j < kmers.size(); j++) {

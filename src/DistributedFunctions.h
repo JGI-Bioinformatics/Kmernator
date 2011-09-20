@@ -152,6 +152,7 @@ void setGlobalReadSetOffsets(mpi::communicator &world, ReadSet &store) {
 	LOG_DEBUG(2, "globalOffset: " << store.getGlobalOffset(world.rank()) << " of " << store.getGlobalSize());
 }
 
+
 template<typename So, typename We, typename Si = TrackingDataSingleton>
 class DistributedKmerSpectrum : public KmerSpectrum<So, We, Si>
 {
@@ -295,11 +296,15 @@ public:
 	 * readIdx, readPos, weight (rc if neg) + kmer
 	 *
 	 */
+
 	class StoreKmerMessageHeader {
 	public:
+
 		ReadSetSizeType readIdx;
 		PositionType readPos;
 		WeightType weight; // weight is negative if kmer is rc of observed direction
+		ExtensionMessagePacket extensionMsgPacket;
+
 		// Kmer is next bytes, dynamically determined by KmerSizer::getTwoBitLength()
 		// kmer is least complement
 
@@ -307,10 +312,18 @@ public:
 		Kmer *getKmer() {
 			return (Kmer*) (((char*)this)+sizeof(*this));
 		}
-		void set(ReadSetSizeType _readIdx, PositionType _readPos, WeightType _weight, const Kmer &_kmer) {
+
+		Extension getLeft() const {
+			return extensionMsgPacket.getLeft();
+		}
+		Extension getRight() const {
+			return extensionMsgPacket.getRight();
+		}
+		void set(ReadSetSizeType _readIdx, PositionType _readPos, const WeightedExtensionMessagePacket &wemsgPkt, const Kmer &_kmer) {
 			readIdx = _readIdx;
 			readPos = _readPos;
-			weight = _weight;
+			weight = wemsgPkt.getWeight();
+			extensionMsgPacket.setExtensions(wemsgPkt.getLeft(), wemsgPkt.getRight());
 			*(getKmer()) = _kmer;
 		}
 	};
@@ -336,7 +349,7 @@ public:
 		int process(StoreKmerMessageHeader *msg, MessagePackage &msgPkg) {
 			assert(msgPkg.tag == omp_get_thread_num());
 			LOG_DEBUG(5, "StoreKmerMessage: " << msg->readIdx << " " << msg->readPos << " " << msg->weight << " " << msg->getKmer()->toFasta());
-			getSpectrum().append(getDataPointer(), *msg->getKmer(), msg->weight, msg->readIdx, msg->readPos, isSolid());
+			getSpectrum().append(getDataPointer(), *msg->getKmer(), msg->weight, msg->readIdx, msg->readPos, isSolid(), msg->getLeft(), msg->getRight());
 			return 0;
 		}
 	};
@@ -351,7 +364,6 @@ public:
 		int messageSize = sizeof(StoreKmerMessageHeader) + KmerSizer::getByteSize();
 
 		long readSetSize = store.getSize();
-
 
 		LOG_VERBOSE(2, "starting _buildSpectrumMPI");
 
@@ -390,13 +402,14 @@ public:
 					continue;
 
 				DataPointers pointers(*this);
-				KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
+				KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
 				ReadSetSizeType globalReadIdx = readIdx + globalReadSetOffset;
 				LOG_DEBUG(3, "_buildKmerSpectrumMPI(): Read " << readIdx << " (" << globalReadIdx << ") " << kmers.size() );
 
 				for (PositionType readPos = 0 ; readPos < kmers.size(); readPos++) {
 					int rankDest, threadDest;
-					WeightType weight = kmers.valueAt(readPos);
+					const WeightedExtensionMessagePacket &v = kmers.valueAt(readPos);
+					WeightType weight = v.getWeight();
 					if ( TrackingData::isDiscard( (weight<0.0) ? 0.0-weight : weight ) )  {
 						LOG_DEBUG(4, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << kmers[readPos].toFasta());
 					} else {
@@ -404,9 +417,9 @@ public:
 						this->getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize, true);
 
 						if (rankDest == rank && threadDest == threadId) {
-							this->append(pointers, kmers[readPos], weight, globalReadIdx, readPos, isSolid);
+							this->append(pointers, kmers[readPos], v.getWeight(), globalReadIdx, readPos, isSolid, v.getLeft(), v.getRight());
 						} else {
-							msgBuffers->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, weight, kmers[readPos]);
+							msgBuffers->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, v, kmers[readPos]);
 						}
 					}
 				}

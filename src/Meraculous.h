@@ -28,12 +28,9 @@ public:
 		return *this;
 	}
 
-	class StoreKmerExtensionMessageHeader {
+	class StoreKmerExtensionMessageHeader : public ExtensionMessagePacket {
 	public:
-		char _leftBase;
-		int _leftQual;
-		char _rightBase;
-		int _rightQual;
+		// first 4 bytes are the ExtensionMessagePacket
 		// Kmer is next bytes, dynamically determined by KmerSizer::getTwoBitLength()
 		// kmer is least complement
 
@@ -41,11 +38,8 @@ public:
 		Kmer *getKmer() {
 			return (Kmer*) (((char*)this)+sizeof(*this));
 		}
-		void set(char leftBase, int leftQual, char rightBase, int rightQual, const Kmer &_kmer) {
-			_leftBase = leftBase;
-			_leftQual = leftQual;
-			_rightBase = rightBase;
-			_rightQual = rightQual;
+		void set(Extension left, Extension right, const Kmer &_kmer) {
+			setExtensions(left, right);
 			*(getKmer()) = _kmer;
 		}
 	};
@@ -69,7 +63,7 @@ public:
 
 			WeakElementType element = getSpectrum().getIfExistsWeak( *msg->getKmer() );
 			if (element.isValid())
-				element.value().trackExtension(msg->_leftBase, msg->_leftQual, msg->_rightBase, msg->_rightQual);
+				element.value().trackExtensions(msg->getLeft(), msg->getRight());
 			return 0;
 		}
 	};

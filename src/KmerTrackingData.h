@@ -72,6 +72,19 @@ public:
 	unsigned char getQuality() const {
 		return _quality;
 	}
+	Extension getReverseComplement() const {
+		Extension revComp = *this;
+		if (_base ==  A)
+			revComp._base = T;
+		else if (_base == C)
+			revComp._base = G;
+		else if (_base == G)
+			revComp._base = C;
+		else if (_base == T)
+			revComp._base = A;
+
+		return revComp;
+	}
 
 private:
 	ExtensionType _base;
@@ -176,7 +189,7 @@ public:
 			}
 		}
 	}
-private:
+protected:
 	char _leftB, _rightB;
 	unsigned char _leftQ, _rightQ;
 
@@ -765,6 +778,30 @@ std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
 std::ostream &operator<<(std::ostream &stream, TrackingDataSingleton &ob);
 std::ostream &operator<<(std::ostream &stream, TrackingDataWithAllReads &ob);
 
+class WeightedExtensionMessagePacket : public ExtensionMessagePacket {
+public:
+	typedef TrackingData::WeightType WeightType;
+
+	WeightedExtensionMessagePacket() : ExtensionMessagePacket(), _weight(0) {}
+	WeightedExtensionMessagePacket(const WeightedExtensionMessagePacket &copy) {
+		*this = copy;
+	}
+	~WeightedExtensionMessagePacket() {}
+	WeightedExtensionMessagePacket &operator=(const WeightedExtensionMessagePacket &copy) {
+		*((ExtensionMessagePacket*)this) = (ExtensionMessagePacket) copy;
+		_weight = copy._weight;
+		return *this;
+	}
+	WeightType getWeight() const {
+		return _weight;
+	}
+	void setWeight(WeightType weight) {
+		_weight = weight;
+	}
+
+protected:
+	WeightType _weight;
+};
 
 class ExtensionTrackingData : public TrackingDataWithDirection {
 public:

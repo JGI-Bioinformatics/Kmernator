@@ -33,10 +33,13 @@
 #define _KMER_READ_UTILS_H
 
 #include "config.h"
+#include "Sequence.h"
+#include "KmerTrackingData.h"
+#include "Kmer.h"
 
 class KmerReadUtils {
 public:
-	static KmerWeights buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
+	static KmerWeightedExtensions buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
 		SequenceLengthType readLength = read.getLength();
 		bool needMalloc = readLength > MAX_STACK_SIZE;
 		bool _bools[ needMalloc ? 0 : readLength ];
@@ -44,7 +47,10 @@ public:
 		if (needMalloc) {
 			bools = new bool[readLength];
 		}
-		KmerWeights kmers(read.getTwoBitSequence(), readLength, leastComplement, bools);
+		std::string fasta = read.getFasta();
+		int kmerLen = KmerSizer::getSequenceLength();
+
+		KmerWeightedExtensions kmers(read.getTwoBitSequence(), readLength, leastComplement, bools);
 		std::string quals = read.getQuals();
 		size_t markupIdx = 0;
 
@@ -56,6 +62,7 @@ public:
 			isRef = true;
 
 		SequenceLengthType size = (SequenceLengthType) kmers.size();
+		Extension left = Extension('X', ExtensionTracking::getMinQuality()), right;
 		for (SequenceLengthType i = 0; i < size; i++) {
 			if (isRef) {
 				weight = 1.0;
@@ -79,13 +86,28 @@ public:
 					+ KmerSizer::getSequenceLength()) {
 				weight = 0.0;
 			}
-			kmers.valueAt(i) = leastComplementForNegativeWeight && bools[i] ? weight : (0.0-weight);
 
+			// set the weight
+			kmers.valueAt(i).setWeight( leastComplementForNegativeWeight && bools[i] ? weight : (0.0-weight) );
+
+			SequenceLengthType rightBase = i + kmerLen + 1;
+			if (rightBase < fasta.length())
+				right = Extension(fasta[rightBase], quals[rightBase] - Read::FASTQ_START_CHAR);
+			else
+				right = Extension('X', ExtensionTracking::getMinQuality());
+
+			// set the extensions
+			if (bools[i])
+				kmers.valueAt(i).setExtensions(left, right);
+			else // kmer is reverse complement, so reverse extensions
+				kmers.valueAt(i).setExtensions(right.getReverseComplement(), left.getReverseComplement());
+
+			left = Extension(fasta[i], quals[i] - Read::FASTQ_START_CHAR);
 		}
 		if (Log::isDebug(5)) {
 			ostream &debug = Log::Debug() << "KmerWeights: idx valueAt toFasta" << std::endl;;
 		    for(Kmer::IndexType i = 0 ; i < kmers.size(); i++) {
-			  debug << i << " " << kmers.valueAt(i) << " " << kmers[i].toFasta() << std::endl;
+			  debug << i << " " << kmers.valueAt(i).getWeight() << " " << kmers[i].toFasta() << std::endl;
 		    }
 		}
 		if (needMalloc) {

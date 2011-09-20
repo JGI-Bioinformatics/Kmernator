@@ -2129,6 +2129,7 @@ public:
 typedef KmerArray<char> Kmers;
 typedef KmerArray<double> KmerWeights;
 typedef KmerArray<Kmernator::UI32> KmerCounts;
+typedef KmerArray< WeightedExtensionMessagePacket > KmerWeightedExtensions;
 
 #endif
 

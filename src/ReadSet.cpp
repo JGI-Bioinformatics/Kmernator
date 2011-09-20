@@ -98,7 +98,7 @@ void ReadSet::circularize(long extraLength) {
 		Read &read = getRead(idx);
 		std::string name, fasta, quals;
 		name = read.getName();
-		fasta = read.getFastaNoMarkup();
+		fasta = read.getFasta();
 		quals = read.getQuals(0, MAX_SEQUENCE_LENGTH, false, true);
 		read = Read(name, fasta + fasta.substr(0, extraLength), quals + quals.substr(0,extraLength));
 	}

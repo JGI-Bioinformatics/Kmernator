@@ -123,14 +123,14 @@ public:
 		LOG_DEBUG(2, "Preparing exact match artifacts");
 		for (unsigned int i = 0; i < sequences.getSize(); i++) {
 			const Read read = sequences.getRead(i);
-			KmerWeights kmers = KmerReadUtils::buildWeightedKmers(read, true);
+			KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true);
 			for (Kmer::IndexType j = 0; j < kmers.size(); j++) {
 				filter.getOrSetElement( kmers[j] , i );
 			}
 			if (Log::isDebug(2) && i % 10000 == 0)
-				LOG_DEBUG(2, "Processed " << i << " artifact reads. " << filter.size() << " " << MemoryUtils::getMemoryUsage())
+				LOG_DEBUG(2, "Processed" << i << " artifact reads." << filter.size() << "" << MemoryUtils::getMemoryUsage())
 		}
-		LOG_DEBUG(2, "Processed " << sequences.getSize() << " artifact reads. " << filter.size() << " " << MemoryUtils::getMemoryUsage())
+		LOG_DEBUG(2, "Processed" << sequences.getSize() << " artifact reads." << filter.size() << "" << MemoryUtils::getMemoryUsage())
 
 		int maxErrors = numErrors;
 		int buildEdits = Options::getOptions().getBuildArtifactEditsInFilter();
@@ -138,7 +138,7 @@ public:
 			if (buildEdits == 1 || (buildEdits == 2 && (filter.size() < 750000))) {
 				numErrors--;
 
-				LOG_DEBUG(2,  "Preparing edit distance " << (error+1) << " match: " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
+				LOG_DEBUG(2,  "Preparing edit distance" << (error+1) << " match:" << filter.size() << "" << MemoryUtils::getMemoryUsage() );
 
 				std::vector< KM::BucketType > tmpKmers;
 				tmpKmers.reserve(filter.size());
@@ -152,10 +152,10 @@ public:
 					}
 				}
 				tmpKmers.clear();
-				LOG_DEBUG(2, "Prepared order " << (error+1) << ": " << filter.size() << " " << MemoryUtils::getMemoryUsage() );
+				LOG_DEBUG(2, "Prepared order" << (error+1) << ":" << filter.size() << "" << MemoryUtils::getMemoryUsage() );
 			}
 		}
-		LOG_DEBUG(1, "filter is " << filter.size() << ".  Remaining edits is: " << numErrors);
+		LOG_DEBUG(1, "filter is" << filter.size() << ".  Remaining edits is:" << numErrors);
 
 		KmerSizer::set(oldKmerLength);
 	}
@@ -260,7 +260,7 @@ public:
 		SequenceLengthType &maxQualityPass = results.maxQualityPass;
 		maxQualityPass = MAX_SEQUENCE_LENGTH;
 
-		LOG_DEBUG(5, "Checking " << read.getName() << "\t" << read.getFasta() );
+		LOG_DEBUG(5, "Checking" << read.getName() << "\t" << read.getFasta() );
 
 		SequenceLengthType seqLen = read.getLength();
 		TwoBitEncoding *ptr = read.getTwoBitSequence();
@@ -276,7 +276,7 @@ public:
 		for(unsigned int i = 0 ; i < quals.size() ; i++) {
 			if (quals[i] < minQual) {
 				minAffected = maxQualityPass = i;
-				LOG_DEBUG(6, "QualityFilter(" << minQual << ") hit baseIdx: " << i << "(" << quals[i] << ")\t" << read.toString());
+				LOG_DEBUG(6, "QualityFilter(" << minQual << ") hit baseIdx:" << i << "(" << quals[i] << ")\t" << read.toString());
 				break;
 			}
 		}
@@ -332,7 +332,7 @@ public:
 			// allow simple repeats in the middle of a read with good edges
 			long goodLength = std::min(maxQualityPass, seqLen);
 			if (minAffected >= length && (goodLength - maxAffected) >= (long) length) {
-				LOG_DEBUG(6, "Allowing simple repeat in middle: " << minAffected << "-" << maxAffected << "!" << maxQualityPass << "\t" << read.toString());
+				LOG_DEBUG(6, "Allowing simple repeat in middle:" << minAffected << "-" << maxAffected << "!" << maxQualityPass << "\t" << read.toString());
 				value = 0;
 				minAffected = 0;
 				maxAffected = 0;
@@ -346,7 +346,7 @@ public:
 			if (maxAffected < seqLen) {
 				maxAffected = seqLen;
 			}
-			LOG_DEBUG(6, "Quality trim " << minAffected << "-" << maxAffected << "\n" << read.toFastq());
+			LOG_DEBUG(6, "Quality trim" << minAffected << "-" << maxAffected << "\n" << read.toFastq());
 		}
 		if (value > 0) {
 			read.markupBases(minAffected , maxAffected - minAffected, 'X');
@@ -443,15 +443,15 @@ public:
 				  Read read;
 				  if (isRead1Affected) {
 					  read = reads.getRead(readIdx1);
-					  LOG_DEBUG(5, "FilterMatch1 to " << read.getName() << " "
-						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
-							  << wasPhiX << " " << results1.minAffected << "-" << results1.maxAffected
+					  LOG_DEBUG(5, "FilterMatch1 to" << read.getName() << " "
+						  << read.getFastaNoMarkup() << "" << read.getFasta() << " "
+							  << wasPhiX << "" << results1.minAffected << "-" << results1.maxAffected
 							  << ":" << getFilterName(results1.value));
 				  }
 				  if (isRead2Affected) {
 					  read = reads.getRead(readIdx2);
-					  LOG_DEBUG(5, "FilterMatch2 to " << read.getName() << " "
-						  << read.getFastaNoMarkup() << " " << read.getFasta() << " "
+					  LOG_DEBUG(5, "FilterMatch2 to" << read.getName() << " "
+						  << read.getFastaNoMarkup() << "" << read.getFasta() << " "
 							  << wasPhiX << " "  << results2.minAffected << "-" << results2.maxAffected
 							  << ":"<< getFilterName(results2.value));
 
@@ -487,10 +487,10 @@ public:
 		if (byPair)
 			size = reads.getPairSize();
 
-		LOG_VERBOSE(1, "Applying Artifact filter to " << size << " " << (byPair?"Pairs":"Reads"));
+		LOG_VERBOSE(1, "Applying Artifact filter to" << size << "" << (byPair?"Pairs":"Reads"));
 		#pragma omp parallel for schedule(dynamic)
 		for (long idx = 0; idx < size; idx++) {
-			LOG_DEBUG(5, "filtering read " << (byPair ? "pair " : "" ) << idx);
+			LOG_DEBUG(5, "filtering read" << (byPair ? "pair " : "" ) << idx);
 
 			if (byPair)
 				applyFilterToPair(reads, idx, recorder);
@@ -504,10 +504,10 @@ public:
 
 		if (Log::isVerbose(1)) {
 			std::stringstream ss ;
-			ss << "Final Filter Matches to reads: " << affectedCount << std::endl;
-			ss << "Discarded Reads: " << recorder.getDiscardedReads() << std::endl;
-			ss << "Trimmed Reads: " << recorder.getTrimmedReads() << std::endl;
-			ss << "Discarded/Trimmed Bases: " << recorder.getTrimmedBases() << std::endl;
+			ss << "Final Filter Matches to reads:" << affectedCount << std::endl;
+			ss << "Discarded Reads:" << recorder.getDiscardedReads() << std::endl;
+			ss << "Trimmed Reads:" << recorder.getTrimmedReads() << std::endl;
+			ss << "Discarded/Trimmed Bases:" << recorder.getTrimmedBases() << std::endl;
 			ss << std::endl;
 			ss << "\tDiscarded\tAffected\tBasesRemoved\tMatch" << std::endl;
 			// TODO sort
@@ -548,40 +548,40 @@ public:
 	    ss << "AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAG" << std::endl;
 	    ss << ">Solexa_3_prime_adapter" << std::endl;
 	    ss << "TTTTCGTATGCCGTCTTCTGCTTG" << std::endl;
-	    ss << ">Gex_Adapter_1             " << std::endl;
-	    ss << "GATCGTCGGACTGTAGAACTCTGAAC " << std::endl;
+	    ss << ">Gex_Adapter_1" << std::endl;
+	    ss << "GATCGTCGGACTGTAGAACTCTGAAC" << std::endl;
 	    ss << ">Gex_Adapter_1_2" << std::endl;
-	    ss << "ACAGGTTCAGAGTTCTACAGTCCGAC " << std::endl;
+	    ss << "ACAGGTTCAGAGTTCTACAGTCCGAC" << std::endl;
 	    ss << ">Gex_Adapter_2" << std::endl;
-	    ss << "CAAGCAGAAGACGGCATACGANN " << std::endl;
+	    ss << "CAAGCAGAAGACGGCATACGANN" << std::endl;
 	    ss << ">Gex_Adapter_2_2" << std::endl;
-	    ss << "TCGTATGCCGTCTTCTGCTTG " << std::endl;
+	    ss << "TCGTATGCCGTCTTCTGCTTG" << std::endl;
 	    ss << ">Gex_PCR_Primer_1" << std::endl;
-	    ss << "CAAGCAGAAGACGGCATACGA " << std::endl;
+	    ss << "CAAGCAGAAGACGGCATACGA" << std::endl;
 	    ss << ">Gex_PCR_Primer_2" << std::endl;
-	    ss << "AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA " << std::endl;
+	    ss << "AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA" << std::endl;
 	    ss << ">Gex_Sequencing_Primer" << std::endl;
-	    ss << "CGACAGGTTCAGAGTTCTACAGTCCGACGATC " << std::endl;
+	    ss << "CGACAGGTTCAGAGTTCTACAGTCCGACGATC" << std::endl;
 	    ss << ">Adapters1" << std::endl;
-	    ss << "GATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG  " << std::endl;
+	    ss << "GATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG" << std::endl;
 	    ss << ">Adapters1_1" << std::endl;
-	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT   " << std::endl;
+	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
 	    ss << ">PCR_Primers1" << std::endl;
-	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
 	    ss << ">PCR Primers1_1" << std::endl;
-	    ss << "CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT   " << std::endl;
+	    ss << "CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT" << std::endl;
 	    ss << ">Genomic_DNA_Sequencing_Primer" << std::endl;
-	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
 	    ss << ">PE_Adapters1" << std::endl;
-	    ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG " << std::endl;
+	    ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG" << std::endl;
 	    ss << ">PE_Adapters1_" << std::endl;
-	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
 	    ss << ">PE_PCR_Primers1" << std::endl;
-	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
 	    ss << ">PE_PCR_Primers1_1" << std::endl;
-	    ss << "CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT " << std::endl;
+	    ss << "CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
 	    ss << ">PE_Sequencing_Primer" << std::endl;
-	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT " << std::endl;
+	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
 	    ss << ">PE_Sequencing_Primer_1" << std::endl;
 	    ss << "CGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
 		return ss.str();
