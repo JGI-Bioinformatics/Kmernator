@@ -119,6 +119,25 @@ target_link_libraries( DistributedNucleatingAssembler
 
 endif()
 
+if( MPI_FOUND )
+
+set_source_files_properties( MeraculousCounter
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+add_executable( MeraculousCounter MeraculousCounter )
+set_target_properties( MeraculousCounter
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       )
+target_link_libraries( MeraculousCounter 
+                              Sequence
+                              Kmer
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+
+endif()
 
 set_source_files_properties( TnfDistance
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}

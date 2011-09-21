@@ -43,6 +43,37 @@ public:
 		static const char ExtensionToBase[MAX_EXTENSIONS] = {'A', 'C', 'G', 'T', 'N', 'X'};
 		return ExtensionToBase[e];
 	}
+	static ExtensionType getExtension(int b) {
+		ExtensionType e;
+		switch(b) {
+		case A : e = A; break;
+		case C : e = C; break;
+		case G : e = G; break;
+		case T : e = T; break;
+		case N : e = N; break;
+		case X : e = X; break;
+		default: e = MAX_EXTENSIONS;
+		}
+		return e;
+	}
+	static ExtensionType getReverseComplement(ExtensionType b) {
+		assert(b < MAX_EXTENSIONS);
+		if (b == A)
+			return T;
+		else if (b == C)
+			return G;
+		else if (b == G)
+			return C;
+		else if (b == T)
+			return A;
+		else
+			return b;
+	}
+	static ExtensionType getReverseComplement(int b) {
+		return getReverseComplement(getExtension(b));
+	}
+
+public:
 	Extension() : _base(MAX_EXTENSIONS), _quality(0) {}
 	Extension(char c, int quality) : _base(MAX_EXTENSIONS), _quality((unsigned char) quality) {
 		switch(c) {
@@ -55,8 +86,22 @@ public:
 		default : LOG_THROW("Invalid Extension type: " << c << " q: " << quality);
 		}
 		if (quality > 255 || quality < 0)
-			LOG_THROW("Invalid Extension quality: " << quality << " type: " << c);
+			LOG_THROW("Invalid Extension quality: " << quality << " type: " << _base << " " << c);
 	}
+	Extension(ExtensionType e, int quality) : _base(e), _quality((unsigned char) quality) {
+		if (quality > 255 || quality < 0)
+			LOG_THROW("Invalid Extension quality: " << quality << " type: " << _base);
+	}
+	Extension(const Extension &copy) {
+		*this = copy;
+	}
+	~Extension() {}
+	Extension &operator=(const Extension &copy) {
+		_base = copy._base;
+		_quality = copy._quality;
+		return *this;
+	}
+
 	bool isValid() const {
 		return _base < MAX_EXTENSIONS;
 	}
@@ -74,15 +119,7 @@ public:
 	}
 	Extension getReverseComplement() const {
 		Extension revComp = *this;
-		if (_base ==  A)
-			revComp._base = T;
-		else if (_base == C)
-			revComp._base = G;
-		else if (_base == G)
-			revComp._base = C;
-		else if (_base == T)
-			revComp._base = A;
-
+		revComp._base = getReverseComplement(_base);
 		return revComp;
 	}
 
@@ -141,6 +178,27 @@ public:
 		return _extensionCounts[dir][ext];
 	}
 
+	std::string toTextValues() const {
+		std::stringstream ss;
+		for(int j = 0; j < MAX_DIRECTIONS; j++) {
+			for(int i = 0; i < Extension::MAX_EXTENSIONS; i++) {
+				if (i + j != 0)
+					ss << " ";
+				ss << _extensionCounts[j][i];
+			}
+		}
+		ss << " " << 0;
+		return ss.str();
+	}
+	ExtensionTracking getReverseComplement() const {
+		ExtensionTracking rev;
+		for(int i = 0; i < Extension::MAX_EXTENSIONS; i++) {
+			rev._extensionCounts[Left][ Extension::getReverseComplement(i) ] = _extensionCounts[Right][i];
+			rev._extensionCounts[Right][ Extension::getReverseComplement(i) ] = _extensionCounts[Left][i];
+		}
+		return rev;
+	}
+
 private:
 	unsigned int _extensionCounts[MAX_DIRECTIONS][Extension::MAX_EXTENSIONS];
 };
@@ -173,6 +231,7 @@ public:
 		_rightQ = right.getQuality();
 	}
 	void setExtensions(ExtensionTracking &extTrack) {
+		int assignCount = 0;
 		for(int dir = 0; dir < ExtensionTracking::MAX_DIRECTIONS; dir++) {
 			for(int ext = 0; ext < Extension::MAX_EXTENSIONS; ext++) {
 				Extension::ExtensionType e = (Extension::ExtensionType) ext;
@@ -181,13 +240,16 @@ public:
 					if (d == ExtensionTracking::Left) {
 						_leftB = Extension::getBase(e);
 					    _leftQ = ExtensionTracking::getMinQuality();
+					    assignCount++;
 					} else {
 						_rightB = Extension::getBase(e);
 					    _rightQ = ExtensionTracking::getMinQuality();
+					    assignCount++;
 					}
 				}
 			}
 		}
+		assert(assignCount <= 2);
 	}
 protected:
 	char _leftB, _rightB;
@@ -826,6 +888,7 @@ public:
 
 		return ret;
 	}
+	// override default methods
 	void trackExtensions(Extension left, Extension right) {
 		_extensionTracking.trackExtensions(left, right);
 	}
@@ -856,10 +919,11 @@ std::ostream &operator<<(std::ostream &stream, ExtensionTrackingData &ob);
 class ExtensionTrackingDataSingleton : public TrackingDataSingleton {
 public:
 	ExtensionTrackingDataSingleton() : TrackingDataSingleton(), extensionMsgPacket() {}
-	ExtensionTrackingDataSingleton(ExtensionTrackingDataSingleton &copy) {
+	ExtensionTrackingDataSingleton(const ExtensionTrackingDataSingleton &copy) {
 		*this = copy;
 	}
 	~ExtensionTrackingDataSingleton() {}
+
 
 	void reset() {
 		TrackingDataSingleton::reset();
@@ -872,10 +936,11 @@ public:
 
 		return ret;
 	}
+	// override default methods
 	void trackExtensions(Extension left, Extension right) {
 		extensionMsgPacket.setExtensions(left, right);
 	}
-	ExtensionTracking getExtentionTracking() const {
+	ExtensionTracking getExtensionTracking() const {
 		ExtensionTracking extTrack;
 		extTrack.trackExtensions(extensionMsgPacket.getLeft(), extensionMsgPacket.getRight());
 		return extTrack;

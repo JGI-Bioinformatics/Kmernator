@@ -90,7 +90,7 @@ public:
 			// set the weight
 			kmers.valueAt(i).setWeight( leastComplementForNegativeWeight && bools[i] ? weight : (0.0-weight) );
 
-			SequenceLengthType rightBase = i + kmerLen + 1;
+			SequenceLengthType rightBase = i + kmerLen;
 			if (rightBase < fasta.length())
 				right = Extension(fasta[rightBase], quals[rightBase] - Read::FASTQ_START_CHAR);
 			else
