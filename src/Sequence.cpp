@@ -979,7 +979,7 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset, SequenceLengthType
 }
 
 std::string Read::toString() const {
-	return getFastaNoMarkup() + "\t" + getQuals(0, MAX_SEQUENCE_LENGTH, true, true) + "\t" + getName();
+	return getFasta() + "\t" + getQuals(0, MAX_SEQUENCE_LENGTH, true, true) + "\t" + getName();
 }
 
 

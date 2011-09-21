@@ -1753,11 +1753,11 @@ public:
 		return getOrSetElement(key, getBucket(key), value);
 	}
 	ElementType getElement(const KeyType &key, BucketType &bucket) {
-		ValueType value = Value();
+		ValueType value = ValueType();
 		return getOrSetElement(key, bucket, value);
 	}
 	ElementType getElement(const KeyType &key) {
-		ValueType value = Value();
+		ValueType value = ValueType();
 		return getOrSetElement(key, value);
 	}
 
