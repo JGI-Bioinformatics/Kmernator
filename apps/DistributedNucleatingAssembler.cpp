@@ -215,29 +215,8 @@ int main(int argc, char *argv[]) {
 	// do not apply artifact filtering by default
 	double timing1, timing2;
 
-	int threadProvided;
-	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE
-			: MPI_THREAD_FUNNELED;
-	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
-	mpi::environment env(argc, argv);
-	mpi::communicator world;
-	MPI_Comm_set_errhandler(world, MPI::ERRORS_THROW_EXCEPTIONS);
+	mpi::communicator world = initializeWorldAndOptions< DistributedNucleatingAssemblerOptions >(argc, argv);
 
-	try {
-		Logger::setWorld(&world);
-
-		if (!DistributedNucleatingAssemblerOptions::parseOpts(argc, argv))
-			throw std::invalid_argument("Please fix the command line arguments");
-
-		if (Options::getOptions().getGatheredLogs())
-			Logger::setWorld(&world, Options::getOptions().getDebug() >= 3);
-
-	} catch (...) {
-		std::cerr << OptionsBaseInterface::getDesc() << std::endl;
-		std::cerr << std::endl
-				<< "Please fix the options and/or MPI environment" << std::endl;
-		exit(1);
-	}
 	timing1 = MPI_Wtime();
 
 	OptionsBaseInterface::FileListType inputFiles =

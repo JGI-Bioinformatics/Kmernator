@@ -74,6 +74,36 @@ void validateMPIWorld(mpi::communicator &world) {
 	reduceOMPThreads(world);
 }
 
+template< typename OptionsTempl >
+mpi::communicator initializeWorldAndOptions(int argc, char *argv[]) {
+	int threadProvided;
+	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
+	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
+	mpi::environment env(argc, argv);
+	mpi::communicator world;
+	MPI_Comm_set_errhandler( world, MPI::ERRORS_THROW_EXCEPTIONS );
+
+	try {
+		Logger::setWorld(&world);
+
+		if (!OptionsTempl::parseOpts(argc, argv))
+			LOG_THROW("Please fix the command line arguments");
+
+		if (GeneralOptions::getOptions().getGatheredLogs())
+			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);
+
+		validateMPIWorld(world);
+
+	} catch (...) {
+		std::cerr << OptionsTempl::getDesc() << std::endl;
+		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
+		MPI_Finalize();
+		exit(1);
+	}
+	world.barrier();
+	return world;
+}
+
 // collective
 std::string getRankSubdir(mpi::communicator &world, std::string prefix) {
 	int subRank = world.rank() / 256;

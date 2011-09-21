@@ -57,6 +57,7 @@ public:
 		ret &= GeneralOptions::_parseOptions(vm);
 		ret &= _MPIOptions::_parseOptions(vm);
 		ret &= _FilterReadsBaseOptions::_parseOptions(vm);
+
 		return ret;
 	}
 };
@@ -64,35 +65,10 @@ typedef OptionsBaseTemplate< _MPIFilterReadsOptions > MPIFilterReadsOptions;
 
 int main(int argc, char *argv[]) {
 
+	mpi::communicator world = initializeWorldAndOptions< MPIFilterReadsOptions >(argc, argv);
 
-	int threadProvided;
-	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
-	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
-	mpi::environment env(argc, argv);
-	mpi::communicator world;
-	MPI_Comm_set_errhandler( world, MPI::ERRORS_THROW_EXCEPTIONS );
-
-	try {
-		Logger::setWorld(&world);
-
-		if (!MPIFilterReadsOptions::parseOpts(argc, argv))
-			throw std::invalid_argument("Please fix the command line arguments");
-
-		if (MPIFilterReadsOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
-			throw std::invalid_argument("Distributed version does not support max-kmer-output-depth option");
-
-		if (Options::getOptions().getGatheredLogs())
-			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);
-
-		validateMPIWorld(world);
-
-	} catch (...) {
-		std::cerr << MPIFilterReadsOptions::getDesc() << std::endl;
-		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
-		MPI_Finalize();
-		exit(1);
-	}
-	world.barrier();
+	if (MPIFilterReadsOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
+		LOG_THROW("Distributed version does not support max-kmer-output-depth option");
 
 	MemoryUtils::getMemoryUsage();
 	std::string outputFilename = Options::getOptions().getOutputFile();
