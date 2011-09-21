@@ -67,7 +67,8 @@ void validateMPIWorld(mpi::communicator &world) {
 	MPI_Query_thread(&provided);
 #ifdef _USE_OPENMP
 	if (provided != MPI_THREAD_FUNNELED && omp_get_max_threads() > 1) {
-		LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_FUNNELED (" << provided << "), reducing OpenMP threads to 1")
+		if (world.rank() == 0)
+			LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_FUNNELED (" << provided << "), reducing OpenMP threads to 1")
 		omp_set_num_threads(1);
 	}
 #endif
