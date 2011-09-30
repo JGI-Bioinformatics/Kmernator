@@ -88,7 +88,7 @@ mpi::communicator initializeWorldAndOptions(int argc, char *argv[]) {
 		Logger::setWorld(&world);
 
 		if (!OptionsTempl::parseOpts(argc, argv))
-			LOG_THROW("Please fix the command line arguments");
+			LOG_THROW("Please fix the command line arguments." << std::endl << OptionsTempl::getOptionsErrorMsg());
 
 		if (GeneralOptions::getOptions().getGatheredLogs())
 			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);
@@ -96,8 +96,6 @@ mpi::communicator initializeWorldAndOptions(int argc, char *argv[]) {
 		validateMPIWorld(world);
 
 	} catch (...) {
-		std::cerr << OptionsTempl::getDesc() << std::endl;
-		std::cerr << std::endl << "Please fix the options and/or MPI environment" << std::endl;
 		MPI_Finalize();
 		exit(1);
 	}
@@ -534,15 +532,15 @@ public:
 		world.barrier();
 
 		// purge low counts
-		if (Options::getOptions().getMinDepth() > 1) {
+		if (KmerOptions::getOptions().getMinDepth() > 1) {
 			LOG_VERBOSE(2, "Clearing memory from singletons: " << this->singleton.size() );
 			LOG_DEBUG(2, MemoryUtils::getMemoryUsage());
 			this->singleton.clear();
 		}
-		if (Options::getOptions().getMinDepth() > 2) {
-			LOG_VERBOSE(2, "Purging low count kmers (< " << Options::getOptions().getMinDepth() << ")");
+		if (KmerOptions::getOptions().getMinDepth() > 2) {
+			LOG_VERBOSE(2, "Purging low count kmers (< " << KmerOptions::getOptions().getMinDepth() << ")");
 			LOG_DEBUG(2, MemoryUtils::getMemoryUsage());
-			this->purgeMinDepth(Options::getOptions().getMinDepth());
+			this->purgeMinDepth(KmerOptions::getOptions().getMinDepth());
 		}
 		LOG_DEBUG(3, this->weak.toString());
 
@@ -569,7 +567,7 @@ public:
 		}
 		ourSpectrum.push_back(this->writeKmerMap(this->weak, mmapFilename));
 
-		if (Options::getOptions().getMinDepth() <= 1 && this->hasSingletons) {
+		if (KmerOptions::getOptions().getMinDepth() <= 1 && this->hasSingletons) {
 			ourSpectrum.push_back(this->writeKmerMap(this->singleton, mmapFilename + "-singleton"));
 		}
 
@@ -1129,7 +1127,7 @@ done when empty cycle is received
 	}
 	void scoreAndTrimReads(ScoreType minimumKmerScore, int correctionAttempts = 0) {
 		this->_trims.resize(this->_reads.getSize());
-		bool useKmers = Options::getOptions().getKmerSize() != 0;
+		bool useKmers = KmerOptions::getOptions().getKmerSize() != 0;
 
 		int numThreads = omp_get_max_threads();
 		int rank = _world.rank();

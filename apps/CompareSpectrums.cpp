@@ -59,6 +59,7 @@ public:
 	static bool getPerRead() { return getVarMap()["per-read"].as<unsigned int>() != 0; }
 
 	void _resetDefaults() {
+		KmerOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 	}
 
@@ -77,11 +78,14 @@ public:
 				 "if set, each read in readset1 will be compared to the entire readset2 separately")
 	    ;
 		desc.add(opts);
-
+		KmerOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
-		return GeneralOptions::_parseOptions(vm);
+		bool ret = true;
+		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= KmerOptions::_parseOptions(vm);
+		return ret;
 	}
 
 };
@@ -132,7 +136,7 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	KmerSizer::set(Options::getOptions().getKmerSize());
+	KmerSizer::set(KmerOptions::getOptions().getKmerSize());
 	OptionsBaseInterface::FileListType fileList1 = Options::getOptions().getReferenceFiles();
 	OptionsBaseInterface::FileListType fileList2 = Options::getOptions().getInputFiles();
 

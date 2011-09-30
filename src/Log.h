@@ -243,6 +243,9 @@ class Log
 		return log;
 	}
 public:
+	static inline const bool printOptions() {
+		return Logger::isMaster() && ((isVerbose(1) || isDebug(1)));
+	}
 	static inline const Logger &getDebug() {
 		return debugOstream;
 	}
@@ -328,8 +331,5 @@ private:
 
 #define LOG_VERBOSE_OPTIONAL(level, test, log) if ( test && Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), true); }
 #define LOG_DEBUG_OPTIONAL(level,   test, log) if ( test && Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), true); }
-
-//#define LOG_VERBOSE_APPEND(level, appendString, log) if ( Log::isVerbose(level) ) { std::stringstream ss; ss << log << std::endl; appendString += Log::getVerbose().toString( ss.str() ); }
-//#define LOG_DEBUG_APPEND(level, appendString, log) if ( Log::isVerbose(level) ) { std::stringstream ss; ss << log << std::endl; appendString += Log::getDebug().toString( ss.str() ); }
 
 #endif /* LOG_H_ */

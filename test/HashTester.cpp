@@ -46,15 +46,35 @@ using namespace std;
 typedef TrackingDataMinimal4f DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 
+class _HashTesterOptions : public OptionsBaseInterface {
+public:
+	void _resetDefaults() {
+		KmerOptions::_resetDefaults();
+		GeneralOptions::_resetDefaults();
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		p.add("kmer-size", 1);
+		p.add("input-file", -1);
+		KmerOptions::_setOptions(desc,p);
+		GeneralOptions::_setOptions(desc, p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		ret &= KmerOptions::_parseOptions(vm);
+		ret &= GeneralOptions::_parseOptions(vm);
+		return ret;
+	}
+};
+typedef OptionsBaseTemplate< _HashTesterOptions > HashTesterOptions;
+
 int main(int argc, char *argv[]) {
-	if (!Options::parseOpts(argc, argv))
+	if (!HashTesterOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 
 	MemoryUtils::getMemoryUsage();
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 	ReadSet reads;
-	KmerSizer::set(Options::getOptions().getKmerSize());
 
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	cerr << "Reading Input Files" << endl;
@@ -65,7 +85,7 @@ int main(int argc, char *argv[]) {
 
 	KS spectrumSolid(0), spectrumNormal(0), spectrumParts(0);
 
-	if (Options::getOptions().getKmerSize() > 0) {
+	if (KmerOptions::getOptions().getKmerSize() > 0) {
 
 	  long numBuckets = 64*64;
 	  cerr << "targeting " << numBuckets << " buckets for reads " << endl;
@@ -99,7 +119,7 @@ int main(int argc, char *argv[]) {
 	  TrackingData::resetGlobalCounters();
 	  cerr << "building normal spectrum in parts" << endl << MemoryUtils::getMemoryUsage() << endl;
 	  spectrumParts = KS(numBuckets);
-	  Kmernator::MmapFileVector mmaps = spectrumParts.buildKmerSpectrumInParts(reads, Options::getOptions().getBuildPartitions());
+	  Kmernator::MmapFileVector mmaps = spectrumParts.buildKmerSpectrumInParts(reads, KmerOptions::getOptions().getBuildPartitions());
 	  cerr << MemoryUtils::getMemoryUsage() << endl;
 	  for(Kmer::IndexType i = 0; i < spectrumParts.weak.getNumBuckets(); i++) {
 		  cerr << i << ": " << spectrumParts.weak.getBucket(i).size() << endl;

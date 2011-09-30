@@ -81,9 +81,9 @@ public:
 		case 'C' : case 'c' : _base = C; break;
 		case 'G' : case 'g' : _base = G; break;
 		case 'T' : case 't' : _base = T; break;
-		case 'N' : case 'n' : _base = N; break;
 		case 'X' : case 'x' : _base = X; break;
-		default : LOG_THROW("Invalid Extension type: " << c << " q: " << quality);
+		case 'N' : case 'n' :
+		default :  _base = N; break;
 		}
 		if (quality > 255 || quality < 0)
 			LOG_THROW("Invalid Extension quality: " << quality << " type: " << _base << " " << c);
@@ -315,14 +315,15 @@ public:
 		}
 	}
 	static inline bool isDiscard(WeightType weight) {
-		if (weight < minimumWeight) {
+		if (weight > minimumWeight) {
+			return false;
+		} else {
 
 			#pragma omp atomic
 			discarded++;
 
 			return true;
-		} else
-			return false;
+		}
 	}
 	static inline bool useWeighted() {
 		return useWeightedByDefault;

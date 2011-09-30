@@ -47,6 +47,7 @@ namespace po = boost::program_options;
 
 #define PASSES_LENGTH(length, readLength, minimumLength) ((minimumLength == MAX_SEQUENCE_LENGTH) ? (length == readLength) : (length >= minimumLength))
 
+// The base class that returns the single, static set of options
 class OptionsInstance {
 public:
 	static po::options_description &getDesc() {
@@ -60,6 +61,15 @@ public:
 	static po::variables_map &getVarMap() {
 		static po::variables_map _vm;
 		return _vm;
+	}
+	static std::string &getOptionsErrorMsg() {
+		static std::string _message;
+		return _message;
+	}
+	static std::string setOptionsErrorMsg(std::string msg) {
+		LOG_ERROR(1, "Invalid option: " << msg);
+		getOptionsErrorMsg() += msg + "\n";
+		return getOptionsErrorMsg();
 	}
 private:
 	OptionsInstance();
@@ -87,8 +97,11 @@ public:
 	static unsigned int &getDebug() {
 		return Log::Debug().setLevel();
 	}
+
+	// helper method to set external (or instance) values and log/print the option
+	// expected to be called in _parseOptions(&vm)
 	template<typename U>
-	static void setOpt(std::string key, U &val, bool print = false) {
+	static void setOpt(std::string key, U &val, bool print = Log::printOptions()) {
 		po::variables_map &vm = getVarMap();
 		if (vm.count(key.c_str())) {
 			val = vm[key.c_str()].as<U>();
@@ -99,6 +112,17 @@ public:
 			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " was not specified.");
 		}
 	}
+	static void setOptionsErrorMsg(std::string msg) {
+		OptionsInstance::setOptionsErrorMsg(msg);
+	}
+	static std::string getOptionsErrorMsg() {
+		return OptionsInstance::getOptionsErrorMsg();
+	}
+	static bool hasOptionsErrorMsg() {
+		return ! OptionsInstance::getOptionsErrorMsg().empty();
+	}
+
+	// TODO this could be moved somewhere else
 	static std::string getHostname() {
 		char hostname[256];
 		gethostname(hostname, 256);
@@ -133,6 +157,7 @@ public:
 		return OptionsInstance::getVarMap();
 	}
 
+	// helper methods to pass through static methods to base class
 	static void _resetDefaults() {
 		getOptions()._resetDefaults();
 	}
@@ -142,7 +167,15 @@ public:
 	static bool _parseOptions(po::variables_map &vm) {
 		return getOptions()._parseOptions(vm);
 	}
-
+	static bool hasOptionsErrorMsg() {
+		return getOptions().hasOptionsErrorMsg();
+	}
+	static void setOptionsErrorMsg(std::string msg) {
+		return getOptions().setOptionsErrorMsg(msg);
+	}
+	static std::string getOptionsErrorMsg() {
+		return getOptions().getOptionsErrorMsg();
+	}
 	static bool parseOpts(int argc, char *argv[]) {
 		// set any defaults
 		_resetDefaults();
@@ -157,7 +190,18 @@ public:
 		po::notify( getVarMap() );
 
 		// post-process
-		return _parseOptions( getVarMap());
+		bool ret = true;
+		try {
+			ret = _parseOptions( getVarMap() );
+			if (hasOptionsErrorMsg())
+				LOG_THROW(getOptionsErrorMsg());
+		} catch (std::exception &e) {
+			std::cerr << getDesc() << std::endl << std::endl;
+			std::cerr << "Please fix the command line arguments:" << std::endl << e.what();
+			std::cerr << std::endl << std::endl;
+			ret = false;
+		}
+		return ret;
 	}
 
 
@@ -171,12 +215,17 @@ protected:
 
 class _GeneralOptions : public OptionsBaseInterface {
 public:
-	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), buildOutputInMemory(false), kmerSize(21), minKmerQuality(0.10),
-	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
-	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
+	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"),
+	formatOutput(0), buildOutputInMemory(false),
+	minQuality(5), depthRange(2), minReadLength(25), bimodalSigmas(-1.0),
+	variantSigmas(-1.0), ignoreQual(0),
+	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24),
+	artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
 	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
-	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
-	mmapInput(1), saveKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(100000), separateOutputs(1)
+	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0),
+	deDupLength(16),
+	mmapInput(1), gcHeatMap(1), gatheredLogs(1),
+	batchSize(100000), separateOutputs(1)
 	{
 		 char *tmpPath;
 		 tmpPath = getenv ("TMPDIR");
@@ -201,10 +250,7 @@ private:
 	std::string  tmpDir;
 	unsigned int formatOutput;
 	bool         buildOutputInMemory;
-	unsigned int kmerSize;
-	double       minKmerQuality;
 	unsigned int minQuality;
-	unsigned int minDepth;
 	unsigned int depthRange;
 	unsigned int minReadLength;
 	double       bimodalSigmas;
@@ -225,9 +271,6 @@ private:
 	unsigned int deDupStartOffset;
 	unsigned int deDupLength;
 	unsigned int mmapInput;
-	unsigned int saveKmerMmap;
-	std::string  loadKmerMmap;
-	unsigned int buildPartitions;
 	unsigned int gcHeatMap;
 	unsigned int gatheredLogs;
 	unsigned int batchSize;
@@ -254,8 +297,6 @@ public:
 #endif
 		("reference-file", po::value<FileListType>(), "set reference file(s)")
 
-		("kmer-size", po::value<unsigned int>()->default_value(kmerSize), "kmer size.  A size of 0 will skip k-mer calculations")
-
 		("input-file", po::value<FileListType>(), "input file(s)")
 
 		("output-file", po::value<std::string>(), "output file pattern")
@@ -281,14 +322,9 @@ public:
 				po::value<unsigned int>()->default_value(minReadLength),
 				"minimum (trimmed) read length of selected reads.  0: no minimum, 1: full read length")
 
-		("min-kmer-quality", po::value<double>()->default_value(minKmerQuality),
-				"minimum quality-adjusted kmer probability (0-1)")
-
 		("min-quality-score", po::value<unsigned int>()->default_value(minQuality),
 				"minimum quality score over entire kmer")
 
-		("min-depth", po::value<unsigned int>()->default_value(minDepth),
-				"minimum depth for a solid kmer")
 
 		("depth-range", po::value<unsigned int>()->default_value(depthRange),
 				"if > min-depth, then output will be created in cycles of files ranging from min-depth to depth-range")
@@ -340,14 +376,6 @@ public:
 		("mmap-input", po::value<unsigned int>()->default_value(mmapInput),
 				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
 
-		("save-kmer-mmap", po::value<unsigned int>()->default_value(saveKmerMmap),
-				"If set to 1, creates a memory map of the kmer spectrum for later use")
-
-		("load-kmer-mmap", po::value<std::string>(), "Instead of generating kmer spectrum, load an existing one (read-only) named by this option")
-
-		("build-partitions", po::value<unsigned int>()->default_value(buildPartitions),
-				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.")
-
 		("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap),
 				"If set, a GC Heat map will be output (requires --output)")
 
@@ -364,7 +392,13 @@ public:
 
 		desc.add(general);
 	}
+	void _setVerbosityAndLogs(bool print) {
+		setOpt<unsigned int>("verbose", getVerbose(), print);
+		setOpt<unsigned int>("debug", getDebug(), print);
+		setOpt<std::string>("log-file", getLogFile(), print);
+	}
 	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
 		try {
 
 			if (vm.count("help")) {
@@ -372,10 +406,7 @@ public:
 				return false;
 			}
 
-
-			setOpt<unsigned int>("verbose", getVerbose());
-			setOpt<unsigned int>("debug", getDebug());
-			setOpt<std::string>("log-file", getLogFile(), false);
+			_setVerbosityAndLogs(false);
 			if ( ! getLogFile().empty() ) {
 				logFileStream.reset( new std::ofstream(getLogFile().c_str(), std::ios_base::out | std::ios_base::ate) );
 				Log::Verbose().setOstream( *logFileStream );
@@ -386,11 +417,12 @@ public:
 			if (getVerbose() > 0)
 				LOG_VERBOSE(1, "Starting on " << OptionsBaseInterface::getHostname());
 
-			bool print = Logger::isMaster() && ((Log::isVerbose(1) || Log::isDebug(1)));
-
+			bool print = Log::printOptions();
 			std::ostream *output = NULL;
 			if (print) {
 				output = Log::Verbose("Options Set").getOstreamPtr();
+				// print out the options that were not set until vebosity & log files were set
+				_setVerbosityAndLogs(true);
 			}
 
 #ifdef _USE_OPENMP
@@ -413,12 +445,6 @@ public:
 				}
 			} else if (print) {
 				Log::Verbose() << "reference was not set." << std::endl;
-			}
-
-			if (vm.count("kmer-size")) {
-				setOpt<unsigned int>("kmer-size", getKmerSize(), print);
-			} else {
-				LOG_WARN(1, "There was no kmer size specified!");
 			}
 			if (vm.count("input-file")) {
 				if (print) {
@@ -443,14 +469,8 @@ public:
 
 			setOpt<bool>("build-output-in-memory", getBuildOutputInMemory(), print);
 
-			// set kmer quality
-			setOpt<double>("min-kmer-quality", getMinKmerQuality(), print);
-
 			// set minimum quality score
 			setOpt<unsigned int>("min-quality-score", getMinQuality(), print);
-
-			// set minimum depth
-			setOpt<unsigned int>("min-depth", getMinDepth(), print);
 
 			setOpt<unsigned int>("depth-range", getDepthRange(), print);
 
@@ -463,10 +483,12 @@ public:
 			setOpt<double>("bimodal-sigmas", getBimodalSigmas(), print);
 			setOpt<double>("variant-sigmas", getVariantSigmas(), print);
 
-			if (getBimodalSigmas() >= 0 && (getMinReadLength() < getKmerSize() + 2)) {
-				if(Logger::isMaster())
-					LOG_WARN(1, "Bimodal Read Detection does not work unless min-read-length >= 2 + kmer-size");
-			}
+			// TODO move to BimodalOptions
+//			if (getBimodalSigmas() >= 0 && (getMinReadLength() < getKmerSize() + 2)) {
+//				if(Logger::isMaster())
+//					LOG_WARN(1, "Bimodal Read Detection does not work unless min-read-length >= 2 + kmer-size");
+//			}
+
 			// set the ignore quality value
 			setOpt<unsigned int>("ignore-quality", getIgnoreQual(), print);
 
@@ -522,13 +544,6 @@ public:
 			// set mmapInput
 			setOpt<unsigned int>("mmap-input", getMmapInput() , print);
 
-			setOpt<unsigned int>("save-kmer-mmap", getSaveKmerMmap(), print);
-
-			setOpt<std::string>("load-kmer-mmap", getLoadKmerMmap(), print);
-
-			// set buildPartitions
-			setOpt<unsigned int>("build-partitions", getBuildPartitions(), print);
-
 			setOpt<unsigned int>("gc-heat-map", getGCHeatMap(), print);
 
 			setOpt<unsigned int>("gathered-logs", getGatheredLogs(), print);
@@ -545,7 +560,7 @@ public:
 			return false;
 		}
 
-		return true;
+		return ret;
 	}
 
 public:
@@ -619,11 +634,6 @@ public:
 	    return buildOutputInMemory;
 	}
 
-	unsigned int &getBuildPartitions()
-	{
-	    return buildPartitions;
-	}
-
 	unsigned int &getDeDupEditDistance()
 	{
 	    return deDupEditDistance;
@@ -689,15 +699,7 @@ public:
 	    return inputFiles;
 	}
 
-	unsigned int &getKmerSize()
-	{
-	    return kmerSize;
-	}
 
-	std::string &getLoadKmerMmap()
-	{
-	    return loadKmerMmap;
-	}
 
 	std::string &getLogFile()
 	{
@@ -719,15 +721,6 @@ public:
 	    return maxThreads;
 	}
 
-	unsigned int &getMinDepth()
-	{
-	    return minDepth;
-	}
-
-	double &getMinKmerQuality()
-	{
-	    return minKmerQuality;
-	}
 
 	unsigned int &getMinQuality()
 	{
@@ -764,10 +757,6 @@ public:
 	    return referenceFiles;
 	}
 
-	unsigned int &getSaveKmerMmap()
-	{
-	    return saveKmerMmap;
-	}
 
 	unsigned int &getSeparateOutputs()
 	{
@@ -794,209 +783,6 @@ public:
 
 typedef OptionsBaseTemplate< _GeneralOptions > GeneralOptions;
 typedef GeneralOptions Options;
-
-/*****
-// extend the class for specific options for each application
-// put common, universal options in this class
-class _Options : public OptionsBaseInterface, public OptionsBaseTemplate<_Options> {
-	friend class OptionsBaseTemplate<_Options>;
-private:
-	// cache of variables (for inline lookup and defaults)
-    int          maxThreads;
-	FileListType referenceFiles;
-	FileListType inputFiles;
-	FileListType inputFilePrefixes;
-	std::string  outputFile;
-	std::string  logFile;
-	OStreamPtr   logFileStream;
-	std::string  tmpDir;
-	unsigned int formatOutput;
-	bool         buildOutputInMemory;
-	unsigned int kmerSize;
-	double       minKmerQuality;
-	unsigned int minQuality;
-	unsigned int minDepth;
-	unsigned int depthRange;
-	unsigned int minReadLength;
-	double       bimodalSigmas;
-	double       variantSigmas;
-	unsigned int ignoreQual;
-	unsigned int periodicSingletonPurge;
-	unsigned int skipArtifactFilter;
-	unsigned int artifactFilterMatchLength;
-	unsigned int artifactFilterEditDistance;
-	unsigned int buildArtifactEditsInFilter;
-	unsigned int maskSimpleRepeats;
-	unsigned int phiXOutput;
-	FileListType artifactReferenceFiles;
-	unsigned int filterOutput;
-	unsigned int deDupMode;
-	unsigned int deDupSingle;
-	unsigned int deDupEditDistance;
-	unsigned int deDupStartOffset;
-	unsigned int deDupLength;
-	unsigned int mmapInput;
-	unsigned int saveKmerMmap;
-	std::string  loadKmerMmap;
-	unsigned int buildPartitions;
-	unsigned int gcHeatMap;
-	unsigned int gatheredLogs;
-	unsigned int batchSize;
-	unsigned int separateOutputs;
-
-	_Options() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), formatOutput(0), buildOutputInMemory(false), kmerSize(21), minKmerQuality(0.10),
-	minQuality(5), minDepth(2), depthRange(2), minReadLength(25), bimodalSigmas(-1.0), variantSigmas(-1.0), ignoreQual(0),
-	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24), artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
-	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
-	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0), deDupLength(16),
-	mmapInput(1), saveKmerMmap(0), buildPartitions(0), gcHeatMap(1), gatheredLogs(1), batchSize(1000000), separateOutputs(1)
-	{
-		 char *tmpPath;
-		 tmpPath = getenv ("TMPDIR");
-		 if (tmpPath != NULL) {
-			 tmpDir = std::string(tmpPath);
-		 }
-	}
-	virtual ~_Options() {}
-
-public:
-
-	static inline int &getMaxThreads() {
-		return getOptions().maxThreads;
-	}
-	static inline FileListType &getReferenceFiles() {
-		return getOptions().referenceFiles;
-	}
-	static inline FileListType &getInputFiles() {
-		return getOptions().inputFiles;
-	}
-	static inline std::string &getOutputFile() {
-		return getOptions().outputFile;
-	}
-	static inline std::string &getLogFile() {
-		return getOptions().logFile;
-	}
-	static inline std::string &getTmpDir() {
-		return getOptions().tmpDir;
-	}
-	static inline unsigned int &getFormatOutput() {
-		return getOptions().formatOutput;
-	}
-	static inline bool &getBuildOutputInMemory() {
-		return getOptions().buildOutputInMemory;
-	}
-	static inline unsigned int &getKmerSize() {
-		return getOptions().kmerSize;
-	}
-	static inline double &getMinKmerQuality() {
-		return getOptions().minKmerQuality;
-	}
-	static inline unsigned int &getVerbose() {
-		return Log::Verbose().setLevel();
-	}
-	static inline unsigned int &getDebug() {
-		return Log::Debug().setLevel();
-	}
-	static inline unsigned int &getMinQuality() {
-		return getOptions().minQuality;
-	}
-	static inline unsigned int &getMinDepth() {
-		return getOptions().minDepth;
-	}
-	static inline unsigned int &getDepthRange() {
-		return getOptions().depthRange;
-	}
-	static inline unsigned int &getMinReadLength() {
-		return getOptions().minReadLength;
-	}
-	static inline double &getBimodalSigmas() {
-		return getOptions().bimodalSigmas;
-	}
-	static inline double &getVariantSigmas() {
-		return getOptions().variantSigmas;
-	}
-	static inline unsigned int &getIgnoreQual() {
-		return getOptions().ignoreQual;
-	}
-	static inline unsigned int &getPeriodicSingletonPurge() {
-		return getOptions().periodicSingletonPurge;
-	}
-	static inline unsigned int &getSkipArtifactFilter() {
-		return getOptions().skipArtifactFilter;
-	}
-	static inline unsigned int &getArtifactFilterMatchLength() {
-		return getOptions().artifactFilterMatchLength;
-	}
-	static inline unsigned int &getArtifactFilterEditDistance() {
-		return getOptions().artifactFilterEditDistance;
-	}
-	static inline unsigned int &getBuildArtifactEditsInFilter() {
-		return getOptions().buildArtifactEditsInFilter;
-	}
-	static inline unsigned int &getMaskSimpleRepeats() {
-		return getOptions().maskSimpleRepeats;
-	}
-	static inline unsigned int &getPhiXOutput(){
-		return getOptions().phiXOutput;
-	}
-	static inline FileListType &getArtifactReferenceFiles() {
-		return getOptions().artifactReferenceFiles;
-	}
-	static inline unsigned int &getFilterOutput(){
-		return getOptions().filterOutput;
-	}
-	static inline unsigned int &getDeDupMode() {
-		return getOptions().deDupMode;
-	}
-	static inline unsigned int &getDeDupSingle() {
-		return getOptions().deDupSingle;
-	}
-	static inline unsigned int &getDeDupEditDistance() {
-		return getOptions().deDupEditDistance;
-	}
-	static inline unsigned int &getDeDupStartOffset() {
-		return getOptions().deDupStartOffset;
-	}
-	static inline unsigned int &getDeDupLength() {
-		return getOptions().deDupLength;
-	}
-	static inline unsigned int &getMmapInput() {
-		return getOptions().mmapInput;
-	}
-	static inline unsigned int &getSaveKmerMmap() {
-		return getOptions().saveKmerMmap;
-	}
-	static inline std::string  &getLoadKmerMmap() {
-		return getOptions().loadKmerMmap;
-	}
-	static inline unsigned int &getBuildPartitions() {
-		return getOptions().buildPartitions;
-	}
-	static inline unsigned int &getGCHeatMap() {
-		return getOptions().gcHeatMap;
-	}
-	static inline unsigned int &getGatheredLogs() {
-		return getOptions().gatheredLogs;
-	}
-	static inline unsigned int &getBatchSize() {
-		return getOptions().batchSize;
-	}
-	static inline unsigned int &getSeparateOutputs() {
-		return getOptions().separateOutputs;
-	}
-
-
-protected:
-	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-
-	}
-
-	bool _parseOpts(po::options_description &desc, po::positional_options_description &p, po::variables_map &vm, int argc, char *argv[]) {
-		return false;
-	}
-};
-
-****/
 
 #endif
 

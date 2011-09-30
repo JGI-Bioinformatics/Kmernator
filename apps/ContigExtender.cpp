@@ -64,8 +64,8 @@ public:
 	// use to post-process options, returning true if everything is okay
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		ret &= _ContigExtenderBaseOptions::_parseOptions(vm);
 		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= _ContigExtenderBaseOptions::_parseOptions(vm);
 		return ret;
 	}
 };

@@ -48,6 +48,7 @@
 #include <boost/cstdint.hpp>
 
 #include "config.h"
+#include "Options.h"
 #include "TwoBitSequence.h"
 #include "MemoryUtils.h"
 #include "KmerTrackingData.h"
@@ -107,6 +108,119 @@ public:
 	}
 
 };
+
+class _KmerOptions: public OptionsBaseInterface {
+public:
+	_KmerOptions() :
+		kmerSize(21), minKmerQuality(0.10), minDepth(2),
+		saveKmerMmap(0), loadKmerMmap(),
+		buildPartitions(0) {
+	}
+	void _resetOptions() {
+	}
+	void _setOptions(po::options_description &desc,
+			po::positional_options_description &p) {
+		po::options_description opts("Kmer Options");
+		opts.add_options()("kmer-size",
+				po::value<unsigned int>()->default_value(kmerSize),
+				"kmer size.  A size of 0 will skip k-mer calculations")
+
+		("min-kmer-quality",
+				po::value<double>()->default_value(minKmerQuality),
+				"minimum quality-adjusted kmer probability (0-1)")
+
+		("min-depth",
+				po::value<unsigned int>()->default_value(minDepth),
+				"minimum depth for a solid kmer")
+
+		("save-kmer-mmap",
+				po::value<unsigned int>()->default_value(saveKmerMmap),
+				"If set to 1, creates a memory map of the kmer spectrum for later use")
+
+		("load-kmer-mmap",
+				po::value<std::string>(),
+				"Instead of generating kmer spectrum, load an existing one (read-only) named by this option")
+
+		("build-partitions",
+				po::value<unsigned int>()->default_value(buildPartitions),
+				"If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.");
+
+		desc.add(opts);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+
+		if (vm.count("kmer-size")) {
+			setOpt<unsigned int>("kmer-size", getKmerSize());
+		} else {
+			LOG_WARN(1, "There was no kmer size specified!");
+			ret = false;
+		}
+		// set kmer quality
+		setOpt<double>("min-kmer-quality", getMinKmerQuality());
+
+		// set minimum depth
+		setOpt<unsigned int>("min-depth", getMinDepth());
+
+		setOpt<unsigned int>("save-kmer-mmap", getSaveKmerMmap());
+
+		setOpt<std::string>("load-kmer-mmap", getLoadKmerMmap());
+
+		// set buildPartitions
+		setOpt<unsigned int>("build-partitions", getBuildPartitions());
+
+		// set the defaults for classes
+		KmerSizer::set(getKmerSize());
+		// set the minimum weight that will be used to track kmers
+		// based on the given options
+		TrackingData::setMinimumWeight( getMinKmerQuality() );
+		TrackingData::setMinimumDepth( getMinDepth() );
+
+		return ret;
+	}
+	unsigned int &getKmerSize()
+	{
+	    return kmerSize;
+	}
+	double &getMinKmerQuality()
+	{
+	    return minKmerQuality;
+	}
+	unsigned int &getMinDepth()
+	{
+	    return minDepth;
+	}
+	unsigned int &getSaveKmerMmap()
+	{
+	    return saveKmerMmap;
+	}
+	std::string &getLoadKmerMmap()
+	{
+	    return loadKmerMmap;
+	}
+	unsigned int &getBuildPartitions()
+	{
+	    return buildPartitions;
+	}
+
+
+	// make this final, so preserving the singleton state
+private:
+	~_KmerOptions() {
+	}
+	friend class OptionsBaseTemplate<_KmerOptions> ;
+
+private:
+	unsigned int kmerSize;
+	double minKmerQuality;
+	unsigned int minDepth;
+	unsigned int saveKmerMmap;
+	std::string loadKmerMmap;
+	unsigned int buildPartitions;
+
+};
+typedef OptionsBaseTemplate< _KmerOptions > KmerOptions;
+
 
 #define TEMP_KMER(name)  TwoBitEncoding _stack_##name[KmerSizer::getByteSize()]; Kmer &name = (Kmer &)(_stack_##name);
 

@@ -66,6 +66,7 @@ public:
 		return getVarMap()["min-passing-in-pair"].as<int>() == 2;
 	}
 	void _resetDefaults() {
+		KmerOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
@@ -84,6 +85,7 @@ public:
 				"1 or 2 reads in a pair must pass filters");
 
 		desc.add(opts);
+		KmerOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions( po::variables_map &vm) {
 
@@ -104,7 +106,8 @@ public:
 			ret = false;
 		}
 
-		return ret;
+		ret &= KmerOptions::_parseOptions(vm);
+		return ret ;
 	}
 };
 typedef OptionsBaseTemplate< _FilterReadsBaseOptions > FilterReadsBaseOptions;
@@ -158,7 +161,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			}
 			OFM ofmap = selector.getOFM(ofname);
 			float tmpMinDepth = std::max(minDepth, depth);
-			if (Options::getOptions().getKmerSize() == 0) {
+			if (KmerOptions::getOptions().getKmerSize() == 0) {
 				tmpMinDepth = 0;
 				depth = 0;
 			}

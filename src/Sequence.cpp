@@ -671,13 +671,13 @@ int Read::initializeQualityToProbability(unsigned char minQualityScore, char sta
 		}
 		FASTQ_START_CHAR = startChar;
 		for (int i = 0; i < 256; i++) {
-			qualityToProbability[i] = 0;
+			qualityToProbability[i] = 0.0;
 		}
 		int start = FASTQ_START_CHAR;
-		for (int i = start + minQualityScore; i <= PRINT_REF_QUAL; i++)
+		for (int i = start + minQualityScore; i < PRINT_REF_QUAL; i++)
 			qualityToProbability[i] = 1.0 - pow(10.0, ((start - i) / 10.0));
-
-		qualityToProbability[255] = 1.0; // for reads with no quality data
+		for (int i = PRINT_REF_QUAL ; i < 256; i++)
+			qualityToProbability[i] = 1.0; // for reads with no quality data
 	}
 	return 1;
 }

@@ -23,24 +23,37 @@ public:
 		_MeraculousOptions::_resetDefaults();
 		MPIOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
+		KmerOptions::_resetDefaults();
+
 		GeneralOptions::getOptions().getMmapInput() = 0;
 		GeneralOptions::getOptions().getVerbose() = 2;
-		Options::getOptions().getMinKmerQuality() = 0;
+		GeneralOptions::getOptions().getMinQuality() = 2;
+
+		KmerOptions::getOptions().getMinKmerQuality() = 0;
+		KmerOptions::getOptions().getSaveKmerMmap() = 0;
 	}
 	// use to set the description of all options
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 
 		_MeraculousOptions::_setOptions(desc, p);
 		MPIOptions::_setOptions(desc,p);
+		KmerOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc, p);
 
 	}
 	// use to post-process options, returning true if everything is okay
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
+		ret &= GeneralOptions::_parseOptions(vm);
 		ret &= _MeraculousOptions::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
-		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= KmerOptions::_parseOptions(vm);
+		if (KmerOptions::getOptions().getKmerSize() == 0) {
+			setOptionsErrorMsg("The Kmer size can not be 0");
+		}
+		if (GeneralOptions::getOptions().getInputFiles().empty()) {
+			setOptionsErrorMsg("You must specify at least one input file");
+		}
 		return ret;
 	}
 };
@@ -55,7 +68,6 @@ int main(int argc, char *argv[]) {
 	std::string outputFilename = Options::getOptions().getOutputFile();
 
 	ReadSet reads;
-	KmerSizer::set(Options::getOptions().getKmerSize());
 
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
@@ -66,28 +78,22 @@ int main(int argc, char *argv[]) {
 
 	setGlobalReadSetOffsets(world, reads);
 	long numBuckets = 0;
-	if (Options::getOptions().getKmerSize() > 0) {
+	numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
 
-		numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
-
-		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
-	}
+	numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
 
 	KS spectrum(world, numBuckets);
-	TrackingData::setMinimumWeight( Options::getOptions().getMinKmerQuality() );
 
-	if (Options::getOptions().getKmerSize() > 0) {
-		spectrum.buildKmerSpectrum(reads);
-		if (Log::isVerbose(1)) {
-			std::string hist = spectrum.getHistogram(false);
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
-		}
-		std::string outputFilenameBase = outputFilename + ".mercount.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength());
-		spectrum.dumpCounts(outputFilenameBase);
-		outputFilenameBase = outputFilename + ".mergraph.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength()) + ".D" + boost::lexical_cast<std::string>(GeneralOptions::getOptions().getMinDepth());
-		spectrum.dumpGraphs(outputFilenameBase);
+	spectrum.buildKmerSpectrum(reads);
+	if (Log::isVerbose(1)) {
+		std::string hist = spectrum.getHistogram(false);
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
 	}
+	std::string outputFilenameBase = outputFilename + ".mercount.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength());
+	spectrum.dumpCounts(outputFilenameBase);
+	outputFilenameBase = outputFilename + ".mergraph.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength()) + ".D" + boost::lexical_cast<std::string>(KmerOptions::getOptions().getMinDepth());
+	spectrum.dumpGraphs(outputFilenameBase);
 
 	world.barrier();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");

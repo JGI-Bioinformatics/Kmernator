@@ -14,7 +14,7 @@ GOOD2=phix.mergraph.m21.D2
 
 check()
 {
-  opts=" --kmer-size 21 --out $TMP $IN"
+  opts=" --min-kmer-quality=0 --min-quality-score=2 --kmer-size 21 --out $TMP $IN"
   echo "Executing: $@ $opts"
   if $@ $opts
   then

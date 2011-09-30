@@ -68,6 +68,7 @@ public:
 
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
+		GeneralOptions::getOptions().getVerbose() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
@@ -395,7 +396,6 @@ public:
 } mvo;
 
 int main(int argc, char *argv[]) {
-	Options::getOptions().getVerbose() = 0;
 	if (!TnfDistanceOptions::parseOpts(argc, argv))
 		throw std::invalid_argument("Please fix the command line arguments");
 

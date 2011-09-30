@@ -53,14 +53,20 @@ typedef KmerSpectrum<TrackingData, TrackingDataWithAllReads> KS;
 class _Ktest2Options : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
+		KmerOptions::_resetDefaults();
+		GeneralOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("kmer-size", 1);
 		p.add("input-file", -1);
-		GeneralOptions::getOptions()._setOptions(desc, p);
+		KmerOptions::_setOptions(desc,p);
+		GeneralOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
-		return GeneralOptions::getOptions()._parseOptions(vm);
+		bool ret = true;
+		ret &= KmerOptions::_parseOptions(vm);
+		ret &= GeneralOptions::_parseOptions(vm);
+		return ret;
 	}
 };
 typedef OptionsBaseTemplate< _Ktest2Options > Ktest2Options;
@@ -75,7 +81,6 @@ int main(int argc, char *argv[]) {
 	MemoryUtils::getMemoryUsage();
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	KmerSizer::set(Options::getOptions().getKmerSize());
 	OptionsBaseInterface::FileListType references = Options::getOptions().getReferenceFiles();
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 
@@ -125,8 +130,6 @@ int main(int argc, char *argv[]) {
 	KS spectrum(numBuckets);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	TrackingData::setMinimumDepth( Options::getOptions().getMinDepth() );
-	TrackingData::setMinimumWeight( Options::getOptions().getMinKmerQuality() );
 
 	cerr << "building spectrum" << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;

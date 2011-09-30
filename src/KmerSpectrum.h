@@ -132,10 +132,6 @@ public:
 		solid(), weak(separateSingletons ? buckets/8 : buckets), singleton(separateSingletons ? buckets/8 : 1),
 		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0)
 	{
-		// set the minimum weight that will be used to track kmers
-		// based on the given options
-		TrackingData::setMinimumWeight( Options::getOptions().getMinKmerQuality() );
-		TrackingData::setMinimumDepth( Options::getOptions().getMinDepth() );
 		// apply the minimum quality automatically
 		Read::setMinQualityScore( Options::getOptions().getMinQuality(), Read::FASTQ_START_CHAR );
 	}
@@ -169,7 +165,7 @@ public:
 			savedMmaps.push_back(solid.store(mmapFilename + "-solid"));
 		}
 		savedMmaps.push_back(weak.store(mmapFilename));
-		if (Options::getOptions().getMinDepth() <= 1) {
+		if (KmerOptions::getOptions().getMinDepth() <= 1) {
 			LOG_VERBOSE(1, "Saving singleton kmer spectrum");
 			savedMmaps.push_back(singleton.store(mmapFilename + "-singleton"));
 		}
@@ -1307,7 +1303,7 @@ public:
 	}
 
 	unsigned long resetSingletons() {
-		if (Options::getOptions().getMinDepth() <= 1) {
+		if (KmerOptions::getOptions().getMinDepth() <= 1) {
 			return 0;
 		}
 		unsigned long singletonCount = singleton.size();
@@ -1333,16 +1329,16 @@ public:
 			buildKmerSpectrum(store, isSolid);
 
 			// purge
-			purgeMinDepth(Options::getOptions().getMinDepth());
+			purgeMinDepth(KmerOptions::getOptions().getMinDepth());
 
-			if (Options::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
+			if (KmerOptions::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
 				mmaps = storeMmap(mmapFileNamePrefix);
 			}
 			return mmaps;
 		}
 
 		assert(numParts > 1);
-		if (Options::getOptions().getSaveKmerMmap() == 0) {
+		if (KmerOptions::getOptions().getSaveKmerMmap() == 0) {
 			LOG_WARN(1, "Can not honor --save-kmer-mmap=0 option, as spectrum is building in parts. Temporary mmaps will be made at " << mmapFileNamePrefix);
 		}
 		mmaps.resize(numParts*2);
@@ -1355,12 +1351,12 @@ public:
 			buildKmerSpectrum(store, isSolid, partIdx, numParts);
 
 			// purge
-			purgeMinDepth(Options::getOptions().getMinDepth());
+			purgeMinDepth(KmerOptions::getOptions().getMinDepth());
 
 			std::string mmapFilename = mmapFileNamePrefix + boost::lexical_cast<std::string>(partIdx) + "-tmpKmer";
 			mmaps[partIdx] = weak.store(mmapFilename);
 			unlink(mmapFilename.c_str());
-			if (Options::getOptions().getMinDepth() <= 1) {
+			if (KmerOptions::getOptions().getMinDepth() <= 1) {
 				mmaps[partIdx + numParts] = singleton.store(mmapFilename);
 				unlink(mmapFilename.c_str());
 			} else
@@ -1373,7 +1369,7 @@ public:
 
 
 		// first free up memory
-		if (Options::getOptions().getMinDepth() <= 1) {
+		if (KmerOptions::getOptions().getMinDepth() <= 1) {
 			LOG_DEBUG(2, "Clearing memory from singletons\n"  << MemoryUtils::getMemoryUsage());
 		    singleton.clear();
 		}
@@ -1394,12 +1390,12 @@ public:
 			}
 		}
 		weak.swap( const_cast<WeakMapType&>(constWeak) );
-		if (Options::getOptions().getMinDepth() <= 1)
+		if (KmerOptions::getOptions().getMinDepth() <= 1)
 			singleton.swap( const_cast<SingletonMapType&>( constSingleton) );
 
 		LOG_VERBOSE(2, "Finished merging partial spectrums\n" << MemoryUtils::getMemoryUsage());
 
-		if (Options::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
+		if (KmerOptions::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
 			mmaps = storeMmap(mmapFileNamePrefix);
 		}
 
@@ -1450,16 +1446,19 @@ public:
 		if (size < batch) {
 		    batch = store.getSize() / 10 + 1;
 		}
+		long kmersPerRead = store.getMaxSequenceLength() - KmerSizer::getSequenceLength() + 1;
+		batch = std::min( batch, 128*1024*1024 / kmersPerRead / KmerSizer::getByteSize() / numThreads );
 
+		LOG_DEBUG(1, "buildKmerSpectrumParallel(): batchSize: " << batch);
 		long reservation;
 		if (KmerSizer::getSequenceLength() > store.getMaxSequenceLength()) {
 			LOG_WARN(1, "KmerSize " << KmerSizer::getSequenceLength() << " is larger than your data set: " << store.getMaxSequenceLength());
 			reservation = batch * 2;
 		} else {
-			reservation = batch * (store.getMaxSequenceLength() - KmerSizer::getSequenceLength() + 1);
+			reservation = batch * (kmersPerRead);
 		}
-		if (numThreads > 1)
-			reservation /= numThreads;
+
+		reservation /= numThreads;
 
 		#pragma omp parallel num_threads(numThreads)
 		{
@@ -1648,7 +1647,7 @@ public:
 		if (hasSolids) {
 			throw; // TODO unsupported
 		}
-		double minDepth = Options::getOptions().getMinDepth();
+		double minDepth = KmerOptions::getOptions().getMinDepth();
 		int numThreads = omp_get_max_threads();
 		this->_preVariants(variantSigmas, minDepth);
 		LOG_DEBUG(1, "Purging with " << numThreads << " threads");
@@ -1696,8 +1695,8 @@ public:
 		LOG_DEBUG(3, "Finished processing variants: " << purgedKmers << " waiting for _postVariants");
 		purgedKmers = this->_postVariants(purgedKmers);
 
-		LOG_DEBUG(1, "Purging to min depth: " << Options::getOptions().getMinDepth());
-		this->purgeMinDepth(Options::getOptions().getMinDepth());
+		LOG_DEBUG(1, "Purging to min depth: " << KmerOptions::getOptions().getMinDepth());
+		this->purgeMinDepth(KmerOptions::getOptions().getMinDepth());
 
 		return purgedKmers;
 	}
