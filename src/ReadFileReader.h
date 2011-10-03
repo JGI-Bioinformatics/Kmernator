@@ -65,31 +65,32 @@ private:
 public:
 	ReadFileReader(): _parser() {}
 
-	ReadFileReader(string fastaFilePath, string qualFilePath) :
+	ReadFileReader(string fastaFilePath, bool autoFindQual) :
+		_parser(), _path(fastaFilePath), _streamType(0) {
+
+		openFastaFile(fastaFilePath);
+
+		if (autoFindQual) {
+			std::string qualFilePath;
+			openQualFile(qualFilePath);
+		} else {
+			_qs.close();
+		}
+		setParser(_ifs, _qs);
+
+	}
+	ReadFileReader(string fastaFilePath, string qualFilePath, bool autoFindQual = GeneralOptions::getOptions().getIgnoreQual()) :
 	    _parser(), _path(fastaFilePath), _streamType(0) {
 
-        _ifs.open(_path.c_str());
+		openFastaFile(fastaFilePath);
 
-		if (_ifs.fail())
-			throw runtime_error("Could not open : " + _path);
-
-		if (Options::getOptions().getIgnoreQual()) {
+		if (!qualFilePath.empty() || autoFindQual) {
+			openQualFile(qualFilePath);
+		} else {
 			qualFilePath.clear();
 			_qs.close();
 		}
 
-		if (!qualFilePath.empty()) {
-			_qs.open(qualFilePath.c_str());
-			if (_qs.fail())
-				throw runtime_error("Could not open : " + qualFilePath);
-		} else {
-		     if (!Options::getOptions().getIgnoreQual()) {
-			   // test for an implicit qual file
-			   _qs.open((_path + ".qual").c_str());
-			   LOG_DEBUG(3, "ReadFileReader() opened " << _path << ".qual " << _qs.good());
-			 }
-		}
-		LOG_DEBUG(2, "ReadFileReader(" << _path << ", " << qualFilePath << ")");
 		setParser(_ifs, _qs);
 	}
 
@@ -112,6 +113,26 @@ public:
 		case(1) : break;
 		case(2) : break;
 		}
+	}
+	void openFastaFile(string fastaFilePath) {
+
+        _ifs.open(_path.c_str());
+
+		if (_ifs.fail())
+			throw runtime_error("Could not open : " + _path);
+
+	}
+	void openQualFile(string qualFilePath) {
+		if (!qualFilePath.empty()) {
+			_qs.open(qualFilePath.c_str());
+			if (_qs.fail())
+				throw runtime_error("Could not open : " + qualFilePath);
+		} else {
+			_qs.open((_path + ".qual").c_str());
+			LOG_DEBUG(3, "ReadFileReader() opened " << _path << ".qual " << _qs.good());
+		}
+		LOG_DEBUG(2, "ReadFileReader(" << _path << ", " << qualFilePath << ")");
+
 	}
 
 	std::string getFilePath() {

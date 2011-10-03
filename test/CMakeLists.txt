@@ -60,6 +60,7 @@ set_source_files_properties( ReadSetTest
 add_executable( ReadSetTest ReadSetTest )
 target_link_libraries( ReadSetTest Sequence
                                    ReadSet 
+                                   Kmer
                                    Log
                                    ${KMERNATOR_BOOST_LIBS}
                                           ${KMERNATOR_BOOST_TEST_LIBS}

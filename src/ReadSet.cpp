@@ -303,17 +303,25 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	return reader.getParser();
 }
 
-ReadSet::SequenceStreamParserPtr ReadSet::appendFastaFile(string &str, int rank, int size) {
-	LOG_DEBUG(2, "ReadSet::appendFastaFile(" << str << ", " << rank << ", " << size << ")");
-	ReadFileReader reader(str, "");
+ReadSet::SequenceStreamParserPtr ReadSet::appendFastaFile(string &fastaFile, string &qualFile, int rank, int size) {
+	LOG_DEBUG(2, "ReadSet::appendFastaFile(" << fastaFile << ", " << qualFile << ", " << rank << ", " << size << ")");
+	ReadFileReader reader(fastaFile, qualFile);
 	appendFasta(reader, rank, size);
 	incrementFile(reader);
 	return reader.getParser();
 }
 
-ReadSet::SequenceStreamParserPtr ReadSet::appendFastaData(string &str, int rank, int size) {
-	LOG_DEBUG(2, "ReadSet::appendFastaData(" << str.size() << ", " << rank << ", " << size << ")");
-	ReadFileReader reader(str);
+ReadSet::SequenceStreamParserPtr ReadSet::appendFastaFile(string &fastaFile, int rank, int size) {
+	LOG_DEBUG(2, "ReadSet::appendFastaFile(" << fastaFile << ", " << rank << ", " << size << ")");
+	ReadFileReader reader(fastaFile, false);
+	appendFasta(reader, rank, size);
+	incrementFile(reader);
+	return reader.getParser();
+}
+
+ReadSet::SequenceStreamParserPtr ReadSet::appendFastaData(string &fastaData, int rank, int size) {
+	LOG_DEBUG(2, "ReadSet::appendFastaData(" << fastaData.size() << ", " << rank << ", " << size << ")");
+	ReadFileReader reader(fastaData);
 	appendFasta(reader, rank, size);
 	incrementFile(reader);
 	return reader.getParser();

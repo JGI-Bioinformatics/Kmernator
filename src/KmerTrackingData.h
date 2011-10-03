@@ -32,6 +32,8 @@
 #ifndef _KMER_TRACKING_DATA_H
 #define _KMER_TRACKING_DATA_H
 
+#include <iomanip>
+
 #include "config.h"
 #include "Log.h"
 

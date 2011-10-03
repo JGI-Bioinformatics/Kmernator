@@ -532,11 +532,14 @@ public:
 	static std::string convertQualIntsToChars(const std::string &qualInts, char fastqStartChar) {
 		std::istringstream ss(qualInts);
 		std::ostringstream oss;
+		int maxQual = Kmernator::REF_QUAL - fastqStartChar - 1;
 		while (!ss.eof()) {
 			int qVal;
 			ss >> qVal;
 			if (ss.fail())
 				break;
+			if (qVal > maxQual)
+				qVal = maxQual;
 			qVal += fastqStartChar;
 			oss << (char) qVal;
 		}

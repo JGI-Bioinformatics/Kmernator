@@ -255,8 +255,9 @@ public:
 	void appendAllFiles(OptionsBaseInterface::FileListType &files, int rank = 0, int size = 1);
 	SequenceStreamParserPtr appendAnyFile(std::string filePath, std::string filePath2 = "", int rank = 0, int size = 1);
 	SequenceStreamParserPtr appendAnyFileMmap(string fastaFilePath, string qualFilePath = "", int rank = 0, int size = 1);
-	SequenceStreamParserPtr appendFastaFile(std::string &is, int rank = 0, int size = 1);
-	SequenceStreamParserPtr appendFastaData(std::string &is, int rank = 0, int size = 1);
+	SequenceStreamParserPtr appendFastaFile(std::string &fastaFile, std::string &qualFile, int rank = 0, int size = 1);
+	SequenceStreamParserPtr appendFastaFile(std::string &fastaFile, int rank = 0, int size = 1);
+	SequenceStreamParserPtr appendFastaData(std::string &fastaData, int rank = 0, int size = 1);
 
 	void append(const ReadSet &reads);
 	void append(const Read &read);

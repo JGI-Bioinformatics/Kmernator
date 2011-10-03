@@ -34,6 +34,8 @@
 #include "ReadSet.h"
 #include "ReadFileReader.h"
 #include "Utils.h"
+#include "KmerReadUtils.h"
+
 #define BOOST_TEST_MODULE ReadSetTest
 #include <boost/test/unit_test.hpp>
 #include <iostream>
@@ -193,6 +195,32 @@ void testStore(string filename) {
 	delete [] buf;
 }
 
+
+void testKmerMap(SequenceLengthType size) {
+	std::string
+			A("ACGTCGTAACGTCGTA"),
+			B("TACGACGTTACGACGT"),
+			C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+	int oldSize = KmerSizer::getSequenceLength();
+	KmerSizer::set(size);
+
+	Read readA("A", A, ""), readAq("Aq", A, std::string("h",A.length()));
+	Read readB("B", B, ""), readBq("Bq", B, std::string("h",B.length()));
+	Read readC("C", C, ""), readCq("Cq", C, std::string("h",C.length()));
+
+	KmerWeightedExtensions weights;
+	weights = KmerReadUtils::buildWeightedKmers(readA);
+	weights = KmerReadUtils::buildWeightedKmers(readAq);
+	weights = KmerReadUtils::buildWeightedKmers(readB);
+	weights = KmerReadUtils::buildWeightedKmers(readBq);
+	weights = KmerReadUtils::buildWeightedKmers(readC);
+	weights = KmerReadUtils::buildWeightedKmers(readCq);
+
+
+	KmerSizer::set(oldSize);
+}
+
+
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
 	testParser();
@@ -221,7 +249,6 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 	Sequence::clearCaches();
 	testStore("consensus2.fastq");
 	Sequence::clearCaches();
-
 
 }
 

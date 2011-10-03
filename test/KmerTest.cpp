@@ -527,8 +527,7 @@ void testKmerMap(SequenceLengthType size) {
 	std::string
 			A("ACGTCGTAACGTCGTA"),
 			B("TACGACGTTACGACGT"),
-			C(
-					"AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+			C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
 	SET_KMERS(A.c_str(), B.c_str(), C.c_str());
 	KmerSizer::set(size);
 
@@ -670,8 +669,6 @@ void testKmerMap(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
 }
 
-
-
 BOOST_AUTO_TEST_CASE( KmerSetTest )
 {
 	testKmerCompare();
@@ -695,6 +692,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 	testKmerArray(7);
 	testKmerArray(8);
 	testKmerArray(9);
+	testKmerArray(10);
+	testKmerArray(11);
+	testKmerArray(12);
 
 	testKmerMap(1);
 	testKmerMap(2);
@@ -705,6 +705,9 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 	testKmerMap(7);
 	testKmerMap(8);
 	testKmerMap(9);
+	testKmerMap(10);
+	testKmerMap(11);
+	testKmerMap(12);
 
 }
 
