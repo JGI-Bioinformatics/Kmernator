@@ -231,11 +231,9 @@ int main(int argc, char *argv[]) {
 	std::string	tmpDir =
 					DistributedNucleatingAssemblerOptions::getOptions().getVmatchIndexPath()
 							+ "/";
-	if (world.rank() == 0)
-		mkdir(tmpDir.c_str(), 0777);
+	mkdir(tmpDir.c_str(), 0777); // all ranks need to mkdir if writing to local disks...
 	tmpDir += UniqueName::generateHashName(inputFiles) + "/";
-	if (world.rank() == 0)
-		mkdir(tmpDir.c_str(), 0777);
+	mkdir(tmpDir.c_str(), 0777); // all ranks need to mkdir if writing to local disks...
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Created temporary directory for ranked vmatch files: " << tmpDir);
 
 	world.barrier();

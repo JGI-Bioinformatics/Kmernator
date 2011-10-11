@@ -133,14 +133,13 @@ public:
 	MatchResults &match(std::string queryFile, std::string options = "") {
 		double time = MPI_Wtime();
 		_results.clear();
-		std::string logFile = _indexName + "-vmatch.log";
 		std::string cmd = _binaryPath + "vmatch " + options + " -q " + queryFile + " "
-				+ _indexName + " 2>" + logFile;
+				+ _indexName;
 		if (Log::isDebug(2))
 			cmd = "strace -tt -T " + cmd;
 
 		LOG_DEBUG_OPTIONAL(1, true, "Executing vmatch: " << cmd);
-		IPipestream vmatchOutput(cmd, Log::isDebug(2));
+		IPipestream vmatchOutput(cmd, true);
 		std::string line;
 		while (!vmatchOutput.eof()) {
 			getline(vmatchOutput, line);
@@ -151,6 +150,9 @@ public:
 			_results.push_back(FieldsType(line));
 		}
 		vmatchOutput.close();
+		if (vmatchOutput.getExitStatus() != 0)
+			LOG_THROW(cmd << " failed.");
+
 		LOG_VERBOSE_OPTIONAL(1, true, "Vmatch::match(,): Found " << _results.size() << " results in " << (MPI_Wtime() - time) << " sec");
 		if (Log::isDebug(2)) {
 			LOG_DEBUG(1, "Vmatch::match() strace:\n" << vmatchOutput.getStdErr());

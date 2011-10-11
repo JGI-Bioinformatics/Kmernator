@@ -111,8 +111,8 @@ std::string getRankSubdir(mpi::communicator &world, std::string prefix) {
 	std::string subDir = ss.str();
 	if (world.rank() == subRank * 256) {
 		LOG_VERBOSE_OPTIONAL(1, true, "Making rank-subdirs: " << subDir);
-		mkdir(subDir.c_str(), 0777);
 	}
+	mkdir(subDir.c_str(), 0777); // all ranks must mkdir if writing to local disks
 	std::string subSubDir = subDir + "/" + boost::lexical_cast<std::string>(world.rank()) + "of" + boost::lexical_cast<std::string>(world.size());
 	LOG_DEBUG(2, "getRankSubdir(" << prefix << "): " << subSubDir);
 	world.barrier();

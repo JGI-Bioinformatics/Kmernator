@@ -629,6 +629,9 @@ public:
 	inline bool isIntercepted() const {
 		return !_errFileName.empty();
 	}
+	void setErrorFile(std::string errFileName) {
+		_errFileName = errFileName;
+	}
 	void reset() {
 		if (isIntercepted())
 			unlink(_errFileName.c_str());
@@ -663,10 +666,10 @@ class OPipestream : public StdErrInterceptor, public boost::iostreams::stream< b
 {
 public:
 	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_sink > base ;
-	explicit OPipestream() : _pipe(NULL) {}
+	explicit OPipestream() : _pipe(NULL), _exitStatus(0) {}
 	explicit OPipestream( const std::string command, bool interceptStderr = false)
 	    : StdErrInterceptor(interceptStderr),
-	      base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "w" ) ) ), _cmd(command+getErrIntercept()) {
+	      base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "w" ) ) ), _cmd(command+getErrIntercept()), _exitStatus(0) {
 		assert(_pipe != NULL);
 		assert(fileno(_pipe) >= 0);
 		assert(is_open());
@@ -677,33 +680,35 @@ public:
 		try {
 			this->flush();
 			base::close();
-			int status = pclose(_pipe);
+			_exitStatus = pclose(_pipe);
 			_pipe = NULL;
-			if (status != 0) {
-				LOG_WARN(1, "OPipestream::close() '" << _cmd << "' closed with an error: " << status << "." << getStdErr());
+			if (_exitStatus != 0) {
+				LOG_WARN(1, "OPipestream::close() '" << _cmd << "' closed with an error: " << _exitStatus << "." << getStdErr());
 			}
 		} catch(...) {
 			// ignoring this pipe closure error.
 			LOG_WARN(1, "OPipestream::close(): Potentially failed to close pipe properly." << getStdErr() );
 		}
 	}
+	int getExitStatus() { return _exitStatus; }
 	virtual ~OPipestream() {
 		close();
 	}
 private :
 	FILE* _pipe ;
 	std::string _cmd;
+	int _exitStatus;
 };
 
 class IPipestream : public StdErrInterceptor, public boost::iostreams::stream< boost::iostreams::file_descriptor_source >
 {
 public:
 	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_source > base ;
-	explicit IPipestream() : StdErrInterceptor(), _pipe(NULL) {}
+	explicit IPipestream() : StdErrInterceptor(), _pipe(NULL), _exitStatus(0) {}
 	explicit IPipestream( const std::string command, bool interceptStderr = false )
 	    : StdErrInterceptor( interceptStderr ),
 	      base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "r" ) ) ),
-	      _cmd(command+getErrIntercept()) {
+	      _cmd(command+getErrIntercept()) , _exitStatus(0) {
 
 		assert(_pipe != NULL);
 		assert(fileno(_pipe) >= 0);
@@ -714,12 +719,12 @@ public:
 		if (_pipe == NULL)
 			return;
 		this->set_auto_close(true);
-		int status = 0;
+		_exitStatus = 0;
 		try {
-			status = pclose(_pipe);
+			_exitStatus = pclose(_pipe);
 			_pipe = NULL;
-			if (status != 0) {
-				LOG_WARN(1, "IPipestream::close() '" << _cmd << "' closed with an error: " << status << "." << getStdErr());
+			if (_exitStatus != 0) {
+				LOG_WARN(1, "IPipestream::close() '" << _cmd << "' closed with an error: " << _exitStatus << "." << getStdErr());
 			}
 		} catch(...) {
 			// ignoring this pipe closure error.
@@ -727,12 +732,14 @@ public:
 
 		}
 	}
+	int getExitStatus() { return _exitStatus; }
 	virtual ~IPipestream() {
 		close();
 	}
 private :
 	FILE* _pipe ;
 	std::string _cmd;
+	int _exitStatus;
 };
 
 
