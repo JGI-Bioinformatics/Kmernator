@@ -177,7 +177,7 @@ void setGlobalReadSetOffsets(mpi::communicator &world, ReadSet &store) {
 
 	mpi::all_reduce(world, (ReadSet::ReadSetSizeType*) readSetSizesInput, world.size(),  (ReadSet::ReadSetSizeType*) readSetSizesOutput, mpi::maximum<ReadSet::ReadSetSizeType>());
 	ReadSet::ReadIdxVector readSizes(readSetSizesOutput, readSetSizesOutput + world.size());
-	store.setGlobalOffsets(readSizes);
+	store.setGlobalOffsets(world.rank(), readSizes);
 	LOG_DEBUG(2, "globalOffset: " << store.getGlobalOffset(world.rank()) << " of " << store.getGlobalSize());
 }
 

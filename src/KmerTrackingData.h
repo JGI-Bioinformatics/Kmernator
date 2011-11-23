@@ -144,9 +144,7 @@ public:
 	}
 
 	ExtensionTracking() {
-		for(int j = 0; j < MAX_DIRECTIONS; j++)
-			for(int i = 0; i < Extension::MAX_EXTENSIONS; i++)
-				_extensionCounts[j][i] = 0;
+		reset();
 	}
 	ExtensionTracking(const ExtensionTracking &copy) {
 		*this = copy;
@@ -158,6 +156,11 @@ public:
 		return *this;
 	}
 	~ExtensionTracking() {}
+	void reset() {
+		for(int j = 0; j < MAX_DIRECTIONS; j++)
+			for(int i = 0; i < Extension::MAX_EXTENSIONS; i++)
+				_extensionCounts[j][i] = 0;
+	}
 
 	ExtensionTracking &operator+(const ExtensionTracking &other) {
 		for(int j = 0; j < MAX_DIRECTIONS; j++)
@@ -218,6 +221,10 @@ public:
 		_leftQ = copy._leftQ;
 		_rightQ = copy._rightQ;
 		return *this;
+	}
+	void reset() {
+		_leftB = _rightB = '\0';
+		_leftQ = _rightQ = 0;
 	}
 
 	Extension getLeft() const {
@@ -756,6 +763,9 @@ public:
 	bool track(double weight, bool forward, ReadIdType readIdx = 0,
 			PositionType readPos = 0) {
 		assert(weight <= 1.0);
+		assert(weight >= -1.0);
+		if (forward)
+			assert(weight >= 0.0);
 
 		if (TrackingData::isDiscard(weight))
 			return false;
@@ -769,7 +779,7 @@ public:
 			ReadPositionWeight rpw(readIdx, readPos, weight);
 
 			instances.push_back(rpw);
-			weightedCount += weight;
+			weightedCount += weight < 0.0 ? -weight : weight;
 		}
 		TrackingData::setGlobals(getCount(), getWeightedCount());
 
@@ -789,7 +799,10 @@ public:
 		double weightedCount = 0.0;
 		for (ReadPositionWeightVector::const_iterator it = instances.begin(); it
 				!= instances.end(); it++)
-			weightedCount += it->weight;
+			if (it->weight < 0.0)
+				weightedCount -= it->weight;
+			else
+				weightedCount += it->weight;
 		return weightedCount;
 	}
 	inline double getNormalizedDirectionBias() const {
@@ -822,6 +835,16 @@ public:
 		}
 		return *this;
 	}
+	TrackingDataWithAllReads &operator=(const TrackingDataSingletonWithReadPosition &other) {
+		this->reset();
+		ReadPositionWeight rpw(other.getReadId(), other.getPosition(), other.getWeightedCount());
+		instances.push_back(rpw);
+		if (other.getCount() > 0) {
+			directionBias = other.getDirectionBias();
+			weightedCount = _getWeightedCount();
+		}
+		return *this;
+	}
 	TrackingDataWithAllReads &add(const TrackingDataWithAllReads &other) {
 		instances.insert(instances.end(), other.instances.begin(), other.instances.end());
 		directionBias += other.getDirectionBias();
@@ -837,6 +860,76 @@ public:
 		return *this;
 	}
 
+};
+
+class TrackingDataSingletonWithReadPositionAndExtension : public TrackingDataSingletonWithReadPosition {
+public:
+	TrackingDataSingletonWithReadPositionAndExtension() : TrackingDataSingletonWithReadPosition(), _extensionMsgPacket() {}
+	TrackingDataSingletonWithReadPositionAndExtension(const TrackingDataSingletonWithReadPositionAndExtension &copy) {
+		*this = copy;
+	}
+	TrackingDataSingletonWithReadPositionAndExtension &operator=(const TrackingDataSingletonWithReadPositionAndExtension &copy) {
+		*((TrackingDataSingletonWithReadPosition*)this) = (TrackingDataSingletonWithReadPosition&) copy;
+		_extensionMsgPacket = copy._extensionMsgPacket;
+		return *this;
+	}
+	~TrackingDataSingletonWithReadPositionAndExtension() {}
+	void reset() {
+		TrackingDataSingletonWithReadPosition::reset();
+		_extensionMsgPacket.reset();
+	}
+
+	// override ExtenstionTrackingInterface noop methods
+	void trackExtensions(Extension left, Extension right) {
+		_extensionMsgPacket.setExtensions(left, right);
+	}
+	ExtensionTracking getExtensionTracking() const {
+		ExtensionTracking extTrack;
+		extTrack.trackExtensions(_extensionMsgPacket.getLeft(), _extensionMsgPacket.getRight());
+		return extTrack;
+	}
+
+private:
+	ExtensionMessagePacket _extensionMsgPacket;
+};
+class TrackingDataWithAllReadsAndExtensions : public TrackingDataWithAllReads {
+public:
+	TrackingDataWithAllReadsAndExtensions() : TrackingDataWithAllReads(), _extensionTracking() {}
+	TrackingDataWithAllReadsAndExtensions(const TrackingDataWithAllReadsAndExtensions &copy) {
+		*this = copy;
+	}
+	TrackingDataWithAllReadsAndExtensions &operator=(const TrackingDataWithAllReadsAndExtensions &copy) {
+		*((TrackingDataWithAllReads*)this) = (TrackingDataWithAllReads&) copy;
+		_extensionTracking = copy._extensionTracking;
+		return *this;
+	}
+	TrackingDataWithAllReadsAndExtensions &operator=(const TrackingDataSingletonWithReadPositionAndExtension &copy) {
+		*((TrackingDataWithAllReads*)this) = (TrackingDataSingletonWithReadPosition&) copy;
+		_extensionTracking = copy.getExtensionTracking();
+		return *this;
+	}
+
+	~TrackingDataWithAllReadsAndExtensions() {}
+	void reset() {
+		TrackingDataWithAllReads::reset();
+		_extensionTracking.reset();
+	}
+
+	// override ExtenstionTrackingInterface noop methods
+	void trackExtensions(Extension left, Extension right) {
+		_extensionTracking.trackExtensions(left,right);
+	}
+	ExtensionTracking getExtensionTracking() const {
+		return _extensionTracking;
+	}
+	TrackingDataWithAllReadsAndExtensions &add(const TrackingDataWithAllReadsAndExtensions &other) {
+		TrackingDataWithAllReads::add((TrackingDataWithAllReads&)other);
+		_extensionTracking = _extensionTracking + other.getExtensionTracking();
+		return *this;
+	}
+
+private:
+	ExtensionTracking _extensionTracking;
 };
 
 std::ostream &operator<<(std::ostream &stream, TrackingData &ob);
@@ -921,7 +1014,7 @@ std::ostream &operator<<(std::ostream &stream, ExtensionTrackingData &ob);
 
 class ExtensionTrackingDataSingleton : public TrackingDataSingleton {
 public:
-	ExtensionTrackingDataSingleton() : TrackingDataSingleton(), extensionMsgPacket() {}
+	ExtensionTrackingDataSingleton() : TrackingDataSingleton(), _extensionMsgPacket() {}
 	ExtensionTrackingDataSingleton(const ExtensionTrackingDataSingleton &copy) {
 		*this = copy;
 	}
@@ -941,11 +1034,11 @@ public:
 	}
 	// override default methods
 	void trackExtensions(Extension left, Extension right) {
-		extensionMsgPacket.setExtensions(left, right);
+		_extensionMsgPacket.setExtensions(left, right);
 	}
 	ExtensionTracking getExtensionTracking() const {
 		ExtensionTracking extTrack;
-		extTrack.trackExtensions(extensionMsgPacket.getLeft(), extensionMsgPacket.getRight());
+		extTrack.trackExtensions(_extensionMsgPacket.getLeft(), _extensionMsgPacket.getRight());
 		return extTrack;
 	}
 
@@ -953,7 +1046,7 @@ public:
 	ExtensionTrackingDataSingleton &add(const U &other) {
 		TrackingDataWithDirection::add(other);
 		ExtensionTracking extensionTracking = other.getExtensionTracking();
-		extensionMsgPacket.setExtensions(extensionTracking);
+		_extensionMsgPacket.setExtensions(extensionTracking);
 		return *this;
 	};
 
@@ -961,12 +1054,12 @@ public:
 	ExtensionTrackingDataSingleton &operator=(const U &other) {
 		*((TrackingDataWithDirection*) this) = other;
 		ExtensionTracking extensionTracking = other.getExtensionTracking();
-		extensionMsgPacket.setExtensions(extensionTracking);
+		_extensionMsgPacket.setExtensions(extensionTracking);
 		return *this;
 	};
 
 protected:
-	ExtensionMessagePacket extensionMsgPacket;
+	ExtensionMessagePacket _extensionMsgPacket;
 };
 
 std::ostream &operator<<(std::ostream &stream, ExtensionTrackingDataSingleton &ob);

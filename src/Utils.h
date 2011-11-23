@@ -58,7 +58,9 @@
 
 #include <boost/iostreams/device/file_descriptor.hpp>
 #include <boost/iostreams/stream.hpp>
+#include <iostream>
 #include <fstream>
+#include <iomanip>
 
 #define foreach BOOST_FOREACH
 
@@ -957,6 +959,35 @@ private:
 		return getSeed(omp_get_thread_num());
 	}
 
+};
+
+class Timer {
+public:
+	typedef std::pair< std::string, float > LabeledTime;
+	typedef std::vector< LabeledTime > LabeledTimes;
+	Timer(float start = 0) : _times() {
+		resetTimes(start);
+	}
+	void resetTimes(float start) {
+		_times.clear();
+		_start = start;
+	}
+	void recordTime(std::string label, float time) {
+		_times.push_back( LabeledTime(label, time));
+	}
+	std::string getTimes(std::string label) {
+		std::stringstream ss;
+		float last = _start;
+		ss << std::fixed << std::setprecision(2);
+		for(LabeledTimes::iterator it = _times.begin(); it != _times.end(); it++) {
+			ss << " " << it->first << ": " << it->second - last;
+			last = it->second;
+		}
+		return ss.str();
+	}
+private:
+	LabeledTimes _times;
+	float _start;
 };
 #endif
 

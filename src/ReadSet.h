@@ -124,6 +124,7 @@ protected:
 	PartitioningData<ReadSetSizeType> _filePartitions;
 	ReadSetSizeType _baseCount;
 	SequenceLengthType _maxSequenceLength;
+	int _myGlobalRank;
 	ReadIdxVector _globalOffsets;
 	ReadSetSizeType _globalSize;
 	PairedIndexType _pairs;
@@ -177,6 +178,8 @@ public:
 		_filePartitions.swap(other._filePartitions);
 		std::swap(_baseCount, other._baseCount);
 		std::swap(_maxSequenceLength, other._maxSequenceLength);
+		std::swap(_myGlobalRank, other._myGlobalRank);
+		std::swap(_globalSize, other._globalSize);
 		_globalOffsets.swap(other._globalOffsets);
 		_pairs.swap(other._pairs);
 		previousReadName.swap(other.previousReadName);
@@ -187,6 +190,8 @@ public:
 		_filePartitions.clear();
 		_baseCount = 0;
 		_maxSequenceLength = 0;
+		_myGlobalRank = 0;
+		_globalSize = 0;
 		_globalOffsets.clear();
 		_pairs.clear();
 		previousReadName.clear();
@@ -273,7 +278,8 @@ public:
 		return _pairs.size();
 	}
 
-	void setGlobalOffsets(ReadIdxVector &globalSizes) {
+	void setGlobalOffsets(int myRank, ReadIdxVector &globalSizes) {
+		_myGlobalRank = myRank;
 		_globalSize = 0;
 		_globalOffsets.clear();
 		_globalOffsets.reserve(globalSizes.size());
@@ -283,6 +289,9 @@ public:
 		}
 	}
 
+	inline ReadSetSizeType getGlobalOffset() const {
+		return getGlobalOffset(_myGlobalRank);
+	}
 	inline ReadSetSizeType getGlobalOffset(int rank) const {
 		if (_globalOffsets.size() == 0)
 			return 0;
@@ -290,6 +299,24 @@ public:
 			return _globalOffsets[rank];
 	}
 
+	inline ReadSetSizeType getGlobalReadIdx(ReadSetSizeType localReadIdx) const {
+		return getGlobalReadIdx(_myGlobalRank, localReadIdx);
+	}
+	inline ReadSetSizeType getGlobalReadIdx(int rank, ReadSetSizeType localReadIdx) const {
+		if (_globalOffsets.size() == 0)
+			return localReadIdx;
+		else
+			return _globalOffsets[rank] + localReadIdx;
+	}
+
+	inline ReadSetSizeType getLocalReadIdx(ReadSetSizeType globalReadIdx) const {
+		return getLocalReadIdx(_myGlobalRank, globalReadIdx);
+	}
+	inline ReadSetSizeType getLocalReadIdx(int rank, ReadSetSizeType globalReadIdx) const {
+		assert(isLocalRead(rank, globalReadIdx));
+		return globalReadIdx - _globalOffsets[rank];
+	}
+	//returns the rank and rankReadidx (localIdx) for a given globalReadIdx
 	void getRankReadForGlobalReadIdx(ReadSetSizeType globalReadIdx, int &rank, ReadSetSizeType &rankReadIdx) const {
 		int size = _globalOffsets.size();
 		if (size == 0) {
@@ -303,6 +330,25 @@ public:
 			rankReadIdx = globalReadIdx - _globalOffsets[rank];
 		}
 		LOG_DEBUG(3, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << ", " << rank << ", " << rankReadIdx << "): " << _globalOffsets[rank]);
+	}
+
+	bool isLocalRead(ReadSetSizeType globalReadIdx) const {
+		return isLocalRead(_myGlobalRank, globalReadIdx);
+	}
+	bool isLocalRead(int rank, ReadSetSizeType globalReadIdx) const {
+		if (rank + 1 < (int) _globalOffsets.size()) {
+			if (globalReadIdx >=_globalOffsets[rank+1]) {
+				return false;
+			}
+		} else if (globalReadIdx >= _globalSize) {
+			LOG_THROW("isLocalRead(" << rank <<", " << globalReadIdx << ") exceeds globalSize: " << _globalSize);
+		}
+
+		if (_globalOffsets[rank] >= globalReadIdx) {
+			return true;
+		} else {
+			return false;
+		}
 	}
 
 	inline ReadSetSizeType getGlobalSize() const {

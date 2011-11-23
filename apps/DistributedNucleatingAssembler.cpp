@@ -41,13 +41,17 @@
 #include "Log.h"
 #include "Vmatch.h"
 #include "Cap3.h"
+#include "KmerMatch.h"
+#include "MatcherInterface.h"
 
 using namespace std;
 typedef TrackingDataMinimal4f DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 
+typedef KmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads > KS2;
 
-class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions {
+
+class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions, public _KmerMatchOptions {
 public:
 	static int getMaxIterations() {
 		return getVarMap()["max-iterations"].as<int> ();
@@ -59,6 +63,7 @@ public:
 		_Cap3Options::_resetDefaults();
 		_ContigExtenderBaseOptions::_resetDefaults();
 		_VmatchOptions::_resetDefaults();
+		_KmerMatchOptions::_resetDefaults();
 
 		GeneralOptions::_resetDefaults();
 		GeneralOptions::getOptions().getSkipArtifactFilter() = 1;
@@ -84,6 +89,7 @@ public:
 		;
 		desc.add(opts);
 
+		_KmerMatchOptions::_setOptions(desc,p);
 		_VmatchOptions::_setOptions(desc,p);
 		_ContigExtenderBaseOptions::_setOptions(desc,p);
 		_Cap3Options::_setOptions(desc,p);
@@ -94,6 +100,7 @@ public:
 
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= _KmerMatchOptions::_parseOptions(vm);
 		ret &= _VmatchOptions::_parseOptions(vm);
 		ret &= _ContigExtenderBaseOptions::_parseOptions(vm);
 		ret &= _Cap3Options::_parseOptions(vm);
@@ -228,15 +235,6 @@ int main(int argc, char *argv[]) {
 			DistributedNucleatingAssemblerOptions::getOptions().getMinimumCoverage();
 	long maxIterations =
 					DistributedNucleatingAssemblerOptions::getOptions().getMaxIterations();
-	std::string	tmpDir =
-					DistributedNucleatingAssemblerOptions::getOptions().getVmatchIndexPath()
-							+ "/";
-	mkdir(tmpDir.c_str(), 0777); // all ranks need to mkdir if writing to local disks...
-	tmpDir += UniqueName::generateHashName(inputFiles) + "/";
-	mkdir(tmpDir.c_str(), 0777); // all ranks need to mkdir if writing to local disks...
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Created temporary directory for ranked vmatch files: " << tmpDir);
-
-	world.barrier();
 
 	ReadSet reads;
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files" );
@@ -247,8 +245,12 @@ int main(int argc, char *argv[]) {
 
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 1, "loaded " << reads.getGlobalSize() << " Reads in " << (timing2-timing1) << " seconds" );
 
-	std::string rankOutputDir = getRankSubdir(world, tmpDir);
-	Vmatch myVmatch = Vmatch(rankOutputDir + "/myReads", reads);
+	boost::shared_ptr< MatcherInterface > matcher;
+	if (KmerBaseOptions::getOptions().getKmerSize() == 0) {
+		matcher.reset( new Vmatch(world, UniqueName::generateHashName(inputFiles), reads) );
+	} else {
+		matcher.reset( new KmerMatch(world, reads) );
+	}
 
 	SequenceLengthType minKmerSize, maxKmerSize, kmerStep, maxExtend;
 	ContigExtender<KS>::getMinMaxKmerSize(reads, minKmerSize, maxKmerSize,
@@ -268,11 +270,10 @@ int main(int argc, char *argv[]) {
 
 	short iteration = 0;
 	while (++iteration <= maxIterations) {
-		double startIterationTime = MPI_Wtime();
+
+		matcher->resetTimes(MPI_Wtime());
 
 		setGlobalReadSetOffsets(world, contigs);
-
-		double setOffsetsTime = MPI_Wtime() - startIterationTime;
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Contig File: " << contigFile << ". contains " << contigs.getGlobalSize() << " Reads");
 		if (contigs.getGlobalSize() == 0) {
@@ -280,108 +281,7 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 
-		ReadSet::ReadSetVector
-				contigReadSet(contigs.getGlobalSize(), ReadSet());
-		Vmatch::MatchResults
-				matches =
-						myVmatch.match(
-								contigFile,
-								DistributedNucleatingAssemblerOptions::getOptions().getVmatchOptions());
-
-		double vmatchMatchTime = MPI_Wtime() - startIterationTime;
-
-		std::vector<std::set<long> > contigReadHits(contigs.getGlobalSize());
-		for (Vmatch::MatchResults::iterator match = matches.begin(); match
-				!= matches.end(); match++) {
-			ReadSet::ReadSetSizeType globalContigIdx = match->queryNumber,
-					readIdx = match->subjectNumber;
-			contigReadHits[globalContigIdx].insert(readIdx);
-			// include pairs
-			if (readIdx % 2 == 0)
-				contigReadHits[globalContigIdx].insert(readIdx + 1);
-			else
-				contigReadHits[globalContigIdx].insert(readIdx - 1);
-		}
-		for (long globalContigIdx = 0; globalContigIdx
-				< (long) contigReadHits.size(); globalContigIdx++) {
-			LOG_DEBUG_OPTIONAL(3, true, "GlobalContig: " << globalContigIdx << " has " << contigReadHits[globalContigIdx].size() << " contigReadHits");
-			for (std::set<long>::iterator it2 =
-					contigReadHits[globalContigIdx].begin(); it2
-					!= contigReadHits[globalContigIdx].end(); it2++) {
-				long readIdx = *it2;
-				contigReadSet[globalContigIdx].append(reads.getRead(readIdx));
-			}
-		}
-		contigReadHits.clear();
-
-		int sendBytes[world.size()], recvBytes[world.size()],
-				sendDisp[world.size()], recvDisp[world.size()];
-		int totalSend = 0, totalRecv = 0;
-
-		for (int rank = 0; rank < world.size(); rank++) {
-			sendBytes[rank] = 0;
-			recvBytes[rank] = 0;
-		}
-		for (ReadSet::ReadSetSizeType globalContigIdx = 0; globalContigIdx
-				< contigs.getGlobalSize(); globalContigIdx++) {
-			int rank;
-			ReadSet::ReadSetSizeType rankReadIdx;
-			contigs.getRankReadForGlobalReadIdx(globalContigIdx, rank,
-					rankReadIdx);
-			int sendByteCount = contigReadSet[globalContigIdx].getStoreSize();
-			sendBytes[rank] += sendByteCount;
-			LOG_DEBUG_OPTIONAL(3, true, "GlobalContig: " << globalContigIdx << " sending " << contigReadSet[ globalContigIdx ].getSize() << " reads / "<< sendByteCount << " bytes to " << rank << " total: " << sendBytes[rank]);
-		}
-		for (int rank = 0; rank < world.size(); rank++) {
-			sendDisp[rank] = totalSend;
-			totalSend += sendBytes[rank];
-			LOG_DEBUG_OPTIONAL(3, true, "Sending to rank " << rank << " sendBytes " << sendBytes[rank] << " sendDisp[] " << sendDisp[rank] << ". 0 == recvBytes[] "<< recvBytes[rank]);
-		}
-
-		double prepareSizesTime = MPI_Wtime() - startIterationTime;
-
-		MPI_Alltoall(sendBytes, 1, MPI_INT, recvBytes, 1, MPI_INT, world);
-
-		double exchangeSizesTime = MPI_Wtime() - startIterationTime;
-
-		for (int rank = 0; rank < world.size(); rank++) {
-			recvDisp[rank] = totalRecv;
-			totalRecv += recvBytes[rank];
-			LOG_DEBUG_OPTIONAL(3, true, "to/from rank " << rank << ": sendDisp[] " << sendDisp[rank] << " sendBytes[] " << sendBytes[rank] << " recvDisp[] " << recvDisp[rank] << " recvBytes[] " << recvBytes[rank] );
-		}
-		LOG_DEBUG_OPTIONAL(3, true, "Sending " << totalSend << " Receiving " << totalRecv);
-
-		char *sendBuf = (char*) (malloc(totalSend == 0 ? 8 : totalSend));
-		if (sendBuf == NULL)
-			LOG_THROW("Could not allocate totalSend bytes! " << totalSend);
-		char *tmp = sendBuf;
-		for (ReadSet::ReadSetSizeType contigGlobalIndex = 0; contigGlobalIndex
-				< contigs.getGlobalSize(); contigGlobalIndex++) {
-			tmp += contigReadSet[contigGlobalIndex].store(tmp);
-		}
-		contigReadSet.clear();
-		char *recvBuf = (char*) (malloc(totalRecv == 0 ? 8 : totalRecv));
-		if (recvBuf == NULL)
-			LOG_THROW("Could not allocate totalRecv bytes! " << totalRecv);
-		double prepareSendTime = MPI_Wtime() - startIterationTime;
-		MPI_Alltoallv(sendBuf, sendBytes, sendDisp, MPI_BYTE, recvBuf,
-				recvBytes, recvDisp, MPI_BYTE, world);
-		double exchangeReadsTime = MPI_Wtime() - startIterationTime;
-		free(sendBuf);
-		// set contigReadSet to hold read sets for local set of contigs
-		contigReadSet.resize(contigs.getSize(), ReadSet());
-		for (int rank = 0; rank < world.size(); rank++) {
-			ReadSet::ReadSetSizeType contigIdx = 0;
-			tmp = recvBuf + recvDisp[rank];
-			while (tmp != recvBuf + recvDisp[rank] + recvBytes[rank]) {
-				ReadSet rs;
-				tmp = (char*) rs.restore(tmp);
-				contigReadSet[contigIdx].append(rs);
-				LOG_DEBUG_OPTIONAL(3, true, "Restored from rank " << rank << " ReadSet " << rs.getSize() << " totaling " << contigReadSet[contigIdx].getSize());
-				contigIdx++;
-			}
-		}
-		free(recvBuf);
+		MatcherInterface::MatchReadResults contigReadSet = matcher->match(contigs, contigFile);
 
 		ReadSet changedContigs;
 		std::string extendLog;
@@ -394,7 +294,7 @@ int main(int argc, char *argv[]) {
 				minKmerSize, minimumCoverage, maxKmerSize, maxExtend, kmerStep);
 		}
 
-		double extendContigsTime = MPI_Wtime() - startIterationTime;
+		matcher->recordTime("extendContigs", MPI_Wtime());
 		LOG_VERBOSE(1, (extendLog));
 
 		finishLongContigs(DistributedNucleatingAssemblerOptions::getOptions().getMaxContigLength(), changedContigs, finalContigs);
@@ -403,8 +303,6 @@ int main(int argc, char *argv[]) {
 		setGlobalReadSetOffsets(world, changedContigs);
 		setGlobalReadSetOffsets(world, finalContigs);
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Changed contigs: " << changedContigs.getGlobalSize() << " finalContigs: " << finalContigs.getGlobalSize());
-
-		double calcChangedSizesTime = MPI_Wtime() - startIterationTime;
 
 		std::string oldFinalContigFile = finalContigFile;
 		std::string oldContigFile = contigFile;
@@ -430,7 +328,7 @@ int main(int argc, char *argv[]) {
 			contigs = changedContigs;
 		}
 
-		double writeFinalTime = MPI_Wtime() - startIterationTime;
+		matcher->recordTime("writeFinalTime", MPI_Wtime());
 
 		if (!Log::isDebug(1) && world.rank() == 0) {
 			// remove most recent contig files (if not debugging)
@@ -451,23 +349,9 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 
-		double finishIterationTime = MPI_Wtime() - startIterationTime;
+		matcher->recordTime("finishIteration", MPI_Wtime());
 		if (Log::isVerbose(1)) {
-			char buf[1024];
-			sprintf(
-					buf,
-					"Time SO:%0.2f vm:%0.2f ps:%0.2f EST:%0.2f ps:%0.2f ER:%0.2f ec:%0.2f CCS:%0.2f WF:%0.2f FI:%0.2f total: %0.2f Mem: ",
-					setOffsetsTime, vmatchMatchTime - setOffsetsTime,
-					prepareSizesTime - vmatchMatchTime, exchangeSizesTime
-							- prepareSizesTime, prepareSendTime
-							- exchangeSizesTime, exchangeReadsTime
-							- prepareSendTime, extendContigsTime
-							- exchangeReadsTime, calcChangedSizesTime
-							- extendContigsTime, writeFinalTime
-							- calcChangedSizesTime, finishIterationTime
-							- writeFinalTime, finishIterationTime);
-			Log::Verbose(std::string(buf) + MemoryUtils::getMemoryUsage(),
-					false);
+			Log::Verbose(matcher->getTimes("") + MemoryUtils::getMemoryUsage(), false);
 		}
 	}
 

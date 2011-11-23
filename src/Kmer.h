@@ -109,21 +109,63 @@ public:
 
 };
 
-class _KmerOptions: public OptionsBaseInterface {
+class _KmerBaseOptions : public OptionsBaseInterface {
 public:
-	_KmerOptions() :
-		kmerSize(21), minKmerQuality(0.10), minDepth(2),
-		saveKmerMmap(0), loadKmerMmap(),
-		buildPartitions(0) {
-	}
+	_KmerBaseOptions(int _kmerSize = 0) : defaultkmerSize(_kmerSize) {}
+	~_KmerBaseOptions() {}
 	void _resetOptions() {
 	}
 	void _setOptions(po::options_description &desc,
 			po::positional_options_description &p) {
+
 		po::options_description opts("Kmer Options");
-		opts.add_options()("kmer-size",
-				po::value<unsigned int>()->default_value(kmerSize),
-				"kmer size.  A size of 0 will skip k-mer calculations")
+
+		opts.add_options()
+
+			("kmer-size",
+					po::value<unsigned int>()->default_value(defaultkmerSize),
+					"kmer size.  A size of 0 will skip k-mer calculations");
+
+		desc.add(opts);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+
+		if (vm.count("kmer-size") == 0) {
+			LOG_WARN(1, "There was no kmer size specified!");
+			ret = false;
+		}
+
+		return ret;
+	}
+	unsigned int getKmerSize()
+	{
+	    return getVarMap()["kmer-size"].as<unsigned int>();
+	}
+private:
+	unsigned int defaultkmerSize;
+
+};
+typedef OptionsBaseTemplate< _KmerBaseOptions > KmerBaseOptions;
+
+class _KmerOptions: public _KmerBaseOptions {
+public:
+	_KmerOptions() :
+		_KmerBaseOptions(21), minKmerQuality(0.10), minDepth(2),
+		saveKmerMmap(0), loadKmerMmap(),
+		buildPartitions(0) {
+	}
+	void _resetOptions() {
+		_KmerBaseOptions::_resetOptions();
+	}
+	void _setOptions(po::options_description &desc,
+			po::positional_options_description &p) {
+
+		_KmerBaseOptions::_setOptions(desc,p);
+
+		po::options_description opts("Kmer Building Options");
+
+		opts.add_options()
 
 		("min-kmer-quality",
 				po::value<double>()->default_value(minKmerQuality),
@@ -148,14 +190,8 @@ public:
 		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
-		bool ret = true;
+		bool ret = _KmerBaseOptions::_parseOptions(vm);
 
-		if (vm.count("kmer-size")) {
-			setOpt<unsigned int>("kmer-size", getKmerSize());
-		} else {
-			LOG_WARN(1, "There was no kmer size specified!");
-			ret = false;
-		}
 		// set kmer quality
 		setOpt<double>("min-kmer-quality", getMinKmerQuality());
 
@@ -177,10 +213,6 @@ public:
 		TrackingData::setMinimumDepth( getMinDepth() );
 
 		return ret;
-	}
-	unsigned int &getKmerSize()
-	{
-	    return kmerSize;
 	}
 	double &getMinKmerQuality()
 	{
@@ -211,7 +243,6 @@ private:
 	friend class OptionsBaseTemplate<_KmerOptions> ;
 
 private:
-	unsigned int kmerSize;
 	double minKmerQuality;
 	unsigned int minDepth;
 	unsigned int saveKmerMmap;

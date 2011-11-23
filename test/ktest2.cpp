@@ -39,6 +39,7 @@
 #include "KmerReadUtils.h"
 #include "Utils.h"
 #include "FilterKnownOddities.h"
+#include "Kmer.h"
 #include "KmerSpectrum.h"
 #include "MemoryUtils.h"
 #include "Options.h"
@@ -57,10 +58,10 @@ public:
 		GeneralOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		p.add("kmer-size", 1);
-		p.add("input-file", -1);
 		KmerOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc, p);
+		p.add("kmer-size", 1);
+		p.add("input-file", -1);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
