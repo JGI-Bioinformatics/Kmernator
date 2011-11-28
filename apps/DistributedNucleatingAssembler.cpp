@@ -51,7 +51,7 @@ typedef KmerSpectrum<DataType, DataType> KS;
 typedef KmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads > KS2;
 
 
-class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions, public _KmerMatchOptions {
+class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions, public _KmerMatchOptions, public _MPIOptions{
 public:
 	static int getMaxIterations() {
 		return getVarMap()["max-iterations"].as<int> ();
@@ -64,6 +64,7 @@ public:
 		_ContigExtenderBaseOptions::_resetDefaults();
 		_VmatchOptions::_resetDefaults();
 		_KmerMatchOptions::_resetDefaults();
+		_MPIOptions::_resetDefaults();
 
 		GeneralOptions::_resetDefaults();
 		GeneralOptions::getOptions().getSkipArtifactFilter() = 1;
@@ -93,6 +94,7 @@ public:
 		_VmatchOptions::_setOptions(desc,p);
 		_ContigExtenderBaseOptions::_setOptions(desc,p);
 		_Cap3Options::_setOptions(desc,p);
+		_MPIOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc,p);
 
 	};
@@ -104,6 +106,7 @@ public:
 		ret &= _VmatchOptions::_parseOptions(vm);
 		ret &= _ContigExtenderBaseOptions::_parseOptions(vm);
 		ret &= _Cap3Options::_parseOptions(vm);
+		ret &= _MPIOptions::_parseOptions(vm);
 
 		if (Options::getOptions().getOutputFile().empty()) {
 			LOG_ERROR(1, "You must specify an --output");
