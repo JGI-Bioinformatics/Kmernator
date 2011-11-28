@@ -336,15 +336,15 @@ public:
 		return isLocalRead(_myGlobalRank, globalReadIdx);
 	}
 	bool isLocalRead(int rank, ReadSetSizeType globalReadIdx) const {
-		if (rank + 1 < (int) _globalOffsets.size()) {
+		if (globalReadIdx >= _globalSize) {
+			LOG_THROW("isLocalRead(" << rank <<", " << globalReadIdx << ") exceeds globalSize: " << _globalSize);
+		} else if (rank + 1 < (int) _globalOffsets.size()) {
 			if (globalReadIdx >=_globalOffsets[rank+1]) {
 				return false;
 			}
-		} else if (globalReadIdx >= _globalSize) {
-			LOG_THROW("isLocalRead(" << rank <<", " << globalReadIdx << ") exceeds globalSize: " << _globalSize);
 		}
 
-		if (_globalOffsets[rank] >= globalReadIdx) {
+		if (_globalOffsets[rank] <= globalReadIdx) {
 			return true;
 		} else {
 			return false;
