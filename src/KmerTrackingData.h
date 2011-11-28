@@ -33,6 +33,7 @@
 #define _KMER_TRACKING_DATA_H
 
 #include <iomanip>
+#include <boost/shared_ptr.hpp>
 
 #include "config.h"
 #include "Log.h"
@@ -738,18 +739,18 @@ public:
 	typedef TrackingData::PositionType PositionType;
 
 protected:
-	ReadPositionWeightVector instances;
+	boost::shared_ptr< ReadPositionWeightVector > instances;
 	unsigned int directionBias;
 	WeightType weightedCount; // for performance reasons
 
 public:
 	TrackingDataWithAllReads() :
-		instances(), directionBias(0), weightedCount(0.0) {
+		instances(new ReadPositionWeightVector()), directionBias(0), weightedCount(0.0) {
 	}
 
 	void reset() {
 		TrackingData::resetForGlobals(getCount());
-		instances.clear();
+		instances->clear();
 		directionBias = 0;
 		weightedCount = 0.0;
 	}
@@ -778,7 +779,7 @@ public:
 
 			ReadPositionWeight rpw(readIdx, readPos, weight);
 
-			instances.push_back(rpw);
+			instances->push_back(rpw);
 			weightedCount += weight < 0.0 ? -weight : weight;
 		}
 		TrackingData::setGlobals(getCount(), getWeightedCount());
@@ -787,7 +788,7 @@ public:
 	}
 
 	inline unsigned long getCount() const {
-		return instances.size();
+		return instances->size();
 	}
 	inline unsigned long getDirectionBias() const {
 		return directionBias;
@@ -797,8 +798,8 @@ public:
 	}
 	double _getWeightedCount() const {
 		double weightedCount = 0.0;
-		for (ReadPositionWeightVector::const_iterator it = instances.begin(); it
-				!= instances.end(); it++)
+		for (ReadPositionWeightVector::const_iterator it = instances->begin(); it
+				!= instances->end(); it++)
 			if (it->weight < 0.0)
 				weightedCount -= it->weight;
 			else
@@ -810,7 +811,7 @@ public:
 	}
 
 	inline ReadPositionWeightVector getEachInstance() const {
-		return instances;
+		return *instances;
 	}
 
 	// cast operator
@@ -826,11 +827,18 @@ public:
 				<< ((double) getWeightedCount() / (double) getCount());
 		return ss.str();
 	}
+	TrackingDataWithAllReads &operator=(const TrackingDataWithAllReads &copy) {
+		this->reset();
+		instances = copy.instances;
+		directionBias = copy.directionBias;
+		weightedCount = copy.weightedCount;
+		return *this;
+	}
 	TrackingDataWithAllReads &operator=(const TrackingDataSingleton &other) {
 		this->reset();
 		if (other.getCount() > 0) {
 			directionBias = other.getDirectionBias();
-			instances = other.getEachInstance();
+			instances.reset( new ReadPositionWeightVector( other.getEachInstance() ) );
 			weightedCount = _getWeightedCount();
 		}
 		return *this;
@@ -838,7 +846,7 @@ public:
 	TrackingDataWithAllReads &operator=(const TrackingDataSingletonWithReadPosition &other) {
 		this->reset();
 		ReadPositionWeight rpw(other.getReadId(), other.getPosition(), other.getWeightedCount());
-		instances.push_back(rpw);
+		instances->push_back(rpw);
 		if (other.getCount() > 0) {
 			directionBias = other.getDirectionBias();
 			weightedCount = _getWeightedCount();
@@ -846,7 +854,7 @@ public:
 		return *this;
 	}
 	TrackingDataWithAllReads &add(const TrackingDataWithAllReads &other) {
-		instances.insert(instances.end(), other.instances.begin(), other.instances.end());
+		instances->insert(instances->end(), other.instances->begin(), other.instances->end());
 		directionBias += other.getDirectionBias();
 		weightedCount += other.getWeightedCount();
 		return *this;
@@ -854,7 +862,7 @@ public:
 
 	TrackingDataWithAllReads &add(const TrackingDataSingleton &other) {
 		if (other.getCount() > 0) {
-	       instances.push_back(ReadPositionWeight((ReadIdType) -1, 0, other.getWeightedCount()));
+	       instances->push_back(ReadPositionWeight((ReadIdType) -1, 0, other.getWeightedCount()));
 	       weightedCount += other.getWeightedCount();
 		}
 		return *this;

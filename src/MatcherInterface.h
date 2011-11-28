@@ -182,34 +182,41 @@ public:
 		}
 		// send each rank the count of globalReadIdx that will send alltoall
 		int *sendCounts = new int[ numRanks * numMatchHitSets ];
-		int *recvCounts = new int[ numRanks * numMatchHitSets ];
+		int *sendRankCount = new int[numRanks];
+		int *sendRankDispl = new int[numRanks];
 		long totalSendCount = 0;
+
+		int *recvCounts = new int[ numRanks * numMatchHitSets ];
+		int *recvRankCount = new int[numRanks];
+		int *recvRankDispl = new int[numRanks];
+		long totalRecvCount = 0;
+
 		for(int i = 0; i < numRanks; i++) {
+			sendRankCount[i] = 0;
+			sendRankDispl[i] = 0;
 			for(int j = 0 ; j < numMatchHitSets ; j++) {
 				long pos = i * numMatchHitSets + j;
-				totalSendCount += sendCounts[pos] = rankHitGlobalIndexes[i][j].size();
+				sendCounts[pos] = rankHitGlobalIndexes[i][j].size();
+				sendRankCount[i] += sendCounts[pos];
+				totalSendCount += sendCounts[pos];
+			}
+			if(i > 0) {
+				sendRankDispl[i] = sendRankDispl[i-1] + sendRankCount[i-1];
 			}
 		}
 		recordTime("EGRI-prepareSizes", MPI_Wtime());
-		MPI_Alltoall(sendCounts, numMatchHitSets, MPI_LONG, recvCounts, numMatchHitSets, MPI_LONG, _world);
+		MPI_Alltoall(sendCounts, numMatchHitSets, MPI_INT, recvCounts, numMatchHitSets, MPI_INT, _world);
 		recordTime("EGRI-exchangeSizes", MPI_Wtime());
 		// Prepare accounting arrays for alltoallv
-		long totalRecvCount = 0;
-		int *sendRankCount = new int[numRanks];
-		int *recvRankCount = new int[numRanks];
-		int *sendRankDispl = new int[numRanks];
-		int *recvRankDispl = new int[numRanks];
 		for(int i = 0; i < numRanks; i++) {
-			sendRankCount[i] = recvRankCount[i] = 0;
-			sendRankDispl[i] = recvRankDispl[i] = 0;
+			recvRankCount[i] = 0;
+			recvRankDispl[i] = 0;
 			for(int j = 0; j < numMatchHitSets ; j++) {
 				long pos = i * numMatchHitSets + j;
-				sendRankCount[i] += sendCounts[pos];
 				recvRankCount[i] += recvCounts[pos];
 				totalRecvCount += recvCounts[pos];
 			}
 			if(i > 0) {
-				sendRankDispl[i] = sendRankDispl[i-1] + sendRankCount[i-1];
 				recvRankDispl[i] = recvRankDispl[i-1] + recvRankCount[i-1];
 			}
 		}
@@ -220,7 +227,7 @@ public:
 			for(int j = 0; j < numMatchHitSets ; j++) {
 				long pos = i * numMatchHitSets + j;
 				for(int k = 0; k < sendCounts[pos]; k++) {
-					*(sendBuf + sendRankDispl[pos] + k) = rankHitGlobalIndexes[i][j][k];
+					*(sendBuf + sendRankDispl[i] + k) = rankHitGlobalIndexes[i][j][k];
 				}
 			}
 		}
@@ -231,7 +238,7 @@ public:
 		ReadSet::ReadSetSizeType *recvBuf = new ReadSet::ReadSetSizeType[totalRecvCount];
 		recordTime("EGRI-PrepareReads", MPI_Wtime());
 		// exchange globalReadIdx to rank that owns it
-		MPI_Alltoallv(sendBuf, sendRankCount, sendRankDispl, MPI_LONG, recvBuf, recvRankCount, recvRankDispl, MPI_LONG, _world);
+		MPI_Alltoallv(sendBuf, sendRankCount, sendRankDispl, MPIReadSetSizeType, recvBuf, recvRankCount, recvRankDispl, MPIReadSetSizeType, _world);
 		recordTime("EGRI-ExchangeReads", MPI_Wtime());
 		delete [] sendBuf;
 		delete [] sendRankCount;
@@ -243,7 +250,7 @@ public:
 			for(int j = 0; j < numMatchHitSets ; j++) {
 				long pos = i * numMatchHitSets + j;
 				for(int k = 0; k < recvCounts[pos]; k++) {
-					localMatchResults[j].insert( *(recvBuf + recvRankDispl[pos] + k) );
+					localMatchResults[j].insert( *(recvBuf + recvRankDispl[i] + k) );
 				}
 			}
 		}

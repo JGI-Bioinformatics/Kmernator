@@ -130,12 +130,13 @@ namespace Kmernator {
 
 
    typedef UI32 SequenceLengthType;
+   #define MPISequenceLengthType MPI_UNSIGNED_LONG
    #define MAX_SEQUENCE_LENGTH MAX_UI32
    typedef UI8 SequenceLengthType1;
    typedef UI16 SequenceLengthType2;
 
    typedef UI64 ReadSetSizeType;
-   
+   #define MPIReadSetSizeType MPI_UNSIGNED_LONG_LONG
    #define MAX_READ_SET_SIZE   MAX_UI64
 
    typedef UI64  KmerNumberType;
