@@ -113,7 +113,7 @@ public:
 		for(kmerSize = minKmerSize ; kmerSize <= maxKmerSize; kmerSize+=kmerStep) {
 			KmerSizer::set(kmerSize);
 			LOG_DEBUG_OPTIONAL(1, true, "ContigExtender::extendContigs(): Building kmer spectrum for kmer sized: " << kmerSize << " over reads sized " << reads.getSize());
-			KS readSpectrum(KS::estimateWeakKmerBucketSize(reads, 64));
+			KS readSpectrum(KS::estimateWeakKmerBucketSize(reads));
 			readSpectrum.buildKmerSpectrum( reads, false );
 			KS contigSpectrum(128);
 

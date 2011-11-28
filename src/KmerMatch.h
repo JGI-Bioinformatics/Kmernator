@@ -27,7 +27,7 @@ public:
 	typedef DistributedKmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads, TrackingDataSingletonWithReadPosition > KS;
 
 	KmerMatch(mpi::communicator &world, const ReadSet &target, bool returnPairedMatches = true)
-	: MatcherInterface(world, target, returnPairedMatches), _spectrum(world) {
+	: MatcherInterface(world, target, returnPairedMatches), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {
 		_spectrum._buildKmerSpectrumMPI(target, true);
 	}
 	MatchResults matchLocal(std::string queryFile) {

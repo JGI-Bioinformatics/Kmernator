@@ -62,6 +62,7 @@ public:
 			isRef = true;
 
 		SequenceLengthType size = (SequenceLengthType) kmers.size();
+		assert(size < readLength);
 		Extension left = Extension('X', ExtensionTracking::getMinQuality()), right;
 		for (SequenceLengthType i = 0; i < size; i++) {
 			if (isRef) {

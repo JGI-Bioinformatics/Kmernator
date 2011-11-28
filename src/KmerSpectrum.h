@@ -217,7 +217,7 @@ public:
 		purgedSingletons = 0;
 	}
 
-	static unsigned long estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = 128) {
+	static unsigned long estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = KmerOptions::getOptions().getKmersPerBucket()) {
 		unsigned long baseCount = store.getBaseCount();
 		if (baseCount == 0 || store.getSize() == 0)
 		return 128;

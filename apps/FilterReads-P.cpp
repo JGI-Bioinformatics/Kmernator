@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
 	long numBuckets = 0;
 	if (KmerOptions::getOptions().getKmerSize() > 0) {
 
-		numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
+		numBuckets = KS::estimateWeakKmerBucketSize(reads);
 
 		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");

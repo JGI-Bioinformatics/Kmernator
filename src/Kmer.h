@@ -135,6 +135,8 @@ public:
 			LOG_WARN(1, "There was no kmer size specified!");
 			ret = false;
 		}
+		// set the defaults for classes
+		KmerSizer::set(getKmerSize());
 
 		return ret;
 	}
@@ -151,7 +153,7 @@ typedef OptionsBaseTemplate< _KmerBaseOptions > KmerBaseOptions;
 class _KmerOptions: public _KmerBaseOptions {
 public:
 	_KmerOptions() :
-		_KmerBaseOptions(21), minKmerQuality(0.10), minDepth(2),
+		_KmerBaseOptions(21), minKmerQuality(0.10), minDepth(2), kmersPerBucket(64),
 		saveKmerMmap(0), loadKmerMmap(),
 		buildPartitions(0) {
 	}
@@ -174,6 +176,10 @@ public:
 		("min-depth",
 				po::value<unsigned int>()->default_value(minDepth),
 				"minimum depth for a solid kmer")
+
+		("kmers-per-bucket",
+				po::value<unsigned int>()->default_value(kmersPerBucket),
+				"number of kmers to target per hash-bucket.  Lesser will use more memory, larger will be slower")
 
 		("save-kmer-mmap",
 				po::value<unsigned int>()->default_value(saveKmerMmap),
@@ -198,6 +204,8 @@ public:
 		// set minimum depth
 		setOpt<unsigned int>("min-depth", getMinDepth());
 
+		setOpt<unsigned int>("kmers-per-bucket", getKmersPerBucket());
+
 		setOpt<unsigned int>("save-kmer-mmap", getSaveKmerMmap());
 
 		setOpt<std::string>("load-kmer-mmap", getLoadKmerMmap());
@@ -205,8 +213,6 @@ public:
 		// set buildPartitions
 		setOpt<unsigned int>("build-partitions", getBuildPartitions());
 
-		// set the defaults for classes
-		KmerSizer::set(getKmerSize());
 		// set the minimum weight that will be used to track kmers
 		// based on the given options
 		TrackingData::setMinimumWeight( getMinKmerQuality() );
@@ -221,6 +227,9 @@ public:
 	unsigned int &getMinDepth()
 	{
 	    return minDepth;
+	}
+	unsigned int &getKmersPerBucket() {
+		return kmersPerBucket;
 	}
 	unsigned int &getSaveKmerMmap()
 	{
@@ -245,6 +254,7 @@ private:
 private:
 	double minKmerQuality;
 	unsigned int minDepth;
+	unsigned int kmersPerBucket;
 	unsigned int saveKmerMmap;
 	std::string loadKmerMmap;
 	unsigned int buildPartitions;
@@ -718,9 +728,11 @@ public:
 	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false, bool *bools = NULL) :
 		_begin(NULL), _size(0), _capacity(0) {
 		initLock();
-		if (KmerSizer::getSequenceLength() <= length) {
+		SequenceLengthType kmerSize = KmerSizer::getSequenceLength();
+		assert(kmerSize > 0);
+		if (kmerSize <= length) {
 			SequenceLengthType numKmers = length
-					- KmerSizer::getSequenceLength() + 1;
+					- kmerSize + 1;
 			resize(numKmers, MAX_INDEX, false);
 			build(twoBit, length, leastComplement, bools);
 		} else {
@@ -781,6 +793,7 @@ public:
 		IndexType *size = (IndexType *) src;
 	    resize(*size);
 		void *ptr = ++size;
+		assert(KmerSizer::getSequenceLength() > 0);
 		if (_size > 0) {
 			long kmerSize  = _size * KmerSizer::getByteSize();
 			_copyRange(ptr, (ValueType *) (((char*)ptr)+kmerSize), 0, 0, _size, false);

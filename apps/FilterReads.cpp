@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 		spectrum.restoreMmap(KmerOptions::getOptions().getLoadKmerMmap());
 	} else if (KmerOptions::getOptions().getKmerSize() > 0) {
 
-	  long numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
+	  long numBuckets = KS::estimateWeakKmerBucketSize(reads);
 	  LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
 
 	  spectrum = KS(numBuckets);
