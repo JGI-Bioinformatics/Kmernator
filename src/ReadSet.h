@@ -289,30 +289,37 @@ public:
 		}
 	}
 
+	inline bool isGlobal() const {
+		return !_globalOffsets.empty();
+	}
 	inline ReadSetSizeType getGlobalOffset() const {
 		return getGlobalOffset(_myGlobalRank);
 	}
 	inline ReadSetSizeType getGlobalOffset(int rank) const {
-		if (_globalOffsets.size() == 0)
-			return 0;
-		else
+		if (isGlobal())
 			return _globalOffsets[rank];
+		else
+			return 0;
 	}
 
 	inline ReadSetSizeType getGlobalReadIdx(ReadSetSizeType localReadIdx) const {
 		return getGlobalReadIdx(_myGlobalRank, localReadIdx);
 	}
 	inline ReadSetSizeType getGlobalReadIdx(int rank, ReadSetSizeType localReadIdx) const {
-		if (_globalOffsets.size() == 0)
-			return localReadIdx;
-		else
+		if (isGlobal())
 			return _globalOffsets[rank] + localReadIdx;
+		else
+			return localReadIdx;
 	}
 
 	inline ReadSetSizeType getLocalReadIdx(ReadSetSizeType globalReadIdx) const {
 		return getLocalReadIdx(_myGlobalRank, globalReadIdx);
 	}
 	inline ReadSetSizeType getLocalReadIdx(int rank, ReadSetSizeType globalReadIdx) const {
+		if (!isGlobal()) {
+			assert(rank == 0);
+			return globalReadIdx;
+		}
 		assert(isLocalRead(rank, globalReadIdx));
 		return globalReadIdx - _globalOffsets[rank];
 	}
@@ -336,6 +343,8 @@ public:
 		return isLocalRead(_myGlobalRank, globalReadIdx);
 	}
 	bool isLocalRead(int rank, ReadSetSizeType globalReadIdx) const {
+		if (!isGlobal())
+			return true;
 		if (globalReadIdx >= _globalSize) {
 			LOG_THROW("isLocalRead(" << rank <<", " << globalReadIdx << ") exceeds globalSize: " << _globalSize);
 		} else if (rank + 1 < (int) _globalOffsets.size()) {
@@ -352,7 +361,7 @@ public:
 	}
 
 	inline ReadSetSizeType getGlobalSize() const {
-		return _globalSize;
+		return isGlobal() ? _globalSize : getSize();
 	}
 
 	inline bool isValidRead(ReadSetSizeType index) const {
