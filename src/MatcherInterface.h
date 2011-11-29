@@ -42,21 +42,31 @@ public:
 	}
 
 	// returns a ReadSetVector of global reads (copied from each local instance) matching the query
-	virtual MatchReadResults match(const ReadSet &query, std::string queryFile = "") {
+	virtual MatchReadResults match(const ReadSet &query, std::string queryFile) {
 		recordTime("startMatch", MPI_Wtime());
 		MatchResults matchResults;
-		if (!queryFile.empty())
+		if (query.getGlobalSize() != query.getSize()){
 			matchResults = this->matchLocal(queryFile);
-		else
+		} else {
 			matchResults = this->matchLocal(query);
+		}
 		MatchReadResults mrr = exchangeGlobalReads(query, getLocalReads(matchResults, query));
+		recordTime("returnMatch", MPI_Wtime());
+		return mrr;
+	}
+	virtual MatchReadResults match(const ReadSet &query) {
+		if (query.getSize() != query.getGlobalSize())
+			LOG_THROW("Can not run MatcherInterface::match(ReadSet&) on global ReadSet (yet)");
+		recordTime("startMatch", MPI_Wtime());
+		MatchResults matchResults = this->matchLocal(query);
+		MatchReadResults mrr = getLocalReads(matchResults, query);
 		recordTime("returnMatch", MPI_Wtime());
 		return mrr;
 	}
 
 	// returns a ReadSetVector of reads that are local (targets in globalReadIdx space)
 	MatchReadResults getLocalReads(MatchResults &matchResults, const ReadSet &query) {
-		assert(query.getSize() == matchResults.size());
+		assert(query.getGlobalSize() == matchResults.size());
 		recordTime("getLocalReads", MPI_Wtime());
 		if (!areAllReadsLocal(matchResults)) {
 			matchResults = exchangeGlobalReadIdxs(matchResults);

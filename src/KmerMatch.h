@@ -49,7 +49,8 @@ public:
 					TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
 					for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
 						// TODO add positional logic to include or not
-						matchResults[i].insert( getTarget().getGlobalReadIdx( it->readId ) );
+						ReadSet::ReadSetSizeType globalReadIdx = it->readId;
+						matchResults[i].insert( globalReadIdx );
 					}
 				}
 			}
