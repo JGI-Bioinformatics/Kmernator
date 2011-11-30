@@ -211,6 +211,8 @@ public:
 
 	long getStoreSize() const {
 		// just store numReads, baseCount, maxSeqLength, readSizeCounts & readData
+		if (getSize() == 0)
+			return sizeof(ReadSetSizeType);
 		long size = sizeof(ReadSetSizeType)*2 + sizeof(SequenceLengthType) * (1+getSize());
 		for(ReadSetSizeType i = 0; i < getSize(); i++)
 			size += getRead(i).getStoreSize();
@@ -218,6 +220,10 @@ public:
 	}
 	long store(void *_dst) const {
 		ReadSetSizeType *readSize = (ReadSetSizeType*) _dst;
+		if (getSize() == 0) {
+			*readSize = 0;
+			return sizeof(ReadSetSizeType);
+		}
 		*(readSize++) = getSize();
 		*(readSize++) = _baseCount;
 		SequenceLengthType *dstSizes = (SequenceLengthType*) readSize;
@@ -235,6 +241,9 @@ public:
 
 		ReadSetSizeType size, *rssp = (ReadSetSizeType*) _src;
 		size = *(rssp++);
+		if (size == 0) {
+			return rssp;
+		}
 		_baseCount = *(rssp++);
 		_reads.reserve(size);
 
@@ -336,7 +345,7 @@ public:
 			}
 			rankReadIdx = globalReadIdx - _globalOffsets[rank];
 		}
-		LOG_DEBUG(3, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << ", " << rank << ", " << rankReadIdx << "): " << _globalOffsets[rank]);
+		LOG_DEBUG(5, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << ", " << rank << ", " << rankReadIdx << "): " << _globalOffsets[rank]);
 	}
 
 	bool isLocalRead(ReadSetSizeType globalReadIdx) const {
