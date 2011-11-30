@@ -68,9 +68,7 @@ public:
 	MatchReadResults getLocalReads(MatchResults &matchResults, const ReadSet &query) {
 		assert(query.getGlobalSize() == matchResults.size());
 		recordTime("getLocalReads", MPI_Wtime());
-		if (!areAllReadsLocal(matchResults)) {
-			matchResults = exchangeGlobalReadIdxs(matchResults);
-		}
+		matchResults = exchangeGlobalReadIdxs(matchResults);
 
 		int myRank = _world.rank();
 		MatchReadResults matchReadResults(matchResults.size(), ReadSet());
@@ -87,8 +85,11 @@ public:
 	// a globalReadSetVector to the node controlling the global reads over the query
 	// reads will be copied from the localReadSet to the destination node
 	MatchReadResults exchangeGlobalReads(const ReadSet &query, const MatchReadResults &localReadSetVector) {
-		assert(query.getSize() == localReadSetVector.size());
+		assert(query.getGlobalSize() == localReadSetVector.size());
 		MatchReadResults globalReadSetVector;
+		assert(globalReadSetVector.size() == 0);
+		globalReadSetVector.resize(query.getGlobalSize(), ReadSet());
+		int myRank = _world.rank();
 
 		int sendBytes[_world.size()], recvBytes[_world.size()],
 				sendDisp[_world.size()], recvDisp[_world.size()];
@@ -103,14 +104,20 @@ public:
 			int rank;
 			ReadSet::ReadSetSizeType rankReadIdx;
 			query.getRankReadForGlobalReadIdx(globalContigIdx, rank, rankReadIdx);
+			if (rank == myRank) {
+				// do not encode and send reads to self
+				assert(query.isLocalRead(globalContigIdx));
+				globalReadSetVector[globalContigIdx].append(localReadSetVector[globalContigIdx]);
+				continue;
+			}
 			int sendByteCount = localReadSetVector[globalContigIdx].getStoreSize();
 			sendBytes[rank] += sendByteCount;
-			LOG_DEBUG_OPTIONAL(3, true, "GlobalContig: " << globalContigIdx << " sending " << localReadSetVector[ globalContigIdx ].getSize() << " reads / "<< sendByteCount << " bytes to " << rank << " total: " << sendBytes[rank]);
+			LOG_DEBUG_OPTIONAL(4, true, "GlobalContig: " << globalContigIdx << " sending " << localReadSetVector[ globalContigIdx ].getSize() << " reads / "<< sendByteCount << " bytes to " << rank << " total: " << sendBytes[rank]);
 		}
 		for (int rank = 0; rank < _world.size(); rank++) {
 			sendDisp[rank] = totalSend;
 			totalSend += sendBytes[rank];
-			LOG_DEBUG_OPTIONAL(3, true, "Sending to rank " << rank << " sendBytes " << sendBytes[rank] << " sendDisp[] " << sendDisp[rank] << ". 0 == recvBytes[] "<< recvBytes[rank]);
+			LOG_DEBUG_OPTIONAL(2, true, "Sending to rank " << rank << " sendBytes " << sendBytes[rank] << " sendDisp[] " << sendDisp[rank] << ". 0 == recvBytes[] "<< recvBytes[rank]);
 		}
 
 		recordTime("EGR-prepareSizes",MPI_Wtime());;
@@ -124,7 +131,7 @@ public:
 			totalRecv += recvBytes[rank];
 			LOG_DEBUG_OPTIONAL(3, true, "to/from rank " << rank << ": sendDisp[] " << sendDisp[rank] << " sendBytes[] " << sendBytes[rank] << " recvDisp[] " << recvDisp[rank] << " recvBytes[] " << recvBytes[rank] );
 		}
-		LOG_DEBUG_OPTIONAL(3, true, "Sending " << totalSend << " Receiving " << totalRecv);
+		LOG_DEBUG_OPTIONAL(2, true, "Sending " << totalSend << " Receiving " << totalRecv);
 
 		char *sendBuf = (char*) (malloc(totalSend == 0 ? 8 : totalSend));
 		if (sendBuf == NULL)
@@ -132,8 +139,13 @@ public:
 		char *tmp = sendBuf;
 		for (ReadSet::ReadSetSizeType contigGlobalIndex = 0; contigGlobalIndex
 				< query.getGlobalSize(); contigGlobalIndex++) {
-			tmp += localReadSetVector[contigGlobalIndex].store(tmp);
+			if (query.isLocalRead(contigGlobalIndex)) {
+				// do not encode and send reads to self
+			} else {
+				tmp += localReadSetVector[contigGlobalIndex].store(tmp);
+			}
 		}
+		assert(tmp == sendBuf + totalSend);
 
 
 		char *recvBuf = (char*) (malloc(totalRecv == 0 ? 8 : totalRecv));
@@ -147,19 +159,33 @@ public:
 
 		free(sendBuf);
 		// set localReadSetVector to hold read sets for local set of query
-		globalReadSetVector.resize(query.getSize(), ReadSet());
 		for (int rank = 0; rank < _world.size(); rank++) {
-			ReadSet::ReadSetSizeType contigIdx = 0;
+			LOG_DEBUG_OPTIONAL(3, true, "restoring for rank " << rank << " recvDisp[rank] " << recvDisp[rank] << " recvBytes[rank] " << recvBytes[rank] << " totalRecv " << totalRecv);
 			tmp = recvBuf + recvDisp[rank];
+			if (rank == myRank) {
+				// no reads will be sent to self
+				assert(recvBytes[rank] == 0);
+				continue;
+			}
+			ReadSet::ReadSetSizeType contigIdx = query.getGlobalOffset();
 			while (tmp != recvBuf + recvDisp[rank] + recvBytes[rank]) {
+				assert (query.isLocalRead(contigIdx));
+				assert(contigIdx < query.getGlobalSize());
+				assert(tmp < (recvBuf + recvDisp[rank] + recvBytes[rank]));
+				assert(tmp < (recvBuf + totalRecv));
+				assert(globalReadSetVector.size() == query.getGlobalSize());
 				ReadSet rs;
 				tmp = (char*) rs.restore(tmp);
+				LOG_DEBUG_OPTIONAL(4, true, "Restored from rank " << rank << " ReadSet " << rs.getSize() << " totaling " << globalReadSetVector[contigIdx].getSize() << " " << globalReadSetVector.size());
 				globalReadSetVector[contigIdx].append(rs);
-				assert (query.isLocalRead(rank, contigIdx) || globalReadSetVector[contigIdx].getSize() == 0);
-				LOG_DEBUG_OPTIONAL(3, true, "Restored from rank " << rank << " ReadSet " << rs.getSize() << " totaling " << globalReadSetVector[contigIdx].getSize());
+				assert(globalReadSetVector.size() == query.getGlobalSize());
+				LOG_DEBUG_OPTIONAL(4, true, "restore " << contigIdx << " is local: " << query.isLocalRead(rank,contigIdx) << " sized " << globalReadSetVector[contigIdx].getSize());
 				contigIdx++;
 			}
+			assert(tmp == recvBuf + recvDisp[rank] + recvBytes[rank]);
+			LOG_DEBUG_OPTIONAL(3, true, "finished restoring from rank " << rank);
 		}
+		assert(tmp == (recvBuf + totalRecv));
 		free(recvBuf);
 
 		return globalReadSetVector;

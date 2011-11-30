@@ -265,7 +265,7 @@ int main(int argc, char *argv[]) {
 
 	timing1 = timing2;
 	timing2 = MPI_Wtime();
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Prepared vmatch indexes in " << (timing2-timing1) << " seconds");
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Prepared Matcher indexes in " << (timing2-timing1) << " seconds");
 
 	ReadSet finalContigs;
 	ReadSet contigs;
@@ -298,7 +298,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		matcher->recordTime("extendContigs", MPI_Wtime());
-		LOG_VERBOSE(1, (extendLog));
+		LOG_VERBOSE(2, (extendLog));
 
 		finishLongContigs(DistributedNucleatingAssemblerOptions::getOptions().getMaxContigLength(), changedContigs, finalContigs);
 
