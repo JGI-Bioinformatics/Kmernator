@@ -781,6 +781,8 @@ public:
 
 			instances->push_back(rpw);
 			weightedCount += weight < 0.0 ? -weight : weight;
+			assert(getCount() >= directionBias);
+			assert(getCount() >= getWeightedCount());
 		}
 		TrackingData::setGlobals(getCount(), getWeightedCount());
 
@@ -829,41 +831,33 @@ public:
 	}
 	TrackingDataWithAllReads &operator=(const TrackingDataWithAllReads &copy) {
 		this->reset();
-		instances = copy.instances;
-		directionBias = copy.directionBias;
-		weightedCount = copy.weightedCount;
+		return add(copy);
 		return *this;
 	}
-	TrackingDataWithAllReads &operator=(const TrackingDataSingleton &other) {
+	template<typename U>
+	TrackingDataWithAllReads &operator=(const U &other) {
 		this->reset();
 		if (other.getCount() > 0) {
-			directionBias = other.getDirectionBias();
-			instances.reset( new ReadPositionWeightVector( other.getEachInstance() ) );
-			weightedCount = _getWeightedCount();
-		}
-		return *this;
-	}
-	TrackingDataWithAllReads &operator=(const TrackingDataSingletonWithReadPosition &other) {
-		this->reset();
-		ReadPositionWeight rpw(other.getReadId(), other.getPosition(), other.getWeightedCount());
-		instances->push_back(rpw);
-		if (other.getCount() > 0) {
-			directionBias = other.getDirectionBias();
-			weightedCount = _getWeightedCount();
+			add(other);
 		}
 		return *this;
 	}
 	TrackingDataWithAllReads &add(const TrackingDataWithAllReads &other) {
-		instances->insert(instances->end(), other.instances->begin(), other.instances->end());
-		directionBias += other.getDirectionBias();
-		weightedCount += other.getWeightedCount();
+		if (other.getCount() > 0) {
+			instances->insert(instances->end(), other.instances->begin(), other.instances->end());
+			directionBias += other.getDirectionBias();
+			weightedCount += other.getWeightedCount();
+		}
 		return *this;
 	}
 
-	TrackingDataWithAllReads &add(const TrackingDataSingleton &other) {
+	template<typename U>
+	TrackingDataWithAllReads &add(const U &other) {
 		if (other.getCount() > 0) {
-	       instances->push_back(ReadPositionWeight((ReadIdType) -1, 0, other.getWeightedCount()));
-	       weightedCount += other.getWeightedCount();
+			ReadPositionWeightVector rpwv = other.getEachInstance();
+	        instances->insert(instances->end(), rpwv.begin(), rpwv.end());
+	        directionBias += other.getDirectionBias();
+	        weightedCount += other.getWeightedCount();
 		}
 		return *this;
 	}
