@@ -41,7 +41,7 @@ public:
 		throw;
 	}
 
-	// returns a ReadSetVector of global reads (copied from each local instance) matching the query
+	// returns a ReadSetVector over the local query reads matching the global query reads
 	virtual MatchReadResults match(const ReadSet &query, std::string queryFile) {
 		recordTime("startMatch", MPI_Wtime());
 		MatchResults matchResults;
@@ -50,7 +50,7 @@ public:
 		} else {
 			matchResults = this->matchLocal(query);
 		}
-		MatchReadResults mrr = exchangeGlobalReads(query, getLocalReads(matchResults, query));
+		MatchReadResults mrr = exchangeGlobalReads(query, getLocalReads(matchResults));
 		recordTime("returnMatch", MPI_Wtime());
 		return mrr;
 	}
@@ -59,14 +59,13 @@ public:
 			LOG_THROW("Can not run MatcherInterface::match(ReadSet&) on global ReadSet (yet)");
 		recordTime("startMatch", MPI_Wtime());
 		MatchResults matchResults = this->matchLocal(query);
-		MatchReadResults mrr = getLocalReads(matchResults, query);
+		MatchReadResults mrr = exchangeGlobalReads(query, getLocalReads(matchResults));
 		recordTime("returnMatch", MPI_Wtime());
 		return mrr;
 	}
 
 	// returns a ReadSetVector of reads that are local (targets in globalReadIdx space)
-	MatchReadResults getLocalReads(MatchResults &matchResults, const ReadSet &query) {
-		assert(query.getGlobalSize() == matchResults.size());
+	MatchReadResults getLocalReads(MatchResults &matchResults) {
 		recordTime("getLocalReads", MPI_Wtime());
 		matchResults = exchangeGlobalReadIdxs(matchResults);
 
@@ -81,14 +80,14 @@ public:
 		recordTime("returnLocalReads", MPI_Wtime());
 		return matchReadResults;
 	}
-	// transfers the proper matching localRedSetVector to
+	// transfers the proper matching localReadSetVector to
 	// a globalReadSetVector to the node controlling the global reads over the query
 	// reads will be copied from the localReadSet to the destination node
+	// the returning matches are for the local reads in the query, global reads from the Target
 	MatchReadResults exchangeGlobalReads(const ReadSet &query, const MatchReadResults &localReadSetVector) {
 		assert(query.getGlobalSize() == localReadSetVector.size());
 		MatchReadResults globalReadSetVector;
-		assert(globalReadSetVector.size() == 0);
-		globalReadSetVector.resize(query.getGlobalSize(), ReadSet());
+		globalReadSetVector.resize(query.getSize(), ReadSet());
 		int myRank = _world.rank();
 
 		int sendBytes[_world.size()], recvBytes[_world.size()],
@@ -107,7 +106,8 @@ public:
 			if (rank == myRank) {
 				// do not encode and send reads to self
 				assert(query.isLocalRead(globalContigIdx));
-				globalReadSetVector[globalContigIdx].append(localReadSetVector[globalContigIdx]);
+				ReadSet::ReadSetSizeType localIdx = query.getLocalReadIdx(globalContigIdx);
+				globalReadSetVector[localIdx].append(localReadSetVector[globalContigIdx]);
 				continue;
 			}
 			int sendByteCount = localReadSetVector[globalContigIdx].getStoreSize();
@@ -167,20 +167,20 @@ public:
 				assert(recvBytes[rank] == 0);
 				continue;
 			}
-			ReadSet::ReadSetSizeType contigIdx = query.getGlobalOffset();
+			ReadSet::ReadSetSizeType globalContigIdx = query.getGlobalOffset();
 			while (tmp != recvBuf + recvDisp[rank] + recvBytes[rank]) {
-				assert (query.isLocalRead(contigIdx));
-				assert(contigIdx < query.getGlobalSize());
+				assert(query.isLocalRead(globalContigIdx));
+				assert(globalContigIdx < query.getGlobalSize());
 				assert(tmp < (recvBuf + recvDisp[rank] + recvBytes[rank]));
 				assert(tmp < (recvBuf + totalRecv));
-				assert(globalReadSetVector.size() == query.getGlobalSize());
+				assert(globalReadSetVector.size() == query.getSize());
 				ReadSet rs;
 				tmp = (char*) rs.restore(tmp);
-				LOG_DEBUG_OPTIONAL(4, true, "Restored from rank " << rank << " ReadSet " << rs.getSize() << " totaling " << globalReadSetVector[contigIdx].getSize() << " " << globalReadSetVector.size());
-				globalReadSetVector[contigIdx].append(rs);
-				assert(globalReadSetVector.size() == query.getGlobalSize());
-				LOG_DEBUG_OPTIONAL(4, true, "restore " << contigIdx << " is local: " << query.isLocalRead(rank,contigIdx) << " sized " << globalReadSetVector[contigIdx].getSize());
-				contigIdx++;
+				ReadSet::ReadSetSizeType localContigIdx = query.getLocalReadIdx(globalContigIdx);
+				globalReadSetVector[localContigIdx].append(rs);
+				LOG_DEBUG_OPTIONAL(4, true, "Restored from rank " << rank << " ReadSet " << rs.getSize() << " totaling " << globalReadSetVector[localContigIdx].getSize() << " " << globalReadSetVector.size() << " restore " << globalContigIdx << " is local: " << query.isLocalRead(rank,globalContigIdx));
+				LOG_DEBUG_OPTIONAL(3, rs.getSize() > 0, query.getRead( localContigIdx ).getName() << " (" << globalContigIdx << " / " << localContigIdx << ") has " << globalReadSetVector[localContigIdx].getSize() << " reads in the pool");
+				globalContigIdx++;
 			}
 			assert(tmp == recvBuf + recvDisp[rank] + recvBytes[rank]);
 			LOG_DEBUG_OPTIONAL(3, true, "finished restoring from rank " << rank);

@@ -81,9 +81,9 @@ public:
 		}
 
 		if (bestRead.getLength() > targetContig.getLength()) {
-			LOG_DEBUG_OPTIONAL(1, true, "Cap3 new contig: " << bestRead.getName() << " from " << targetContig.getLength() << " to " << bestRead.getLength());
+			LOG_DEBUG_OPTIONAL(2, true, "Cap3 new contig: " << bestRead.getName() << " from " << targetContig.getLength() << " to " << bestRead.getLength());
 		} else {
-			LOG_DEBUG_OPTIONAL(1, true, "Cap3 failed to extend: " << bestRead.getName());
+			LOG_DEBUG_OPTIONAL(2, true, "Cap3 failed to extend: " << bestRead.getName());
 		}
 		KmerSizer::set(oldSize);
 		return bestRead;
@@ -109,7 +109,7 @@ public:
 		}
 		std::string log = outputName + ".log";
 		std::string cmd = Cap3Options::getOptions().getCap3Path() + " " + outputName + " > " + log + " 2>&1";
-		LOG_DEBUG(3, "Executing: " << cmd);
+		LOG_DEBUG_OPTIONAL(1, true, "Executing: " << cmd);
 		status = system(cmd.c_str());
 		if (status == 0) {
 			std::string newContigFile = outputName + ".cap.contigs";
@@ -122,7 +122,7 @@ public:
 				return bestRead;
 			}
 		}
-		LOG_WARN(1, "Could not assemble " << oldContig.getName() << ": " << FileUtils::dumpFile(log));
+		LOG_WARN(1, "Could not assemble " << oldContig.getName() << " with pool of " << _inputReads.getSize() << " reads: " << FileUtils::dumpFile(log));
 
 		clean(outputDir);
 		return Read();

@@ -396,7 +396,7 @@ public:
 
 	// by default no pairs are identified
 	ReadSetSizeType identifyPairs();
-	inline bool hasPairs() {
+	inline bool hasPairs() const {
 		return getPairSize() != 0 && getPairSize() < getSize();
 	}
 	static bool isPair(const Read &readA, const Read &readB);
@@ -409,6 +409,11 @@ public:
 	}
 	inline const Pair &getPair(ReadSetSizeType pairIndex) const {
 		return _pairs[pairIndex];
+	}
+	ReadSetSizeType getGlobalPairIdx(ReadSetSizeType globalIdx) const {
+		// FIXME hack!!!
+		assert(hasPairs());
+		return (globalIdx & 0x1) == 0 ? globalIdx + 1 : globalIdx - 1;
 	}
 
 	const ReadIdxVector getReadIdxVector() const;

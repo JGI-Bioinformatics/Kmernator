@@ -51,7 +51,7 @@ typedef KmerSpectrum<DataType, DataType> KS;
 typedef KmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads > KS2;
 
 
-class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions, public _KmerMatchOptions, public _MPIOptions{
+class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions, public _KmerMatchOptions, public _MPIOptions {
 public:
 	static int getMaxIterations() {
 		return getVarMap()["max-iterations"].as<int> ();
@@ -127,6 +127,7 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 	std::string cap3Path = DistributedNucleatingAssemblerOptions::getOptions().getCap3Path();
 	int maxReads = DistributedNucleatingAssemblerOptions::getOptions().getCap3MaxReads();
 
+	int poolsWithoutMinimumCoverage = 0;
 	#pragma omp parallel for
 	for (ReadSet::ReadSetSizeType i = 0; i < contigs.getSize(); i++) {
 		const Read &oldRead = contigs.getRead(i);
@@ -141,6 +142,8 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 			ReadSet sampledSet = contigReadSet[i].randomlySample(maxReads);
 			newRead = Cap3::extendContig(oldRead, sampledSet);
 			newLen = newRead.getLength();
+		} else {
+			poolsWithoutMinimumCoverage++;
 		}
 		long deltaLen = (long)newLen - (long)oldLen;
 		if (deltaLen > 0) {
@@ -158,6 +161,7 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 		}
 	}
 
+	LOG_VERBOSE_OPTIONAL(2, true, "Extended " << contigs.getSize() - poolsWithoutMinimumCoverage << " contigs out of " << contigs.getSize());
 
 	return extendLog.str();
 }
@@ -242,8 +246,9 @@ int main(int argc, char *argv[]) {
 	ReadSet reads;
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files" );
 	reads.appendAllFiles(inputFiles, world.rank(), world.size());
-
+	reads.identifyPairs();
 	setGlobalReadSetOffsets(world, reads);
+
 	timing2 = MPI_Wtime();
 
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 1, "loaded " << reads.getGlobalSize() << " Reads in " << (timing2-timing1) << " seconds" );
@@ -285,6 +290,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		MatcherInterface::MatchReadResults contigReadSet = matcher->match(contigs, contigFile);
+		assert(contigs.getSize() == contigReadSet.size());
 
 		ReadSet changedContigs;
 		std::string extendLog;
@@ -298,7 +304,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		matcher->recordTime("extendContigs", MPI_Wtime());
-		LOG_VERBOSE(2, (extendLog));
+		LOG_DEBUG(1, (extendLog));
 
 		finishLongContigs(DistributedNucleatingAssemblerOptions::getOptions().getMaxContigLength(), changedContigs, finalContigs);
 
