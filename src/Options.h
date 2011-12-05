@@ -316,7 +316,7 @@ public:
 		("log-file", po::value<std::string>()->default_value(logFile),
 				"If set all INFO and DEBUG messages will be logged here (default stderr)")
 
-		("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to deposit mmap file")
+		("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to utilize")
 
 		("min-read-length",
 				po::value<unsigned int>()->default_value(minReadLength),
