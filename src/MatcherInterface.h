@@ -110,11 +110,12 @@ public:
 		long iteration = 0;
 		while (! isDone ) {
 			iteration++;
+			long localReadSets = 0;
 			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "exchangeGlobalReads: " << iteration << ". Maximum transmit buffer is: " << maxRankTransmitSize1 << ", " << maxRankTransmitSize << " / " << maxBuffer);
 			isDone = true;
 			int totalSend = 0, totalRecv = 0;
 			for (int rank = 0; rank < _world.size(); rank++) {
-				sendBytes[rank] = 0;
+				sendBytes[rank] = 1; // artifically pad by one byte to ensure negative 'isDone' flag can be sent
 				recvBytes[rank] = 0;
 			}
 
@@ -127,6 +128,7 @@ public:
 					assert(query.isLocalRead(globalContigIdx));
 					ReadSet::ReadSetSizeType localIdx = query.getLocalReadIdx(globalContigIdx);
 					globalReadSetVector[localIdx].append(localReadSetVector[globalContigIdx]);
+					localReadSets++;
 					continue;
 				}
 				int sendByteCount = localReadSetVector[globalContigIdx].getStoreSize();
@@ -166,7 +168,7 @@ public:
 			for (int rank = 0; rank < _world.size(); rank++) {
 				sendDisp[rank] = totalSend;
 				assert(sendDisp[rank] >= 0); // i.e. no overflow
-				totalSend += sendBytes[rank];
+				totalSend += sendBytes[rank] - 1; // do not count the artificial padding
 				if (! isDone ) {
 					// signal others this rank is not done
 					sendBytes[rank] = 0 - sendBytes[rank];
@@ -174,7 +176,7 @@ public:
 				assert(totalSend >= 0); // i.e. no overflow
 				LOG_DEBUG_OPTIONAL(2, true, "Sending to rank " << rank << " sendBytes " << sendBytes[rank] << " sendDisp[] " << sendDisp[rank] << ". 0 == recvBytes[] "<< recvBytes[rank]);
 			}
-			LOG_DEBUG_OPTIONAL(1, true, "iteration " << iteration << "Sending " << totalSend);
+			LOG_DEBUG_OPTIONAL(1, true, "iteration " << iteration << " Sending bytes: " << totalSend << " readSets: " << sendingGlobalContigIdx.size() + localReadSets << (isDone ? " isDone" : ""));
 
 			MPI_Alltoall(sendBytes, 1, MPI_INT, recvBytes, 1, MPI_INT, _world);
 
@@ -184,6 +186,7 @@ public:
 					// restore proper send bytes as they will be used for transmit sizes
 					sendBytes[rank] = 0 - sendBytes[rank];
 				}
+				sendBytes[rank] -= 1;  // remove the artifically padded byte
 
 				recvDisp[rank] = totalRecv;
 				if (recvBytes[rank] < 0) {
@@ -191,6 +194,8 @@ public:
 					isDone = false;
 					recvBytes[rank] = 0 - recvBytes[rank];
 				}
+				recvBytes[rank] -= 1; // remove the artifically padded byte
+
 				totalRecv += recvBytes[rank];
 				assert(totalRecv >= 0); // i.e. no overflow
 				LOG_DEBUG_OPTIONAL(3, true, "to/from rank " << rank << ": sendDisp[] " << sendDisp[rank] << " sendBytes[] " << sendBytes[rank] << " recvDisp[] " << recvDisp[rank] << " recvBytes[] " << recvBytes[rank] );
@@ -264,6 +269,7 @@ public:
 			recordTime("EGR" + boost::lexical_cast<std::string>(iteration), MPI_Wtime());
 		}
 
+		LOG_DEBUG_OPTIONAL(1, true, "exchangeGlobalReads(): Done " << iteration);
 		localReadSetVector.clear();
 		return globalReadSetVector;
 	}
