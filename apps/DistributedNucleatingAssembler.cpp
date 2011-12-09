@@ -51,7 +51,7 @@ typedef KmerSpectrum<DataType, DataType> KS;
 typedef KmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads > KS2;
 
 
-class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions, public _KmerMatchOptions, public _MPIOptions {
+class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions, public _MatcherInterfaceOptions, public _KmerMatchOptions, public _MPIOptions {
 public:
 	static int getMaxIterations() {
 		return getVarMap()["max-iterations"].as<int> ();
@@ -62,6 +62,7 @@ public:
 	void _resetDefaults() {
 		_Cap3Options::_resetDefaults();
 		_ContigExtenderBaseOptions::_resetDefaults();
+		_MatcherInterfaceOptions::_resetDefaults();
 		_VmatchOptions::_resetDefaults();
 		_KmerMatchOptions::_resetDefaults();
 		_MPIOptions::_resetDefaults();
@@ -90,6 +91,7 @@ public:
 		;
 		desc.add(opts);
 
+		_MatcherInterfaceOptions::_setOptions(desc,p);
 		_KmerMatchOptions::_setOptions(desc,p);
 		_VmatchOptions::_setOptions(desc,p);
 		_ContigExtenderBaseOptions::_setOptions(desc,p);
@@ -102,6 +104,7 @@ public:
 
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= _MatcherInterfaceOptions::_parseOptions(vm);
 		ret &= _KmerMatchOptions::_parseOptions(vm);
 		ret &= _VmatchOptions::_parseOptions(vm);
 		ret &= _ContigExtenderBaseOptions::_parseOptions(vm);
@@ -125,7 +128,6 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 		ReadSet & finalContigs, ReadSet::ReadSetSizeType minimumCoverage) {
 	std::stringstream extendLog;
 	std::string cap3Path = DistributedNucleatingAssemblerOptions::getOptions().getCap3Path();
-	int maxReads = DistributedNucleatingAssemblerOptions::getOptions().getCap3MaxReads();
 
 	int poolsWithoutMinimumCoverage = 0;
 	#pragma omp parallel for
@@ -138,9 +140,7 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 
 		if (poolSize > minimumCoverage) {
 			LOG_VERBOSE_OPTIONAL(2, true, "Extending " << oldRead.getName() << " with " << poolSize << " pool of reads");
-
-			ReadSet sampledSet = contigReadSet[i].randomlySample(maxReads);
-			newRead = Cap3::extendContig(oldRead, sampledSet);
+			newRead = Cap3::extendContig(oldRead, contigReadSet[i]);
 			newLen = newRead.getLength();
 		} else {
 			poolsWithoutMinimumCoverage++;

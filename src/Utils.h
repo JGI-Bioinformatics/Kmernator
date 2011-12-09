@@ -53,6 +53,7 @@
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
+#include <boost/unordered_set.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/shared_ptr.hpp>
 
@@ -997,5 +998,41 @@ public:
 private:
 	LabeledTimes _times;
 };
+
+template<typename T>
+class Random {
+public:
+	typedef typename boost::unordered_set<T> Set;
+	typedef typename Set::iterator SetIterator;
+	static Set sample(T existingSize, T sampleSize) {
+		Set ids;
+		if (existingSize > (3 * sampleSize / 2)) {
+			// select ids to include
+			while (ids.size() < sampleSize) {
+				T includeCandidate = LongRand::rand() % existingSize;
+				ids.insert(includeCandidate);
+			}
+		} else if (existingSize > sampleSize){
+			// select ids to exclude
+			T excludeCount = existingSize - sampleSize;
+			Set exclude;
+			while (exclude.size() < excludeCount) {
+				T excludeCandidate = LongRand::rand() % existingSize;
+				exclude.insert(excludeCandidate);
+			}
+			for(T i = 0; i < existingSize; i++) {
+				if (exclude.find(i) == exclude.end())
+					ids.insert(i);
+			}
+		} else {
+			// really no need to sample!
+			for(T i = 0; i < existingSize; i++)
+				ids.insert(i);
+		}
+		assert( ids.size() == std::min(existingSize, sampleSize));
+		return ids;
+	}
+};
+
 #endif
 

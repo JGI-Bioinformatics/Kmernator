@@ -724,33 +724,14 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 
 ReadSet ReadSet::randomlySample(ReadSet::ReadSetSizeType maxReads) const {
 	ReadSetSizeType size = getSize();
-	std::set< ReadSetSizeType > readIds;
-	ReadSet sampledReadSet;
-	if (size > (3 * maxReads / 2)) {
-		// select reads to include
-		while (readIds.size() < maxReads) {
-			ReadSetSizeType includeCandidate = LongRand::rand() % size;
-			readIds.insert(includeCandidate);
-		}
+	if (size <= maxReads)
+		return *this;
 
-		for(std::set< ReadSetSizeType >::iterator it = readIds.begin() ; it != readIds.end(); it++) {
-			sampledReadSet.append( getRead( *it ));
-		}
-		LOG_DEBUG(5, "ReadSet::randomlySample(): included " << readIds.size() << " candidates");
-	} else if (size > maxReads) {
-		// select reads to exclude
-		ReadSetSizeType excludeCount = size - maxReads;
-		while (readIds.size() < excludeCount) {
-			ReadSetSizeType excludeCandidate = LongRand::rand() % size;
-			readIds.insert(excludeCandidate);
-		}
-		for(ReadSetSizeType i = 0; i < size; i++) {
-			if (readIds.find(i) == readIds.end())
-				sampledReadSet.append( getRead( i ));
-		}
-		LOG_DEBUG(5, "ReadSet::randomlySample(): excluded " << readIds.size() << " candidates");
-	} else {
-		sampledReadSet = *this;
+	Random<ReadSetSizeType>::Set readIds = Random<ReadSetSizeType>::sample(size, maxReads);
+
+	ReadSet sampledReadSet;
+	for(Random<ReadSetSizeType>::SetIterator it = readIds.begin(); it != readIds.end(); it++) {
+		sampledReadSet.append( getRead( *it ));
 	}
 	LOG_DEBUG(4, "ReadSet::randomlySample(): sampled " << size << " to: " << sampledReadSet.getSize());
 	assert( sampledReadSet.getSize() == std::min(size, maxReads));

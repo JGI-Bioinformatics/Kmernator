@@ -16,9 +16,34 @@
 #include "Options.h"
 #include "MPIBuffer.h"
 
+class _MatcherInterfaceOptions  : public OptionsBaseInterface {
+public:
+	static int getMaxReadMatches() {
+		return getVarMap()["max-read-matches"].as<int>();
+	}
+	// use to set/overrided any defaults on options that are stored persistently
+	void _resetDefaults() {}
+	// use to set the description of all options
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		po::options_description opts("Matching Options");
+		opts.add_options()
+		("max-read-matches", po::value<int>()->default_value(500),
+						"maximum number of (randomly sampled) reads to return for matching. '0' disables.")
+						;
+		desc.add(opts);
+	}
+	// use to post-process options, returning true if everything is okay
+	bool _parseOptions(po::variables_map &vm) {
+		return true;
+	}
+};
+typedef OptionsBaseTemplate< _MatcherInterfaceOptions > MatcherInterfaceOptions;
+
+
 class MatcherInterface : public Timer {
 public:
 	typedef std::set< ReadSet::ReadSetSizeType > MatchHitSet;
+	typedef std::vector< ReadSet::ReadSetSizeType > MatchHitVector;
 	typedef std::vector< MatchHitSet > MatchResults;
 	typedef ReadSet::ReadSetVector MatchReadResults;
 	typedef boost::unordered_set<ReadSet::ReadSetSizeType> ReadIdxSet;
@@ -44,7 +69,7 @@ public:
 	}
 
 	// returns a ReadSetVector over the local query reads matching the global query reads
-	virtual MatchReadResults match(const ReadSet &query, std::string queryFile) {
+	MatchReadResults match(const ReadSet &query, std::string queryFile) {
 		MatchResults matchResults;
 		if (query.getGlobalSize() != query.getSize()){
 			matchResults = this->matchLocal(queryFile);
@@ -56,7 +81,7 @@ public:
 		recordTime("returnMatch", MPI_Wtime());
 		return mrr;
 	}
-	virtual MatchReadResults match(const ReadSet &query) {
+	MatchReadResults match(const ReadSet &query) {
 		if (query.getSize() != query.getGlobalSize())
 			LOG_THROW("Can not run MatcherInterface::match(ReadSet&) on global ReadSet (yet)");
 		MatchResults matchResults = this->matchLocal(query);
@@ -66,8 +91,29 @@ public:
 		return mrr;
 	}
 
+	void sampleMatches(MatchResults &matchResults) {
+		ReadSet::ReadSetSizeType maxMatches = MatcherInterfaceOptions::getOptions().getMaxReadMatches();
+
+		if (maxMatches <= 0)
+			return;
+
+		for(ReadSet::ReadSetSizeType i = 0 ; i < matchResults.size(); i++) {
+			MatchHitSet &mhs = matchResults[i];
+			if (mhs.size() > maxMatches) {
+				MatchHitVector mhv(mhs.begin(), mhs.end());
+				ReadSet::ReadSetSizeType oldSize = mhv.size();
+				mhs.clear();
+				Random<ReadSet::ReadSetSizeType>::Set sampledSet = Random<ReadSet::ReadSetSizeType>::sample(oldSize, maxMatches);
+				for(Random<ReadSet::ReadSetSizeType>::SetIterator it = sampledSet.begin(); it != sampledSet.end(); it++) {
+					mhs.insert(mhv[*it]);
+				}
+				LOG_DEBUG(3, "Reduced " << i << " from " << oldSize << " to " << mhs.size());
+			}
+		}
+		return;
+	}
 	// returns a ReadSetVector of reads that are local (targets in globalReadIdx space)
-	MatchReadResults getLocalReads(const MatchResults globalMatchResults) {
+	MatchReadResults getLocalReads(MatchResults &globalMatchResults) {
 		MatchResults matchResults = exchangeGlobalReadIdxs(globalMatchResults);
 		assert(matchResults.size() == globalMatchResults.size());
 
@@ -75,6 +121,7 @@ public:
 		MatchReadResults matchReadResults(matchResults.size(), ReadSet());
 		for(int i = 0; i < (int) matchResults.size(); i++) {
 			for(MatchHitSet::iterator it = matchResults[i].begin(); it != matchResults[i].end(); it++) {
+				assert(getTarget().isLocalRead( *it ));
 				ReadSet::ReadSetSizeType localReadIdx = getTarget().getLocalReadIdx(myRank, *it);
 				matchReadResults[i].append( getTarget().getRead( localReadIdx ));
 			}
@@ -115,7 +162,7 @@ public:
 			isDone = true;
 			int totalSend = 0, totalRecv = 0;
 			for (int rank = 0; rank < _world.size(); rank++) {
-				sendBytes[rank] = 1; // artifically pad by one byte to ensure negative 'isDone' flag can be sent
+				sendBytes[rank] = 1; // artificially pad by one byte to ensure negative 'isDone' flag can be sent
 				recvBytes[rank] = 0;
 			}
 
@@ -186,7 +233,7 @@ public:
 					// restore proper send bytes as they will be used for transmit sizes
 					sendBytes[rank] = 0 - sendBytes[rank];
 				}
-				sendBytes[rank] -= 1;  // remove the artifically padded byte
+				sendBytes[rank] -= 1;  // remove the artificially padded byte
 
 				recvDisp[rank] = totalRecv;
 				if (recvBytes[rank] < 0) {
@@ -194,7 +241,7 @@ public:
 					isDone = false;
 					recvBytes[rank] = 0 - recvBytes[rank];
 				}
-				recvBytes[rank] -= 1; // remove the artifically padded byte
+				recvBytes[rank] -= 1; // remove the artificially padded byte
 
 				totalRecv += recvBytes[rank];
 				assert(totalRecv >= 0); // i.e. no overflow
@@ -268,9 +315,21 @@ public:
 			free(recvBuf);
 			recordTime("EGR" + boost::lexical_cast<std::string>(iteration), MPI_Wtime());
 		}
-
-		LOG_DEBUG_OPTIONAL(1, true, "exchangeGlobalReads(): Done " << iteration);
 		localReadSetVector.clear();
+
+		ReadSet::ReadSetSizeType maxReads = MatcherInterfaceOptions::getOptions().getMaxReadMatches();
+		if (maxReads > 0) {
+			for (ReadSet::ReadSetSizeType localContigIdx = 0; localContigIdx
+						< globalReadSetVector.size(); localContigIdx++) {
+				ReadSet::ReadSetSizeType numReads = globalReadSetVector[localContigIdx].getSize();
+				if (numReads > maxReads) {
+					LOG_DEBUG_OPTIONAL(2, true, "for " << localContigIdx << " sampled from " << numReads << " to " << maxReads);
+					globalReadSetVector[localContigIdx] = globalReadSetVector[localContigIdx].randomlySample(maxReads);
+				}
+			}
+		}
+		LOG_DEBUG_OPTIONAL(1, true, "exchangeGlobalReads(): Done " << iteration);
+
 		return globalReadSetVector;
 	}
 	// const version of exchangeGlobalReads
@@ -289,7 +348,9 @@ public:
 		}
 		return true;
 	}
-	MatchResults exchangeGlobalReadIdxs(const MatchResults &globalMatchResults) {
+	MatchResults exchangeGlobalReadIdxs(MatchResults &globalMatchResults) {
+		sampleMatches(globalMatchResults);
+
 		int numMatchHitSets = globalMatchResults.size();
 		int numRanks = _world.size();
 		// sort globalReadIdxs by rank, matchHitSet
@@ -376,6 +437,7 @@ public:
 				}
 			}
 		}
+		sampleMatches(localMatchResults);
 
 		delete [] recvRankDispl;
 		delete [] recvRankCount;

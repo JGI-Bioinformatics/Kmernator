@@ -19,9 +19,6 @@ public:
 	static std::string getCap3Path() {
 		return getVarMap()["cap3-path"].as<std::string>();
 	}
-	static int getCap3MaxReads() {
-		return getVarMap()["cap3-max-reads"].as<int>();
-	}
 	void _resetDefaults() {
 		Options::getOptions().getMmapInput() = 0;
 	}
@@ -33,8 +30,7 @@ public:
 		("cap3-path", po::value<std::string>()->default_value(""),
 				"if set, cap3 will be used to extend contigs")
 
-		("cap3-max-reads", po::value<int>()->default_value(500),
-				"maximum number of reads to send to cap 3 per contig extension (randomly sampled, of course)");
+		;
 
 		desc.add(opts);
 	}
