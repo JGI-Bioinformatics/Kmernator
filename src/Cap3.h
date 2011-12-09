@@ -129,7 +129,7 @@ public:
 	}
 	static void clean(std::string fileDir) {
 		std::string cmd;
-		cmd = "rm -rf " + fileDir;
+		cmd = "/bin/rm -rf " + fileDir;
 		int status = system(cmd.c_str());
 		if (status != 0)
 			LOG_WARN(1, "Could not clean up directory: " + fileDir);

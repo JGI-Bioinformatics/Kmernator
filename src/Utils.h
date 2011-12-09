@@ -963,31 +963,39 @@ private:
 
 class Timer {
 public:
-	typedef std::pair< std::string, float > LabeledTime;
+	typedef std::pair< std::string, double > LabeledTime;
 	typedef std::vector< LabeledTime > LabeledTimes;
-	Timer(float start = 0) : _times() {
-		resetTimes(start);
+	Timer() : _times() {
 	}
-	void resetTimes(float start) {
+	void resetTimes() {
 		_times.clear();
-		_start = start;
 	}
-	void recordTime(std::string label, float time) {
+	void resetTimes(std::string label, double time) {
+		resetTimes();
+		recordTime(label,time);
+	}
+	void recordTime(std::string label, double time) {
 		_times.push_back( LabeledTime(label, time));
 	}
 	std::string getTimes(std::string label) {
 		std::stringstream ss;
-		float last = _start;
+		ss << label;
+		double last = 0.0;
+		double total = 0.0;
+		if (!_times.empty())
+			last = _times.begin()->second;
 		ss << std::fixed << std::setprecision(2);
 		for(LabeledTimes::iterator it = _times.begin(); it != _times.end(); it++) {
-			ss << " " << it->first << ": " << it->second - last;
+			double diff = it->second - last;
+			total += diff;
+			ss << " " << it->first << ": " << diff;
 			last = it->second;
 		}
+		ss << " Total: " << total;
 		return ss.str();
 	}
 private:
 	LabeledTimes _times;
-	float _start;
 };
 #endif
 

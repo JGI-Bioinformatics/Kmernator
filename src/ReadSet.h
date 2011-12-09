@@ -287,6 +287,25 @@ public:
 		return _pairs.size();
 	}
 
+	// returns a copy of the reads from start
+	ReadSet subset(ReadSetSizeType startIdx, ReadSetSizeType length) const {
+		assert(startIdx + length <= getSize());
+		ReadSet subset;
+		for(ReadSetSizeType i = startIdx; i < length + startIdx && i < getSize(); i++) {
+			subset.append(getRead(i));
+		}
+		return subset;
+	}
+
+	// keeps the first reads and returns the truncated ones
+	ReadSet truncate(ReadSetSizeType length) {
+		assert(length < getSize());
+		ReadSet keep = subset(0, length);
+		ReadSet rest = subset(length, getSize() - length);
+		*this = keep;
+		return rest;
+	}
+
 	void setGlobalOffsets(int myRank, ReadIdxVector &globalSizes) {
 		_myGlobalRank = myRank;
 		_globalSize = 0;

@@ -279,7 +279,7 @@ int main(int argc, char *argv[]) {
 	short iteration = 0;
 	while (++iteration <= maxIterations) {
 
-		matcher->resetTimes(MPI_Wtime());
+		matcher->resetTimes("Start Iteration", MPI_Wtime());
 
 		setGlobalReadSetOffsets(world, contigs);
 
@@ -359,9 +359,8 @@ int main(int argc, char *argv[]) {
 		}
 
 		matcher->recordTime("finishIteration", MPI_Wtime());
-		if (Log::isVerbose(1)) {
-			Log::Verbose(matcher->getTimes("") + MemoryUtils::getMemoryUsage(), false);
-		}
+		LOG_VERBOSE(1, matcher->getTimes("") + " " + MemoryUtils::getMemoryUsage());
+
 	}
 
 	if (world.rank() == 0 && !Log::isDebug(1)) {
