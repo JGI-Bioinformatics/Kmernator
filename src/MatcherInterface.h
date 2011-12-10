@@ -349,8 +349,6 @@ public:
 		return true;
 	}
 	MatchResults exchangeGlobalReadIdxs(MatchResults &globalMatchResults) {
-		sampleMatches(globalMatchResults);
-
 		int numMatchHitSets = globalMatchResults.size();
 		int numRanks = _world.size();
 		// sort globalReadIdxs by rank, matchHitSet
