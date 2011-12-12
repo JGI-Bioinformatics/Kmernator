@@ -39,20 +39,30 @@ do
   rm -f $TMP*
 done
 
+MPI=""
+
 if mpirun /bin/true
+then
+  MPI="mpirun -np"
+elif aprun -n 1 /bin/true
+then
+  MPI="aprun -n"
+fi
+
+if [ -n "$MPI" ]
 then
   for mpi in {1..5}
   do
-    check mpirun -np $mpi $FRP --thread 1
+    check $MPI $mpi $FRP --thread 1
     rm -f $TMP*
-    check mpirun -np $mpi $FRP --thread 1 --save-kmer-mmap 1
+    check $MPI $mpi $FRP --thread 1 --save-kmer-mmap 1
     mv $TMP-mmap $TMP-mmap-saved
-    check mpirun -np $mpi $FRP --thread 1 --load-kmer-mmap $TMP-mmap-saved
+    check $MPI $mpi $FRP --thread 1 --load-kmer-mmap $TMP-mmap-saved
     check $FR --load-kmer-mmap $TMP-mmap-saved
     rm -f $TMP*
     check $FR --thread $thread --save-kmer-mmap 1 
     mv $TMP-mmap $TMP-mmap-saved
-    check mpirun -np $mpi $FRP --thread 1 --load-kmer-mmap $TMP-mmap-saved
+    check $MPI $mpi $FRP --thread 1 --load-kmer-mmap $TMP-mmap-saved
     rm -f $TMP*
   done
 fi

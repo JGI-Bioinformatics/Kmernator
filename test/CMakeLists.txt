@@ -137,6 +137,24 @@ target_link_libraries (TestMPI
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_test(testmpi testMPI.sh)
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/testMPI.sh test/ )
+    
+add_executable( TestKmerMatchMPI TestKmerMatchMPI)
+set_source_files_properties( TestKmerMatchMPI
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+set_target_properties( TestKmerMatchMPI
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       )
+target_link_libraries (TestKmerMatchMPI
+                            Log
+                            Kmer
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+add_test(testKmerMatchMPI testKmerMatchMPI.sh)
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/testKmerMatchMPI.sh test/ )
 
 endif()
 

@@ -60,6 +60,24 @@ public:
 	SendTextMessageBuffer(mpi::communicator &world, int messageSize) : SendTextMessageBufferBase(world, messageSize) {}
 };
 
+class _MPITestOptions : public _MPIOptions {
+public:
+	void _resetDefaults() {}
+	void _setOptions(po::options_description &desc,
+				po::positional_options_description &p) {
+		GeneralOptions::getOptions()._setOptions(desc,p);
+		_MPIOptions::_setOptions(desc,p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		ret &= GeneralOptions::getOptions()._parseOptions(vm);
+		ret &= _MPIOptions::_parseOptions(vm);
+		return ret;
+	}
+};
+
+typedef OptionsBaseTemplate< _MPITestOptions > MPITestOptions;
+
 int main(int argc, char **argv)
 {
   int provided;
@@ -67,9 +85,8 @@ int main(int argc, char **argv)
   mpi::environment env(argc, argv);
   mpi::communicator world;
 
+  MPITestOptions::parseOpts(argc,argv);
   Logger::setWorld(&world);
-
-  Options::parseOpts(argc, argv);
 
   printf("Hello World from Node %d, mpi support %d\n", world.rank(), provided);
 
@@ -78,19 +95,21 @@ int main(int argc, char **argv)
   if (!MPIMessageBufferBase::isThreadSafe())
 	  stdNumThreads = 1;
 
+
+  A2ABufferBase a2a(world, sizeof(TextMessage));
+
   RecvTextMessageBuffer *recv[numThreads];
   SendTextMessageBuffer *send[numThreads];
-  A2ABufferBase a2a(world, sizeof(TextMessage));
 
 #pragma omp parallel num_threads(stdNumThreads)
   {
-	  int threadId = omp_get_thread_num();
-	  recv[threadId] = new RecvTextMessageBuffer(world, sizeof(TextMessage), threadId);
-	  send[threadId] = new SendTextMessageBuffer(world, sizeof(TextMessage));
-	  send[threadId]->addReceiveAllCallback(recv[threadId]);
+	  //int threadId = omp_get_thread_num();
+	  //recv[threadId] = new RecvTextMessageBuffer(world, sizeof(TextMessage), threadId);
+	  //send[threadId] = new SendTextMessageBuffer(world, sizeof(TextMessage));
+	  //send[threadId]->addReceiveAllCallback(recv[threadId]);
   }
+  int spamMax = MPIOptions::getOptions().getTotalBufferSize() / world.size() / 20;
 
-  int spamMax = recv[0]->getBufferSize();
   char spam[spamMax];
 
   #pragma omp parallel for
@@ -105,21 +124,19 @@ int main(int argc, char **argv)
   int msgSize = 16*1024 - sizeof(TextMessage);
   int msgPerMb = 1024*1024 / msgSize;
 
-
-
   #pragma omp parallel num_threads(stdNumThreads)
   {
 	  int threadId = omp_get_thread_num();
 	  for(int i = 0; i < msgPerMb * mb / stdNumThreads / world.size(); i++) {
 		  for(int w=0; w < world.size() ; w++) {
-			  send[threadId]->bufferMessage(w, threadId, msgSize)->set(spam, msgSize);
+			  //send[threadId]->bufferMessage(w, threadId, msgSize)->set(spam, msgSize);
 		  }
 	  }
-	  send[threadId]->finalize(threadId);
-	  recv[threadId]->finalize();
+	 // send[threadId]->finalize(threadId);
+	  //recv[threadId]->finalize();
 
-	  delete recv[threadId];
-	  delete send[threadId];
+	 // delete recv[threadId];
+	 // delete send[threadId];
   }
 
   boost::posix_time::ptime end = boost::posix_time::microsec_clock::local_time();
@@ -172,7 +189,6 @@ int main(int argc, char **argv)
   elapsed = end - start;
   rate = (double) mb / (double) elapsed.total_milliseconds() * 1000.0;
   LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "MPI all2all: " << rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
-
 
 
   MPI_Finalize();
