@@ -48,6 +48,7 @@ typedef KmerSpectrum<DataType, DataType> KS;
 
 class _ContigExtenderOptions : public _ContigExtenderBaseOptions {
 public:
+	virtual ~_ContigExtenderOptions() {}
 	void _resetDefaults() {
 		_ContigExtenderBaseOptions::_resetDefaults();
 

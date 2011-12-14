@@ -171,7 +171,7 @@ public:
 		return getOptions().hasOptionsErrorMsg();
 	}
 	static void setOptionsErrorMsg(std::string msg) {
-		return getOptions().setOptionsErrorMsg(msg);
+		getOptions().setOptionsErrorMsg(msg);
 	}
 	static std::string getOptionsErrorMsg() {
 		return getOptions().getOptionsErrorMsg();

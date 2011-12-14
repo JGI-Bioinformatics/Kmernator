@@ -16,6 +16,7 @@
 
 class _Cap3Options : public OptionsBaseInterface {
 public:
+	virtual ~_Cap3Options() {}
 	static std::string getCap3Path() {
 		return getVarMap()["cap3-path"].as<std::string>();
 	}
@@ -52,7 +53,7 @@ public:
 			newName = oldName;
 		}
 
-		return newName + "+" + boost::lexical_cast<std::string>(deltaLen);;
+		return newName + "+" + boost::lexical_cast<std::string>(deltaLen);
 	}
 	static Read selectBestContig(const ReadSet &candidateContigs, const Read &targetContig) {
 		Read bestRead = targetContig;

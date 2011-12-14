@@ -54,7 +54,7 @@ class _CS_Options : public OptionsBaseInterface {
 	// cache of variables (for inline lookup and defaults)
 
 public:
-
+	virtual ~_CS_Options() {}
 	static bool getCircularReference() { return  getVarMap()["circular-reference"].as<unsigned int>() != 0; }
 	static bool getPerRead() { return getVarMap()["per-read"].as<unsigned int>() != 0; }
 

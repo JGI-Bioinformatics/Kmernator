@@ -124,7 +124,7 @@ void testIpipestream()
 		IPipestream p("head -" + boost::lexical_cast<std::string>(i) + " 1000.fastq");
 		int c = 0;
 		std::string line;
-		while (!p.eof()) {
+		while (p.good() && !p.eof()) {
 			getline(p, line);
 			if (line.length() > 0)
 				c++;

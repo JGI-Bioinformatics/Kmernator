@@ -150,6 +150,8 @@ set_target_properties( TestKmerMatchMPI
 target_link_libraries (TestKmerMatchMPI
                             Log
                             Kmer
+                            Sequence
+                            ReadSet
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
