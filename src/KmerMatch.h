@@ -54,19 +54,26 @@ public:
 	typedef MatcherInterface::MatchResults MatchResults;
 	typedef DistributedKmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads, TrackingDataSingletonWithReadPosition > KS;
 
-	KmerMatch(mpi::communicator &world, const ReadSet &target, bool returnPairedMatches = true)
+	KmerMatch(mpi::communicator &world, const ReadSet &target, bool returnPairedMatches = KmerMatchOptions::getOptions().getIncludeMate())
 	: MatcherInterface(world, target, returnPairedMatches), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {
+		assert(target.isGlobal());
 		_spectrum._buildKmerSpectrumMPI(target, true);
 	}
 	MatchResults matchLocal(std::string queryFile) {
 		ReadSet query;
 		query.appendAnyFile(queryFile);
-		return this->matchLocal(query);
+		return this->_matchLocal(query);
 	}
 	virtual MatchResults matchLocal(const ReadSet &query) {
+		return MatcherInterface::matchLocal(query);
+	}
+
+	// works on the full copy of the query set
+	MatchResults _matchLocal(const ReadSet &query) {
+		assert(!query.isGlobal());
 		MatchResults matchResults;
 		matchResults.resize(query.getSize());
-		bool includeMates = getTarget().hasPairs() && KmerMatchOptions::getOptions().getIncludeMate();
+		bool includeMates = getTarget().hasPairs() && isReturnPairedMatches();
 		int maxPositionsFromEdge = KmerMatchOptions::getOptions().getMaxPositionsFromEdge();
 		int maxKmersFromEdge = maxPositionsFromEdge - KmerSizer::getSequenceLength() + 1;
 
@@ -87,7 +94,7 @@ public:
 					for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
 						ReadSet::ReadSetSizeType globalReadIdx = it->readId;
 						matchResults[i].insert( globalReadIdx );
-						LOG_DEBUG(4, "KmerMatch::matchLocal: localRead " << i << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
+						LOG_DEBUG(5, "KmerMatch::matchLocal: localRead " << i << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
 						if (includeMates) {
 							matchResults[i].insert( getTarget().getGlobalPairIdx( globalReadIdx ) );
 						}
@@ -98,6 +105,7 @@ public:
 
 		return matchResults;
 	}
+	const KS getKmerSpectrum() const { return _spectrum; }
 protected:
 	KS _spectrum;
 };

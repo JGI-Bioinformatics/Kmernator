@@ -50,47 +50,92 @@ public:
 
 	MatcherInterface(mpi::communicator &world, const ReadSet &target, bool returnPairedMatches = true)
 	: _world(world), _target(target), _returnPairedMatches(returnPairedMatches) {
+		assert(_target.isGlobal() && _target.getGlobalSize() > 0);
 	}
 
-	// returns a list of sets of local reads (targets in the globalReadIdx space) that match the query
+	// returns a list of sets of local reads (i.e. target reads idxs in their globalReadIdx space)
+	// to a query, which should be a global ReadSet
 	virtual MatchResults matchLocal(const ReadSet &query) {
-		std::string queryFile = UniqueName::generateUniqueName( GeneralOptions::getOptions().getTmpDir() + "/MatcherInterface-" );
-		{
-			OfstreamMap om(queryFile);
-			query.writeAll(om.getOfstream(""));
-		}
+		assert(query.isGlobal());
+		std::string queryFile = UniqueName::generateUniqueGlobalName( GeneralOptions::getOptions().getTmpDir() + "/MatcherInterface-" );
+		queryFile = DistributedOfstreamMap::writeGlobalReadSet(_world, query, queryFile, "", FormatOutput::Fasta());
+		LOG_DEBUG(3, "Running matchLocal on " << queryFile);
 		MatchResults results = this->matchLocal(queryFile);
-		assert(results.size() == query.getSize());
-		unlink(queryFile.c_str());
+		assert(results.size() == query.getGlobalSize());
+		LOG_DEBUG(3, "Waiting for rest of world to finish");
+		_world.barrier();
+		if (_world.rank() == 0)
+			unlink(queryFile.c_str());
 		return results;
 	}
+
+	// returns a list of sets of local reads (i.e. target reads idxs in their globalReadIdx space)
+	// to a query, in its localReadIdxSpace space (should be full global copy, not a global ReadSet)
 	virtual MatchResults matchLocal(std::string queryFile) {
-		throw;
+		LOG_THROW("You must implement this function for your specific MatcherInterface");
 	}
 
-	// returns a ReadSetVector over the local query reads matching the global query reads
+	// returns a ReadSetVector of (possibly copied Read) results over the target global reads (i.e. full set)
+	// matching the local reads in the query global ReadSet (i.e. partition of the global)
+	// queryFile is expected to contain the entire query set and will be used in matchLocal
 	MatchReadResults match(const ReadSet &query, std::string queryFile) {
-		MatchResults matchResults;
-		if (query.getGlobalSize() != query.getSize()){
-			matchResults = this->matchLocal(queryFile);
-		} else {
-			matchResults = this->matchLocal(query);
-		}
-		MatchReadResults localReads = getLocalReads(matchResults);
-		MatchReadResults mrr = exchangeGlobalReads(query, localReads);
-		recordTime("returnMatch", MPI_Wtime());
-		return mrr;
-	}
-	MatchReadResults match(const ReadSet &query) {
-		if (query.getSize() != query.getGlobalSize())
-			LOG_THROW("Can not run MatcherInterface::match(ReadSet&) on global ReadSet (yet)");
-		MatchResults matchResults = this->matchLocal(query);
-		MatchReadResults localReads = getLocalReads(matchResults);
-		MatchReadResults mrr = exchangeGlobalReads(query, localReads);
-		recordTime("returnMatch", MPI_Wtime());
-		return mrr;
+		assert(query.isGlobal() && query.getGlobalSize() > 0);
+		MatchResults matchResults = this->matchLocal(queryFile);
+		return convertLocalMatchesToGlobalReads(query, matchResults);
 	}
 
+	// returns a ReadSetVector of (possibly copied Read) results over the target global reads (i.e. full set)
+	// matching the local reads in the query global ReadSet (i.e. partition of the global)
+	MatchReadResults match(const ReadSet &query) {
+		assert(query.isGlobal() && query.getGlobalSize() > 0);
+		MatchResults matchResults = this->matchLocal(query);
+		return convertLocalMatchesToGlobalReads(query, matchResults);
+	}
+
+	static void debuglog(int level, std::string label, const MatchResults &matchResults) {
+		if (Log::isDebug(level)) {
+			std::stringstream ss;
+			ss << label << ":" << std::endl;
+			for(int i = 0 ; i < (int) matchResults.size(); i++) {
+				ss << i << ":";
+				for(MatchHitSet::iterator it = matchResults[i].begin(); it != matchResults[i].end(); it++)
+					ss << " " << *it;
+				ss << std::endl;
+			}
+			std::string s = ss.str();
+			LOG_DEBUG(level, s);
+		}
+	}
+	static void debuglog(int level, std::string label, const MatchReadResults &matchReadResults) {
+		if (Log::isDebug(level)) {
+			std::stringstream ss;
+			ss << label << ":" << std::endl;
+			for(int i = 0 ; i < (int) matchReadResults.size(); i++) {
+				ss << i << ":";
+				for(ReadSet::ReadSetSizeType j = 0; j < matchReadResults[i].getSize(); j++)
+					ss << " " << matchReadResults[i].getRead(j).getName();
+				ss << std::endl;
+			}
+			std::string s = ss.str();
+			LOG_DEBUG(level, s);
+		}
+	}
+
+	// takes a query global ReadSet
+	// a MatchResults of globalReadIdx
+	// and returns the global ReadSetVector (possibly copied reads) for the local reads within the query
+	MatchReadResults convertLocalMatchesToGlobalReads(const ReadSet &query, MatchResults &matchResults) {
+		assert(query.isGlobal() && query.getGlobalSize() > 0);
+		debuglog(3, "LocalMatches", matchResults);
+		MatchReadResults localReads = getLocalReads(matchResults);
+		debuglog(3, "LocalReads", localReads);
+		MatchReadResults globalReads = exchangeGlobalReads(query, localReads);
+		debuglog(3, "GlobalReads", globalReads);
+		recordTime("returnMatch", MPI_Wtime());
+		return globalReads;
+	}
+
+	// randomly downsizes overly full MatchHitSets in the MatchResults
 	void sampleMatches(MatchResults &matchResults) {
 		ReadSet::ReadSetSizeType maxMatches = MatcherInterfaceOptions::getOptions().getMaxReadMatches();
 
@@ -112,7 +157,8 @@ public:
 		}
 		return;
 	}
-	// returns a ReadSetVector of reads that are local (targets in globalReadIdx space)
+	// returns a ReadSetVector of reads that are local (i.e. targets in globalReadIdx space local to the node)
+	// exchanges globalReadSetIds with the responsible nodes, if needed
 	MatchReadResults getLocalReads(MatchResults &globalMatchResults) {
 		MatchResults matchResults = exchangeGlobalReadIdxs(globalMatchResults);
 		assert(matchResults.size() == globalMatchResults.size());
@@ -135,7 +181,7 @@ public:
 	// the returning matches are for the local reads in the query, global reads from the Target
 	// localReadSetVector will be empty after this routine is called
 	MatchReadResults exchangeGlobalReads(const ReadSet &query, MatchReadResults &localReadSetVector) {
-		assert(query.getGlobalSize() == localReadSetVector.size());
+		assert(query.isGlobal() && query.getGlobalSize() > 0);
 		MatchReadResults globalReadSetVector, tmpReadSetVector;
 		globalReadSetVector.resize(query.getSize(), ReadSet());
 		tmpReadSetVector.resize(query.getGlobalSize(), ReadSet());
@@ -348,6 +394,9 @@ public:
 		}
 		return true;
 	}
+
+	// exchanges globalReadIdx matches with responsible nodes
+	// so all nodes end up with reads in their own globalIndex ranges
 	MatchResults exchangeGlobalReadIdxs(MatchResults &globalMatchResults) {
 		int numMatchHitSets = globalMatchResults.size();
 		int numRanks = _world.size();
@@ -405,13 +454,17 @@ public:
 
 		// build sending buffer
 		ReadSet::ReadSetSizeType *sendBuf = new ReadSet::ReadSetSizeType[totalSendCount];
+		ReadSet::ReadSetSizeType *tmp;
 		for(int i = 0; i < numRanks; i++) {
+			tmp = sendBuf + sendRankDispl[i];
 			for(int j = 0; j < numMatchHitSets ; j++) {
 				long pos = i * numMatchHitSets + j;
 				for(int k = 0; k < sendCounts[pos]; k++) {
-					*(sendBuf + sendRankDispl[i] + k) = rankHitGlobalIndexes[i][j][k];
+					*tmp = rankHitGlobalIndexes[i][j][k];
+					tmp++;
 				}
 			}
+			assert(tmp == sendBuf + sendRankDispl[i] + sendRankCount[i]);
 		}
 		// free some memory before using more
 		delete [] sendCounts;
@@ -428,12 +481,15 @@ public:
 		// consolidate into localMatchResults
 		MatchResults localMatchResults(globalMatchResults.size());
 		for(int i = 0; i < numRanks; i++) {
+			tmp = recvBuf + recvRankDispl[i];
 			for(int j = 0; j < numMatchHitSets ; j++) {
 				long pos = i * numMatchHitSets + j;
 				for(int k = 0; k < recvCounts[pos]; k++) {
-					localMatchResults[j].insert( *(recvBuf + recvRankDispl[i] + k) );
+					localMatchResults[j].insert( *tmp );
+					tmp++;
 				}
 			}
+			assert(tmp == recvBuf + recvRankDispl[i] + recvRankCount[i]);
 		}
 		sampleMatches(localMatchResults);
 

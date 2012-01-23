@@ -63,13 +63,64 @@ public:
 
 typedef OptionsBaseTemplate< _KmerMatchTestOptions > KmerMatchTestOptions;
 
+bool containsRead(const ReadSet &rs, const Read &read) {
+	bool hasRead = false;
+	std::string name = read.getName();
+	for(ReadSet::ReadSetSizeType i = 0; i < rs.getSize(); i++)
+		if (name.compare(rs.getRead(i).getName()) == 0)
+			hasRead = true;
+	return hasRead;
+}
+
+bool testMatchesSelf(mpi::communicator &world, ReadSet &q, ReadSet &t, bool includePair) {
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "running testMatchesSelf on " << q.getSize() << " " << t.getSize());
+	bool passed = true;
+	KmerMatch matcher(world, t, includePair);
+	//std::cout << matcher.getKmerSpectrum().solid.toString() << std::endl;
+	MatcherInterface::MatchReadResults results = matcher.match(q);
+	passed &= results.size() == q.getSize();
+	for(ReadSet::ReadSetSizeType idx = 0; idx < q.getSize(); idx++) {
+		ReadSet &rs = results[idx];
+		Read &r = q.getRead(idx);
+		//std::cout << passed << "\t" << rs.getSize() << "\t" << r.getName();
+		if (!containsRead( rs, r )) {
+			//std::cout << "\tmissing self match!";
+			passed = false;
+		}
+		//std::cout << std::endl;
+	}
+	if (!passed)
+		LOG_WARN(1, "Failed testMatchesSelf!");
+	return passed;
+}
 int main(int argc, char **argv)
 {
 
 	mpi::communicator world = initializeWorldAndOptions< KmerMatchTestOptions >(argc, argv);
 
+	ReadSet reads, reads2, greads, greads2;
+	reads.appendAnyFile("10.fastq");
+	reads.identifyPairs();
+	greads.appendAnyFile("10.fastq", "", world.rank(), world.size());
+	greads.identifyPairs();
+	setGlobalReadSetOffsets(world, greads);
+
+	reads2.appendAnyFile("1000.fastq");
+	reads2.identifyPairs();
+	greads2.appendAnyFile("1000.fastq", "", world.rank(), world.size());
+	greads2.identifyPairs();
+	setGlobalReadSetOffsets(world, greads2);
+
+	KmerSizer::set(21);
+
+	bool passed = true;
+
+	passed &= testMatchesSelf(world, greads, greads, false);
+	//passed &= testMatchesSelf(world, greads, greads, true);
+	//passed &= testMatchesSelf(world, greads2, greads2, false);
+    passed &= testMatchesSelf(world, greads2, greads2, true);
 
 	MPI_Finalize();
-
+	return passed ? 0 : -1;
 }
 
