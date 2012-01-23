@@ -386,6 +386,8 @@ public:
 	typedef MPIAllToAllMessageBuffer< StoreKmerMessageHeader, StoreKmerMessageHeaderProcessor > StoreKmerMessageBuffer;
 
 	void _buildKmerSpectrumMPI(const ReadSet &store, bool isSolid) {
+		assert(store.isGlobal());
+		assert(store.getGlobalSize() > 0);
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
 		int worldSize = world.size();
@@ -401,7 +403,7 @@ public:
 		LOG_DEBUG(2, "building spectrum using " << numThreads << " threads (" << omp_get_max_threads() << ")");
 
 		ReadSetSizeType globalReadSetOffset = store.getGlobalOffset(world.rank());
-		assert( world.rank() == 0 ? (globalReadSetOffset == 0) : (globalReadSetOffset > 0) );
+		assert( world.rank() == 0 ? (globalReadSetOffset == 0) : (store.getSize() == 0 || globalReadSetOffset > 0) );
 		msgBuffers = new StoreKmerMessageBuffer(world, messageSize, StoreKmerMessageHeaderProcessor(*this,isSolid));
 
 		std::stringstream ss;
@@ -968,7 +970,22 @@ public:
 			unlink(rankFile.c_str());
 	}
 
+	static std::string writeGlobalReadSet(mpi::communicator &world, const ReadSet &readSet, std::string outputFile = Options::getOptions().getOutputFile(), std::string suffix = "", FormatOutput format = FormatOutput::Fasta())
+	{
+		DistributedOfstreamMap om(world, outputFile, suffix);
+		om.setBuildInMemory();
+		std::string fileKey = "";
+		readSet.writeAll(om.getOfstream(fileKey), format);
+		om.clear();
+		std::string filename = om.getRealFilePath(fileKey);
+
+		return filename;
+	}
+
+
 };
+
+
 
 
 template<typename M>
