@@ -131,7 +131,7 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 
 	int poolsWithoutMinimumCoverage = 0;
 	#pragma omp parallel for
-	for (ReadSet::ReadSetSizeType i = 0; i < contigs.getSize(); i++) {
+	for (long i = 0; i < (long) contigs.getSize(); i++) {
 		const Read &oldRead = contigs.getRead(i);
 		Read newRead = oldRead;
 		SequenceLengthType oldLen = oldRead.getLength(), newLen = 0;
@@ -371,23 +371,15 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	{
-		// write final contigs (and any unfinished contigs still remaining)
-		std::string tmpFinalFile = finalContigFile;
-		DistributedOfstreamMap om(world, Options::getOptions().getOutputFile(),
-				"");
-		om.setBuildInMemory();
-		finalContigs.append(contigs);
-		std::string fileKey = "";
-		finalContigs.writeAll(om.getOfstream(fileKey), FormatOutput::Fasta());
-		om.clear();
-
-		if (world.rank() == 0 && !finalContigFile.empty()) {
-			LOG_DEBUG_OPTIONAL(1, true, "Removing " << finalContigFile);
-			unlink(finalContigFile.c_str());
-		}
-		finalContigFile = om.getRealFilePath(fileKey);
+	// write final contigs (and any unfinished contigs still remaining)
+	finalContigs.append(contigs);
+	std::string tmpFinalFile = DistributedOfstreamMap::writeGlobalReadSet(world, finalContigs, Options::getOptions().getOutputFile(), "", FormatOutput::Fasta());
+	if (world.rank() == 0 && !finalContigFile.empty()) {
+		LOG_DEBUG_OPTIONAL(1, true, "Removing " << finalContigFile);
+		unlink(finalContigFile.c_str());
 	}
+	finalContigFile = tmpFinalFile;
+
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Final contigs are in: " << finalContigFile);
 
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
