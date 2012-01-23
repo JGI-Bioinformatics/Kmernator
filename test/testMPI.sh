@@ -2,10 +2,11 @@
 test=TestMPI
 MPI=""
 
-if mpirun /bin/true
+true=$(which true)
+if mpirun $true
 then
   MPI="mpirun -np"
-elif aprun -n 1 /bin/true
+elif aprun -n 1 $true
 then
   MPI="aprun -n"
 fi
