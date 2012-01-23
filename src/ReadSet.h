@@ -121,12 +121,12 @@ private:
 	}
 
 protected:
-	PartitioningData<ReadSetSizeType> _filePartitions;
 	ReadSetSizeType _baseCount;
 	SequenceLengthType _maxSequenceLength;
-	int _myGlobalRank;
-	ReadIdxVector _globalOffsets;
 	ReadSetSizeType _globalSize;
+	int _myGlobalRank;
+	PartitioningData<ReadSetSizeType> _filePartitions;
+	ReadIdxVector _globalOffsets;
 	PairedIndexType _pairs;
 	std::string previousReadName; // for fast pairing
 
@@ -164,10 +164,10 @@ private:
 
 public:
 	ReadSet() :
-		_baseCount(0), _maxSequenceLength(0), _globalSize(0) {
+		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0) {
 	}
 	ReadSet(const ReadSet &copy)  :
-		_baseCount(0), _maxSequenceLength(0), _globalSize(0) {
+		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0) {
 		*this = copy;
 	}
 	~ReadSet() {
@@ -307,6 +307,7 @@ public:
 	}
 
 	void setGlobalOffsets(int myRank, ReadIdxVector &globalSizes) {
+		assert(myRank < (int) globalSizes.size());
 		_myGlobalRank = myRank;
 		_globalSize = 0;
 		_globalOffsets.clear();
@@ -363,8 +364,8 @@ public:
 					break;
 			}
 			rankReadIdx = globalReadIdx - _globalOffsets[rank];
+			LOG_DEBUG(5, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << ", " << rank << ", " << rankReadIdx << "): " << _globalOffsets[rank]);
 		}
-		LOG_DEBUG(5, "ReadSet::getRankReadForGlobalReadIdx(" << globalReadIdx << ", " << rank << ", " << rankReadIdx << "): " << _globalOffsets[rank]);
 	}
 
 	bool isLocalRead(ReadSetSizeType globalReadIdx) const {
