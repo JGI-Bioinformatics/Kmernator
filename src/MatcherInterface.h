@@ -81,6 +81,7 @@ public:
 	MatchReadResults match(const ReadSet &query, std::string queryFile) {
 		assert(query.isGlobal() && query.getGlobalSize() > 0);
 		MatchResults matchResults = this->matchLocal(queryFile);
+		matchResults.resize(query.getGlobalSize(), MatchHitSet());
 		return convertLocalMatchesToGlobalReads(query, matchResults);
 	}
 
@@ -89,6 +90,7 @@ public:
 	MatchReadResults match(const ReadSet &query) {
 		assert(query.isGlobal() && query.getGlobalSize() > 0);
 		MatchResults matchResults = this->matchLocal(query);
+		assert(matchResults.size() == query.getGlobalSize());
 		return convertLocalMatchesToGlobalReads(query, matchResults);
 	}
 
@@ -126,10 +128,13 @@ public:
 	// and returns the global ReadSetVector (possibly copied reads) for the local reads within the query
 	MatchReadResults convertLocalMatchesToGlobalReads(const ReadSet &query, MatchResults &matchResults) {
 		assert(query.isGlobal() && query.getGlobalSize() > 0);
+		assert(matchResults.size() == query.getGlobalSize());
 		debuglog(3, "LocalMatches", matchResults);
 		MatchReadResults localReads = getLocalReads(matchResults);
+		assert(localReads.size() == query.getGlobalSize());
 		debuglog(3, "LocalReads", localReads);
 		MatchReadResults globalReads = exchangeGlobalReads(query, localReads);
+		assert(globalReads.size() == query.getSize());
 		debuglog(3, "GlobalReads", globalReads);
 		recordTime("returnMatch", MPI_Wtime());
 		return globalReads;
@@ -182,6 +187,7 @@ public:
 	// localReadSetVector will be empty after this routine is called
 	MatchReadResults exchangeGlobalReads(const ReadSet &query, MatchReadResults &localReadSetVector) {
 		assert(query.isGlobal() && query.getGlobalSize() > 0);
+		assert(localReadSetVector.size() == query.getGlobalSize());
 		MatchReadResults globalReadSetVector, tmpReadSetVector;
 		globalReadSetVector.resize(query.getSize(), ReadSet());
 		tmpReadSetVector.resize(query.getGlobalSize(), ReadSet());
