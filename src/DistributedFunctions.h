@@ -548,15 +548,18 @@ public:
 
 	}
 
-	virtual std::string getHistogram(bool solidOnly = false) {
-		MPIHistogram histogram(127);
+	MPIHistogram _getHistogram(bool solidOnly = false) {
+		MPIHistogram histogram(255);
 		histogram.set(*this, solidOnly);
 		LOG_DEBUG(2, "Individual histogram\n" << histogram.toString());
-
 		histogram.reduce(world);
+		return histogram;
+        }
 
-		return histogram.toString();
+	virtual std::string getHistogram(bool solidOnly = false) {
+		return _getHistogram(solidOnly).toString();
 	}
+
 
 
 	Kmernator::MmapFileVector writeKmerMaps(string mmapFilename = Options::getOptions().getOutputFile()) {

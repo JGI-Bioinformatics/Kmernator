@@ -85,6 +85,22 @@ target_link_libraries( FilterReads-P
                               ${KMERNATOR_P_LIBS}
                               )
 
+set_source_files_properties( EstimateSize-P
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+add_executable( EstimateSize-P EstimateSize-P )
+set_target_properties( EstimateSize-P
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       )
+target_link_libraries( EstimateSize-P 
+                              Sequence
+                              Kmer
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+
 endif()
 
 set_source_files_properties( ContigExtender
