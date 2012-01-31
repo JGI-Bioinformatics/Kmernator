@@ -55,15 +55,18 @@ typedef DistributedReadSelector<DataType> RS;
 class _MPIEstimateSizeOptions : public OptionsBaseInterface {
 public:
         long getNumPoints() {
-            return 1000;
+            return 250;
         } 
+        long getTotalPoints() {
+            return 1000;
+        }
 	void _resetDefaults() {
 		MPIOptions::_resetDefaults();
                 KmerOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 		// assign defaults
 		GeneralOptions::getOptions().getMmapInput() = 0;
-		GeneralOptions::getOptions().getVerbose() = 2;
+		GeneralOptions::getOptions().getVerbose() = 1;
                 KmerOptions::getOptions().getMinDepth() = 1;
 		KmerOptions::getOptions().getSaveKmerMmap() = 0;
 	}
@@ -97,6 +100,11 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
   
         long numPoints = MPIEstimateSizeOptions::getOptions().getNumPoints();
+        long totalPoints = MPIEstimateSizeOptions::getOptions().getTotalPoints();
+
+        if (world.rank() == 0) {
+            std::cout << "totalBases\tuniqueKmers\trawKmers\n0\t0\t0\n" << KmerSizer::getSequenceLength() << "\t1\t1\n";
+        }
 
         unsigned long totalBases = 0;
         long numBuckets = 0;
@@ -105,9 +113,7 @@ int main(int argc, char *argv[]) {
             LOG_VERBOSE(1, "Starting iteration " << iter << " of " << numPoints);
 
 	    ReadSet reads;
-	    reads.appendAllFiles(inputs, world.rank()*numPoints + iter, world.size()*numPoints);
-
-	    LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+	    reads.appendAllFiles(inputs, world.rank()*totalPoints + iter, world.size()*totalPoints);
 
 	    unsigned long counts[3], totalCounts[3];
 	    unsigned long &readCount = counts[0] = reads.getSize();
@@ -128,7 +134,6 @@ int main(int argc, char *argv[]) {
 	        spectrum = KS(world, numBuckets);
 	    }
 	    if (KmerOptions::getOptions().getKmerSize() > 0) {
-		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		spectrum.buildKmerSpectrum(reads);
                 KS::MPIHistogram h = spectrum._getHistogram(false);
