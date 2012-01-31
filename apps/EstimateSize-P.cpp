@@ -55,10 +55,10 @@ typedef DistributedReadSelector<DataType> RS;
 class _MPIEstimateSizeOptions : public OptionsBaseInterface {
 public:
         long getNumPoints() {
-            return 250;
+            return 100;
         } 
-        long getTotalPoints() {
-            return 1000;
+        double getMaxFraction() {
+            return 0.10;
         }
 	void _resetDefaults() {
 		MPIOptions::_resetDefaults();
@@ -100,7 +100,9 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
   
         long numPoints = MPIEstimateSizeOptions::getOptions().getNumPoints();
-        long totalPoints = MPIEstimateSizeOptions::getOptions().getTotalPoints();
+        long partitions = 1024 * 1024;
+        double maxFraction = MPIEstimateSizeOptions::getOptions().getMaxFraction();
+        double fraction = 0.0;
 
         if (world.rank() == 0) {
             std::cout << "totalBases\tuniqueKmers\trawKmers\n0\t0\t0\n" << KmerSizer::getSequenceLength() << "\t1\t1\n";
@@ -109,27 +111,30 @@ int main(int argc, char *argv[]) {
         unsigned long totalBases = 0;
         long numBuckets = 0;
         KS spectrum(world, numBuckets);
-        for (long iter = 0 ; iter < numPoints; iter++) {
-            LOG_VERBOSE(1, "Starting iteration " << iter << " of " << numPoints);
+        for (long iter = 0 ; iter < numPoints && fraction < maxFraction; iter++) {
+            if (partitions > 128 && partitions > numPoints)
+               partitions /= 2;
+            fraction += 1. / partitions;
+            
+            LOG_VERBOSE(1, "Starting iteration " << iter << " of " << numPoints << " at " << fraction*100 << "%");
 
 	    ReadSet reads;
-	    reads.appendAllFiles(inputs, world.rank()*totalPoints + iter, world.size()*totalPoints);
+	    reads.appendAllFiles(inputs, world.rank()*partitions + iter, world.size()*partitions);
 
 	    unsigned long counts[3], totalCounts[3];
 	    unsigned long &readCount = counts[0] = reads.getSize();
-	    unsigned long &numPairs  = counts[1] = reads.identifyPairs();
 	    unsigned long &baseCount = counts[2] = reads.getBaseCount();
 	    LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
 
 	    all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
-	    LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
+	    LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[2] << " distributed bases");
             totalBases += totalCounts[2];
 
 	    if (numBuckets == 0 && KmerOptions::getOptions().getKmerSize() > 0) {
 
 		numBuckets = KS::estimateWeakKmerBucketSize(reads);
 
-		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>()) * numPoints;
+		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>()) * partitions;
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
 	        spectrum = KS(world, numBuckets);
 	    }
