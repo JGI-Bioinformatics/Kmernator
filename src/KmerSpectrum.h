@@ -125,12 +125,18 @@ public:
 	bool hasSingletons;
 	unsigned long purgedSingletons;
 
+private:
+	long rawKmers;       // total kmers tracked
+	long rawGoodKmers;   // total number of non-discarded kmers
+	long uniqueKmers;    // total number of unique kmers (includes singleton)
+	long singletonKmers; // total number of kmers seen exactly once
+
 public:
 	// if singletons are separated use less buckets (but same # as singletons)
-	KmerSpectrum() : solid(), weak(), singleton(), hasSolids(false), hasSingletons(false), purgedSingletons(0) {}
+	KmerSpectrum() : solid(), weak(), singleton(), hasSolids(false), hasSingletons(false), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0) {}
 	KmerSpectrum(unsigned long buckets, bool separateSingletons = true):
 		solid(), weak(separateSingletons ? buckets/8 : buckets), singleton(separateSingletons ? buckets/8 : 1),
-		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0)
+		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0)
 	{
 		// apply the minimum quality automatically
 		Read::setMinQualityScore( Options::getOptions().getMinQuality(), Read::FASTQ_START_CHAR );
@@ -146,6 +152,10 @@ public:
 		this->hasSolids = other.hasSolids;
 		this->hasSingletons = other.hasSingletons;
 		this->purgedSingletons = other.purgedSingletons;
+		this->rawKmers = other.rawKmers;
+		this->rawGoodKmers = other.rawGoodKmers;
+		this->uniqueKmers = other.uniqueKmers;
+		this->singletonKmers = other.singletonKmers;
 		return *this;
 	}
 
@@ -156,7 +166,16 @@ public:
 		std::swap(hasSolids, other.hasSolids);
 		std::swap(hasSingletons, other.hasSingletons);
 		std::swap(purgedSingletons, other.purgedSingletons);
+		std::swap(rawKmers, other.rawKmers);
+		std::swap(rawGoodKmers, other.rawGoodKmers);
+		std::swap(uniqueKmers, other.uniqueKmers);
+		std::swap(singletonKmers, other.singletonKmers);
 	}
+
+	inline long getRawKmers() const { return rawKmers; }
+	inline long getRawGoodKmers() const { return rawGoodKmers; }
+	inline long getUniqueKmers() const { return uniqueKmers; }
+	inline long getSingletonKmers() const { return singletonKmers; }
 
 	Kmernator::MmapFileVector storeMmap(string mmapFilename){
 		LOG_VERBOSE(1, "Saving weak kmer spectrum");
@@ -215,6 +234,10 @@ public:
 		singleton.clear(releaseMemory);
 		hasSolids = false;
 		purgedSingletons = 0;
+		rawKmers = 0;
+		rawGoodKmers = 0;
+		uniqueKmers = 0;
+		singletonKmers = 0;
 	}
 
 	static unsigned long estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = KmerOptions::getOptions().getKmersPerBucket()) {
@@ -1119,19 +1142,30 @@ public:
 		append(pointers, least, weight, readIdx, readPos, true);
 	}
 	inline void append(DataPointers &pointers, Kmer &least, WeightType weight, ReadSetSizeType readIdx, PositionType readPos, bool isSolid = false, Extension left = Extension(), Extension right = Extension()) {
+		#pragma omp atomic
+		rawKmers++;
+
 		bool keepDirection = true;
 		if (weight < 0.0) {
 			keepDirection = false;
 			weight = 0.0-weight;
 		}
+
 		if ( TrackingData::isDiscard( weight ) )  {
 			LOG_DEBUG(4, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << least.toFasta());
 			return;
 		}
 
+		#pragma omp atomic
+		rawGoodKmers++;
+
 		if ( isSolid ) {
 			pointers.reset();
 			SolidElementType elem = getSolid( least );
+			if (elem.value().getCount() == 0) {
+				#pragma omp atomic
+				uniqueKmers++;
+			}
 			elem.value().track( weight, keepDirection, readIdx, readPos );
 			elem.value().trackExtensions(left, right);
 
@@ -1151,6 +1185,9 @@ public:
 			} else {
 				if ( pointers.singletonElem.isValid() ) {
 
+					#pragma omp atomic
+					singletonKmers--;
+
 					// promote singleton to weak & track
 					SingletonDataType singleData = pointers.singletonElem.value();
 					pointers.reset();
@@ -1163,11 +1200,17 @@ public:
 					singleton.remove( least );
 
 				} else {
+					#pragma omp atomic
+					uniqueKmers++;
+
 					if (hasSingletons) {
-					    // record this new singleton
-					    SingletonElementType elem = getSingleton(least);
-					    elem.value().track( weight, keepDirection, readIdx, readPos);
-					    elem.value().trackExtensions(left, right);
+						#pragma omp atomic
+						singletonKmers++;
+
+						// record this new singleton
+						SingletonElementType elem = getSingleton(least);
+						elem.value().track( weight, keepDirection, readIdx, readPos);
+						elem.value().trackExtensions(left, right);
 					} else {
 						// record in the weak spectrum
 						WeakElementType weakElem = getWeak( least );
