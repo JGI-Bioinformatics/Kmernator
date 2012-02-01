@@ -215,6 +215,10 @@ public:
 	mpi::communicator &getWorld() {
 		return world;
 	}
+	static long &getKmerSubsample() {
+		static long kmerSubsample = 0;
+		return kmerSubsample;
+	}
 	template<typename D>
 	MmapFile writeKmerMap(D &kmerMap, std::string filepath) {
 		MmapFile mmap;
@@ -406,6 +410,8 @@ public:
 		assert( world.rank() == 0 ? (globalReadSetOffset == 0) : (store.getSize() == 0 || globalReadSetOffset > 0) );
 		msgBuffers = new StoreKmerMessageBuffer(world, messageSize, StoreKmerMessageHeaderProcessor(*this,isSolid));
 
+		long kmerSubsample = getKmerSubsample();
+
 		std::stringstream ss;
 		#pragma omp parallel num_threads(numThreads)
 		{
@@ -439,6 +445,9 @@ public:
 
 				for (PositionType readPos = 0 ; readPos < kmers.size(); readPos++) {
 					int rankDest, threadDest;
+					if (kmerSubsample > 1 && kmers[readPos].hash() % kmerSubsample != 0) {
+						continue;
+					}	
 					const WeightedExtensionMessagePacket &v = kmers.valueAt(readPos);
 					WeightType weight = v.getWeight();
 					if ( TrackingData::isDiscard( (weight<0.0) ? 0.0-weight : weight ) )  {
@@ -470,6 +479,7 @@ public:
 			msgBuffers->finalize();
 
 		} // omp parallel
+		LOG_VERBOSE_OPTIONAL(1, true, "distributed processed " << store.getGlobalSize() << " reads");
 
 		delete msgBuffers;
 
@@ -528,8 +538,10 @@ public:
 
 		_buildKmerSpectrumMPI(store, isSolid);
 
-		std::string hist = getHistogram(isSolid);
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Raw Histogram\n" << hist);
+		if(Log::isVerbose(2)) {
+			std::string hist = getHistogram(isSolid);
+			LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Collective Raw Histogram\n" << hist);
+		}
 		LOG_DEBUG(2, "buildKmerSpectrum() barrier");
 		world.barrier();
 
