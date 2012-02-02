@@ -177,6 +177,11 @@ public:
 	inline long getUniqueKmers() const { return uniqueKmers; }
 	inline long getSingletonKmers() const { return singletonKmers; }
 
+        static long &getKmerSubsample() {
+                static long kmerSubsample = 0;
+                return kmerSubsample;
+        }
+
 	Kmernator::MmapFileVector storeMmap(string mmapFilename){
 		LOG_VERBOSE(1, "Saving weak kmer spectrum");
 		Kmernator::MmapFileVector savedMmaps;
@@ -477,6 +482,92 @@ public:
 		assert(trans);
 	}
 
+	class SizeTracker {
+	public:
+
+		class SizeTrackerElement {
+		public:
+       			long rawKmers;
+			long rawGoodKmers;
+			long uniqueKmers;
+			long singletonKmers;
+
+			SizeTrackerElement(long raw = 0, long rawGood = 0, long unique = 0, long single = 0) : rawKmers(raw), rawGoodKmers(rawGood), uniqueKmers(unique), singletonKmers(single) {}
+			SizeTrackerElement(const SizeTrackerElement &copy) {
+				*this = copy;
+			}
+			SizeTrackerElement &operator=(const SizeTrackerElement &copy) {
+				rawKmers = copy.rawKmers;
+				rawGoodKmers = copy.rawGoodKmers;
+				uniqueKmers = copy.uniqueKmers;
+				singletonKmers = copy.singletonKmers;
+				return *this;
+			}
+			std::string toString() const {
+				std::stringstream ss;
+				ss << rawKmers << "\t" << rawGoodKmers << "\t" << uniqueKmers << "\t" << singletonKmers;
+				return ss.str();
+			}
+			static std::string header() {
+				std::stringstream ss;
+				ss << "rawKmers\trawGoodKmers\tuniqueKmers\tsingletonKmers";
+				return ss.str();
+			}
+		};
+
+		typedef std::vector< SizeTrackerElement > Elements;
+		typedef typename Elements::const_iterator ElementsConstIterator;
+		typedef typename Elements::iterator ElementsIterator;
+
+		long nextToTrack;
+		Elements elements;
+
+		SizeTracker() {
+			reset();
+		}
+		SizeTracker(const SizeTracker &copy) {
+			*this = copy;
+		}
+		SizeTracker &operator=(const SizeTracker &copy) {
+			nextToTrack = copy.nextToTrack;
+			elements = copy.elements;
+			return *this;
+		}
+		void resize(int size) {
+			elements.resize(size, SizeTrackerElement());
+		}
+		
+		std::string toString() const {
+			std::stringstream ss;
+			ss << SizeTrackerElement::header() << std::endl;
+			for(ElementsConstIterator it = elements.begin(); it != elements.end(); it++)
+				ss << it->toString() << std::endl;
+			return ss.str();
+		}
+		void track(long raw, long rawGood, long unique, long single, bool force = false) {
+			if (raw < nextToTrack && !force)
+				return;
+			if (getKmerSubsample() > 1) {
+				raw *= getKmerSubsample();
+				rawGood *= getKmerSubsample();
+				unique *= getKmerSubsample();
+				single *= getKmerSubsample();
+			}
+			SizeTrackerElement element(raw, rawGood, unique, single);
+			elements.push_back( element );
+			nextToTrack = raw * 1.3;
+			LOG_DEBUG_OPTIONAL(1, true, "SizeTracker::track(): " << element.toString() << ".  Next to track at above: " << nextToTrack);
+		}
+		void reset() {
+			nextToTrack = 128;
+			elements.clear();
+			track(0,0,0,0);
+		}
+	};
+	SizeTracker sizeTracker;
+	SizeTracker getSizeTracker() const {
+		return sizeTracker;
+	}
 
 	class Histogram {
 	public:
@@ -1141,7 +1232,15 @@ public:
 		PositionType readPos = 0;
 		append(pointers, least, weight, readIdx, readPos, true);
 	}
+
+	void trackSpectrum(bool force = false) {
+		sizeTracker.track(rawKmers, rawGoodKmers, uniqueKmers, singletonKmers, force);
+	}
+		
 	inline void append(DataPointers &pointers, Kmer &least, WeightType weight, ReadSetSizeType readIdx, PositionType readPos, bool isSolid = false, Extension left = Extension(), Extension right = Extension()) {
+		if (omp_get_thread_num() == 0)
+			trackSpectrum(false);
+
 		#pragma omp atomic
 		rawKmers++;
 

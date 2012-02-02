@@ -110,65 +110,6 @@ public:
 };
 typedef OptionsBaseTemplate< _MPIEstimateSizeOptions > MPIEstimateSizeOptions;
 
-class SizeTracker {
-public:
-
-class SizeTrackerElement {
-public:
-	long totalBases;
-	long uniqueKmers;
-	long rawKmers;
-	SizeTrackerElement(long bases, long unique, long raw) : totalBases(bases), uniqueKmers(unique), rawKmers(raw) {}
-	std::string toString() const {
-		std::stringstream ss;
-		ss << totalBases << "\t" << uniqueKmers << "\t" << rawKmers << std::endl;
-		return ss.str();
-	}
-	static std::string header() {
-		std::stringstream ss;
-		ss << "totalBases\tuniqueKmers\trawKmers" << std::endl;
-		return ss.str();
-	}
-};
-
-	typedef std::vector< SizeTrackerElement > Elements;
-	Elements elements;
-	SizeTracker() {}
-	std::string toString() const {
-		std::stringstream ss;
-		ss << SizeTrackerElement::header();
-		for(Elements::const_iterator it = elements.begin(); it != elements.end(); it++)
-			ss << it->toString();
-		return ss.str();
-	}
-	void track(long bases, long unique, long raw) {
-		if (KS::getKmerSubsample() > 1) {
-			unique *= KS::getKmerSubsample();
-			raw *= KS::getKmerSubsample();
-		}
-		elements.push_back( SizeTrackerElement( bases, unique, raw ) );
-	}
-	void reset() {
-		elements.clear();
-	}
-	void reduce(mpi::communicator &world) {
-		int ct = 3*elements.size();
-		long in[ct], out[ct];
-		long *tmp = &in[0];
-		for(Elements::const_iterator it = elements.begin(); it != elements.end(); it++) {
-			*(tmp++) = it->totalBases;
-			*(tmp++) = it->uniqueKmers;
-			*(tmp++) = it->rawKmers;
-		}
-		MPI_Allreduce(in, out, ct, MPI_LONG, MPI_SUM, world);
-		tmp = &out[0];
-		for(Elements::iterator it = elements.begin(); it != elements.end(); it++) {
-			it->totalBases = *(tmp++);
-			it->uniqueKmers = *(tmp++);
-			it->rawKmers = *(tmp++);
-		}
-	}
-};
 
 int main(int argc, char *argv[]) {
 
@@ -186,9 +127,6 @@ int main(int argc, char *argv[]) {
         double maxSamplePartition = MPIEstimateSizeOptions::getOptions().getMaxSamplePartition();
         double fraction = 0.0;
 
-	SizeTracker tracker;
-	tracker.track(0,0,0);
-	tracker.track(KmerSizer::getSequenceLength(), 1, 1);
         unsigned long totalBases = 0;
         long numBuckets = 0;
         KS spectrum(world, numBuckets);
@@ -222,7 +160,7 @@ int main(int argc, char *argv[]) {
 	    if (KmerOptions::getOptions().getKmerSize() > 0) {
 
 		spectrum.buildKmerSpectrum(reads);
-		tracker.track(totalBases, spectrum.getUniqueKmers(), spectrum.getRawKmers());
+		spectrum.trackSpectrum();
 
 		if (Log::isDebug(1)) {
                 	KS::MPIHistogram h = spectrum._getHistogram(false);
@@ -233,10 +171,10 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	tracker.reduce(world);
+	KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
 	if (world.rank() == 0 && !outputFilename.empty()) {
 		OfstreamMap ofm(outputFilename, "");
-		ofm.getOfstream("") << tracker.toString();
+		ofm.getOfstream("") << reducedSizeTracker.toString();
 	}
 	std::string hist = spectrum.getHistogram(false);
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);

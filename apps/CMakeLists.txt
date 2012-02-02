@@ -101,6 +101,8 @@ target_link_libraries( EstimateSize-P
                               ${KMERNATOR_P_LIBS}
                               )
 
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/apps/EstimateSize.R apps/ )
+
 endif()
 
 set_source_files_properties( ContigExtender
@@ -233,46 +235,3 @@ target_link_libraries(        RandomlySample
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
-#
-# $Log: CMakeLists.txt,v $
-# Revision 1.9  2010-08-18 17:47:49  regan
-# added TNF distance application
-#
-# Revision 1.8.16.1  2010-07-13 17:39:12  regan
-# created TnfDistance application
-#
-# Revision 1.8  2010-05-05 06:28:40  regan
-# merged changes from FixPairOutput-20100504
-#
-# Revision 1.7.4.1  2010-05-04 21:33:44  regan
-# checkpoint
-#
-# Revision 1.7  2010-05-01 21:58:00  regan
-# merged head with serial threaded build partitioning
-#
-# Revision 1.6.4.1  2010-04-30 23:33:42  regan
-# replaced read cache with LRU 3rd party cache
-#
-# Revision 1.6  2010-04-16 22:44:23  regan
-# merged HEAD with changes for mmap and intrusive pointer
-#
-# Revision 1.4.2.2  2010-04-05 05:42:56  regan
-# checkpoint mmaping input files
-#
-# Revision 1.4.2.1  2010-04-05 03:32:13  regan
-# moved read file reader
-#
-# Revision 1.4  2010-03-16 18:58:10  regan
-# created a simple fastq2fasta program
-#
-# Revision 1.3  2010-01-13 23:32:35  regan
-# new app
-#
-# Revision 1.2  2010-01-08 18:34:51  regan
-# refactored a bit
-# enabled openmp parallelizations
-#
-# Revision 1.1  2009-11-27 23:28:07  cfurman
-# CompareSpectrum application added
-#
- 

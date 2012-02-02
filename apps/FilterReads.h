@@ -56,14 +56,17 @@ using namespace std;
 // TODO add outputformat of fasta
 class _FilterReadsBaseOptions : public OptionsBaseInterface {
 public:
-	static int getMaxKmerDepth() {
+	int getMaxKmerDepth() {
 		return getVarMap()["max-kmer-output-depth"].as<int> ();
 	}
-	static int getPartitionByDepth() {
+	int getPartitionByDepth() {
 		return getVarMap()["partition-by-depth"].as<int> ();
 	}
-	static bool getBothPairs() {
+	bool getBothPairs() {
 		return getVarMap()["min-passing-in-pair"].as<int>() == 2;
+	}
+	std::string getSizeHistoryFile() {
+		return getVarMap()["size-history-file"].as<std::string>();
 	}
 	void _resetDefaults() {
 		KmerOptions::_resetDefaults();
@@ -82,7 +85,10 @@ public:
 				"partition filtered reads by powers-of-two coverage depth (mutually exclusive with max-kmer-depth)")
 
 		("min-passing-in-pair", po::value<int>()->default_value(1),
-				"1 or 2 reads in a pair must pass filters");
+				"1 or 2 reads in a pair must pass filters")
+
+		("size-history-file", po::value<std::string>()->default_value(""),
+				"if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)");
 
 		desc.add(opts);
 		KmerOptions::_setOptions(desc, p);

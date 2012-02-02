@@ -197,6 +197,8 @@ public:
 	typedef typename KS::DataPointers DataPointers;
 	typedef typename KS::WeakElementType WeakElementType;
 	typedef typename KS::WeakBucketType WeakBucketType;
+	typedef typename KS::SizeTracker SizeTracker;
+	typedef typename SizeTracker::Elements SizeTrackerElements;
 
 protected:
 	mpi::communicator world;
@@ -214,10 +216,6 @@ public:
 	}
 	mpi::communicator &getWorld() {
 		return world;
-	}
-	static long &getKmerSubsample() {
-		static long kmerSubsample = 0;
-		return kmerSubsample;
 	}
 	template<typename D>
 	MmapFile writeKmerMap(D &kmerMap, std::string filepath) {
@@ -410,7 +408,7 @@ public:
 		assert( world.rank() == 0 ? (globalReadSetOffset == 0) : (store.getSize() == 0 || globalReadSetOffset > 0) );
 		msgBuffers = new StoreKmerMessageBuffer(world, messageSize, StoreKmerMessageHeaderProcessor(*this,isSolid));
 
-		long kmerSubsample = getKmerSubsample();
+		long kmerSubsample = KS::getKmerSubsample();
 
 		std::stringstream ss;
 		#pragma omp parallel num_threads(numThreads)
@@ -487,6 +485,41 @@ public:
 		world.barrier();
 		LOG_DEBUG(1, "finished _buildKmerSpectrumMPI");
 	}
+
+        SizeTracker reduceSizeTracker(mpi::communicator &world) {
+		SizeTracker s = this->getSizeTracker();
+		SizeTrackerElements &elements = s.elements;
+                int inct = elements.size();
+		int ct, tmpct;
+		LOG_DEBUG_OPTIONAL(1, true, "my sizeTracker size: " << inct);
+		MPI_Allreduce(&inct, &ct, 1, MPI_INT, MPI_MAX, world);
+		LOG_DEBUG_OPTIONAL(1, true, "our sizeTracker size: " << ct);
+
+		SizeTracker newTracker;
+		newTracker.resize(ct);
+		SizeTrackerElements &newElements = newTracker.elements;
+                
+                long in[ct*4], out[ct*4];
+                long *tmp = &in[0];
+                for(int i = 0; i < ct; i++) {
+			// repeat the last record, if shorter than the global max size
+			tmpct = i;
+			if (tmpct >= inct) tmpct = inct - 1;
+                        *(tmp++) = elements[tmpct].rawKmers;
+                        *(tmp++) = elements[tmpct].rawGoodKmers;
+                        *(tmp++) = elements[tmpct].uniqueKmers;
+                        *(tmp++) = elements[tmpct].singletonKmers;
+                }
+                MPI_Allreduce(in, out, ct*4, MPI_LONG_LONG_INT, MPI_SUM, world);
+                tmp = &out[0];
+                for(int i = 0; i < ct ; i++) {
+                        newElements[i].rawKmers = *(tmp++);
+                        newElements[i].rawGoodKmers = *(tmp++);
+                        newElements[i].uniqueKmers = *(tmp++);
+                        newElements[i].singletonKmers = *(tmp++);
+                }
+		return newTracker;
+        }
 
 	class MPIHistogram : public Histogram {
 	public:

@@ -3,7 +3,12 @@
 
 FRP=../apps/MeraculousCounter
 
-TMP=$(mktemp)
+TMPDIR=${TMPDIR:=/tmp}
+TMP=$(mktemp $TMPDIR/test$$)
+if [ ! -f $TMP ]
+then
+  exit 1
+fi
 rm $TMP
 
 IN=1000.fastq

@@ -3,8 +3,8 @@ args <- commandArgs(TRUE)
 file <- args[1]
 
 data <- read.table(file, header = TRUE, sep="\t")
-rawKmers <- data[3]
-uniqueKmers <- data[2]
+rawKmers <- data[1]
+uniqueKmers <- data[3]
 d <- data.frame(rawKmers=rawKmers, uniqueKmers=uniqueKmers)
 
 fun3 <- function(x, ax, bx) {
