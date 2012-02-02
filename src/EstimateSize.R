@@ -10,8 +10,11 @@ d <- data.frame(rawKmers=rawKmers, uniqueKmers=uniqueKmers)
 fun3 <- function(x, ax, bx) {
   val <- ax * x + bx - bx * (( ax + bx - 1) / bx ) ^ x
   cx <- (( bx + ax - 1) / bx)
-  dy.da <- ( ( -bx * ( cx ) ^ x + bx + ax - 1) * x ) / (bx + ax - 1)
-  dy.db <- ( (ax - 1) * ( cx ) ^ x * x + ( - bx - ax + 1) * ( cx ) ^ x + bx + ax - 1) / ( bx + ax - 1)
+  # derivatives from http://www.solvemymath.com/online_math_calculator/calculus/derivative_calculator/index.php
+  dy.da <- ( ( -bx * ( cx ^ x ) + bx + ax - 1) * x ) / (bx + ax - 1)
+  dy.db <- ( (ax - 1) * ( cx ^ x ) * x + ( - bx - ax + 1) * ( cx ^ x ) + bx + ax - 1) / ( bx + ax - 1)
+  #dy.dx <- ax - bx * ( cx ^ x ) * log ( cx )
+
   attr(val, "gradient") <- cbind( ax = dy.da, bx = dy.db)
   val
 }
