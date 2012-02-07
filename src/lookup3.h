@@ -965,11 +965,11 @@ static void driver3()
 static void driver4()
 {
   uint8_t buf[1];
-  uint32_t h,i,state[HASHSTATE];
+  uint32_t h,i; //,state[HASHSTATE];
 
 
   buf[0] = ~0;
-  for (i=0; i<HASHSTATE; ++i) state[i] = 1;
+  //for (i=0; i<HASHSTATE; ++i) state[i] = 1;
   printf("These should all be different\n");
   for (i=0, h=0; i<8; ++i)
   {
