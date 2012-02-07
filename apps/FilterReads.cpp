@@ -115,13 +115,16 @@ int main(int argc, char *argv[]) {
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, KmerOptions::getOptions().getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
-          std::string sizeHistoryFile = FilterReadsOptions::getOptions().getSizeHistoryFile();
-          if (!sizeHistoryFile.empty()) {
-              LOG_VERBOSE(1, "Writing size history file to: " << sizeHistoryFile);
-              spectrum.trackSpectrum(true);
-              OfstreamMap ofm(sizeHistoryFile, "");
-              ofm.getOfstream("") << spectrum.getSizeTracker().toString();
-          }
+      spectrum.trackSpectrum(true);
+      std::string sizeHistoryFile = FilterReadsOptions::getOptions().getSizeHistoryFile();
+      if (!sizeHistoryFile.empty()) {
+          LOG_VERBOSE(1, "Writing size history file to: " << sizeHistoryFile);
+          OfstreamMap ofm(sizeHistoryFile, "");
+          ofm.getOfstream("") << spectrum.getSizeTracker().toString();
+      } else {
+    	  LOG_VERBOSE(1, "Kmer Size History:" << std::endl << spectrum.getSizeTracker().toString());
+      }
+
 	  if (Log::isVerbose(1))
 		  spectrum.printHistograms(Log::Verbose("Kmer Histogram"));
 

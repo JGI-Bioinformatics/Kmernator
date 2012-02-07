@@ -152,16 +152,18 @@ int main(int argc, char *argv[]) {
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		spectrum.buildKmerSpectrum(reads);
+		spectrum.trackSpectrum(true);
+		KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
 
 		std::string sizeHistoryFile = MPIFilterReadsOptions::getOptions().getSizeHistoryFile();
 		if (!sizeHistoryFile.empty()) {
-			spectrum.trackSpectrum(true);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Writing size history file to: " << sizeHistoryFile);
-			KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
 			if (world.rank() == 0) {
 				OfstreamMap ofm(sizeHistoryFile, "");
 				ofm.getOfstream("") << reducedSizeTracker.toString();
 			}
+		} else {
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Kmer Size History:" << std::endl << reducedSizeTracker.toString())
 		}
 
 		if (Log::isVerbose(1)) {
