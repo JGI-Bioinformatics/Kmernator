@@ -11,6 +11,98 @@
 #include "FilterKnownOddities.h"
 #include "Options.h"
 
+
+class _DuplicateFragmentFilterOptions : public OptionsBaseInterface {
+public:
+	_DuplicateFragmentFilterOptions() : deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0),
+	deDupLength(16) {}
+	virtual ~_DuplicateFragmentFilterOptions() {}
+
+	unsigned int &getDeDupEditDistance()
+	{
+	    return deDupEditDistance;
+	}
+
+	unsigned int &getDeDupLength()
+	{
+	    return deDupLength;
+	}
+
+	unsigned int &getDeDupMode()
+	{
+	    return deDupMode;
+	}
+
+	unsigned int &getDeDupSingle()
+	{
+	    return deDupSingle;
+	}
+
+	unsigned int &getDeDupStartOffset()
+	{
+	    return deDupStartOffset;
+	}
+
+	void _resetDefaults() {
+	    GeneralOptions::_resetDefaults();
+	    FilterKnownOdditiesOptions::_resetDefaults();
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+	    // *::_setOptions(desc,p);
+		// This class does not support non-default options for:
+		// GeneralOptions or FilterKnownOdditiesOptions
+	    po::options_description opts("Duplicate Fragment Filter (PCR duplicates)");
+	    opts.add_options()
+				("dedup-mode", po::value<unsigned int>()->default_value(deDupMode),
+						"if 0, no fragment de-duplication will occur.  if 1, single orientation (AB and BA are separated) will collapse to consensus. if 2, both orientations (AB and BA are the same) will collapse")
+
+		        ("dedup-single", po::value<unsigned int>()->default_value(deDupSingle),
+				    "if 0, no single read de-duplication will occur.  if 1, then single read deduplication will occur")
+
+				("dedup-edit-distance", po::value<unsigned int>()->default_value(deDupEditDistance),
+						"if -1, no fragment de-duplication will occur, if 0, only exact match, ...")
+
+				("dedup-start-offset", po::value<unsigned int>()->default_value(deDupStartOffset),
+						"de-duplication start offset to find unique fragments, must be multiple of 4")
+
+				("dedup-length", po::value<unsigned int>()->default_value(deDupLength),
+						"de-duplication length to find unique fragments, must be multiple of 4 (length on each read of a paired fragment or doubled when in single-end mode)")
+
+						;
+	    desc.add(opts);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		// This class does not support non-default options for:
+		// GeneralOptions or FilterKnownOdditiesOptions
+		// ret &= *::_parseOptions(vm);
+		// set dedup mode
+		setOpt<unsigned int>("dedup-mode", getDeDupMode());
+
+		// set dedup single
+		setOpt<unsigned int>("dedup-single", getDeDupSingle());
+
+		// set dedup edit distance
+		setOpt<unsigned int>("dedup-edit-distance", getDeDupEditDistance());
+		if (getDeDupEditDistance() > 1) {
+			LOG_ERROR(1, "Unsupported option dedup-edit-distance > 1!" << std::endl << getDesc() << std::endl << "Unsupported option dedup-edit-distance > 1!");
+		    ret = false;
+		}
+		setOpt<unsigned int>("dedup-start-offset", getDeDupStartOffset());
+		setOpt<unsigned int>("dedup-length", getDeDupLength());
+		if (getDeDupStartOffset() % 4 != 0 || getDeDupLength() % 4 != 0) {
+			LOG_ERROR(1, "Unsupported option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl << getDesc() << std::endl << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!");
+			ret = false;
+		}
+
+		return ret;
+	}
+protected:
+	unsigned int deDupMode, deDupSingle, deDupEditDistance, deDupStartOffset, deDupLength;
+
+};
+typedef OptionsBaseTemplate< _DuplicateFragmentFilterOptions > DuplicateFragmentFilterOptions;
+
 // NOTE
 //
 //  _KmerSpectrum must be <TD, TD, TD>;
@@ -30,7 +122,7 @@ public:
 	typedef ReadSet::Pair Pair;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 
-	static void _buildDuplicateFragmentMap(KSV &ksv, ReadSet &reads, unsigned char bytes, bool useReverseComplement, bool paired, unsigned int startOffset = Options::getOptions().getDeDupStartOffset()) {
+	static void _buildDuplicateFragmentMap(KSV &ksv, ReadSet &reads, unsigned char bytes, bool useReverseComplement, bool paired, unsigned int startOffset = DuplicateFragmentFilterOptions::getOptions().getDeDupStartOffset()) {
 		// build one KS per thread, then merge, skipping singletons
         // no need to include quality scores
 
@@ -343,7 +435,7 @@ public:
 
 		SequenceLengthType affectedCount = 0;
 
-        bool useReverseComplement = (Options::getOptions().getDeDupMode() == 2);
+        bool useReverseComplement = (DuplicateFragmentFilterOptions::getOptions().getDeDupMode() == 2);
 
 		// build the paired duplicate fragment map
 		_buildDuplicateFragmentMap(ksv, reads, bytes, useReverseComplement, paired);
@@ -363,14 +455,14 @@ public:
 			affectedCount += _buildConsensusUnPairedReads(ks, reads, newReads, cutoffThreshold);
 		}
 
-		if (Options::getOptions().getSkipArtifactFilter() == 0) {
+		if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
 			LOG_VERBOSE(1, "Preparing artifact filter on new consensus reads: ");
 			FilterKnownOddities filter;
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			// ignore user settings for outputing any filtered new consensus reads
-			int oldFilterOutput = Options::getOptions().getFilterOutput();
-			Options::getOptions().getFilterOutput() = 0;
+			int oldFilterOutput = FilterKnownOdditiesOptions::getOptions().getFilterOutput();
+			FilterKnownOdditiesOptions::getOptions().getFilterOutput() = 0;
 
 			LOG_VERBOSE(2, "Applying sequence artifact filter to new consensus reads");
 			unsigned long filtered = filter.applyFilter(newReads);
@@ -378,7 +470,7 @@ public:
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			// reset user settings
-			Options::getOptions().getFilterOutput() = oldFilterOutput;
+			FilterKnownOdditiesOptions::getOptions().getFilterOutput() = oldFilterOutput;
 		}
 
 		reads.append(newReads);
@@ -390,9 +482,9 @@ public:
 		return affectedCount;
 	}
 
-	static ReadSetSizeType filterDuplicateFragments(ReadSet &reads, unsigned char sequenceLength = Options::getOptions().getDeDupLength(), unsigned int cutoffThreshold = 2, unsigned int editDistance = Options::getOptions().getDeDupEditDistance()) {
+	static ReadSetSizeType filterDuplicateFragments(ReadSet &reads, unsigned char sequenceLength = DuplicateFragmentFilterOptions::getOptions().getDeDupLength(), unsigned int cutoffThreshold = 2, unsigned int editDistance = DuplicateFragmentFilterOptions::getOptions().getDeDupEditDistance()) {
 
-	  if ( Options::getOptions().getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
+	  if ( DuplicateFragmentFilterOptions::getOptions().getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
 		  LOG_VERBOSE(1, "Skipping filter and merge of duplicate fragments");
 		  return 0;
 	  }
@@ -408,7 +500,7 @@ public:
 
 	  affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, true);
 
-	  if (Options::getOptions().getDeDupSingle() == 1)
+	  if (DuplicateFragmentFilterOptions::getOptions().getDeDupSingle() == 1)
 		  affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, false);
 
       KmerSizer::set(oldKmerSize);

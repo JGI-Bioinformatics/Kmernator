@@ -55,10 +55,12 @@ class _Ktest2Options : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
 		KmerOptions::_resetDefaults();
+		FilterKnownOdditiesOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		KmerOptions::_setOptions(desc,p);
+		FilterKnownOdditiesOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc, p);
 		p.add("kmer-size", 1);
 		p.add("input-file", -1);
@@ -66,6 +68,7 @@ public:
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= KmerOptions::_parseOptions(vm);
+		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 		ret &= GeneralOptions::_parseOptions(vm);
 		return ret;
 	}

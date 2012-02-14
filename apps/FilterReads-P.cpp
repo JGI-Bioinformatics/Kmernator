@@ -37,12 +37,16 @@ typedef TrackingDataWithDirection DataType;
 typedef DistributedKmerSpectrum<DataType, DataType> KS;
 typedef DistributedReadSelector<DataType> RS;
 
-class _MPIFilterReadsOptions : public _FilterReadsBaseOptions, public _MPIOptions {
+class _MPIFilterReadsOptions : public _FilterReadsBaseOptions {
 public:
 	void _resetDefaults() {
 		_FilterReadsBaseOptions::_resetDefaults();
-		_MPIOptions::_resetDefaults();
+		MPIOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
+		KmerOptions::_resetDefaults();
+		FilterKnownOdditiesOptions::_resetDefaults();
+		DuplicateFragmentFilterOptions::_resetDefaults();
+
 		// assign defaults
 		GeneralOptions::getOptions().getMmapInput() = 0;
 		GeneralOptions::getOptions().getVerbose() = 2;
@@ -50,13 +54,20 @@ public:
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		_FilterReadsBaseOptions::_setOptions(desc, p);
-		_MPIOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc, p);
+		MPIOptions::_setOptions(desc,p);
+		KmerOptions::_setOptions(desc,p);
+		FilterKnownOdditiesOptions::_setOptions(desc,p);
+		DuplicateFragmentFilterOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
-		ret &= _MPIOptions::_parseOptions(vm);
+		ret &= MPIOptions::_parseOptions(vm);
+		ret &= KmerOptions::_parseOptions(vm);
+		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
+		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
+
 		ret &= _FilterReadsBaseOptions::_parseOptions(vm);
 
 		return ret;
@@ -97,7 +108,7 @@ int main(int argc, char *argv[]) {
 
 	setGlobalReadSetOffsets(world, reads);
 
-	if (Options::getOptions().getSkipArtifactFilter() == 0) {
+	if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Preparing artifact filter: ");
 
@@ -117,7 +128,7 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	if ( Options::getOptions().getDeDupMode() > 0 && Options::getOptions().getDeDupEditDistance() >= 0) {
+	if ( DuplicateFragmentFilterOptions::getOptions().getDeDupMode() > 0 && DuplicateFragmentFilterOptions::getOptions().getDeDupEditDistance() >= 0) {
 		if (world.size() == 1) {
 			LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
 			unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);

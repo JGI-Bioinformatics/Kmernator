@@ -18,8 +18,11 @@
 
 class _MatcherInterfaceOptions  : public OptionsBaseInterface {
 public:
-	static int getMaxReadMatches() {
-		return getVarMap()["max-read-matches"].as<int>();
+	_MatcherInterfaceOptions() : maxReadMatches(500) {}
+	virtual ~_MatcherInterfaceOptions() {}
+
+	int &getMaxReadMatches() {
+		return maxReadMatches;
 	}
 	// use to set/overrided any defaults on options that are stored persistently
 	void _resetDefaults() {}
@@ -27,15 +30,18 @@ public:
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		po::options_description opts("Matching Options");
 		opts.add_options()
-		("max-read-matches", po::value<int>()->default_value(500),
+		("max-read-matches", po::value<int>()->default_value(maxReadMatches),
 						"maximum number of (randomly sampled) reads to return for matching. '0' disables.")
 						;
 		desc.add(opts);
 	}
 	// use to post-process options, returning true if everything is okay
 	bool _parseOptions(po::variables_map &vm) {
+		setOpt<int>("max-read-matches", maxReadMatches);
 		return true;
 	}
+protected:
+	int maxReadMatches;
 };
 typedef OptionsBaseTemplate< _MatcherInterfaceOptions > MatcherInterfaceOptions;
 

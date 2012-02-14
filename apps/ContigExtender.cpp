@@ -38,6 +38,7 @@
 #include "Options.h"
 #include "Kmer.h"
 #include "KmerSpectrum.h"
+#include "FilterKnownOddities.h"
 #include "DuplicateFragmentFilter.h"
 #include "ContigExtender.h"
 #include "Log.h"
@@ -51,21 +52,27 @@ public:
 	virtual ~_ContigExtenderOptions() {}
 	void _resetDefaults() {
 		_ContigExtenderBaseOptions::_resetDefaults();
-
 		GeneralOptions::_resetDefaults();
+		FilterKnownOdditiesOptions::_resetDefaults();
+		DuplicateFragmentFilterOptions::_resetDefaults();
+
 		// do not apply artifact filtering by default
-		GeneralOptions::getOptions().getSkipArtifactFilter() = 1;
+		FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() = 1;
 		// override the default output format!
 		GeneralOptions::getOptions().getFormatOutput() = 3;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		_ContigExtenderBaseOptions::_setOptions(desc, p);
 		GeneralOptions::_setOptions(desc,p);
+		FilterKnownOdditiesOptions::_setOptions(desc,p);
+		DuplicateFragmentFilterOptions::_setOptions(desc,p);
 	}
 	// use to post-process options, returning true if everything is okay
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
+		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
 		ret &= _ContigExtenderBaseOptions::_parseOptions(vm);
 		return ret;
 	}
@@ -92,7 +99,7 @@ int main(int argc, char *argv[]) {
 	contigs.appendAllFiles(contigFiles);
 	LOG_VERBOSE(1, "loaded " << contigs.getSize() << " Reads, " << contigs.getBaseCount() << " Bases ");
 
-	if (Options::getOptions().getDeDupMode() > 0 && Options::getOptions().getDeDupEditDistance() >= 0) {
+	if (DuplicateFragmentFilterOptions::getOptions().getDeDupMode() > 0 && DuplicateFragmentFilterOptions::getOptions().getDeDupEditDistance() >= 0) {
 	  LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
 	  unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
 	  LOG_VERBOSE(1, "filter removed duplicate fragment pair reads: " << duplicateFragments);

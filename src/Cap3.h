@@ -16,9 +16,10 @@
 
 class _Cap3Options : public OptionsBaseInterface {
 public:
+	_Cap3Options() : cap3Path() {}
 	virtual ~_Cap3Options() {}
-	static std::string getCap3Path() {
-		return getVarMap()["cap3-path"].as<std::string>();
+	std::string &getCap3Path() {
+		return cap3Path;
 	}
 	void _resetDefaults() {
 		Options::getOptions().getMmapInput() = 0;
@@ -28,13 +29,20 @@ public:
 		po::options_description opts("Cap3 Options");
 
 		opts.add_options()
-		("cap3-path", po::value<std::string>()->default_value(""),
+		("cap3-path", po::value<std::string>()->default_value(cap3Path),
 				"if set, cap3 will be used to extend contigs")
 
 		;
 
 		desc.add(opts);
 	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		setOpt<std::string>("cap3-path", cap3Path);
+		return ret;
+	}
+protected:
+	std::string cap3Path;
 };
 typedef OptionsBaseTemplate< _Cap3Options > Cap3Options;
 

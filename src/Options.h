@@ -81,6 +81,18 @@ public:
 	typedef std::vector<std::string> StringListType;
 	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
 	typedef StringListType FileListType;
+    static std::string toString(const FileListType &fl) {
+		std::stringstream ss;
+		bool isNotFirst = false;
+		for (FileListType::const_iterator it = fl.begin(); it != fl.end(); it++) {
+			if (isNotFirst)
+				ss << ", ";
+
+			isNotFirst = true;
+			ss << *it;
+		}
+		return ss.str();
+	}
 
 	static po::options_description &getDesc() {
 		return OptionsInstance::getDesc();
@@ -111,7 +123,19 @@ public:
 		} else if (print) {
 			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " was not specified.");
 		}
+	};
+	void setOpt2(std::string key, FileListType &val, bool print = Log::printOptions()) {
+		po::variables_map &vm = getVarMap();
+		if (vm.count(key.c_str())) {
+			val = vm[key.c_str()].as<FileListType>();
+			if (print) {
+				LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " is: " << toString(val) );
+			}
+		} else if (print) {
+			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " was not specified.");
+		}
 	}
+
 	static void setOptionsErrorMsg(std::string msg) {
 		OptionsInstance::setOptionsErrorMsg(msg);
 	}
@@ -213,17 +237,36 @@ protected:
 	OptionsBaseTemplate& operator=(OptionsBaseTemplate const&); // disabled
 };
 
+/* Example copy-paste template */
+
+class _MySpecificOptions : public OptionsBaseInterface {
+public:
+	void _resetDefaults() {
+	    // *::_resetDefaults();
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+	    // *::_setOptions(desc,p);
+	    po::options_description opts("My Specific Options");
+	    opts.add_options()("my-option", po::value<int>()->default_value(0), "my option");
+	    desc.add(opts);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		// ret &= *::_parseOptions(vm);
+		return ret;
+	}
+};
+typedef OptionsBaseTemplate< _MySpecificOptions > MySpecificOptions;
+
+
 class _GeneralOptions : public OptionsBaseInterface {
 public:
 	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"),
 	formatOutput(0), buildOutputInMemory(false),
 	minQuality(5), depthRange(2), minReadLength(25), bimodalSigmas(-1.0),
 	variantSigmas(-1.0), ignoreQual(0),
-	periodicSingletonPurge(0), skipArtifactFilter(0), artifactFilterMatchLength(24),
-	artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
-	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0),
-	deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0),
-	deDupLength(16),
+	periodicSingletonPurge(0),
+
 	mmapInput(1), gcHeatMap(1), gatheredLogs(1),
 	batchSize(100000), separateOutputs(1)
 	{
@@ -257,19 +300,6 @@ private:
 	double       variantSigmas;
 	unsigned int ignoreQual;
 	unsigned int periodicSingletonPurge;
-	unsigned int skipArtifactFilter;
-	unsigned int artifactFilterMatchLength;
-	unsigned int artifactFilterEditDistance;
-	unsigned int buildArtifactEditsInFilter;
-	unsigned int maskSimpleRepeats;
-	unsigned int phiXOutput;
-	FileListType artifactReferenceFiles;
-	unsigned int filterOutput;
-	unsigned int deDupMode;
-	unsigned int deDupSingle;
-	unsigned int deDupEditDistance;
-	unsigned int deDupStartOffset;
-	unsigned int deDupLength;
 	unsigned int mmapInput;
 	unsigned int gcHeatMap;
 	unsigned int gatheredLogs;
@@ -307,12 +337,6 @@ public:
 		("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory),
 				"if set, all temporary output files will first be stored in memory (faster for MPI applications)")
 
-		("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
-		        "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
-
-		("filter-output", po::value<unsigned int>()->default_value(filterOutput),
-				"if set, artifact filter reads will be output into a separate file. If not set, then affected reads will be trimmed and then output normally.  (requires --output-file set)")
-
 		("log-file", po::value<std::string>()->default_value(logFile),
 				"If set all INFO and DEBUG messages will be logged here (default stderr)")
 
@@ -324,7 +348,6 @@ public:
 
 		("min-quality-score", po::value<unsigned int>()->default_value(minQuality),
 				"minimum quality score over entire kmer")
-
 
 		("depth-range", po::value<unsigned int>()->default_value(depthRange),
 				"if > min-depth, then output will be created in cycles of files ranging from min-depth to depth-range")
@@ -340,38 +363,6 @@ public:
 
 		("periodic-singleton-purge", po::value<unsigned int>()->default_value(periodicSingletonPurge),
 				"Purge singleton memory structure every # of reads")
-
-		("skip-artifact-filter", po::value<unsigned int>()->default_value(skipArtifactFilter),
-				"Skip homo-polymer, primer-dimer and duplicated fragment pair filtering")
-
-		("artifact-match-length", po::value<unsigned int>()->default_value(artifactFilterMatchLength),
-				"Kmer match length to known artifact sequences")
-
-		("artifact-edit-distance", po::value<unsigned int>()->default_value(artifactFilterEditDistance),
-				"edit-distance to apply to artifact-match-length matches to know artifacts")
-
-		("build-artifact-edits-in-filter", po::value<unsigned int>()->default_value(buildArtifactEditsInFilter),
-				"0 - edits will be applied to reads on the fly, 1 - edits will be pre-build in the filter (needs more memory, less overall CPU), 2 - automatic based on size")
-
-		("mask-simple-repeats", po::value<unsigned int>()->default_value(maskSimpleRepeats),
-				"if filtering artifacts, also mask simple repeats")
-
-		("artifact-reference-file", po::value<FileListType>(), "additional artifact reference file(s)")
-
-		("dedup-mode", po::value<unsigned int>()->default_value(deDupMode),
-				"if 0, no fragment de-duplication will occur.  if 1, single orientation (AB and BA are separated) will collapse to consensus. if 2, both orientations (AB and BA are the same) will collapse")
-
-        ("dedup-single", po::value<unsigned int>()->default_value(deDupSingle),
-		    "if 0, no single read de-duplication will occur.  if 1, then single read deduplication will occur")
-
-		("dedup-edit-distance", po::value<unsigned int>()->default_value(deDupEditDistance),
-				"if -1, no fragment de-duplication will occur, if 0, only exact match, ...")
-
-		("dedup-start-offset", po::value<unsigned int>()->default_value(deDupStartOffset),
-				"de-duplication start offset to find unique fragments, must be multiple of 4")
-
-		("dedup-length", po::value<unsigned int>()->default_value(deDupLength),
-				"de-duplication length to find unique fragments, must be multiple of 4 (length on each read of a paired fragment or doubled when in single-end mode)")
 
 		("mmap-input", po::value<unsigned int>()->default_value(mmapInput),
 				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
@@ -495,51 +486,7 @@ public:
 			// set periodic singleton purge value
 			setOpt<unsigned int>("periodic-singleton-purge", getPeriodicSingletonPurge(), print);
 
-			// set skipArtifactFiltering
-			setOpt<unsigned int>("skip-artifact-filter", getSkipArtifactFilter(), print);
-			setOpt<unsigned int>("artifact-match-length", getArtifactFilterMatchLength(), print);
-			setOpt<unsigned int>("artifact-edit-distance", getArtifactFilterEditDistance(), print);
-			setOpt<unsigned int>("build-artifact-edits-in-filter", getBuildArtifactEditsInFilter(), print);
 
-			// set simple repeat masking
-			setOpt<unsigned int>("mask-simple-repeats", getMaskSimpleRepeats() , print);
-
-			// set phix masking
-			setOpt<unsigned int>("phix-output", getPhiXOutput() , print);
-
-			if (vm.count("artifact-reference-file")) {
-				if (print) {
-					Log::Verbose() << "Artifact Reference files are: ";
-				}
-				FileListType artifacts = getArtifactReferenceFiles() = vm["artifact-reference-file"].as<FileListType> ();
-				if (print) {
-					for (FileListType::iterator it = artifacts.begin(); it
-							!= artifacts.end(); it++)
-						*output << *it << ", ";
-					*output << std::endl;
-				}
-			}
-			// set simple repeat masking
-			setOpt<unsigned int>("filter-output", getFilterOutput() , print);
-
-			// set dedup mode
-			setOpt<unsigned int>("dedup-mode", getDeDupMode() , print);
-
-			// set dedup single
-			setOpt<unsigned int>("dedup-single", getDeDupSingle() , print);
-
-			// set dedup edit distance
-			setOpt<unsigned int>("dedup-edit-distance", getDeDupEditDistance() , print);
-			if (getDeDupEditDistance() > 1) {
-				LOG_ERROR(1, "Unsupported option dedup-edit-distance > 1!" << std::endl << getDesc() << std::endl << "Unsupported option dedup-edit-distance > 1!");
-			    return false;
-			}
-			setOpt<unsigned int>("dedup-start-offset", getDeDupStartOffset(), print);
-			setOpt<unsigned int>("dedup-length", getDeDupLength(), print);
-			if (getDeDupStartOffset() % 4 != 0 || getDeDupLength() % 4 != 0) {
-				LOG_ERROR(1, "Unsupported option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl << getDesc() << std::endl << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!");
-				return false;
-			}
 
 			// set mmapInput
 			setOpt<unsigned int>("mmap-input", getMmapInput() , print);
@@ -599,20 +546,6 @@ public:
 #endif
 	}
 
-	unsigned int &getArtifactFilterEditDistance()
-	{
-	    return artifactFilterEditDistance;
-	}
-
-	unsigned int &getArtifactFilterMatchLength()
-	{
-	    return artifactFilterMatchLength;
-	}
-
-	FileListType &getArtifactReferenceFiles()
-	{
-	    return artifactReferenceFiles;
-	}
 
 	unsigned int &getBatchSize()
 	{
@@ -624,49 +557,14 @@ public:
 	    return bimodalSigmas;
 	}
 
-	unsigned int &getBuildArtifactEditsInFilter()
-	{
-	    return buildArtifactEditsInFilter;
-	}
-
 	bool &getBuildOutputInMemory()
 	{
 	    return buildOutputInMemory;
 	}
 
-	unsigned int &getDeDupEditDistance()
-	{
-	    return deDupEditDistance;
-	}
-
-	unsigned int &getDeDupLength()
-	{
-	    return deDupLength;
-	}
-
-	unsigned int &getDeDupMode()
-	{
-	    return deDupMode;
-	}
-
-	unsigned int &getDeDupSingle()
-	{
-	    return deDupSingle;
-	}
-
-	unsigned int &getDeDupStartOffset()
-	{
-	    return deDupStartOffset;
-	}
-
 	unsigned int &getDepthRange()
 	{
 	    return depthRange;
-	}
-
-	unsigned int &getFilterOutput()
-	{
-	    return filterOutput;
 	}
 
 	unsigned int &getFormatOutput()
@@ -699,8 +597,6 @@ public:
 	    return inputFiles;
 	}
 
-
-
 	std::string &getLogFile()
 	{
 	    return logFile;
@@ -709,11 +605,6 @@ public:
 	OStreamPtr &getLogFileStream()
 	{
 	    return logFileStream;
-	}
-
-	unsigned int &getMaskSimpleRepeats()
-	{
-	    return maskSimpleRepeats;
 	}
 
 	int &getMaxThreads()
@@ -747,10 +638,6 @@ public:
 	    return periodicSingletonPurge;
 	}
 
-	unsigned int &getPhiXOutput()
-	{
-	    return phiXOutput;
-	}
 
 	FileListType &getReferenceFiles()
 	{
@@ -763,10 +650,6 @@ public:
 	    return separateOutputs;
 	}
 
-	unsigned int &getSkipArtifactFilter()
-	{
-	    return skipArtifactFilter;
-	}
 
 	std::string &getTmpDir()
 	{

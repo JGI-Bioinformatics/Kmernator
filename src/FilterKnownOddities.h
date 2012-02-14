@@ -49,6 +49,112 @@
 #include "Options.h"
 #include "Log.h"
 
+class _FilterKnownOdditiesOptions : public OptionsBaseInterface {
+public:
+	_FilterKnownOdditiesOptions() : skipArtifactFilter(0), artifactFilterMatchLength(24),
+	artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
+	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0) {}
+	~_FilterKnownOdditiesOptions() {}
+
+	unsigned int &getArtifactFilterEditDistance()
+	{
+	    return artifactFilterEditDistance;
+	}
+	unsigned int &getArtifactFilterMatchLength()
+	{
+	    return artifactFilterMatchLength;
+	}
+	FileListType &getArtifactReferenceFiles()
+	{
+	    return artifactReferenceFiles;
+	}
+	unsigned int &getBuildArtifactEditsInFilter()
+	{
+	    return buildArtifactEditsInFilter;
+	}
+	unsigned int &getFilterOutput()
+	{
+	    return filterOutput;
+	}
+	unsigned int &getMaskSimpleRepeats()
+	{
+	    return maskSimpleRepeats;
+	}
+	unsigned int &getPhiXOutput()
+	{
+	    return phiXOutput;
+	}
+	unsigned int &getSkipArtifactFilter()
+	{
+	    return skipArtifactFilter;
+	}
+
+
+	void _resetDefaults() {
+	    // *::_resetDefaults();
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+	    // *::_setOptions(desc,p);
+	    po::options_description opts("Filter Known Artifacts and Oddities Options");
+	    opts.add_options()
+
+	    		("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
+	    		        "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
+
+	    		("filter-output", po::value<unsigned int>()->default_value(filterOutput),
+	    				"if set, artifact filter reads will be output into a separate file. If not set, then affected reads will be trimmed and then output normally.  (requires --output-file set)")
+
+	    		("skip-artifact-filter", po::value<unsigned int>()->default_value(skipArtifactFilter),
+	    				"Skip homo-polymer, primer-dimer and duplicated fragment pair filtering")
+
+	    		("artifact-match-length", po::value<unsigned int>()->default_value(artifactFilterMatchLength),
+	    				"Kmer match length to known artifact sequences")
+
+	    		("artifact-edit-distance", po::value<unsigned int>()->default_value(artifactFilterEditDistance),
+	    				"edit-distance to apply to artifact-match-length matches to know artifacts")
+
+	    		("build-artifact-edits-in-filter", po::value<unsigned int>()->default_value(buildArtifactEditsInFilter),
+	    				"0 - edits will be applied to reads on the fly, 1 - edits will be pre-build in the filter (needs more memory, less overall CPU), 2 - automatic based on size")
+
+	    		("mask-simple-repeats", po::value<unsigned int>()->default_value(maskSimpleRepeats),
+	    				"if filtering artifacts, also mask simple repeats")
+
+	    		("artifact-reference-file", po::value<FileListType>(), "additional artifact reference file(s)");
+
+	    desc.add(opts);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		// ret &= *::_parseOptions(vm);
+		// set skipArtifactFiltering
+		setOpt<unsigned int>("skip-artifact-filter", skipArtifactFilter);
+		setOpt<unsigned int>("artifact-match-length", artifactFilterMatchLength);
+		setOpt<unsigned int>("artifact-edit-distance", artifactFilterEditDistance);
+		setOpt<unsigned int>("build-artifact-edits-in-filter", buildArtifactEditsInFilter);
+
+		// set simple repeat masking
+		setOpt<unsigned int>("mask-simple-repeats", maskSimpleRepeats);
+
+		// set phix masking
+		setOpt<unsigned int>("phix-output", phiXOutput);
+
+		setOpt2("artifact-reference-file", artifactReferenceFiles);
+
+		// set simple repeat masking
+		setOpt<unsigned int>("filter-output", filterOutput);
+
+		return ret;
+	}
+
+protected:
+	unsigned int skipArtifactFilter, artifactFilterMatchLength,
+		artifactFilterEditDistance, buildArtifactEditsInFilter,
+		maskSimpleRepeats, phiXOutput, filterOutput;
+	FileListType artifactReferenceFiles;
+};
+typedef OptionsBaseTemplate< _FilterKnownOdditiesOptions > FilterKnownOdditiesOptions;
+
+
 class FilterKnownOddities {
 public:
 	typedef Kmer::NumberType NumberType;
@@ -66,7 +172,7 @@ private:
 	int numErrors;
 
 public:
-	FilterKnownOddities(int _length = Options::getOptions().getArtifactFilterMatchLength(), int _numErrors = Options::getOptions().getArtifactFilterEditDistance()) :
+	FilterKnownOddities(int _length = FilterKnownOdditiesOptions::getOptions().getArtifactFilterMatchLength(), int _numErrors = FilterKnownOdditiesOptions::getOptions().getArtifactFilterEditDistance()) :
 		length(_length), filter(512*1024), numErrors(_numErrors) {
 		if (length > 28) {
 			throw std::invalid_argument("FilterKnownOddities must use 7 bytes or less (<= 28 bases)");
@@ -80,20 +186,20 @@ public:
 
 		std::string fasta = getArtifactFasta();
 		sequences.appendFastaData(fasta);
-		if (Options::getOptions().getMaskSimpleRepeats()) {
+		if (FilterKnownOdditiesOptions::getOptions().getMaskSimpleRepeats()) {
 			fasta = getSimpleRepeatFasta();
 			getSimpleRepeatBegin() = sequences.getSize();
 			sequences.appendFastaData(fasta);
 			getSimpleRepeatEnd() = sequences.getSize();
 		}
-		if (Options::getOptions().getPhiXOutput()) {
+		if (FilterKnownOdditiesOptions::getOptions().getPhiXOutput()) {
 			fasta = getPhiX();
 			getPhiXReadIdx() = sequences.getSize();
 			sequences.appendFastaData(fasta);
 		}
 		sequences.circularize(length);
 
-		OptionsBaseInterface::FileListType artifacts = Options::getOptions().getArtifactReferenceFiles();
+		OptionsBaseInterface::FileListType artifacts = FilterKnownOdditiesOptions::getOptions().getArtifactReferenceFiles();
 		if (!artifacts.empty()) {
 			getReferenceReadIdx() = sequences.getSize();
 			for(unsigned int i = 0 ; i < artifacts.size(); i++)
@@ -133,7 +239,7 @@ public:
 		LOG_DEBUG(2, "Processed" << sequences.getSize() << " artifact reads." << filter.size() << "" << MemoryUtils::getMemoryUsage())
 
 		int maxErrors = numErrors;
-		int buildEdits = Options::getOptions().getBuildArtifactEditsInFilter();
+		int buildEdits = FilterKnownOdditiesOptions::getOptions().getBuildArtifactEditsInFilter();
 		for (int error = 0; error < maxErrors; error++) {
 			if (buildEdits == 1 || (buildEdits == 2 && (filter.size() < 750000))) {
 				numErrors--;
@@ -468,11 +574,11 @@ public:
 		unsigned long affectedCount = 0;
 
 		OfstreamMap _omPhiX(Options::getOptions().getOutputFile(), "-PhiX.fastq");
-		if (Options::getOptions().getPhiXOutput()) {
+		if (FilterKnownOdditiesOptions::getOptions().getPhiXOutput()) {
 			recorder.omPhiX = &_omPhiX;
 		}
 		OfstreamMap _omArtifact(Options::getOptions().getOutputFile(), "-Artifact.fastq");
-		if (Options::getOptions().getFilterOutput()) {
+		if (FilterKnownOdditiesOptions::getOptions().getFilterOutput()) {
 			recorder.omArtifact = &_omArtifact;
 		}
 
@@ -1204,71 +1310,3 @@ public:
 
 #endif
 
-// $Log: FilterKnownOddities.h,v $
-// Revision 1.28  2010-08-18 17:50:40  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.27.4.2  2010-07-21 18:06:11  regan
-// added options to change unique mask offset and length for de-duplication
-//
-// Revision 1.27.4.1  2010-07-21 17:27:48  regan
-// refactored
-// filter by pairs, if available
-// output PhiX by pairs
-// allow simple repeats if edge sequences are unmasked
-//
-// Revision 1.27  2010-06-23 20:58:02  regan
-// fixed minimum read length logic
-//
-// Revision 1.26  2010-06-22 23:06:31  regan
-// merged changes in CorruptionBugfix-20100622 branch
-//
-// Revision 1.25.4.1  2010-06-22 23:02:51  regan
-// named all critical sections
-// made the code a bit clearer to follow
-//
-// Revision 1.25  2010-05-24 21:48:46  regan
-// merged changes from RNADedupMods-20100518
-//
-// Revision 1.24.2.6  2010-05-24 21:44:44  regan
-// save memory and scanning time by outputting reads as they are filtered (if output is requested).
-//
-// Revision 1.24.2.5  2010-05-20 18:26:43  regan
-// attempt to fix a race condition when consolidating/merging edit-distance spectrums
-//
-// Revision 1.24.2.4  2010-05-20 03:42:24  regan
-// added RNA_Linker to filter sequences
-// optimized parallel performance in consensus generation
-//
-// Revision 1.24.2.3  2010-05-19 22:43:49  regan
-// bugfixes
-//
-// Revision 1.24.2.2  2010-05-19 21:53:20  regan
-// bugfixes
-//
-// Revision 1.24.2.1  2010-05-19 21:36:54  regan
-// refactored duplicate fragment filter code
-// added duplicate fragment on single ended reads
-//
-// Revision 1.24  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.23.2.4  2010-05-12 22:45:00  regan
-// added readset circularize method
-//
-// Revision 1.23.2.3  2010-05-12 20:47:12  regan
-// bugfix in names of output files
-//
-// Revision 1.23.2.2  2010-05-10 17:57:24  regan
-// fixing types
-//
-// Revision 1.23.2.1  2010-05-07 22:59:32  regan
-// refactored base type declarations
-//
-// Revision 1.23  2010-05-06 22:55:05  regan
-// merged changes from CodeCleanup-20100506
-//
-// Revision 1.22  2010-05-06 21:46:54  regan
-// merged changes from PerformanceTuning-20100501
-//
-//

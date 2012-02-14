@@ -56,17 +56,23 @@ using namespace std;
 // TODO add outputformat of fasta
 class _FilterReadsBaseOptions : public OptionsBaseInterface {
 public:
-	int getMaxKmerDepth() {
-		return getVarMap()["max-kmer-output-depth"].as<int> ();
+	_FilterReadsBaseOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), sizeHistoryFile("") {}
+	virtual ~_FilterReadsBaseOptions() {}
+
+	int &getMaxKmerDepth() {
+		return maxKmerDepth;
 	}
-	int getPartitionByDepth() {
-		return getVarMap()["partition-by-depth"].as<int> ();
+	int &getPartitionByDepth() {
+		return partitionByDepth;
+	}
+	int &getMinPassingInPair() {
+		return bothPairs;
 	}
 	bool getBothPairs() {
-		return getVarMap()["min-passing-in-pair"].as<int>() == 2;
+		return bothPairs == 2;
 	}
-	std::string getSizeHistoryFile() {
-		return getVarMap()["size-history-file"].as<std::string>();
+	std::string &getSizeHistoryFile() {
+		return sizeHistoryFile;
 	}
 	void _resetDefaults() {
 		KmerOptions::_resetDefaults();
@@ -78,29 +84,34 @@ public:
 		po::options_description opts("General Filtering Options");
 		opts.add_options()
 
-		("max-kmer-output-depth", po::value<int>()->default_value(-1),
+		("max-kmer-output-depth", po::value<int>()->default_value(maxKmerDepth),
 				"maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output")
 
-		("partition-by-depth", po::value<int>()->default_value(-1),
+		("partition-by-depth", po::value<int>()->default_value(partitionByDepth),
 				"partition filtered reads by powers-of-two coverage depth (mutually exclusive with max-kmer-depth)")
 
-		("min-passing-in-pair", po::value<int>()->default_value(1),
+		("min-passing-in-pair", po::value<int>()->default_value(bothPairs),
 				"1 or 2 reads in a pair must pass filters")
 
-		("size-history-file", po::value<std::string>()->default_value(""),
+		("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile),
 				"if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)");
 
 		desc.add(opts);
-		KmerOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions( po::variables_map &vm) {
 
 		bool ret = true;
 
+		setOpt<int>("max-kmer-output-depth", maxKmerDepth);
+		setOpt<int>("partition-by-depth", partitionByDepth);
+		setOpt<int>("min-passing-in-pair", bothPairs);
+		setOpt<std::string>("size-history-file", sizeHistoryFile);
+
 		// verify mutually exclusive options are not set
 		if ( (getMaxKmerDepth() > 0 && getPartitionByDepth() >  0) )
 		{
-			throw std::invalid_argument("You can not specify both max-kmer-depth and partition-by-depth");
+			LOG_ERROR(1, "You can not specify both max-kmer-depth and partition-by-depth");
+			ret = false;
 		}
 		if (Options::getOptions().getOutputFile().empty() && Logger::isMaster())
 		{
@@ -112,9 +123,12 @@ public:
 			ret = false;
 		}
 
-		ret &= KmerOptions::_parseOptions(vm);
 		return ret ;
 	}
+
+protected:
+	int maxKmerDepth, partitionByDepth, bothPairs;
+	std::string sizeHistoryFile;
 };
 typedef OptionsBaseTemplate< _FilterReadsBaseOptions > FilterReadsBaseOptions;
 

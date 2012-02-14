@@ -33,6 +33,7 @@
 #include "Options.h"
 #include "Kmer.h"
 #include "KmerSpectrum.h"
+#include "FilterKnownOddities.h"
 #include "DuplicateFragmentFilter.h"
 #include "ContigExtender.h"
 #include "DistributedFunctions.h"
@@ -53,22 +54,26 @@ typedef KmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads > KS2;
 
 class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions, public _MatcherInterfaceOptions, public _KmerMatchOptions, public _MPIOptions {
 public:
-	static int getMaxIterations() {
-		return getVarMap()["max-iterations"].as<int> ();
+	_DistributedNucleatingAssemblerOptions(): maxIterations(1000), maxContigLength(3000) {}
+	virtual ~_DistributedNucleatingAssemblerOptions() {}
+
+	int &getMaxIterations() {
+		return maxIterations; // getVarMap()["max-iterations"].as<int> ();
 	}
-	static int getMaxContigLength() {
-		return getVarMap()["max-contig-length"].as<int>();
+	int &getMaxContigLength() {
+		return maxContigLength; // getVarMap()["max-contig-length"].as<int>();
 	}
 	void _resetDefaults() {
-		_Cap3Options::_resetDefaults();
-		_ContigExtenderBaseOptions::_resetDefaults();
-		_MatcherInterfaceOptions::_resetDefaults();
-		_VmatchOptions::_resetDefaults();
-		_KmerMatchOptions::_resetDefaults();
-		_MPIOptions::_resetDefaults();
+		Cap3Options::_resetDefaults();
+		ContigExtenderBaseOptions::_resetDefaults();
+		MatcherInterfaceOptions::_resetDefaults();
+		VmatchOptions::_resetDefaults();
+		KmerMatchOptions::_resetDefaults();
+		MPIOptions::_resetDefaults();
+		FilterKnownOdditiesOptions::_resetDefaults();
 
 		GeneralOptions::_resetDefaults();
-		GeneralOptions::getOptions().getSkipArtifactFilter() = 1;
+		FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() = 1;
 		// override the default output format!
 		GeneralOptions::getOptions().getFormatOutput() = 3;
 		GeneralOptions::getOptions().getMmapInput() = 0;
@@ -84,19 +89,20 @@ public:
 
 		opts.add_options()
 
-		("max-iterations", po::value<int>()->default_value(1000),
+		("max-iterations", po::value<int>()->default_value(maxIterations),
 				"the maximum number of rounds to extend the set of contigs")
-		("max-contig-length", po::value<int>()->default_value(3000),
+		("max-contig-length", po::value<int>()->default_value(maxContigLength),
 				"the maximum size of a contig to continue extending")
 		;
 		desc.add(opts);
 
-		_MatcherInterfaceOptions::_setOptions(desc,p);
-		_KmerMatchOptions::_setOptions(desc,p);
-		_VmatchOptions::_setOptions(desc,p);
-		_ContigExtenderBaseOptions::_setOptions(desc,p);
-		_Cap3Options::_setOptions(desc,p);
-		_MPIOptions::_setOptions(desc,p);
+		MatcherInterfaceOptions::_setOptions(desc,p);
+		KmerMatchOptions::_setOptions(desc,p);
+		VmatchOptions::_setOptions(desc,p);
+		ContigExtenderBaseOptions::_setOptions(desc,p);
+		Cap3Options::_setOptions(desc,p);
+		MPIOptions::_setOptions(desc,p);
+		FilterKnownOdditiesOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc,p);
 
 	};
@@ -104,12 +110,16 @@ public:
 
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
-		ret &= _MatcherInterfaceOptions::_parseOptions(vm);
-		ret &= _KmerMatchOptions::_parseOptions(vm);
-		ret &= _VmatchOptions::_parseOptions(vm);
-		ret &= _ContigExtenderBaseOptions::_parseOptions(vm);
-		ret &= _Cap3Options::_parseOptions(vm);
-		ret &= _MPIOptions::_parseOptions(vm);
+		ret &= MatcherInterfaceOptions::_parseOptions(vm);
+		ret &= KmerMatchOptions::_parseOptions(vm);
+		ret &= VmatchOptions::_parseOptions(vm);
+		ret &= ContigExtenderBaseOptions::_parseOptions(vm);
+		ret &= Cap3Options::_parseOptions(vm);
+		ret &= MPIOptions::_parseOptions(vm);
+		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
+
+		setOpt<int>("max-iterations", maxIterations);
+		setOpt<int>("max-contig-length", maxContigLength);
 
 		if (Options::getOptions().getOutputFile().empty()) {
 			LOG_ERROR(1, "You must specify an --output");
@@ -118,6 +128,10 @@ public:
 
 		return ret;
 	}
+protected:
+	int maxIterations;
+	int maxContigLength;
+
 };
 typedef OptionsBaseTemplate<_DistributedNucleatingAssemblerOptions>
 		DistributedNucleatingAssemblerOptions;

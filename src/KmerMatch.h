@@ -18,23 +18,25 @@
 
 class _KmerMatchOptions  : public _KmerBaseOptions {
 public:
-	_KmerMatchOptions() : _KmerBaseOptions() {}
+	_KmerMatchOptions() : _KmerBaseOptions(), maxPositionsFromEdge(0),includeMate(1) {}
 	~_KmerMatchOptions() {}
-	static int getMaxPositionsFromEdge() {
-		return getVarMap()["max-positions-from-edge"].as<int> ();
+	int &getMaxPositionsFromEdge() {
+		return maxPositionsFromEdge;
 	}
-	static bool getIncludeMate() {
-		return getVarMap()["include-mate"].as<int>() == 1;
+	bool getIncludeMate() {
+		return includeMate == 1;
 	}
-	void _resetDefaults() {}
+	void _resetDefaults() {
+		_KmerBaseOptions::_resetDefaults();
+	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		_KmerBaseOptions::_setOptions(desc,p);
 		po::options_description opts("Kmer-Match Options");
 		opts.add_options()
 
-		("max-positions-from-edge", po::value<int>()->default_value(0),
+		("max-positions-from-edge", po::value<int>()->default_value(maxPositionsFromEdge),
 				"if >0 then match only reads with max-postitions-from-edge bases of either end")
-		("include-mate", po::value<int>()->default_value(1),
+		("include-mate", po::value<int>()->default_value(includeMate),
 				"1 - include mates, 0 - do not")
 		;
 		desc.add(opts);
@@ -42,9 +44,13 @@ public:
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = _KmerBaseOptions::_parseOptions(vm);
-;
+		setOpt<int>("max-positions-from-edge", maxPositionsFromEdge);
+		setOpt<int>("include-mate", includeMate);
+
 		return ret;
 	}
+protected:
+	int maxPositionsFromEdge, includeMate;
 };
 typedef OptionsBaseTemplate< _KmerMatchOptions > KmerMatchOptions;
 

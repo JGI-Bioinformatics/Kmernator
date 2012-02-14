@@ -54,7 +54,6 @@
 
 
 #include "config.h"
-#include "Sequence.h"
 
 class StackTrace {
 public:

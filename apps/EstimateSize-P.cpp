@@ -52,50 +52,68 @@ typedef TrackingDataWithDirection DataType;
 typedef DistributedKmerSpectrum<DataType, DataType> KS;
 typedef DistributedReadSelector<DataType> RS;
 
-class _MPIEstimateSizeOptions : public OptionsBaseInterface {
+class _MPIEstimateSizeOptions: public OptionsBaseInterface {
 public:
-        long getMaxSamplePoints() {
-            return getVarMap()["max-sample-points"].as<long>();
-        } 
-	long getInitialSamplePartitions() {
-	    return getVarMap()["initial-sample-partitions"].as<long>();
+	_MPIEstimateSizeOptions() :
+		maxSamplePoints(100), initialSamplePartitions(1024 * 1024),
+				maxSampleFraction(0.10), maxSamplePartition(0.005),
+				kmerSubsample(0) {
 	}
-        double getMaxSampleFraction() {
-            return getVarMap()["max-sample-fraction"].as<double>();
-        }
-        double getMaxSamplePartition() {
-            return getVarMap()["max-sample-partition"].as<double>();
-        }
-	long getKmerSubsample() {
-	    return getVarMap()["kmer-subsample"].as<long>();
+	~_MPIEstimateSizeOptions() {
+	}
+
+	long &getMaxSamplePoints() {
+		return maxSamplePoints;
+	}
+	long &getInitialSamplePartitions() {
+		return initialSamplePartitions;
+	}
+	double &getMaxSampleFraction() {
+		return maxSampleFraction;
+	}
+	double &getMaxSamplePartition() {
+		return maxSamplePartition;
+	}
+	long &getKmerSubsample() {
+		return kmerSubsample;
 	}
 	void _resetDefaults() {
 		MPIOptions::_resetDefaults();
-                KmerOptions::_resetDefaults();
+		KmerOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 		// assign defaults
 		GeneralOptions::getOptions().getMmapInput() = 0;
 		GeneralOptions::getOptions().getVerbose() = 1;
-                KmerOptions::getOptions().getMinDepth() = 1;
+		KmerOptions::getOptions().getMinDepth() = 1;
 		KmerOptions::getOptions().getSaveKmerMmap() = 0;
 	}
-	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-                p.add("kmer-size", 1);
-                p.add("input-file", -1);
+
+	void _setOptions(po::options_description &desc,
+			po::positional_options_description &p) {
+		p.add("kmer-size", 1);
+		p.add("input-file", -1);
 
 		po::options_description opts("EstimateSize Options");
-                opts.add_options()
-                                ("max-sample-points", po::value<long>()->default_value(100), "The maximum number of points to sample at exponentially larger partition steps")
-                                ("initial-sample-partitions", po::value<long>()->default_value(1024*1024), "The starting number of partitions (power-of-two) to double after each point is taken (up to max-smaple-partition fraction)")
-                                ("max-sample-fraction",  po::value<double>()->default_value(0.10), "The maximum amount of data to read")
-                                ("max-sample-partition",  po::value<double>()->default_value(0.005), "The maximum amount of data to read for each point")
-				("kmer-subsample", po::value<long>()->default_value(0), "The 1 / kmer-subsample fraction of kmers to track. 0 to not sample") 
-                                ;
-                desc.add(opts);
+		opts.add_options()(
+				"max-sample-points",
+				po::value<long>()->default_value(maxSamplePoints),
+				"The maximum number of points to sample at exponentially larger partition steps")(
+				"initial-sample-partitions",
+				po::value<long>()->default_value(initialSamplePartitions),
+				"The starting number of partitions (power-of-two) to double after each point is taken (up to max-smaple-partition fraction)")(
+				"max-sample-fraction", po::value<double>()->default_value(
+						maxSampleFraction),
+				"The maximum amount of data to read")("max-sample-partition",
+				po::value<double>()->default_value(maxSamplePartition),
+				"The maximum amount of data to read for each point")(
+				"kmer-subsample", po::value<long>()->default_value(
+						kmerSubsample),
+				"The 1 / kmer-subsample fraction of kmers to track. 0 to not sample");
+		desc.add(opts);
 
-		MPIOptions::_setOptions(desc,p);
+		MPIOptions::_setOptions(desc, p);
 		GeneralOptions::_setOptions(desc, p);
-                KmerOptions::_setOptions(desc,p);
+		KmerOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
@@ -103,10 +121,21 @@ public:
 		ret &= MPIOptions::_parseOptions(vm);
 		ret &= KmerOptions::_parseOptions(vm);
 
+		setOpt<long> ("max-sample-points", maxSamplePoints);
+		setOpt<long> ("initial-sample-partitions", initialSamplePartitions);
+		setOpt<double> ("max-sample-fraction", maxSampleFraction);
+		setOpt<double> ("max-sample-partition", maxSamplePartition);
+		setOpt<long> ("kmer-subsample", kmerSubsample);
+
 		KS::getKmerSubsample() = getKmerSubsample();
 
 		return ret;
 	}
+protected:
+	long maxSamplePoints, initialSamplePartitions;
+	double maxSampleFraction, maxSamplePartition;
+	long kmerSubsample;
+
 };
 typedef OptionsBaseTemplate< _MPIEstimateSizeOptions > MPIEstimateSizeOptions;
 

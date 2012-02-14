@@ -39,15 +39,25 @@ public:
 	void _resetDefaults() {
 		_FilterReadsBaseOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
+		FilterKnownOdditiesOptions::_resetDefaults();
+		DuplicateFragmentFilterOptions::_resetDefaults();
+
 		KmerOptions::getOptions().getSaveKmerMmap() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		GeneralOptions::_setOptions(desc, p);
 		_FilterReadsBaseOptions::_setOptions(desc, p);
+		GeneralOptions::_setOptions(desc, p);
+		KmerOptions::_setOptions(desc, p);
+		FilterKnownOdditiesOptions::_setOptions(desc, p);
+		DuplicateFragmentFilterOptions::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= KmerOptions::_parseOptions(vm);
+		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
+		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
+
 		ret &= _FilterReadsBaseOptions::_parseOptions(vm);
 		return ret;
 	}
@@ -82,7 +92,7 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(1, "Pairs + single = " << numPairs);
 	LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-	if (Options::getOptions().getSkipArtifactFilter() == 0) {
+	if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
 
 	  LOG_VERBOSE(1, "Preparing artifact filter: ");
       FilterKnownOddities filter;
@@ -94,7 +104,7 @@ int main(int argc, char *argv[]) {
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	}
-	if (Options::getOptions().getDeDupMode() > 0 && Options::getOptions().getDeDupEditDistance() >= 0) {
+	if (DuplicateFragmentFilterOptions::getOptions().getDeDupMode() > 0 && DuplicateFragmentFilterOptions::getOptions().getDeDupEditDistance() >= 0) {
 	  LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
 	  unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
 	  LOG_VERBOSE(1, "filter removed duplicate fragment pair reads: " << duplicateFragments);
