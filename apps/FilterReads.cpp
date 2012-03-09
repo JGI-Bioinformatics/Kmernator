@@ -125,15 +125,16 @@ int main(int argc, char *argv[]) {
 	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 	  spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, KmerOptions::getOptions().getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
-      spectrum.trackSpectrum(true);
-      std::string sizeHistoryFile = FilterReadsOptions::getOptions().getSizeHistoryFile();
-      if (!sizeHistoryFile.empty()) {
-          LOG_VERBOSE(1, "Writing size history file to: " << sizeHistoryFile);
-          OfstreamMap ofm(sizeHistoryFile, "");
-          ofm.getOfstream("") << spectrum.getSizeTracker().toString();
-      } else {
-    	  LOG_VERBOSE(1, "Kmer Size History:" << std::endl << spectrum.getSizeTracker().toString());
-      }
+	  spectrum.optimize();
+	  spectrum.trackSpectrum(true);
+          std::string sizeHistoryFile = FilterReadsOptions::getOptions().getSizeHistoryFile();
+          if (!sizeHistoryFile.empty()) {
+              LOG_VERBOSE(1, "Writing size history file to: " << sizeHistoryFile);
+              OfstreamMap ofm(sizeHistoryFile, "");
+              ofm.getOfstream("") << spectrum.getSizeTracker().toString();
+          } else {
+    	      LOG_VERBOSE(1, "Kmer Size History:" << std::endl << spectrum.getSizeTracker().toString());
+          }
 
 	  if (Log::isVerbose(1))
 		  spectrum.printHistograms(Log::Verbose("Kmer Histogram"));
@@ -160,6 +161,8 @@ int main(int argc, char *argv[]) {
 		  LOG_DEBUG(1, "Clearing singletons from memory");
 		  spectrum.singleton.clear();
 		  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+	  } else {
+		spectrum.optimize(true);
 	  }
 	}
 

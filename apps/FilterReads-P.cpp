@@ -163,6 +163,7 @@ int main(int argc, char *argv[]) {
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		spectrum.buildKmerSpectrum(reads);
+		spectrum.optimize();
 		spectrum.trackSpectrum(true);
 		KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
 
@@ -205,6 +206,8 @@ int main(int argc, char *argv[]) {
 			LOG_DEBUG(1, "Clearing singletons from memory");
 			spectrum.singleton.clear();
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+		} else {
+			spectrum.optimize(true);
 		}
 	}
 

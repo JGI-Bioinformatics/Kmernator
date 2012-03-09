@@ -182,6 +182,13 @@ public:
                 return kmerSubsample;
         }
 
+	void optimize(bool singletonsToo = false) {
+		solid.resort();
+		weak.resort();
+		if (singletonsToo)
+			singleton.resort();
+	}
+
 	Kmernator::MmapFileVector storeMmap(string mmapFilename){
 		LOG_VERBOSE(1, "Saving weak kmer spectrum");
 		Kmernator::MmapFileVector savedMmaps;
@@ -258,7 +265,9 @@ public:
 		unsigned long targetBuckets = rawKmers / targetKmersPerBucket;
 		unsigned long maxBuckets = 256*1024*1024;
 		unsigned long minBuckets = 128;
-		return std::max( std::min(targetBuckets,maxBuckets), minBuckets );
+		unsigned long buckets = std::max( std::min(targetBuckets,maxBuckets), minBuckets );
+		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "estimateWeakKmerBucketSize(" << store.getBaseCount() << ", " << targetKmersPerBucket << "): " << buckets);
+		return buckets;
 	}
 
 	bool hasSolid( const Kmer &kmer ) const {
@@ -556,7 +565,7 @@ public:
 			SizeTrackerElement element(raw, rawGood, unique, single);
 			elements.push_back( element );
 			nextToTrack = raw * 1.3;
-			LOG_DEBUG_OPTIONAL(1, true, "SizeTracker::track(): " << element.toString() << ".  Next to track at above: " << nextToTrack);
+			LOG_DEBUG_OPTIONAL(2, Logger::isMaster(), "SizeTracker::track(): " << element.toString() << ".  Next to track at above: " << nextToTrack);
 		}
 		void reset() {
 			nextToTrack = 128;
@@ -1509,7 +1518,6 @@ public:
 			singleton.rotateDMPBuffers(numParts);
 		}
 
-
 		// first free up memory
 		if (KmerOptions::getOptions().getMinDepth() <= 1) {
 			LOG_DEBUG(2, "Clearing memory from singletons\n"  << MemoryUtils::getMemoryUsage());
@@ -1545,6 +1553,7 @@ public:
 			if (it->is_open())
 				madvise(const_cast<char*>(it->data()), it->size(), MADV_RANDOM);
 		}
+
 		return mmaps;
 	}
 
@@ -1682,10 +1691,10 @@ public:
 		buildKmerSpectrum(tmpReadSet);
 	}
 	virtual void buildKmerSpectrum( const ReadSet &store ) {
-		return this->buildKmerSpectrum(store, hasSolids);
+		this->buildKmerSpectrum(store, hasSolids);
 	}
 	virtual void buildKmerSpectrum( const ReadSet &store, bool isSolid ) {
-		return this->buildKmerSpectrum(store, isSolid, 0, 1);
+		this->buildKmerSpectrum(store, isSolid, 0, 1);
 	}
 	void buildKmerSpectrum( const ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts)
 	{
@@ -1714,6 +1723,7 @@ public:
 		if (Log::isDebug(2)) {
 		    printStats(Log::Debug("Stats"), store.getSize(), isSolid, true);
 		}
+
 	}
 
 	bool _setPurgeVariant(DataPointers &pointers, const Kmer &kmer, double threshold, double &v) {

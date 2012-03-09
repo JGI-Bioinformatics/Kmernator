@@ -64,6 +64,7 @@ public:
 	: MatcherInterface(world, target, returnPairedMatches), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {
 		assert(target.isGlobal());
 		_spectrum._buildKmerSpectrumMPI(target, true);
+		_spectrum.optimize();
 	}
 	MatchResults matchLocal(std::string queryFile) {
 		ReadSet query;

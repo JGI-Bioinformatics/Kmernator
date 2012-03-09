@@ -40,6 +40,9 @@
 class KmerReadUtils {
 public:
 	static KmerWeightedExtensions buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
+		if (read.isDiscarded())
+			return KmerWeightedExtensions();
+
 		SequenceLengthType readLength = read.getLength();
 		bool needMalloc = readLength > MAX_STACK_SIZE;
 		bool _bools[ needMalloc ? 0 : readLength ];
@@ -47,7 +50,7 @@ public:
 		if (needMalloc) {
 			bools = new bool[readLength];
 		}
-		std::string fasta = read.getFasta();
+		std::string fasta = read.getFastaNoMarkup();
 		int kmerLen = KmerSizer::getSequenceLength();
 
 		KmerWeightedExtensions kmers(read.getTwoBitSequence(), readLength, leastComplement, bools);

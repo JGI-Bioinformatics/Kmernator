@@ -50,58 +50,6 @@
 #error "mpi is required for this library"
 #endif
 
-// collective
-void reduceOMPThreads(mpi::communicator &world) {
-	Options::getOptions().validateOMPThreads();
-#ifdef _USE_OPENMP
-	int numThreads = omp_get_max_threads();
-	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
-	omp_set_num_threads(numThreads);
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
-#endif
-}
-
-// collective
-void validateMPIWorld(mpi::communicator &world) {
-	int provided;
-	MPI_Query_thread(&provided);
-#ifdef _USE_OPENMP
-	if (provided != MPI_THREAD_FUNNELED && omp_get_max_threads() > 1) {
-		if (world.rank() == 0)
-			LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_FUNNELED (" << provided << "), reducing OpenMP threads to 1")
-		omp_set_num_threads(1);
-	}
-#endif
-	reduceOMPThreads(world);
-}
-
-template< typename OptionsTempl >
-mpi::communicator initializeWorldAndOptions(int argc, char *argv[]) {
-	int threadProvided;
-	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
-	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
-	mpi::environment env(argc, argv);
-	mpi::communicator world;
-	MPI_Comm_set_errhandler( world, MPI::ERRORS_THROW_EXCEPTIONS );
-
-	try {
-		Logger::setWorld(&world);
-
-		if (!OptionsTempl::parseOpts(argc, argv))
-			LOG_THROW("Please fix the command line arguments." << std::endl << OptionsTempl::getOptionsErrorMsg());
-
-		if (GeneralOptions::getOptions().getGatheredLogs())
-			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);
-
-		validateMPIWorld(world);
-
-	} catch (...) {
-		MPI_Finalize();
-		exit(1);
-	}
-	world.barrier();
-	return world;
-}
 
 // collective
 std::string getRankSubdir(mpi::communicator &world, std::string prefix) {
@@ -486,7 +434,7 @@ public:
 		LOG_DEBUG(1, "finished _buildKmerSpectrumMPI");
 	}
 
-        SizeTracker reduceSizeTracker(mpi::communicator &world) {
+    SizeTracker reduceSizeTracker(mpi::communicator &world) {
 		SizeTracker s = this->getSizeTracker();
 		SizeTrackerElements &elements = s.elements;
                 int inct = elements.size();
@@ -564,7 +512,7 @@ public:
 	};
 
 	void buildKmerSpectrum(const ReadSet &store ) {
-		return this->buildKmerSpectrum(store, false);
+		this->buildKmerSpectrum(store, false);
 	}
 
 	void buildKmerSpectrum(const ReadSet &store, bool isSolid) {
@@ -1324,6 +1272,61 @@ keep track of globalReadIds, or at least read-file boundaries
  *
  */
 
+
+
+// collective
+void reduceOMPThreads(mpi::communicator &world) {
+	Options::getOptions().validateOMPThreads();
+#ifdef _USE_OPENMP
+	int numThreads = omp_get_max_threads();
+	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
+	omp_set_num_threads(numThreads);
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
+#endif
+}
+
+// collective
+void validateMPIWorld(mpi::communicator &world) {
+	int provided;
+	MPI_Query_thread(&provided);
+#ifdef _USE_OPENMP
+	if (provided != MPI_THREAD_FUNNELED && omp_get_max_threads() > 1) {
+		if (world.rank() == 0)
+			LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_FUNNELED (" << provided << "), reducing OpenMP threads to 1")
+		omp_set_num_threads(1);
+	}
+#endif
+	reduceOMPThreads(world);
+}
+
+
+template< typename OptionsTempl >
+mpi::communicator initializeWorldAndOptions(int argc, char *argv[]) {
+	int threadProvided;
+	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
+	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
+	mpi::environment env(argc, argv);
+	mpi::communicator world;
+	MPI_Comm_set_errhandler( world, MPI::ERRORS_THROW_EXCEPTIONS );
+
+	try {
+		Logger::setWorld(&world);
+
+		if (!OptionsTempl::parseOpts(argc, argv))
+			LOG_THROW("Please fix the command line arguments." << std::endl << OptionsTempl::getOptionsErrorMsg());
+
+		if (GeneralOptions::getOptions().getGatheredLogs())
+			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);
+
+		validateMPIWorld(world);
+
+	} catch (...) {
+		MPI_Finalize();
+		exit(1);
+	}
+	world.barrier();
+	return world;
+}
 
 
 #endif /* DISTRIBUTED_FUNCTIONS_H_ */

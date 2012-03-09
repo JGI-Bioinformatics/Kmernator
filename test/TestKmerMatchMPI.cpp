@@ -65,10 +65,13 @@ typedef OptionsBaseTemplate< _KmerMatchTestOptions > KmerMatchTestOptions;
 
 bool containsRead(const ReadSet &rs, const Read &read) {
 	bool hasRead = false;
+	if (read.getFirstMarkupLength() != read.getLength())
+		return true; // can not expect a trimmed read to return as a match!
 	std::string name = read.getName();
-	for(ReadSet::ReadSetSizeType i = 0; i < rs.getSize(); i++)
+	for(ReadSet::ReadSetSizeType i = 0; i < rs.getSize(); i++) {
 		if (name.compare(rs.getRead(i).getName()) == 0)
 			hasRead = true;
+	}
 	return hasRead;
 }
 

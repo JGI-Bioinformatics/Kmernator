@@ -262,7 +262,16 @@ public:
 	}
 
 	inline SequenceLengthType getMaxSequenceLength() const {
-		return _maxSequenceLength;
+		if (_maxSequenceLength == 0 && _baseCount != 0)
+			return getAvgSequenceLength() + 1;
+		else
+			return _maxSequenceLength;
+	}
+	inline SequenceLengthType getAvgSequenceLength() const {
+		if (getSize() > 0)
+			return _baseCount / getSize();
+		else
+			return 0;
 	}
 	void circularize(long extraLength);
 
@@ -469,10 +478,14 @@ public:
 
 		return os;
 	}
-	inline std::ostream &writeAll(std::ostream &os, FormatOutput format = FormatOutput::getDefault()) const {
+	inline std::ostream &writeAll(std::ostream &os, FormatOutput format = FormatOutput::getDefault(), bool trimmed = true) const {
 		LOG_DEBUG(2, "ReadSet::writeAll()");
-		for(ReadSetSizeType i = 0; i < getSize(); i++)
-			write(os, i, 0, MAX_SEQUENCE_LENGTH, "", format);
+		for(ReadSetSizeType i = 0; i < getSize(); i++) {
+			if (trimmed)
+				write(os, i, 0, getRead(i).getFirstMarkupLength(), "", format);
+			else
+				write(os, i, 0, MAX_SEQUENCE_LENGTH, "", format);
+		}
 		return os;
 	}
 	static Read fakePair(const Read &unPaired);

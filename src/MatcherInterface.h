@@ -18,11 +18,14 @@
 
 class _MatcherInterfaceOptions  : public OptionsBaseInterface {
 public:
-	_MatcherInterfaceOptions() : maxReadMatches(500) {}
+	_MatcherInterfaceOptions() : maxReadMatches(400), maxReadDepthMatches(40) {}
 	virtual ~_MatcherInterfaceOptions() {}
 
 	int &getMaxReadMatches() {
 		return maxReadMatches;
+	}
+	int &getMaxReadDepthMatches() {
+		return maxReadDepthMatches;
 	}
 	// use to set/overrided any defaults on options that are stored persistently
 	void _resetDefaults() {}
@@ -32,16 +35,21 @@ public:
 		opts.add_options()
 		("max-read-matches", po::value<int>()->default_value(maxReadMatches),
 						"maximum number of (randomly sampled) reads to return for matching. '0' disables.")
+		("max-read-depth-matches", po::value<int>()->default_value(maxReadDepthMatches),
+						"maximum number of (randomly sampled) reads per query length to return for matching. '0' disables.")
 						;
 		desc.add(opts);
 	}
 	// use to post-process options, returning true if everything is okay
 	bool _parseOptions(po::variables_map &vm) {
 		setOpt<int>("max-read-matches", maxReadMatches);
+		setOpt<int>("max-read-depth-matches", maxReadDepthMatches);
 		return true;
 	}
 protected:
 	int maxReadMatches;
+	int maxReadDepthMatches;
+
 };
 typedef OptionsBaseTemplate< _MatcherInterfaceOptions > MatcherInterfaceOptions;
 
@@ -163,7 +171,7 @@ public:
 				for(Random<ReadSet::ReadSetSizeType>::SetIterator it = sampledSet.begin(); it != sampledSet.end(); it++) {
 					mhs.insert(mhv[*it]);
 				}
-				LOG_DEBUG(3, "Reduced " << i << " from " << oldSize << " to " << mhs.size());
+				LOG_DEBUG_OPTIONAL(1, true, "Reduced " << i << " from " << oldSize << " to " << mhs.size());
 			}
 		}
 		return;
@@ -180,7 +188,9 @@ public:
 			for(MatchHitSet::iterator it = matchResults[i].begin(); it != matchResults[i].end(); it++) {
 				assert(getTarget().isLocalRead( *it ));
 				ReadSet::ReadSetSizeType localReadIdx = getTarget().getLocalReadIdx(myRank, *it);
-				matchReadResults[i].append( getTarget().getRead( localReadIdx ));
+				const Read read = getTarget().getRead( localReadIdx );
+				if (! read.isDiscarded() )
+					matchReadResults[i].append( read );
 			}
 		}
 		recordTime("returnLocalReads", MPI_Wtime());
@@ -375,17 +385,20 @@ public:
 		}
 		localReadSetVector.clear();
 
-		ReadSet::ReadSetSizeType maxReads = MatcherInterfaceOptions::getOptions().getMaxReadMatches();
-		if (maxReads > 0) {
-			for (ReadSet::ReadSetSizeType localContigIdx = 0; localContigIdx
-						< globalReadSetVector.size(); localContigIdx++) {
-				ReadSet::ReadSetSizeType numReads = globalReadSetVector[localContigIdx].getSize();
+		ReadSet::ReadSetSizeType maxReadMatches = MatcherInterfaceOptions::getOptions().getMaxReadMatches();
+		ReadSet::ReadSetSizeType maxReadDepth = MatcherInterfaceOptions::getOptions().getMaxReadDepthMatches();
+
+		for (ReadSet::ReadSetSizeType localContigIdx = 0; localContigIdx < globalReadSetVector.size(); localContigIdx++) {
+			ReadSet::ReadSetSizeType maxReads = std::max(maxReadMatches, maxReadDepth * query.getRead(localContigIdx).getLength() / (getTarget().getSize() > 0 ? getTarget().getAvgSequenceLength() : 76) );
+			if (maxReads > 0) {
+			    ReadSet::ReadSetSizeType numReads = globalReadSetVector[localContigIdx].getSize();
 				if (numReads > maxReads) {
-					LOG_DEBUG_OPTIONAL(2, true, "for " << localContigIdx << " sampled from " << numReads << " to " << maxReads);
+					LOG_DEBUG_OPTIONAL(1, true, "for " << localContigIdx << " sampled from " << numReads << " to " << maxReads);
 					globalReadSetVector[localContigIdx] = globalReadSetVector[localContigIdx].randomlySample(maxReads);
 				}
 			}
 		}
+
 		LOG_DEBUG_OPTIONAL(1, true, "exchangeGlobalReads(): Done " << iteration);
 
 		return globalReadSetVector;

@@ -1306,7 +1306,11 @@ public:
 				unsetSharedLock();
 				return idx;
 			}
-
+			IndexType find(const Kmer &target, bool &targetIsFound) const {
+				IndexType idx = find(target);
+				targetIsFound = idx != MAX_INDEX;
+				return idx;
+			}
 		protected:
 			IndexType _findSorted(const Kmer &target, bool &targetIsFound) const {
 				// binary search
@@ -1426,6 +1430,41 @@ public:
 				setExclusiveLock();
 				resize(size()-1,idx);
 				unsetExclusiveLock();
+			}
+
+			class CompareArrayIdx {
+				const KmerArray &_kmerArray;
+			public:
+				CompareArrayIdx(const KmerArray &kmerArray): _kmerArray(kmerArray) {}
+				bool operator()(IndexType i, IndexType j) {
+					return _kmerArray.get(i).compare(_kmerArray.get(j)) <= 0;
+				}
+			};
+
+			bool isSorted() const {
+				bool isSorted = true;
+				for(IndexType i = 1; isSorted && i < size(); i++)
+					isSorted &= get(i-1).compare(get(i)) <= 0;
+				return isSorted;
+			}
+
+			void resort() {
+				if (isSorted())
+					return;
+
+				std::vector< IndexType > sortedIdxes;
+				sortedIdxes.reserve(size());
+
+				for(IndexType i = 0; i < size(); i++)
+					sortedIdxes.push_back(i);
+				std::sort(sortedIdxes.begin(), sortedIdxes.end(), CompareArrayIdx(*this));
+
+				KmerArray s;
+				s.reserve(size());
+
+				for(IndexType i = 0; i < size(); i++)
+					s.append(get(sortedIdxes[i]), valueAt(sortedIdxes[i]));
+				swap(s);
 			}
 
 			void swap(IndexType idx1, IndexType idx2) {
@@ -1567,7 +1606,7 @@ public:
 
 template<typename Value>
 class KmerMap {
-
+    static const bool defaultSort = false;
 public:
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
@@ -1600,6 +1639,7 @@ public:
 private:
 	BucketsVector _buckets;
 	NumberType BUCKET_MASK;
+	bool _isSorted;
 
 	inline const KmerMap &_constThis() const {return *this;}
 
@@ -1607,6 +1647,7 @@ public:
 	KmerMap() {
 		BUCKET_MASK=0;
 		_buckets.clear();
+		_isSorted = defaultSort;
 	}
 	KmerMap(IndexType bucketCount) {
 
@@ -1617,6 +1658,7 @@ public:
 		NumberType powerOf2 = getMinPowerOf2(bucketCount);
 		BUCKET_MASK = powerOf2 - 1;
 		_buckets.resize(powerOf2);
+		_isSorted = defaultSort;
 	}
 	~KmerMap()
 	{
@@ -1625,6 +1667,7 @@ public:
 	KmerMap &operator=(const KmerMap &other) {
 		_buckets = other._buckets;
 		BUCKET_MASK = other.BUCKET_MASK;
+		_isSorted = other._isSorted;
 		return *this;
 	}
 	// restore new instance from mmap
@@ -1633,10 +1676,15 @@ public:
 		const void *ptr;
 		_getMmapSizes(src, size, BUCKET_MASK, offsetArray);
 		_buckets.resize(size);
+		_isSorted = true;
 		for (NumberType idx = 0 ; idx < size ; idx++) {
 			ptr = ((char*)src) + *(offsetArray + idx);
 			_buckets[idx] = BucketType(ptr);
+			_isSorted &= _buckets[idx].isSorted();
 		}
+	}
+	inline bool isSorted() const {
+		return _isSorted;
 	}
 	const Kmernator::MmapFile store(std::string permanentFile = "") const {
 		long size = getSizeToStore();
@@ -1668,9 +1716,11 @@ public:
 		const void *ptr;
 		_getMmapSizes(src, size, map.BUCKET_MASK, offsetArray);
 		map._buckets.resize(size);
+		map._isSorted = true;
 		for (NumberType idx = 0 ; idx < size ; idx++) {
 			ptr = ((char*)src) + *(offsetArray + idx);
 			map._buckets[idx] = BucketType::restore(ptr);
+			map._isSorted &= map._buckets[idx].isSorted();
 		}
 		return map;
 	}
@@ -1678,6 +1728,7 @@ public:
 	void swap(KmerMap &other) {
 		_buckets.swap(other._buckets);
 		std::swap(BUCKET_MASK, other.BUCKET_MASK);
+		std::swap(_isSorted, other._isSorted);
 	}
 
 	static const void _getMmapSizes(const void *src, NumberType &size, NumberType &mask, NumberTypePtr &offsetArray) {
@@ -1712,6 +1763,17 @@ public:
 		reset(releaseMemory);
 		if (releaseMemory)
 		    _buckets.resize(0);
+	}
+
+	void resort() {
+		if (!_isSorted) {
+			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Sorting KmerMaps");
+            #pragma omp parallel for
+			for(long i=0; i< (long) _buckets.size(); i++) {
+				_buckets[i].resort();
+			}
+			_isSorted = true;
+		}
 	}
 
 	void setReadOnlyOptimization() {
@@ -1814,7 +1876,7 @@ public:
 
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
 		bucket.setExclusiveLock();
-		IndexType idx = bucket.insertSorted(key,value);
+		IndexType idx = isSorted() ? bucket.insertSorted(key,value) : bucket.append(key,value);
 		ElementType element = bucket.getElement(idx);
 		bucket.unsetExclusiveLock();
 		return element;
@@ -1826,7 +1888,7 @@ public:
 	bool remove(const KeyType &key, BucketType &bucket) {
 		bool isFound;
 		bucket.setExclusiveLock();
-		IndexType idx = bucket.findSorted(key, isFound);
+		IndexType idx = isSorted() ? bucket.findSorted(key, isFound) : bucket.find(key, isFound);
 		if (isFound && idx != BucketType::MAX_INDEX)
 		bucket.remove(idx);
 		bucket.unsetExclusiveLock();
@@ -1838,7 +1900,7 @@ public:
 
 	bool _exists(const KeyType &key, IndexType &existingIdx, const BucketType &bucket) const {
 		bool isFound;
-		existingIdx = bucket.findSorted(key, isFound);
+		existingIdx = isSorted() ? bucket.findSorted(key, isFound) : bucket.find(key, isFound);
 		return isFound;
 	}
 	bool _exists(const KeyType &key, IndexType &existingIdx) const {
@@ -1860,7 +1922,7 @@ public:
 		bool isFound;
 		IndexType existingIndex;
 		bucket.setSharedLock();
-		existingIndex = bucket.findSorted(key, isFound);
+		existingIndex = isSorted() ? bucket.findSorted(key, isFound) : bucket.find(key, isFound);
 		if (isFound)
 			value = bucket.valueAt(existingIndex);
 		bucket.unsetSharedLock();
@@ -2029,6 +2091,10 @@ public:
     	   throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
        }
        BucketType merged;
+       if (!isSorted())
+    	   resort();
+       if (!src.isSorted())
+    	   src.resort();
 
        long bucketsSize = getNumBuckets();
        #pragma omp parallel for private(merged)
@@ -2084,6 +2150,10 @@ public:
 	       if (chunkSize <= 1)
 	    	   chunkSize = 2;
 	       BucketType merged;
+	       if (! src.isSorted() )
+	    	   src.resort();
+	       if (! mergeDest.isSorted() )
+	    	   mergeDest.resort();
 
 	       long bucketsSize = getNumBuckets();
            //#pragma omp parallel for private(merged) schedule(static, chunkSize)

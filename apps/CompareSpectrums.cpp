@@ -166,6 +166,7 @@ int main(int argc, char *argv[]) {
 
 	LOG_VERBOSE(1, "Building map 2");
 	ks2.buildKmerSpectrum(readSet2, true);
+	ks2.optimize();
 
 	*outPtr << endl;
 	*outPtr << "Set 1\tSet 2\tCommon\t%Uniq1\t%Tot1\t%Uniq2\t%Tot2\n";
@@ -176,6 +177,7 @@ int main(int argc, char *argv[]) {
 	} else {
 		LOG_VERBOSE(1, "Building map 1");
 		ks1.buildKmerSpectrum(readSet1, true);
+		ks1.optimize();
 		evaluate(*outPtr, ks1, ks2);
 	}
 }
@@ -208,6 +210,7 @@ void evaluatePerRead(std::ostream &os, KS &ks1, KS &ks2, ReadSet &readSet1) {
 		Read &read = readSet1.getRead(readIdx);
 		a.append(read);
 		ks1.buildKmerSpectrum(a, true);
+		ks1.optimize();
 
 		evaluate(os, ks1,ks2,read.getName());
 	}

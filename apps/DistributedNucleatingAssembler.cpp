@@ -52,7 +52,7 @@ typedef KmerSpectrum<DataType, DataType> KS;
 typedef KmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads > KS2;
 
 
-class _DistributedNucleatingAssemblerOptions: public _ContigExtenderBaseOptions, public _Cap3Options, public _VmatchOptions, public _MatcherInterfaceOptions, public _KmerMatchOptions, public _MPIOptions {
+class _DistributedNucleatingAssemblerOptions: public OptionsBaseInterface {
 public:
 	_DistributedNucleatingAssemblerOptions(): maxIterations(1000), maxContigLength(3000) {}
 	virtual ~_DistributedNucleatingAssemblerOptions() {}
@@ -73,7 +73,7 @@ public:
 		FilterKnownOdditiesOptions::_resetDefaults();
 
 		GeneralOptions::_resetDefaults();
-		FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() = 1;
+		FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() = 0;
 		// override the default output format!
 		GeneralOptions::getOptions().getFormatOutput() = 3;
 		GeneralOptions::getOptions().getMmapInput() = 0;
@@ -89,11 +89,14 @@ public:
 
 		opts.add_options()
 
-		("max-iterations", po::value<int>()->default_value(maxIterations),
-				"the maximum number of rounds to extend the set of contigs")
-		("max-contig-length", po::value<int>()->default_value(maxContigLength),
-				"the maximum size of a contig to continue extending")
-		;
+				("max-iterations", po::value<int>()->default_value(maxIterations),
+						"the maximum number of rounds to extend the set of contigs")
+
+				("max-contig-length", po::value<int>()->default_value(maxContigLength),
+						"the maximum size of a contig to continue extending")
+
+				;
+
 		desc.add(opts);
 
 		MatcherInterfaceOptions::_setOptions(desc,p);
@@ -134,17 +137,17 @@ protected:
 
 };
 typedef OptionsBaseTemplate<_DistributedNucleatingAssemblerOptions>
-		DistributedNucleatingAssemblerOptions;
+DistributedNucleatingAssemblerOptions;
 
 
 std::string extendContigsWithCap3(ReadSet & contigs,
 		ReadSet::ReadSetVector &contigReadSet, ReadSet & changedContigs,
 		ReadSet & finalContigs, ReadSet::ReadSetSizeType minimumCoverage) {
 	std::stringstream extendLog;
-	std::string cap3Path = DistributedNucleatingAssemblerOptions::getOptions().getCap3Path();
+	std::string cap3Path = Cap3Options::getOptions().getCap3Path();
 
 	int poolsWithoutMinimumCoverage = 0;
-	#pragma omp parallel for
+#pragma omp parallel for
 	for (long i = 0; i < (long) contigs.getSize(); i++) {
 		const Read &oldRead = contigs.getRead(i);
 		Read newRead = oldRead;
@@ -169,7 +172,7 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 			changedContigs.append(newRead);
 		} else {
 			extendLog << std::endl << "Did not extend " << oldRead.getName()
-					<< " with " << poolSize << " reads in the pool";
+							<< " with " << poolSize << " reads in the pool";
 			//#pragma omp critical
 			finalContigs.append(oldRead);
 		}
@@ -219,7 +222,7 @@ std::string extendContigsWithContigExtender(ReadSet & contigs,
 			changedContigs.append(newRead);
 		} else {
 			extendLog << std::endl << "Did not extend " << oldRead.getName()
-					<< " with " << poolSize << " reads in the pool";
+							<< " with " << poolSize << " reads in the pool";
 			//#pragma omp critical
 			finalContigs.append(oldRead);
 		}
@@ -250,18 +253,38 @@ int main(int argc, char *argv[]) {
 	OptionsBaseInterface::FileListType inputFiles =
 			Options::getOptions().getInputFiles();
 	std::string contigFile =
-			DistributedNucleatingAssemblerOptions::getOptions().getContigFile();
+			ContigExtenderBaseOptions::getOptions().getContigFile();
 	std::string finalContigFile;
 	double minimumCoverage =
-			DistributedNucleatingAssemblerOptions::getOptions().getMinimumCoverage();
+			ContigExtenderBaseOptions::getOptions().getMinimumCoverage();
 	long maxIterations =
-					DistributedNucleatingAssemblerOptions::getOptions().getMaxIterations();
+			DistributedNucleatingAssemblerOptions::getOptions().getMaxIterations();
 
 	ReadSet reads;
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files" );
 	reads.appendAllFiles(inputFiles, world.rank(), world.size());
 	reads.identifyPairs();
 	setGlobalReadSetOffsets(world, reads);
+
+	if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
+
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Preparing artifact filter: ");
+
+		FilterKnownOddities filter;
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+		LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Applying sequence artifact filter to Input Files");
+
+		unsigned long filtered = filter.applyFilter(reads);
+
+		LOG_VERBOSE(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+		unsigned long allFiltered;
+		reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
+
+	}
 
 	timing2 = MPI_Wtime();
 
@@ -290,113 +313,120 @@ int main(int argc, char *argv[]) {
 	ReadSet contigs;
 	contigs.appendFastaFile(contigFile, world.rank(), world.size());
 
-	short iteration = 0;
-	while (++iteration <= maxIterations) {
+	try {
 
-		matcher->resetTimes("Start Iteration", MPI_Wtime());
+		short iteration = 0;
+		while (++iteration <= maxIterations) {
 
-		setGlobalReadSetOffsets(world, contigs);
+			matcher->resetTimes("Start Iteration", MPI_Wtime());
 
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Contig File: " << contigFile << ". contains " << contigs.getGlobalSize() << " Reads");
-		if (contigs.getGlobalSize() == 0) {
-			LOG_VERBOSE_OPTIONAL(1, true, "There are no contigs to extend in " << contigFile);
-			break;
-		}
+			setGlobalReadSetOffsets(world, contigs);
 
-		MatcherInterface::MatchReadResults contigReadSet = matcher->match(contigs, contigFile);
-		assert(contigs.getSize() == contigReadSet.size());
-
-		ReadSet changedContigs;
-		std::string extendLog;
-
-		if (!DistributedNucleatingAssemblerOptions::getOptions().getCap3Path().empty()) {
-			extendLog = extendContigsWithCap3(contigs, contigReadSet, changedContigs, finalContigs, minimumCoverage);
-		} else {
-			extendLog = extendContigsWithContigExtender(contigs, contigReadSet,
-				changedContigs, finalContigs,
-				minKmerSize, minimumCoverage, maxKmerSize, maxExtend, kmerStep);
-		}
-
-		matcher->recordTime("extendContigs", MPI_Wtime());
-		LOG_DEBUG(1, (extendLog));
-
-		finishLongContigs(DistributedNucleatingAssemblerOptions::getOptions().getMaxContigLength(), changedContigs, finalContigs);
-
-		LOG_DEBUG(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
-		setGlobalReadSetOffsets(world, changedContigs);
-		setGlobalReadSetOffsets(world, finalContigs);
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Changed contigs: " << changedContigs.getGlobalSize() << " finalContigs: " << finalContigs.getGlobalSize());
-
-		std::string oldFinalContigFile = finalContigFile;
-		std::string oldContigFile = contigFile;
-		{
-			// write out the state of the contig files (so far) so we do not loose them
-			DistributedOfstreamMap om(world,
-					Options::getOptions().getOutputFile(), "");
-			om.setBuildInMemory();
-			if (finalContigs.getGlobalSize() > 0) {
-				std::string fileKey = "final-" + boost::lexical_cast<
-						std::string>(iteration);
-				finalContigs.writeAll(om.getOfstream(fileKey),
-						FormatOutput::Fasta());
-				finalContigFile = om.getRealFilePath(fileKey);
-			}
-			if (changedContigs.getGlobalSize() > 0) {
-				std::string filekey = "-inputcontigs-" + boost::lexical_cast<
-						std::string>(iteration) + ".fasta";
-				changedContigs.writeAll(om.getOfstream(filekey),
-						FormatOutput::Fasta());
-				contigFile = om.getRealFilePath(filekey);
-			}
-			contigs = changedContigs;
-		}
-
-		matcher->recordTime("writeFinalTime", MPI_Wtime());
-
-		if (!Log::isDebug(1) && world.rank() == 0) {
-			// remove most recent contig files (if not debugging)
-			if (!oldFinalContigFile.empty()) {
-				LOG_VERBOSE_OPTIONAL(1, true, "Removing " << oldFinalContigFile);
-				unlink(oldFinalContigFile.c_str());
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Contig File: " << contigFile << ". contains " << contigs.getGlobalSize() << " Reads");
+			if (contigs.getGlobalSize() == 0) {
+				LOG_VERBOSE_OPTIONAL(1, true, "There are no contigs to extend in " << contigFile);
+				break;
 			}
 
-			if (DistributedNucleatingAssemblerOptions::getOptions().getContigFile().compare(
-					oldContigFile) != 0) {
-				LOG_VERBOSE_OPTIONAL(1, true, "Removing " << oldContigFile);
-				unlink(oldContigFile.c_str());
+			MatcherInterface::MatchReadResults contigReadSet = matcher->match(contigs, contigFile);
+			assert(contigs.getSize() == contigReadSet.size());
+
+			ReadSet changedContigs;
+			std::string extendLog;
+
+			if (!Cap3Options::getOptions().getCap3Path().empty()) {
+				extendLog = extendContigsWithCap3(contigs, contigReadSet, changedContigs, finalContigs, minimumCoverage);
+			} else {
+				extendLog = extendContigsWithContigExtender(contigs, contigReadSet,
+						changedContigs, finalContigs,
+						minKmerSize, minimumCoverage, maxKmerSize, maxExtend, kmerStep);
+			}
+
+			matcher->recordTime("extendContigs", MPI_Wtime());
+			LOG_DEBUG(1, (extendLog));
+
+			finishLongContigs(DistributedNucleatingAssemblerOptions::getOptions().getMaxContigLength(), changedContigs, finalContigs);
+
+			LOG_DEBUG(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
+			setGlobalReadSetOffsets(world, changedContigs);
+			setGlobalReadSetOffsets(world, finalContigs);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Changed contigs: " << changedContigs.getGlobalSize() << " finalContigs: " << finalContigs.getGlobalSize());
+
+			std::string oldFinalContigFile = finalContigFile;
+			std::string oldContigFile = contigFile;
+			{
+				// write out the state of the contig files (so far) so we do not loose them
+				DistributedOfstreamMap om(world,
+						Options::getOptions().getOutputFile(), "");
+				om.setBuildInMemory();
+				if (finalContigs.getGlobalSize() > 0) {
+					std::string fileKey = "final-" + boost::lexical_cast<
+							std::string>(iteration);
+					finalContigs.writeAll(om.getOfstream(fileKey),
+							FormatOutput::Fasta());
+					finalContigFile = om.getRealFilePath(fileKey);
+				}
+				if (changedContigs.getGlobalSize() > 0) {
+					std::string filekey = "-inputcontigs-" + boost::lexical_cast<
+							std::string>(iteration) + ".fasta";
+					changedContigs.writeAll(om.getOfstream(filekey),
+							FormatOutput::Fasta());
+					contigFile = om.getRealFilePath(filekey);
+				}
+				contigs = changedContigs;
+			}
+
+			matcher->recordTime("writeFinalTime", MPI_Wtime());
+
+			if (!Log::isDebug(1) && world.rank() == 0) {
+				// remove most recent contig files (if not debugging)
+				if (!oldFinalContigFile.empty()) {
+					LOG_VERBOSE_OPTIONAL(1, true, "Removing " << oldFinalContigFile);
+					unlink(oldFinalContigFile.c_str());
+				}
+
+				if (ContigExtenderBaseOptions::getOptions().getContigFile().compare(
+						oldContigFile) != 0) {
+					LOG_VERBOSE_OPTIONAL(1, true, "Removing " << oldContigFile);
+					unlink(oldContigFile.c_str());
+				}
+			}
+
+			if (changedContigs.getGlobalSize() == 0) {
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 1, "No more contigs to extend " << changedContigs.getSize());
+				break;
+			}
+
+			matcher->recordTime("finishIteration", MPI_Wtime());
+			LOG_DEBUG(1, matcher->getTimes("") + " " + MemoryUtils::getMemoryUsage());
+
+		}
+
+		if (world.rank() == 0 && !Log::isDebug(1)) {
+			if (ContigExtenderBaseOptions::getOptions().getContigFile().compare(
+					contigFile) != 0) {
+				LOG_DEBUG_OPTIONAL(1, true, "Removing " << contigFile);
+				unlink(contigFile.c_str());
 			}
 		}
 
-		if (changedContigs.getGlobalSize() == 0) {
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 1, "No more contigs to extend " << changedContigs.getSize());
-			break;
+		// write final contigs (and any unfinished contigs still remaining)
+		finalContigs.append(contigs);
+		std::string tmpFinalFile = DistributedOfstreamMap::writeGlobalReadSet(world, finalContigs, Options::getOptions().getOutputFile(), "", FormatOutput::Fasta());
+		if (world.rank() == 0 && !finalContigFile.empty()) {
+			LOG_DEBUG_OPTIONAL(1, true, "Removing " << finalContigFile);
+			unlink(finalContigFile.c_str());
 		}
+		finalContigFile = tmpFinalFile;
 
-		matcher->recordTime("finishIteration", MPI_Wtime());
-		LOG_VERBOSE(1, matcher->getTimes("") + " " + MemoryUtils::getMemoryUsage());
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Final contigs are in: " << finalContigFile);
 
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
+
+	} catch (...) {
+		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
 	}
 
-	if (world.rank() == 0 && !Log::isDebug(1)) {
-		if (DistributedNucleatingAssemblerOptions::getOptions().getContigFile().compare(
-				contigFile) != 0) {
-			LOG_DEBUG_OPTIONAL(1, true, "Removing " << contigFile);
-			unlink(contigFile.c_str());
-		}
-	}
-
-	// write final contigs (and any unfinished contigs still remaining)
-	finalContigs.append(contigs);
-	std::string tmpFinalFile = DistributedOfstreamMap::writeGlobalReadSet(world, finalContigs, Options::getOptions().getOutputFile(), "", FormatOutput::Fasta());
-	if (world.rank() == 0 && !finalContigFile.empty()) {
-		LOG_DEBUG_OPTIONAL(1, true, "Removing " << finalContigFile);
-		unlink(finalContigFile.c_str());
-	}
-	finalContigFile = tmpFinalFile;
-
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Final contigs are in: " << finalContigFile);
-
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 	MPI_Finalize();
 
 	return 0;
