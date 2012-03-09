@@ -84,17 +84,13 @@ public:
 		po::options_description opts("General Filtering Options");
 		opts.add_options()
 
-		("max-kmer-output-depth", po::value<int>()->default_value(maxKmerDepth),
-				"maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output")
+				("max-kmer-output-depth", po::value<int>()->default_value(maxKmerDepth), "maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output")
 
-		("partition-by-depth", po::value<int>()->default_value(partitionByDepth),
-				"partition filtered reads by powers-of-two coverage depth (mutually exclusive with max-kmer-depth)")
+				("partition-by-depth", po::value<int>()->default_value(partitionByDepth), "partition filtered reads by powers-of-two coverage depth (mutually exclusive with max-kmer-depth)")
 
-		("min-passing-in-pair", po::value<int>()->default_value(bothPairs),
-				"1 or 2 reads in a pair must pass filters")
+				("min-passing-in-pair", po::value<int>()->default_value(bothPairs), "1 or 2 reads in a pair must pass filters")
 
-		("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile),
-				"if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)");
+				("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile), "if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)");
 
 		desc.add(opts);
 	}
@@ -196,7 +192,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 						Options::getOptions().getMinReadLength());
 			}
 			LOG_VERBOSE(2, "At or above coverage: " << depth << " Picked " << picked
-			<< " / " << reads.getSize() << " reads");
+					<< " / " << reads.getSize() << " reads");
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			if (picked > 0 && !outputFilename.empty()) {

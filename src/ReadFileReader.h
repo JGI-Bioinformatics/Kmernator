@@ -50,7 +50,7 @@ public:
 	typedef Kmernator::MmapIStream MmapIStream;
 	typedef Kmernator::FilteredIStream FilteredIStream;
 
-    class SequenceStreamParser;
+	class SequenceStreamParser;
 	typedef boost::shared_ptr< SequenceStreamParser > SequenceStreamParserPtr;
 
 private:
@@ -80,7 +80,7 @@ public:
 
 	}
 	ReadFileReader(string fastaFilePath, string qualFilePath, bool autoFindQual = GeneralOptions::getOptions().getIgnoreQual()) :
-	    _parser(), _path(fastaFilePath), _streamType(0) {
+		_parser(), _path(fastaFilePath), _streamType(0) {
 
 		openFastaFile(fastaFilePath);
 
@@ -116,7 +116,7 @@ public:
 	}
 	void openFastaFile(string fastaFilePath) {
 
-        _ifs.open(_path.c_str());
+		_ifs.open(_path.c_str());
 
 		if (_ifs.fail())
 			throw runtime_error("Could not open : " + _path);
@@ -158,9 +158,9 @@ public:
 	template<typename U> void setParser(U &data, char marker) {
 		LOG_DEBUG(3, "setParser(U)");
 		if (marker == '@')
-		   _parser = SequenceStreamParserPtr(new FastqStreamParser(data));
+			_parser = SequenceStreamParserPtr(new FastqStreamParser(data));
 		else if (marker == '>')
-		   _parser = SequenceStreamParserPtr(new FastaStreamParser(data));
+			_parser = SequenceStreamParserPtr(new FastaStreamParser(data));
 		else
 			throw std::invalid_argument("Unknown file format");
 	}
@@ -223,19 +223,19 @@ public:
 		} catch (runtime_error &e) {
 			stringstream error;
 			error << e.what() << " in file '" << _path << "' at line "
-								<< _parser->lineNumber() << " position:" << _parser->tellg() << " " \
-								<< _parser->getName() << _parser->getBases() << _parser->getQuals() \
-								<< " '" << _parser->getLineBuffer() << _parser->nextLine() << "'";
+					<< _parser->lineNumber() << " position:" << _parser->tellg() << " " \
+					<< _parser->getName() << _parser->getBases() << _parser->getQuals() \
+					<< " '" << _parser->getLineBuffer() << _parser->nextLine() << "'";
 			throw runtime_error(error.str());
 		}
 	}
 	bool nextRead(RecordPtr &recordStart, string &name, string &bases, string &quals, bool &isMultiline) {
 		bool passed = nextRead(recordStart);
 		if (passed) {
-		  name = getLastName();
-		  bases = getLastBases();
-		  quals = getLastQuals();
-		  isMultiline = getLastMultiline();
+			name = getLastName();
+			bases = getLastBases();
+			quals = getLastQuals();
+			isMultiline = getLastMultiline();
 		}
 		return passed;
 	}
@@ -272,13 +272,13 @@ public:
 		if (_parser->isMmaped()) {
 			return _parser->getMmapFileSize();
 		} else {
-		    long size = 0;
-		    switch(_streamType) {
-		    case(0) : size = FileUtils::getFileSize(_ifs); break;
-		    case(1) : size = FileUtils::getFileSize(_iss); break;
-		    case(2) : size = 0; break;
-		    }
-		    return size;
+			long size = 0;
+			switch(_streamType) {
+			case(0) : size = FileUtils::getFileSize(_ifs); break;
+			case(1) : size = FileUtils::getFileSize(_iss); break;
+			case(2) : size = 0; break;
+			}
+			return size;
 		}
 	}
 
@@ -353,9 +353,9 @@ public:
 		RecordPtr readRecord(RecordPtr recordPtr, string &name, string &bases, string &quals) const {
 			RecordPtr end = readRecord(recordPtr);
 			if (end != NULL) {
-			  name = getName();
-			  bases = getBases();
-			  quals = getQuals();
+				name = getName();
+				bases = getBases();
+				quals = getQuals();
 			} else {
 				LOG_DEBUG(5, "SequenceStreamParser()::readRecord(" << recordPtr <<",,,) found the end");
 				resetBuffers();
@@ -391,7 +391,7 @@ public:
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::MmapSource &mmap, char marker) :
-		    _stream(NULL), _line(0), _pos(0), _lastPos(-1), _marker(marker), _mmap( mmap ), _lastPtr(NULL), _freeStream(false) {
+			_stream(NULL), _line(0), _pos(0), _lastPos(-1), _marker(marker), _mmap( mmap ), _lastPtr(NULL), _freeStream(false) {
 			if (!_mmap.is_open() || !_mmap.size()>0 || _mmap.data() == NULL)
 				LOG_THROW("SequenceStreamParser(" << _mmap << ", " << marker << ") has an invalid memory map!");
 
@@ -502,7 +502,7 @@ public:
 				LOG_THROW("Missing name marker '" << _marker << "'" << " in '" << name << "' at " << getPos() << " after " << count << " attempts to find the marker");
 
 			// remove marker and any extra comments or fields
-            SequenceRecordParser::trimName( name );
+			SequenceRecordParser::trimName( name );
 
 			return name;
 		}
@@ -673,7 +673,7 @@ public:
 				return NULL;
 			}
 			if (*(recordPtr++) != _marker) {
-			    // skip the first character
+				// skip the first character
 				LOG_THROW("Detected invalid line marker: at " << getPos() << ": " << *recordPtr);
 			}
 			std::string &name = _nameBuffer[threadNum];
@@ -823,17 +823,17 @@ public:
 		RecordPtr readRecord() {
 			int threadNum = omp_get_thread_num();
 			RecordPtr fastaPtr = getStreamRecordPtr();
-     		RecordPtr qualPtr = _qualParser.getStreamRecordPtr();
-     		translate[fastaPtr] = qualPtr;
+			RecordPtr qualPtr = _qualParser.getStreamRecordPtr();
+			translate[fastaPtr] = qualPtr;
 			if (readName().empty()) {
 				resetBuffers();
 				LOG_DEBUG(5, "FastaQualStreamParser::readRecord() found the end");
 				return NULL;
 			} else {
-			    readBases();
-			    readQuals();
-			    _isMultiline[threadNum] = _isMultiline[threadNum] || _qualParser.isMultiline();
-			    LOG_DEBUG(5, "FastaQualStreamParser::readRecord() found " << _nameBuffer[threadNum]);
+				readBases();
+				readQuals();
+				_isMultiline[threadNum] = _isMultiline[threadNum] || _qualParser.isMultiline();
+				LOG_DEBUG(5, "FastaQualStreamParser::readRecord() found " << _nameBuffer[threadNum]);
 			}
 			return getStreamRecordPtr();
 		}
@@ -885,21 +885,3 @@ public:
 
 #endif
 
-
-// $Log: ReadFileReader.h,v $
-// Revision 1.7  2010-08-18 17:50:39  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.6.4.1  2010-07-20 20:02:56  regan
-// autodetect fastq quality range
-//
-// Revision 1.6  2010-06-22 23:06:30  regan
-// merged changes in CorruptionBugfix-20100622 branch
-//
-// Revision 1.5.8.1  2010-06-22 23:02:03  regan
-// named all critical sections
-//
-// Revision 1.5  2010-05-06 21:46:54  regan
-// merged changes from PerformanceTuning-20100501
-//
-//

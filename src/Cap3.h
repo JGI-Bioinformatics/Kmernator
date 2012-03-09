@@ -29,10 +29,7 @@ public:
 		po::options_description opts("Cap3 Options");
 
 		opts.add_options()
-		("cap3-path", po::value<std::string>()->default_value(cap3Path),
-				"if set, cap3 will be used to extend contigs")
-
-		;
+				("cap3-path", po::value<std::string>()->default_value(cap3Path), "if set, cap3 will be used to extend contigs");
 
 		desc.add(opts);
 	}

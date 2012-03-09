@@ -144,7 +144,7 @@ public:
 #ifdef  _USE_MPI
 			return ((mpi::communicator*)_world)->rank() == 0;
 #else
-			return true;
+		return true;
 #endif
 	}
 	inline bool isActive(unsigned int level = 1) const {
@@ -234,7 +234,7 @@ class Log
 		if (!msg.empty()) {
 			std::string s(msg + std::string("\n"));
 #ifdef _USE_OPENMP
-			#pragma omp critical(Log)
+#pragma omp critical(Log)
 #endif
 			{
 				log << s;

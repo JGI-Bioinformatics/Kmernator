@@ -37,9 +37,9 @@
 typedef MmapTempFile::MmapFile MmapFile;
 
 #define INIT_AND_TEST(ptr,j) \
-	for (long i = 0; i < 100; i++) \
+		for (long i = 0; i < 100; i++) \
 		*(ptr+i) = i+j; \
-	for (long i = 0; i < 100; i++) \
+		for (long i = 0; i < 100; i++) \
 		BOOST_CHECK_EQUAL(*(ptr+i) , i+j);
 
 void testMmapTempFile()
@@ -83,12 +83,3 @@ BOOST_AUTO_TEST_CASE( MmapTempfileTest )
 	testBoostPoolWithMmapAllocator();
 
 }
-
-//
-// $Log: MmapTempFileTest.cpp,v $
-// Revision 1.2  2010-05-18 20:50:21  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.1.2.1  2010-05-12 18:25:27  regan
-// added tests
-//

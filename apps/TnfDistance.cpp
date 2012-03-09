@@ -76,21 +76,16 @@ public:
 
 		opts.add_options()
 
-		("inter-distance-file", po::value<string>()->default_value(""),
-				"output inter-distance LT matrix to this filename")
+				("inter-distance-file", po::value<string>()->default_value(""), "output inter-distance LT matrix to this filename")
 
-		("intra-distance-file", po::value<string>()->default_value(""),
-				"output intra-distance matrix (one line per read) to this filename")
+				("intra-distance-file", po::value<string>()->default_value(""), "output intra-distance matrix (one line per read) to this filename")
 
-		("intra-window-size", po::value<int>()->default_value(25000),
-				"size of adjacent intra-distance windows")
+				("intra-window-size", po::value<int>()->default_value(25000), "size of adjacent intra-distance windows")
 
-		("cluster-file", po::value<string>()->default_value(""),
-				"cluster output filename")
+				("cluster-file", po::value<string>()->default_value(""), "cluster output filename")
 
-		("cluster-threshold-distance", po::value<double>()->default_value(0.175),
-				"Euclidean distance threshold for clusters")
-		;
+				("cluster-threshold-distance", po::value<double>()->default_value(0.175), "Euclidean distance threshold for clusters") ;
+
 		desc.add(opts);
 
 		GeneralOptions::_setOptions(desc, p);
@@ -119,17 +114,17 @@ public:
 	static KM stdMap;
 	static long stdSize;
 	static void initStdMap() {
-	  for(int i=0; i < 256 ; i++) {
-		char c = (char) i;
-		Kmer &kmer = (Kmer&) c;
-		TEMP_KMER(lc);
-		kmer.buildLeastComplement(lc);
-		if ( !stdMap.exists(lc) ) {
-			LOG_DEBUG(1, lc.toFasta() << "\t" << (int) i);
-		    stdMap.insert(lc, DataType());
+		for(int i=0; i < 256 ; i++) {
+			char c = (char) i;
+			Kmer &kmer = (Kmer&) c;
+			TEMP_KMER(lc);
+			kmer.buildLeastComplement(lc);
+			if ( !stdMap.exists(lc) ) {
+				LOG_DEBUG(1, lc.toFasta() << "\t" << (int) i);
+				stdMap.insert(lc, DataType());
+			}
 		}
-	  }
-	  stdSize = stdMap.size();
+		stdSize = stdMap.size();
 	}
 	static std::string toHeader() {
 		std::stringstream ss;
@@ -198,31 +193,31 @@ public:
 	}
 	void buildLength() {
 		length = 0.0;
-	    bool debug = Log::isDebug(1);
-	    ostream *debugPtr = NULL;
-	    if (debug) {
-	    	debugPtr = Log::Debug("buildLength()").getOstreamPtr();
-	    }
-	    for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
-	    	length += tnfValues[i] * tnfValues[i];
-	    	if (debug) *debugPtr << tnfValues[i] << "\t";
-	    }
-	    length = sqrt(length);
-	    if (length == 0.0)
-	    	length = 1.0;
-	    if (debug) *debugPtr << length << endl;
+		bool debug = Log::isDebug(1);
+		ostream *debugPtr = NULL;
+		if (debug) {
+			debugPtr = Log::Debug("buildLength()").getOstreamPtr();
+		}
+		for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
+			length += tnfValues[i] * tnfValues[i];
+			if (debug) *debugPtr << tnfValues[i] << "\t";
+		}
+		length = sqrt(length);
+		if (length == 0.0)
+			length = 1.0;
+		if (debug) *debugPtr << length << endl;
 	}
 	void buildTnf(const KM & map) {
 		tnfValues.empty();
 		tnfValues.reserve(stdSize);
-	    for(KM::Iterator it = stdMap.begin(); it != stdMap.end(); it++) {
-	    	KM::ElementType elem = map.getElementIfExists(it->key());
-	    	double t = 0.0;
-	    	if (elem.isValid()) {
-	    		t = elem.value() / length;
-	    	}
-	    	tnfValues.push_back(t);
-	    }
+		for(KM::Iterator it = stdMap.begin(); it != stdMap.end(); it++) {
+			KM::ElementType elem = map.getElementIfExists(it->key());
+			double t = 0.0;
+			if (elem.isValid()) {
+				t = elem.value() / length;
+			}
+			tnfValues.push_back(t);
+		}
 	}
 	double getDistance(const TNF &other) const {
 		bool debug = Log::isDebug(1);
@@ -251,35 +246,35 @@ public:
 	static double getDistance(KM &kmers, KM &target, KM &query) {
 		double distance = 0.0;
 
-	    double targetSum = 0.0;
-	    double querySum = 0.0;
-	    bool debug = Log::isDebug(1);
+		double targetSum = 0.0;
+		double querySum = 0.0;
+		bool debug = Log::isDebug(1);
 
-	    ostream *debugPtr = NULL;
-	    if (debug) {
-	    	debugPtr = Log::Debug("getDistance(...)").getOstreamPtr();
-	    }
-	    for(KM::Iterator it = kmers.begin(); it != kmers.end(); it++) {
-	    	double t = target[it->key()];
-	    	targetSum += t*t;
-	    	double q = query[it->key()];
-	    	querySum += q*q;
+		ostream *debugPtr = NULL;
+		if (debug) {
+			debugPtr = Log::Debug("getDistance(...)").getOstreamPtr();
+		}
+		for(KM::Iterator it = kmers.begin(); it != kmers.end(); it++) {
+			double t = target[it->key()];
+			targetSum += t*t;
+			double q = query[it->key()];
+			querySum += q*q;
 			if (debug) *debugPtr << t << "\t" << q << endl;
-	    }
-	    if (debug) *debugPtr << endl;
-	    targetSum = sqrt(targetSum);
-	    querySum = sqrt(querySum);
-	    if (debug) *debugPtr << targetSum << "\t" << querySum << endl;
+		}
+		if (debug) *debugPtr << endl;
+		targetSum = sqrt(targetSum);
+		querySum = sqrt(querySum);
+		if (debug) *debugPtr << targetSum << "\t" << querySum << endl;
 
-	    for(KM::Iterator it = kmers.begin(); it != kmers.end(); it++) {
-	    	double t = target[it->key()] / targetSum;
-	    	double q = query[it->key()] / querySum;
-	    	double d = t-q;
-	    	distance += d*d;
-	    	if (debug) *debugPtr << t << "\t" << q << "\t" << d*d << endl;
-	    }
-	    distance = sqrt(distance);
-	    if (debug) *debugPtr << distance << endl;
+		for(KM::Iterator it = kmers.begin(); it != kmers.end(); it++) {
+			double t = target[it->key()] / targetSum;
+			double q = query[it->key()] / querySum;
+			double d = t-q;
+			distance += d*d;
+			if (debug) *debugPtr << t << "\t" << q << "\t" << d*d << endl;
+		}
+		distance = sqrt(distance);
+		if (debug) *debugPtr << distance << endl;
 
 		return distance;
 	}
@@ -294,7 +289,7 @@ TNFS buildTnfs(const ReadSet &reads, bool normalize = false) {
 	long size = reads.getSize();
 	tnfs.resize(size);
 
-	#pragma omp parallel for
+#pragma omp parallel for
 	for(long readIdx = 0; readIdx < size; readIdx++) {
 		KS ksReads;
 		ksReads.setSolidOnly();
@@ -325,23 +320,23 @@ TNFS buildIntraTNFs(const Read &read, long window, long step, bool normalize = f
 
 class Result {
 public:
-  double distance;
-  string label;
-  TNF tnf;
-  Result() : distance(0.0) {}
-  Result(double _dist, string _label) : distance(_dist), label(_label) {}
-  Result(double _dist, string _label, TNF _tnf) :  distance(_dist), label(_label), tnf(_tnf) {}
-  Result(const Result &copy) {
-	  *this = copy;
-  }
-  Result &operator=(const Result &copy) {
-	  if (this == &copy)
-		  return *this;
-	  distance = copy.distance;
-	  label = copy.label;
-	  tnf = copy.tnf;
-	  return *this;
-  }
+	double distance;
+	string label;
+	TNF tnf;
+	Result() : distance(0.0) {}
+	Result(double _dist, string _label) : distance(_dist), label(_label) {}
+	Result(double _dist, string _label, TNF _tnf) :  distance(_dist), label(_label), tnf(_tnf) {}
+	Result(const Result &copy) {
+		*this = copy;
+	}
+	Result &operator=(const Result &copy) {
+		if (this == &copy)
+			return *this;
+		distance = copy.distance;
+		label = copy.label;
+		tnf = copy.tnf;
+		return *this;
+	}
 };
 typedef std::vector< Result > Results;
 class ResultCompare {
@@ -355,7 +350,7 @@ Results calculateDistances(const TNF &refTnf, const ReadSet &reads, const TNFS &
 	long size = reads.getSize();
 	results.resize(size);
 
-	#pragma omp parallel for
+#pragma omp parallel for
 	for(long readIdx = 0; readIdx < size; readIdx++) {
 
 		ReadSet singleRead;
@@ -495,7 +490,7 @@ int main(int argc, char *argv[]) {
 		float clusterThreshold = TnfDistanceOptions::getOptions().getClusterThreshold();
 
 
-        #pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic)
 		for(long i = 0; i < size; i++) {
 			clusterNames[i].push_back( reads.getRead(i).getName() );
 			DVector &vect = distMatrix[i];
@@ -599,38 +594,3 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-// $Log: TnfDistance.cpp,v $
-// Revision 1.2  2010-08-18 17:47:49  regan
-// added TNF distance application
-//
-// Revision 1.1.2.10  2010-08-02 22:10:50  regan
-// refactored and optimized/parallelized cluster building
-//
-// Revision 1.1.2.9  2010-07-26 20:44:00  regan
-// parallelized some parts
-//
-// Revision 1.1.2.8  2010-07-16 17:05:56  regan
-// fixed debug output levels
-//
-// Revision 1.1.2.7  2010-07-16 16:38:33  regan
-// added clustering option and output
-//
-// Revision 1.1.2.6  2010-07-16 00:25:42  regan
-// refactored and refeatured.. added inter, intra options
-//
-// Revision 1.1.2.5  2010-07-14 21:13:50  regan
-// added mode to print TNF
-//
-// Revision 1.1.2.4  2010-07-14 21:02:13  regan
-// refactor
-//
-// Revision 1.1.2.3  2010-07-13 21:39:34  regan
-// changed options
-//
-// Revision 1.1.2.2  2010-07-13 19:45:37  regan
-// bugfix
-//
-// Revision 1.1.2.1  2010-07-13 17:39:11  regan
-// created TnfDistance application
-//
-//

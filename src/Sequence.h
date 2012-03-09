@@ -94,7 +94,7 @@ private:
 	};
 
 	// dangling pointer
-    // it is very important that ~Sequence::DataPtrListVector() NEVER gets called, as ~Sequence() inserts into it.
+	// it is very important that ~Sequence::DataPtrListVector() NEVER gets called, as ~Sequence() inserts into it.
 	static DataPtrListVector *preAllocatedDataPtrs;
 
 public:
@@ -148,7 +148,7 @@ protected:
 	//   else if markups2
 	//     +sizeof(char*) : unsigned short = markupsCount
 	//     +sizeof(unsigned short) : = BaseLocationType2[markupsCount]
-    //
+	//
 	// else, _data consists of:
 	//   +0 : SequenceLengthType = sequenceLength
 	//   +sizeof(SequenceLengthType) : = TwoBitEncoding[ (sequenceLength+3)/4 ]
@@ -259,7 +259,7 @@ public:
 		return const_cast<RecordPtr> (constThis().getRecord());
 	}
 
-    const RecordPtr getQualRecord() const;
+	const RecordPtr getQualRecord() const;
 	inline RecordPtr getQualRecord() {
 		return const_cast<RecordPtr> (constThis().getQualRecord());
 	}
@@ -380,7 +380,7 @@ private:
 
 	static int qualityToProbabilityInitialized;
 	static int
-			initializeQualityToProbability(unsigned char minQualityScore = 0, char startChar = Kmernator::FASTQ_START_CHAR_ILLUMINA);
+	initializeQualityToProbability(unsigned char minQualityScore = 0, char startChar = Kmernator::FASTQ_START_CHAR_ILLUMINA);
 
 public:
 

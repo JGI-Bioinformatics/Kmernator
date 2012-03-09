@@ -69,16 +69,3 @@ std::ostream &operator<<(std::ostream &stream, ExtensionTrackingDataSingleton &o
 ClassicMemory ClassicMemory::singleton;
 BoostPoolManager BoostPoolManager::singleton;
 
-
-// $Log: Kmer.cpp,v $
-// Revision 1.18  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.17.2.1  2010-05-10 17:57:34  regan
-// added header
-//
-// Revision 1.17  2010-05-06 21:46:54  regan
-// merged changes from PerformanceTuning-20100501
-//
-//
-

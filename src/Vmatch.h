@@ -36,21 +36,15 @@ public:
 		po::options_description opts("Vmatch Options");
 		opts.add_options()
 
-		("vmatch-path", po::value<std::string>()->default_value(""),
-				"if specified the path to the directory containing vmatch and mkvtree")
+				("vmatch-path", po::value<std::string>()->default_value(""), "if specified the path to the directory containing vmatch and mkvtree")
 
-		("vmatch-options", po::value<std::string>()->default_value(
-				"-d -p -seedlength 10 -l 50 -e 3"),
-				"options with which to call vmatch")
+				("vmatch-options", po::value<std::string>()->default_value( "-d -p -seedlength 10 -l 50 -e 3"), "options with which to call vmatch")
 
-		("vmatch-index-path",
-				po::value<std::string>()->default_value("."),
-				"top level directory under which to create the vmatch index directories for each rank")
+				("vmatch-index-path", po::value<std::string>()->default_value("."), "top level directory under which to create the vmatch index directories for each rank")
 
-		("vmatch-preload", po::value<bool>()->default_value(false),
-				"pre-load the necessary vmatch files in a mmap")
+				("vmatch-preload", po::value<bool>()->default_value(false), "pre-load the necessary vmatch files in a mmap")
 
-		;
+				;
 		desc.add(opts);
 
 	}
@@ -100,9 +94,9 @@ public:
 			const ReadSet &target,
 			bool cacheIndexes =
 					VmatchOptions::getOptions().getVmatchPreload(),
-			bool returnPairedMatches = true) :
-		MatcherInterface(world, target, returnPairedMatches),
-		_indexName(indexName) {
+					bool returnPairedMatches = true) :
+						MatcherInterface(world, target, returnPairedMatches),
+						_indexName(indexName) {
 
 		std::string	tmpDir = VmatchOptions::getOptions().getVmatchIndexPath() + "/";
 		mkdir(tmpDir.c_str(), 0777); // all ranks need to mkdir if writing to local disks...
@@ -155,7 +149,7 @@ public:
 
 		int myRank = getWorld().rank();
 		for (VmatchMatchResults::iterator match = matches.begin(); match
-				!= matches.end(); match++) {
+		!= matches.end(); match++) {
 			ReadSet::ReadSetSizeType globalContigIdx = match->queryNumber;
 			ReadSet::ReadSetSizeType globalReadIdx = this->getTarget().getGlobalReadIdx(myRank, match->subjectNumber);
 

@@ -23,9 +23,9 @@ typedef boost::optional< mpi::status > MPIOptionalStatus;
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #define WAIT_MS 1
 #define WAIT_AND_WARN( iterations, warningMessage ) \
-	{ if ((iterations++ % (30000/WAIT_MS)) == 0) LOG_WARN(1, warningMessage << " waiting in loop: " << iterations);  \
-	  boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) ); \
-	}
+		{ if ((iterations++ % (30000/WAIT_MS)) == 0) LOG_WARN(1, warningMessage << " waiting in loop: " << iterations);  \
+		boost::this_thread::sleep( boost::posix_time::milliseconds(WAIT_MS) ); \
+		}
 
 
 #endif /* MPIBASE_H_ */

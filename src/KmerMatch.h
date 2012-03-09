@@ -34,11 +34,10 @@ public:
 		po::options_description opts("Kmer-Match Options");
 		opts.add_options()
 
-		("max-positions-from-edge", po::value<int>()->default_value(maxPositionsFromEdge),
-				"if >0 then match only reads with max-postitions-from-edge bases of either end")
-		("include-mate", po::value<int>()->default_value(includeMate),
-				"1 - include mates, 0 - do not")
-		;
+				("max-positions-from-edge", po::value<int>()->default_value(maxPositionsFromEdge), "if >0 then match only reads with max-postitions-from-edge bases of either end")
+
+				("include-mate", po::value<int>()->default_value(includeMate), "1 - include mates, 0 - do not")
+				;
 		desc.add(opts);
 
 	}

@@ -33,10 +33,9 @@ public:
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		po::options_description opts("Matching Options");
 		opts.add_options()
-		("max-read-matches", po::value<int>()->default_value(maxReadMatches),
-						"maximum number of (randomly sampled) reads to return for matching. '0' disables.")
-		("max-read-depth-matches", po::value<int>()->default_value(maxReadDepthMatches),
-						"maximum number of (randomly sampled) reads per query length to return for matching. '0' disables.")
+						("max-read-matches", po::value<int>()->default_value(maxReadMatches), "maximum number of (randomly sampled) reads to return for matching. '0' disables.")
+
+						("max-read-depth-matches", po::value<int>()->default_value(maxReadDepthMatches), "maximum number of (randomly sampled) reads per query length to return for matching. '0' disables.")
 						;
 		desc.add(opts);
 	}
@@ -210,7 +209,7 @@ public:
 		int myRank = _world.rank();
 
 		int sendBytes[_world.size()], recvBytes[_world.size()],
-				sendDisp[_world.size()], recvDisp[_world.size()];
+		sendDisp[_world.size()], recvDisp[_world.size()];
 
 		ReadIdxSet sendingGlobalContigIdx;
 
@@ -391,7 +390,7 @@ public:
 		for (ReadSet::ReadSetSizeType localContigIdx = 0; localContigIdx < globalReadSetVector.size(); localContigIdx++) {
 			ReadSet::ReadSetSizeType maxReads = std::max(maxReadMatches, maxReadDepth * query.getRead(localContigIdx).getLength() / (getTarget().getSize() > 0 ? getTarget().getAvgSequenceLength() : 76) );
 			if (maxReads > 0) {
-			    ReadSet::ReadSetSizeType numReads = globalReadSetVector[localContigIdx].getSize();
+				ReadSet::ReadSetSizeType numReads = globalReadSetVector[localContigIdx].getSize();
 				if (numReads > maxReads) {
 					LOG_DEBUG_OPTIONAL(1, true, "for " << localContigIdx << " sampled from " << numReads << " to " << maxReads);
 					globalReadSetVector[localContigIdx] = globalReadSetVector[localContigIdx].randomlySample(maxReads);

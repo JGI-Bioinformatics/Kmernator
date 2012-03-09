@@ -60,9 +60,9 @@ public:
 		po::options_description opts("MPI Options");
 		opts.add_options()
 
-			("mpi-buffer-size", po::value<int>()->default_value(mpiBufferSize),
-					"total amount of RAM to devote to MPI message batching buffers in bytes")
-			;
+					("mpi-buffer-size", po::value<int>()->default_value(mpiBufferSize),
+							"total amount of RAM to devote to MPI message batching buffers in bytes")
+							;
 		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
@@ -241,7 +241,7 @@ public:
 			MessageClassProcessor processor = MessageClassProcessor(),
 			int totalBufferSize = MPIOptions::getOptions().getTotalBufferSize(),
 			float softRatio = 0.90) :
-		_world(world), _bufferSize(totalBufferSize / _world.size() / BUFFER_INSTANCES),
+				_world(world), _bufferSize(totalBufferSize / _world.size() / BUFFER_INSTANCES),
 				_messageSize(messageSize), _processor(processor), _softRatio(
 						softRatio), _softNumThreads(0), _numCheckpoints(0) {
 		assert(getMessageSize() >= (int) sizeof(MessageClass));
@@ -263,7 +263,7 @@ public:
 	}
 	~MPIMessageBuffer() {
 		for (ThreadedFreeBufferCache::iterator it = _freeBuffers.begin(); it
-				!= _freeBuffers.end(); it++)
+		!= _freeBuffers.end(); it++)
 			for (FreeBufferCache::iterator it2 = it->begin(); it2 != it->end(); it2++)
 				delete[] *it2;
 		_freeBuffers.clear();
@@ -357,7 +357,7 @@ public:
 		_numCheckpoints = 0;
 	}
 	void checkpoint() {
-		#pragma omp atomic
+#pragma omp atomic
 		_numCheckpoints++;
 		LOG_DEBUG_OPTIONAL(3, true, "checkpoint received:" << _numCheckpoints);
 	}
@@ -382,7 +382,7 @@ public:
 		}
 		MessageHeader(const MessageHeader &copy) :
 			offset(copy.offset), threadSource(copy.threadSource),
-					tag(copy.tag), dummy(copy.dummy) {
+			tag(copy.tag), dummy(copy.dummy) {
 		}
 		MessageHeader &operator=(const MessageHeader &other) {
 			if (this == &other)
@@ -463,9 +463,9 @@ public:
 	public:
 		enum StateType { EMPTY_OUT, BUILDING_OUT, READY_OUT, EMPTY_IN, BUILDING_IN, READY_IN, DRAINING_IN, UNUSED };
 		TransmitBuffer(int _numThreads, int _worldSize, int _numTags, int bufferSize) :
-		numThreads(_numThreads), worldSize(_worldSize), numTags(_numTags), buildSize(0), finalCount(0) {
+			numThreads(_numThreads), worldSize(_worldSize), numTags(_numTags), buildSize(0), finalCount(0) {
 			dataSize = sizeof(int) + numThreads * (numThreads * numTags)
-					* (sizeof(MessageHeader) + bufferSize);
+							* (sizeof(MessageHeader) + bufferSize);
 			totalSize = getHeaderSize() + worldSize * dataSize;
 			jumps = new int[numThreads * worldSize * numThreads * numTags];
 			xmit = new char[totalSize];
@@ -545,7 +545,7 @@ public:
 			in.setAllStates(BUILDING_IN);
 			MPI_Alltoallv(out.xmit + out.getHeaderSize(), &out.getSize(0),
 					&out.getOffset(0), MPI_BYTE, in.xmit
-							+ in.getHeaderSize(), &in.getSize(0),
+					+ in.getHeaderSize(), &in.getSize(0),
 					&in.getOffset(0), MPI_BYTE, world);
 
 			out.setAllStates(UNUSED);
@@ -619,7 +619,7 @@ public:
 			return inState(UNUSED);
 		}
 		void setFinal() {
-            #pragma omp atomic
+#pragma omp atomic
 			finalCount++;
 		}
 		bool areAllFinal() {
@@ -679,7 +679,7 @@ public:
 	MPIAllToAllMessageBuffer(mpi::communicator &world, int messageSize,
 			MessageClassProcessor processor = MessageClassProcessor(),
 			int _numTags = 1, int totalBufferSize = MPIOptions::getOptions().getTotalBufferSize(), double softRatio = 0.90) :
-		BufferBase(world, messageSize, processor, totalBufferSize, softRatio),
+				BufferBase(world, messageSize, processor, totalBufferSize, softRatio),
 				numTags(_numTags), threadsSending(0) {
 		assert(!omp_in_parallel());
 		int worldSize = this->getWorldSize();
@@ -740,20 +740,20 @@ private:
 			in.prepIn();
 		}
 
-        #pragma omp atomic
-        threadsSending++;
+#pragma omp atomic
+		threadsSending++;
 
 		// ensure in, out & last buffer are all prepared
 		// and all threads have reset checkpoints
 		LOG_DEBUG(3, "sendReceive() starting barrier1, buffer: " << thisBuffer);
 		waitTime = MPI_Wtime();
-		#pragma omp barrier
+#pragma omp barrier
 		this->threadWait( MPI_Wtime() - waitTime );
 		// make sure all threads get here before incrementing the buffer or resetting checkpoints
 
 		if (omp_get_thread_num() == 0) {
 			this->resetCheckpoints();
-            #pragma omp atomic
+#pragma omp atomic
 			currentBuffer++;
 		}
 		if (isFinalized)
@@ -766,11 +766,11 @@ private:
 		assert(out.isEmptyOut());
 		assert(in.isEmptyIn());
 
-		#pragma omp atomic
+#pragma omp atomic
 		threadsSending--;
 
 		waitTime = MPI_Wtime();
-		#pragma omp barrier
+#pragma omp barrier
 		this->threadWait( MPI_Wtime() - waitTime );
 		// make sure all threads always use the same currentBuffer (between two barriers)
 		LOG_DEBUG(3, "sendReceive() past barrier2, buffer: " << thisBuffer);
@@ -798,7 +798,7 @@ private:
 			assert(out.isReadyOut());
 			assert(last.isUnused());
 
-			#pragma omp barrier
+#pragma omp barrier
 
 			if (out.getBuildSize() == 0 && this->reachedCheckpoint(this->getNumThreads())) {
 				if (omp_get_thread_num() == 0) {
@@ -868,12 +868,12 @@ public:
 			sendReceive(true);
 		}
 		this->syncPoint();
-        #pragma omp barrier
+#pragma omp barrier
 	}
 	bool isReadyToSend(int offset, int trailingBytes) {
 		return offset >= this->getSoftMaxBufferSize() && (threadsSending > this->getSoftNumThreads()
 				|| (offset + trailingBytes + this->getMessageSize())
-						>= this->getBufferSize());
+				>= this->getBufferSize());
 	}
 
 	MessageClass *bufferMessage(int rankDest, int tagDest) {
@@ -926,7 +926,7 @@ private:
 		out.setThreadBuildingOut();
 
 		double waitTime = MPI_Wtime();
-		#pragma omp critical
+#pragma omp critical
 		{
 			waitTime = MPI_Wtime() - waitTime;
 			// allocate the out message headers
@@ -1031,9 +1031,9 @@ protected:
 public:
 	MPIRecvMessageBuffer(mpi::communicator &world, int messageSize, int tag =
 			mpi::any_tag, MessageClassProcessor processor =
-			MessageClassProcessor()) :
-		BufferBase(world, messageSize, processor), _tag(tag), _isProcessing(
-				false) {
+					MessageClassProcessor()) :
+						BufferBase(world, messageSize, processor), _tag(tag), _isProcessing(
+								false) {
 		_recvBuffers = new Buffer[this->getWorld().size()];
 		_requests = new MPIOptionalRequest[this->getWorld().size()];
 		_requestAttempts.resize(this->getWorld().size(), 0);
@@ -1074,13 +1074,13 @@ public:
 		if (!!MPIOptionalRequest) {
 			++_requestAttempts[rankSource];
 			bool retry = _RETRY_MESSAGES && _requestAttempts[rankSource]
-					> _RETRY_THRESHOLD;
+			                                                 > _RETRY_THRESHOLD;
 			{
 				MPIOptionalStatus = MPIOptionalRequest.get().test();
 				if (retry && !MPIOptionalStatus) {
 					LOG_WARN(1,
 							"Canceling pending request that looks to be stuck tag: "
-									<< _tag);
+							<< _tag);
 					MPIOptionalRequest.get().cancel();
 					MPIOptionalStatus = MPIOptionalRequest.get().test();
 					if (!MPIOptionalStatus) {
@@ -1142,7 +1142,7 @@ private:
 						3,
 						true,
 						"Recv " << _tag
-								<< ": Achieved checkpoint but more messages are pending");
+						<< ": Achieved checkpoint but more messages are pending");
 			}
 			if (messages == 0)
 				WAIT_AND_WARN(iterations, "_finalize(" << checkpointFactor << ") with messages: " << messages << " checkpoint: " << this->getNumCheckpoints());
@@ -1154,7 +1154,7 @@ public:
 		LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag
 				<< ": Entering finalize checkpoint: "
 				<< this->getNumCheckpoints() << " out of " << (checkpointFactor
-				* this->getWorld().size()));
+						* this->getWorld().size()));
 
 		long messages = 0;
 		do {
@@ -1302,7 +1302,7 @@ protected:
 public:
 	MPISendMessageBuffer(mpi::communicator &world, int messageSize,
 			MessageClassProcessor processor = MessageClassProcessor()) :
-		BufferBase(world, messageSize, processor) {
+				BufferBase(world, messageSize, processor) {
 		_sendBuffers = new Buffer[world.size()];
 		_offsets = new int[this->getWorld().size()];
 		for (int destRank = 0; destRank < this->getWorld().size(); destRank++) {
@@ -1423,7 +1423,7 @@ public:
 		newMessages = 0;
 		while (newMessages == 0 && _sentBuffers.size()
 				>= (size_t) BufferBase::BUFFER_QUEUE_SOFT_LIMIT
-						* this->getWorld().size()) {
+				* this->getWorld().size()) {
 			if (newMessages != 0)
 				WAIT_AND_WARN(iterations, "flushMessageBuffer(" << rankDest << ", " << tagDest << ", " << sendZeroMessage << ") in checkSentBuffers loop");
 			newMessages = checkSentBuffers(true);
@@ -1466,7 +1466,7 @@ public:
 			//	LOG_WARN(1, "sending message returned an error: " << status.error());
 			LOG_DEBUG(4, "finished sending message to " << sent.destRank
 					<< ", " << sent.destTag << " size " << sent.size
-					<< " deliveryCount " << sent.deliveryNum);
+					<< " deliveryCount " << sent.deliveryNum << " status.error(): " << status.error());
 
 			this->returnBuffer(sent.buffer);
 			sent.reset();
@@ -1480,7 +1480,7 @@ public:
 		while (wait || iterations++ == 0) {
 			messages += this->receiveAllIncomingMessages(wait);
 			for (SentBuffersIterator it = _sentBuffers.begin(); it
-					!= _sentBuffers.end(); it++) {
+			!= _sentBuffers.end(); it++) {
 				SentBuffer &sent = *it;
 				checkSent(sent);
 			}

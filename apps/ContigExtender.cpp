@@ -100,10 +100,10 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(1, "loaded " << contigs.getSize() << " Reads, " << contigs.getBaseCount() << " Bases ");
 
 	if (DuplicateFragmentFilterOptions::getOptions().getDeDupMode() > 0 && DuplicateFragmentFilterOptions::getOptions().getDeDupEditDistance() >= 0) {
-	  LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
-	  unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
-	  LOG_VERBOSE(1, "filter removed duplicate fragment pair reads: " << duplicateFragments);
-	  LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+		LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
+		unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
+		LOG_VERBOSE(1, "filter removed duplicate fragment pair reads: " << duplicateFragments);
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 	}
 
 	ReadSet newContigs = ContigExtender<KS>::extendContigs(contigs, reads);

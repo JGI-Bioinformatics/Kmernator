@@ -103,11 +103,11 @@ public:
 		p.add("input-file", -1);
 		po::options_description opts("Split Sequence Options");
 		opts.add_options()
-				("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
-				("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))")
-				("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
-				("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
-				;
+						("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
+						("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))")
+						("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
+						("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
+						;
 
 		desc.add(opts);
 		GeneralOptions::_setOptions(desc, p);
@@ -151,10 +151,10 @@ int main(int argc, char *argv[]) {
 		ReadFileReader reader(inputs[i], "");
 		reader.seekToPartition( SSOptions::getOptions().getFileNum(), SSOptions::getOptions().getNumFiles() );
 		std::string name, bases, quals;
-	    while (reader.nextRead(name, bases, quals)) {
-	        Read read(name, bases, quals);
-	        read.write(output);
-	    }
+		while (reader.nextRead(name, bases, quals)) {
+			Read read(name, bases, quals);
+			read.write(output);
+		}
 	}
 
 	if (ops != NULL) {
@@ -183,15 +183,3 @@ int main(int argc, char *argv[]) {
 #endif
 
 }
-
-// $Log: FixPair.cpp,v $
-// Revision 1.4  2010-05-18 20:50:18  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.3.2.1  2010-05-07 22:59:29  regan
-// refactored base type declarations
-//
-// Revision 1.3  2010-05-06 21:46:57  regan
-// merged changes from PerformanceTuning-20100501
-//
-//

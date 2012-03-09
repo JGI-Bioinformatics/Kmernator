@@ -45,7 +45,7 @@ class _KmerMatchTestOptions : public _MatcherInterfaceOptions, public _KmerMatch
 public:
 	void _resetDefaults() {}
 	void _setOptions(po::options_description &desc,
-				po::positional_options_description &p) {
+			po::positional_options_description &p) {
 		GeneralOptions::getOptions()._setOptions(desc,p);
 		_MatcherInterfaceOptions::_setOptions(desc,p);
 		_KmerMatchOptions::_setOptions(desc,p);
@@ -121,7 +121,7 @@ int main(int argc, char **argv)
 	passed &= testMatchesSelf(world, greads, greads, false);
 	//passed &= testMatchesSelf(world, greads, greads, true);
 	//passed &= testMatchesSelf(world, greads2, greads2, false);
-    passed &= testMatchesSelf(world, greads2, greads2, true);
+	passed &= testMatchesSelf(world, greads2, greads2, true);
 
 	MPI_Finalize();
 	return passed ? 0 : -1;

@@ -88,14 +88,9 @@ public:
 		p.add("input-file", -1);
 
 		opts.add_options()
+						("max-iterations", po::value<int>()->default_value(maxIterations), "the maximum number of rounds to extend the set of contigs")
 
-				("max-iterations", po::value<int>()->default_value(maxIterations),
-						"the maximum number of rounds to extend the set of contigs")
-
-				("max-contig-length", po::value<int>()->default_value(maxContigLength),
-						"the maximum size of a contig to continue extending")
-
-				;
+						("max-contig-length", po::value<int>()->default_value(maxContigLength), "the maximum size of a contig to continue extending");
 
 		desc.add(opts);
 
@@ -172,7 +167,7 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 			changedContigs.append(newRead);
 		} else {
 			extendLog << std::endl << "Did not extend " << oldRead.getName()
-							<< " with " << poolSize << " reads in the pool";
+													<< " with " << poolSize << " reads in the pool";
 			//#pragma omp critical
 			finalContigs.append(oldRead);
 		}
@@ -222,7 +217,7 @@ std::string extendContigsWithContigExtender(ReadSet & contigs,
 			changedContigs.append(newRead);
 		} else {
 			extendLog << std::endl << "Did not extend " << oldRead.getName()
-							<< " with " << poolSize << " reads in the pool";
+													<< " with " << poolSize << " reads in the pool";
 			//#pragma omp critical
 			finalContigs.append(oldRead);
 		}

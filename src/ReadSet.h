@@ -59,7 +59,7 @@ public:
 	static const ReadSetSizeType MAX_READ_IDX = MAX_READ_SET_SIZE;
 
 	static MmapSourceVector mmapSources;
-        static void madviseMmaps(int advise);
+	static void madviseMmaps(int advise);
 	static void madviseMmapsRandom() {
 		madviseMmaps(MADV_RANDOM);
 	}
@@ -136,7 +136,7 @@ private:
 	void _trackSequentialPair(const Read &read);
 	inline bool _setMaxSequenceLength(SequenceLengthType len) {
 		if (len > _maxSequenceLength) {
-			#pragma omp critical
+#pragma omp critical
 			_maxSequenceLength = len;
 			return true;
 		}
@@ -409,7 +409,7 @@ public:
 	ReadPtr parseMmapedRead(ReadSetSizeType index) const;
 	inline const Read &getRead(ReadSetSizeType index) const {
 		const Read &read = _reads[index];
-        return read;
+		return read;
 	}
 	inline Read &getRead(ReadSetSizeType index) {
 		return const_cast<Read&>(constThis().getRead(index));
