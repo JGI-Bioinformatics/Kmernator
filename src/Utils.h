@@ -260,14 +260,14 @@ public:
 	typedef Map::iterator Iterator;
 	typedef boost::shared_ptr< Map > MapPtr;
 protected:
-    MapPtr _map;
-    std::string _outputFilePathPrefix;
-    std::string _suffix;
-    bool _append;
-    bool _isStdout;
-    bool _buildInMemory;
+	MapPtr _map;
+	std::string _outputFilePathPrefix;
+	std::string _suffix;
+	bool _append;
+	bool _isStdout;
+	bool _buildInMemory;
 #ifdef _USE_MPI
-    mpi::communicator *_world;
+	mpi::communicator *_world;
 #endif
 	virtual void close() {
 		LOG_DEBUG_OPTIONAL(2, true, "Calling OfstreamMap::close()");
@@ -284,7 +284,7 @@ public:
 	}
 
 	OfstreamMap(std::string outputFilePathPrefix = Options::getOptions().getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix())
-	 : _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix), _append(false), _isStdout(false), _buildInMemory(false) {
+	: _map(new Map()), _outputFilePathPrefix(outputFilePathPrefix), _suffix(suffix), _append(false), _isStdout(false), _buildInMemory(false) {
 		_append = getDefaultAppend();
 		if (Options::getOptions().getOutputFile() == std::string("-")) {
 			_isStdout = true;
@@ -360,7 +360,7 @@ public:
 
 			// lock if not found and map needs to be updated
 #ifdef _USE_OPENMP
-			#pragma omp critical (ofStreamMap)
+#pragma omp critical (ofStreamMap)
 #endif
 			{
 				// re-copy the map first
@@ -404,25 +404,25 @@ public:
 	void clear() {
 		_partitions.clear();
 	}
-    inline bool hasPartitions() const {
-    	return ! _partitions.empty();
-    }
-    inline int getPartitionIdx(DataType score) const {
+	inline bool hasPartitions() const {
+		return ! _partitions.empty();
+	}
+	inline int getPartitionIdx(DataType score) const {
 		// TODO binary search?
 		for(unsigned int i = 0; i < _partitions.size(); i++)
 			if (score < _partitions[i])
 				return i;
 		return _partitions.size();
 	}
-    inline Partitions getPartitions() const {
-    	return _partitions;
-    }
+	inline Partitions getPartitions() const {
+		return _partitions;
+	}
 
-    inline int addPartition(DataType partition) {
-    	_partitions.push_back(partition);
-    	std::sort(_partitions.begin(), _partitions.end());
-    	return _partitions.size();
-    }
+	inline int addPartition(DataType partition) {
+		_partitions.push_back(partition);
+		std::sort(_partitions.begin(), _partitions.end());
+		return _partitions.size();
+	}
 
 
 };
@@ -472,12 +472,12 @@ public:
 		Kmernator::RecordPtr nextPtr = strchr(recordPtr, '\n');
 		long len = nextPtr - recordPtr;
 		if (len > 0) {
-		  buffer.assign(recordPtr, len);
+			buffer.assign(recordPtr, len);
 		} else {
-		  buffer.clear();
+			buffer.clear();
 		}
-	    recordPtr = ++nextPtr;
-	    return buffer;
+		recordPtr = ++nextPtr;
+		return buffer;
 	}
 	static std::string &trimName(std::string &nameLine) {
 		if (nameLine.length() == 0)
@@ -487,8 +487,8 @@ public:
 		if (marker != '>' && marker != '@') {
 			throw std::invalid_argument( (std::string("Can not parse name without a marker: ") + nameLine).c_str() );
 		} else {
-		    // remove marker
-		    nameLine.erase(0,1);
+			// remove marker
+			nameLine.erase(0,1);
 		}
 
 		// trim at first whitespace
@@ -499,9 +499,9 @@ public:
 		return nameLine;
 	}
 	static void parse(Kmernator::RecordPtr record, Kmernator::RecordPtr lastRecord,
-			          std::string &name, std::string &bases, std::string &quals,
-			          Kmernator::RecordPtr qualRecord = NULL, Kmernator::RecordPtr lastQualRecord = NULL,
-			          char fastqStartChar = Kmernator::FASTQ_START_CHAR_ILLUMINA) {
+			std::string &name, std::string &bases, std::string &quals,
+			Kmernator::RecordPtr qualRecord = NULL, Kmernator::RecordPtr lastQualRecord = NULL,
+			char fastqStartChar = Kmernator::FASTQ_START_CHAR_ILLUMINA) {
 		std::string buf;
 		if (*record == '@') {
 			// FASTQ
@@ -532,7 +532,7 @@ public:
 					throw "fasta and qual do not match names!";
 				}
 
-                // TODO FIXME HACK!
+				// TODO FIXME HACK!
 				if (lastQualRecord == NULL) // only read one line if no last record is given
 					lastQualRecord = qualRecord+1;
 				while (qualRecord < lastQualRecord && *qualRecord != '>') {
@@ -560,7 +560,7 @@ public:
 			qVal += fastqStartChar;
 			oss << (char) qVal;
 		}
-        return oss.str();
+		return oss.str();
 	}
 
 	static std::string commonName(const std::string &readName) {
@@ -610,7 +610,7 @@ public:
 class StdErrInterceptor2 {
 public:
 	StdErrInterceptor2(bool _intercept = false)
-	    : _stderrBuffer(), _olderr(_intercept ? std::cerr.flush().rdbuf(_stderrBuffer.rdbuf()) : NULL)
+	: _stderrBuffer(), _olderr(_intercept ? std::cerr.flush().rdbuf(_stderrBuffer.rdbuf()) : NULL)
 	{
 	}
 	virtual ~StdErrInterceptor2() {
@@ -637,7 +637,7 @@ private:
 class StdErrInterceptor {
 public:
 	StdErrInterceptor(bool _intercept = false)
-	    : _errFileName( _intercept ? getNewFile() : "")
+	: _errFileName( _intercept ? getNewFile() : "")
 	{
 	}
 	virtual ~StdErrInterceptor() {
@@ -685,8 +685,8 @@ public:
 	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_sink > base ;
 	explicit OPipestream() : _pipe(NULL), _exitStatus(0) {}
 	explicit OPipestream( const std::string command, bool interceptStderr = false)
-	    : StdErrInterceptor(interceptStderr),
-	      base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "w" ) ) ), _cmd(command+getErrIntercept()), _exitStatus(0) {
+	: StdErrInterceptor(interceptStderr),
+	  base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "w" ) ) ), _cmd(command+getErrIntercept()), _exitStatus(0) {
 		assert(_pipe != NULL);
 		assert(fileno(_pipe) >= 0);
 		assert(is_open());
@@ -723,9 +723,9 @@ public:
 	typedef boost::iostreams::stream<  boost::iostreams::file_descriptor_source > base ;
 	explicit IPipestream() : StdErrInterceptor(), _pipe(NULL), _exitStatus(0) {}
 	explicit IPipestream( const std::string command, bool interceptStderr = false )
-	    : StdErrInterceptor( interceptStderr ),
-	      base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "r" ) ) ),
-	      _cmd(command+getErrIntercept()) , _exitStatus(0) {
+	: StdErrInterceptor( interceptStderr ),
+	  base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "r" ) ) ),
+	  _cmd(command+getErrIntercept()) , _exitStatus(0) {
 
 		assert(_pipe != NULL);
 		assert(fileno(_pipe) >= 0);
@@ -767,7 +767,7 @@ public:
 	static std::string getDirname(const std::string filePath) {
 		char buf[filePath.size() + 1];
 		memcpy(buf, filePath.c_str(), filePath.size());
-	    std::string dirPath(dirname(buf));
+		std::string dirPath(dirname(buf));
 		return dirPath;
 	}
 	static void syncDir(const std::string filePath) {
@@ -879,7 +879,7 @@ public:
 			}
 		}
 	};
-	
+
 	template<typename forwardIterator>
 	static forwardIterator findBimodalPartition(double numSigmas, MeanStdCount &firstMSC, MeanStdCount &secondMSC, forwardIterator begin, forwardIterator end, bool isPoisson = true) {
 		if (begin == end)
@@ -921,18 +921,18 @@ public:
 	}
 	static unsigned long rand(unsigned int &seed) {
 		return
-			   (((unsigned long)(rand_r(&seed) & 0xFFFF)) << 48) |
-			   (((unsigned long)(rand_r(&seed) & 0xFFFF)) << 32) |
-			   (((unsigned long)(rand_r(&seed) & 0xFFFF)) << 16) |
-			   (((unsigned long)(rand_r(&seed) & 0xFFFF)) );
+				(((unsigned long)(rand_r(&seed) & 0xFFFF)) << 48) |
+				(((unsigned long)(rand_r(&seed) & 0xFFFF)) << 32) |
+				(((unsigned long)(rand_r(&seed) & 0xFFFF)) << 16) |
+				(((unsigned long)(rand_r(&seed) & 0xFFFF)) );
 	}
 	// NOT THREAD SAFE!
 	static unsigned long rand2() {
 		assert(omp_get_num_threads() == 1 || !omp_in_parallel());
 		return (((unsigned long)(std::rand() & 0xFFFF)) << 48) |
-			   (((unsigned long)(std::rand() & 0xFFFF)) << 32) |
-			   (((unsigned long)(std::rand() & 0xFFFF)) << 16) |
-			   (((unsigned long)(std::rand() & 0xFFFF)) );
+				(((unsigned long)(std::rand() & 0xFFFF)) << 32) |
+				(((unsigned long)(std::rand() & 0xFFFF)) << 16) |
+				(((unsigned long)(std::rand() & 0xFFFF)) );
 
 	}
 	static void srand(unsigned int seed) {
@@ -949,7 +949,7 @@ private:
 		static SeedPtr threadSeedsPtr;
 
 		if (threadSeedsPtr.get() == NULL || (int) threadSeedsPtr->size() < omp_get_max_threads()) {
-            #pragma omp critical
+#pragma omp critical
 			{
 				unsigned int baseSeed = 0;
 				if (threadSeedsPtr.get() == NULL || (int) threadSeedsPtr->size() < omp_get_max_threads()) {

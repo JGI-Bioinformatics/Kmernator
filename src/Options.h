@@ -81,7 +81,7 @@ public:
 	typedef std::vector<std::string> StringListType;
 	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
 	typedef StringListType FileListType;
-    static std::string toString(const FileListType &fl) {
+	static std::string toString(const FileListType &fl) {
 		std::stringstream ss;
 		bool isNotFirst = false;
 		for (FileListType::const_iterator it = fl.begin(); it != fl.end(); it++) {
@@ -242,13 +242,13 @@ protected:
 class _MySpecificOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
-	    // *::_resetDefaults();
+		// *::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-	    // *::_setOptions(desc,p);
-	    po::options_description opts("My Specific Options");
-	    opts.add_options()("my-option", po::value<int>()->default_value(0), "my option");
-	    desc.add(opts);
+		// *::_setOptions(desc,p);
+		po::options_description opts("My Specific Options");
+		opts.add_options()("my-option", po::value<int>()->default_value(0), "my option");
+		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
@@ -270,20 +270,20 @@ public:
 	mmapInput(1), gcHeatMap(1), gatheredLogs(1),
 	batchSize(100000), separateOutputs(1)
 	{
-		 char *tmpPath;
-		 tmpPath = getenv ("TMPDIR");
-		 if (tmpPath != NULL) {
-			 tmpDir = std::string(tmpPath);
-		 }
+		char *tmpPath;
+		tmpPath = getenv ("TMPDIR");
+		if (tmpPath != NULL) {
+			tmpDir = std::string(tmpPath);
+		}
 	}
 
-// make this final, so preserving the singleton state
+	// make this final, so preserving the singleton state
 private:
 	~_GeneralOptions() {}
 	friend class OptionsBaseTemplate< _GeneralOptions >;
 
 private:
-    int          maxThreads;
+	int          maxThreads;
 	FileListType referenceFiles;
 	FileListType inputFiles;
 	FileListType inputFilePrefixes;
@@ -315,71 +315,52 @@ public:
 
 		general.add_options()("help", "produce help message")
 
-		("verbose", po::value<unsigned int>()->default_value(getVerbose()),
-				"level of verbosity (0+)")
+				("verbose", po::value<unsigned int>()->default_value(getVerbose()), "level of verbosity (0+)")
 
-		("debug", po::value<unsigned int>()->default_value(getDebug()),
-				"level of debug verbosity (0+)")
+				("debug", po::value<unsigned int>()->default_value(getDebug()), "level of debug verbosity (0+)")
 
 #ifdef _USE_OPENMP
-		("threads", po::value<int>()->default_value(maxThreads),
-				"maximum number of threads")
+				("threads", po::value<int>()->default_value(maxThreads), "maximum number of threads")
 #endif
-		("reference-file", po::value<FileListType>(), "set reference file(s)")
+				("reference-file", po::value<FileListType>(), "set reference file(s)")
 
-		("input-file", po::value<FileListType>(), "input file(s)")
+				("input-file", po::value<FileListType>(), "input file(s)")
 
-		("output-file", po::value<std::string>(), "output file pattern")
+				("output-file", po::value<std::string>(), "output file pattern")
 
-		("format-output", po::value<unsigned int>()->default_value(formatOutput),
-				"0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
+				("format-output", po::value<unsigned int>()->default_value(formatOutput), "0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
 
-		("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory),
-				"if set, all temporary output files will first be stored in memory (faster for MPI applications)")
+				("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory), "if set, all temporary output files will first be stored in memory (faster for MPI applications)")
 
-		("log-file", po::value<std::string>()->default_value(logFile),
-				"If set all INFO and DEBUG messages will be logged here (default stderr)")
+				("log-file", po::value<std::string>()->default_value(logFile), "If set all INFO and DEBUG messages will be logged here (default stderr)")
 
-		("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to utilize")
+				("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to utilize")
 
-		("min-read-length",
-				po::value<unsigned int>()->default_value(minReadLength),
-				"minimum (trimmed) read length of selected reads.  0: no minimum, 1: full read length")
+				("min-read-length", po::value<unsigned int>()->default_value(minReadLength), "minimum (trimmed) read length of selected reads.  0: no minimum, 1: full read length")
 
-		("min-quality-score", po::value<unsigned int>()->default_value(minQuality),
-				"minimum quality score over entire kmer")
+				("min-quality-score", po::value<unsigned int>()->default_value(minQuality), "minimum quality score over entire kmer")
 
-		("depth-range", po::value<unsigned int>()->default_value(depthRange),
-				"if > min-depth, then output will be created in cycles of files ranging from min-depth to depth-range")
+				("depth-range", po::value<unsigned int>()->default_value(depthRange), "if > min-depth, then output will be created in cycles of files ranging from min-depth to depth-range")
 
-		("bimodal-sigmas", po::value<double>()->default_value(bimodalSigmas),
-				"Detect bimodal kmer-signatures across reads and trim at transition point if the two means are separated by bimodal-sigmas * stdDev (2.0 to 3.0 suggested).  disabled if < 0.0")
+				("bimodal-sigmas", po::value<double>()->default_value(bimodalSigmas), "Detect bimodal kmer-signatures across reads and trim at transition point if the two means are separated by bimodal-sigmas * stdDev (2.0 to 3.0 suggested).  disabled if < 0.0")
 
-		("variant-sigmas", po::value<double>()->default_value(variantSigmas),
-				"Detect and purge kmer-variants if >= variant-sigmas * Poisson-stdDev (2.0-3.0 suggested).  disabled if < 0.0")
+				("variant-sigmas", po::value<double>()->default_value(variantSigmas), "Detect and purge kmer-variants if >= variant-sigmas * Poisson-stdDev (2.0-3.0 suggested).  disabled if < 0.0")
 
-		("ignore-quality", po::value<unsigned int>()->default_value(ignoreQual),
-				"ignore the quality score, to save memory or if they are untrusted")
+				("ignore-quality", po::value<unsigned int>()->default_value(ignoreQual), "ignore the quality score, to save memory or if they are untrusted")
 
-		("periodic-singleton-purge", po::value<unsigned int>()->default_value(periodicSingletonPurge),
-				"Purge singleton memory structure every # of reads")
+				("periodic-singleton-purge", po::value<unsigned int>()->default_value(periodicSingletonPurge), "Purge singleton memory structure every # of reads")
 
-		("mmap-input", po::value<unsigned int>()->default_value(mmapInput),
-				"If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
+				("mmap-input", po::value<unsigned int>()->default_value(mmapInput), "If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
 
-		("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap),
-				"If set, a GC Heat map will be output (requires --output)")
+				("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap), "If set, a GC Heat map will be output (requires --output)")
 
-		("gathered-logs", po::value<unsigned int>()->default_value(gatheredLogs),
-				"If set and MPI is enabled, VERBOSE1, VERBOSE2 and DEBUG1 logs will be gathered to the master before being output.")
+				("gathered-logs", po::value<unsigned int>()->default_value(gatheredLogs), "If set and MPI is enabled, VERBOSE1, VERBOSE2 and DEBUG1 logs will be gathered to the master before being output.")
 
-		("batch-size", po::value<unsigned int>()->default_value(batchSize),
-				"default size of batches (reads, kmers, MPI, etc)")
+				("batch-size", po::value<unsigned int>()->default_value(batchSize), "default size of batches (reads, kmers, MPI, etc)")
 
-		("separate-outputs", po::value<unsigned int>()->default_value(separateOutputs),
-				"If set, each input (plus consensus) will generate a new outputfile.  If set to 0, all input files will be merged into one output file.")
+				("separate-outputs", po::value<unsigned int>()->default_value(separateOutputs), "If set, each input (plus consensus) will generate a new outputfile.  If set to 0, all input files will be merged into one output file.")
 
-		;
+				;
 
 		desc.add(general);
 	}
@@ -427,10 +408,10 @@ public:
 				if (print)
 					Log::Verbose() << "Reference files are: ";
 				FileListType & referenceFiles = getReferenceFiles()
-						= vm["reference-file"].as<FileListType> ();
+								= vm["reference-file"].as<FileListType> ();
 				if (print) {
 					for (FileListType::iterator it = referenceFiles.begin(); it
-						!= referenceFiles.end(); it++)
+					!= referenceFiles.end(); it++)
 						*output << *it << ", ";
 					*output << std::endl;
 				}
@@ -444,7 +425,7 @@ public:
 				FileListType inputs = getInputFiles() = vm["input-file"].as<FileListType> ();
 				if (print) {
 					for (FileListType::iterator it = inputs.begin(); it
-							!= inputs.end(); it++)
+					!= inputs.end(); it++)
 						*output << *it << ", ";
 					*output << std::endl;
 				}
@@ -475,10 +456,10 @@ public:
 			setOpt<double>("variant-sigmas", getVariantSigmas(), print);
 
 			// TODO move to BimodalOptions
-//			if (getBimodalSigmas() >= 0 && (getMinReadLength() < getKmerSize() + 2)) {
-//				if(Logger::isMaster())
-//					LOG_WARN(1, "Bimodal Read Detection does not work unless min-read-length >= 2 + kmer-size");
-//			}
+			//			if (getBimodalSigmas() >= 0 && (getMinReadLength() < getKmerSize() + 2)) {
+			//				if(Logger::isMaster())
+			//					LOG_WARN(1, "Bimodal Read Detection does not work unless min-read-length >= 2 + kmer-size");
+			//			}
 
 			// set the ignore quality value
 			setOpt<unsigned int>("ignore-quality", getIgnoreQual(), print);
@@ -549,116 +530,116 @@ public:
 
 	unsigned int &getBatchSize()
 	{
-	    return batchSize;
+		return batchSize;
 	}
 
 	double &getBimodalSigmas()
 	{
-	    return bimodalSigmas;
+		return bimodalSigmas;
 	}
 
 	bool &getBuildOutputInMemory()
 	{
-	    return buildOutputInMemory;
+		return buildOutputInMemory;
 	}
 
 	unsigned int &getDepthRange()
 	{
-	    return depthRange;
+		return depthRange;
 	}
 
 	unsigned int &getFormatOutput()
 	{
-	    return formatOutput;
+		return formatOutput;
 	}
 
 	unsigned int &getGatheredLogs()
 	{
-	    return gatheredLogs;
+		return gatheredLogs;
 	}
 
 	unsigned int &getGCHeatMap()
 	{
-	    return gcHeatMap;
+		return gcHeatMap;
 	}
 
 	unsigned int &getIgnoreQual()
 	{
-	    return ignoreQual;
+		return ignoreQual;
 	}
 
 	FileListType &getInputFilePrefixes()
 	{
-	    return inputFilePrefixes;
+		return inputFilePrefixes;
 	}
 
 	FileListType &getInputFiles()
 	{
-	    return inputFiles;
+		return inputFiles;
 	}
 
 	std::string &getLogFile()
 	{
-	    return logFile;
+		return logFile;
 	}
 
 	OStreamPtr &getLogFileStream()
 	{
-	    return logFileStream;
+		return logFileStream;
 	}
 
 	int &getMaxThreads()
 	{
-	    return maxThreads;
+		return maxThreads;
 	}
 
 
 	unsigned int &getMinQuality()
 	{
-	    return minQuality;
+		return minQuality;
 	}
 
 	unsigned int &getMinReadLength()
 	{
-	    return minReadLength;
+		return minReadLength;
 	}
 
 	unsigned int &getMmapInput()
 	{
-	    return mmapInput;
+		return mmapInput;
 	}
 
 	std::string &getOutputFile()
 	{
-	    return outputFile;
+		return outputFile;
 	}
 
 	unsigned int &getPeriodicSingletonPurge()
 	{
-	    return periodicSingletonPurge;
+		return periodicSingletonPurge;
 	}
 
 
 	FileListType &getReferenceFiles()
 	{
-	    return referenceFiles;
+		return referenceFiles;
 	}
 
 
 	unsigned int &getSeparateOutputs()
 	{
-	    return separateOutputs;
+		return separateOutputs;
 	}
 
 
 	std::string &getTmpDir()
 	{
-	    return tmpDir;
+		return tmpDir;
 	}
 
 	double &getVariantSigmas()
 	{
-	    return variantSigmas;
+		return variantSigmas;
 	}
 
 

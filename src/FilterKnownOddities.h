@@ -58,70 +58,63 @@ public:
 
 	unsigned int &getArtifactFilterEditDistance()
 	{
-	    return artifactFilterEditDistance;
+		return artifactFilterEditDistance;
 	}
 	unsigned int &getArtifactFilterMatchLength()
 	{
-	    return artifactFilterMatchLength;
+		return artifactFilterMatchLength;
 	}
 	FileListType &getArtifactReferenceFiles()
 	{
-	    return artifactReferenceFiles;
+		return artifactReferenceFiles;
 	}
 	unsigned int &getBuildArtifactEditsInFilter()
 	{
-	    return buildArtifactEditsInFilter;
+		return buildArtifactEditsInFilter;
 	}
 	unsigned int &getFilterOutput()
 	{
-	    return filterOutput;
+		return filterOutput;
 	}
 	unsigned int &getMaskSimpleRepeats()
 	{
-	    return maskSimpleRepeats;
+		return maskSimpleRepeats;
 	}
 	unsigned int &getPhiXOutput()
 	{
-	    return phiXOutput;
+		return phiXOutput;
 	}
 	unsigned int &getSkipArtifactFilter()
 	{
-	    return skipArtifactFilter;
+		return skipArtifactFilter;
 	}
 
 
 	void _resetDefaults() {
-	    // *::_resetDefaults();
+		// *::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-	    // *::_setOptions(desc,p);
-	    po::options_description opts("Filter Known Artifacts and Oddities Options");
-	    opts.add_options()
+		// *::_setOptions(desc,p);
+		po::options_description opts("Filter Known Artifacts and Oddities Options");
+		opts.add_options()
 
-	    		("phix-output", po::value<unsigned int>()->default_value(phiXOutput),
-	    		        "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
+	    				("phix-output", po::value<unsigned int>()->default_value(phiXOutput), "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
 
-	    		("filter-output", po::value<unsigned int>()->default_value(filterOutput),
-	    				"if set, artifact filter reads will be output into a separate file. If not set, then affected reads will be trimmed and then output normally.  (requires --output-file set)")
+	    				("filter-output", po::value<unsigned int>()->default_value(filterOutput), "if set, artifact filter reads will be output into a separate file. If not set, then affected reads will be trimmed and then output normally.  (requires --output-file set)")
 
-	    		("skip-artifact-filter", po::value<unsigned int>()->default_value(skipArtifactFilter),
-	    				"Skip homo-polymer, primer-dimer and duplicated fragment pair filtering")
+	    				("skip-artifact-filter", po::value<unsigned int>()->default_value(skipArtifactFilter), "Skip homo-polymer, primer-dimer and duplicated fragment pair filtering")
 
-	    		("artifact-match-length", po::value<unsigned int>()->default_value(artifactFilterMatchLength),
-	    				"Kmer match length to known artifact sequences")
+	    				("artifact-match-length", po::value<unsigned int>()->default_value(artifactFilterMatchLength), "Kmer match length to known artifact sequences")
 
-	    		("artifact-edit-distance", po::value<unsigned int>()->default_value(artifactFilterEditDistance),
-	    				"edit-distance to apply to artifact-match-length matches to know artifacts")
+	    				("artifact-edit-distance", po::value<unsigned int>()->default_value(artifactFilterEditDistance), "edit-distance to apply to artifact-match-length matches to know artifacts")
 
-	    		("build-artifact-edits-in-filter", po::value<unsigned int>()->default_value(buildArtifactEditsInFilter),
-	    				"0 - edits will be applied to reads on the fly, 1 - edits will be pre-build in the filter (needs more memory, less overall CPU), 2 - automatic based on size")
+	    				("build-artifact-edits-in-filter", po::value<unsigned int>()->default_value(buildArtifactEditsInFilter), "0 - edits will be applied to reads on the fly, 1 - edits will be pre-build in the filter (needs more memory, less overall CPU), 2 - automatic based on size")
 
-	    		("mask-simple-repeats", po::value<unsigned int>()->default_value(maskSimpleRepeats),
-	    				"if filtering artifacts, also mask simple repeats")
+	    				("mask-simple-repeats", po::value<unsigned int>()->default_value(maskSimpleRepeats), "if filtering artifacts, also mask simple repeats")
 
-	    		("artifact-reference-file", po::value<FileListType>(), "additional artifact reference file(s)");
+	    				("artifact-reference-file", po::value<FileListType>(), "additional artifact reference file(s)");
 
-	    desc.add(opts);
+		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
@@ -148,8 +141,8 @@ public:
 
 protected:
 	unsigned int skipArtifactFilter, artifactFilterMatchLength,
-		artifactFilterEditDistance, buildArtifactEditsInFilter,
-		maskSimpleRepeats, phiXOutput, filterOutput;
+	artifactFilterEditDistance, buildArtifactEditsInFilter,
+	maskSimpleRepeats, phiXOutput, filterOutput;
 	FileListType artifactReferenceFiles;
 };
 typedef OptionsBaseTemplate< _FilterKnownOdditiesOptions > FilterKnownOdditiesOptions;
@@ -291,19 +284,19 @@ public:
 		}
 		void recordDiscard(int value, Read &read, std::ostream *os, std::string label = "") {
 			read.discard();
-			#pragma omp atomic
+#pragma omp atomic
 			discardedCounts[value]++;
 			SequenceLengthType len = read.getLength();
-			#pragma omp atomic
+#pragma omp atomic
 			baseCounts[value] += len;
 			if (os != NULL) {
 				FilterKnownOddities::_writeFilterRead(*os, read, 0, len, label);
 			}
 		}
 		void recordTrim(int value, long length) {
-			#pragma omp atomic
+#pragma omp atomic
 			readCounts[value]++;
-			#pragma omp atomic
+#pragma omp atomic
 			baseCounts[value] += length;
 		}
 		long getDiscardedReads() const {
@@ -477,7 +470,7 @@ public:
 		bool wasAffected = (results1.value != 0) | (results2.value != 0);
 		bool wasPhiX = isPhiX(results1.value) | isPhiX(results2.value);
 		bool wasReference = ((results1.value != sequences.getSize()) & isReference(results1.value))
-				| ((results2.value != sequences.getSize()) & isReference(results2.value));
+						| ((results2.value != sequences.getSize()) & isReference(results2.value));
 
 		if (wasAffected) {
 
@@ -495,7 +488,7 @@ public:
 					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx1);
 					os = & (recorder.omPhiX->getOfstream( fileSuffix ) );
 				}
-				#pragma omp critical (writePhix)
+#pragma omp critical (writePhix)
 				{
 					// always discard the read, as it contains some PhiX even if not output to a discard file
 					if (isRead1) {
@@ -522,7 +515,7 @@ public:
 					os = & (recorder.omArtifact->getOfstream( fileSuffix ) );
 				}
 
-				#pragma omp critical (writeFilter)
+#pragma omp critical (writeFilter)
 				{
 					if (isRead1 && results1.value != 0) {
 						Read &read = reads.getRead(readIdx1);
@@ -546,22 +539,22 @@ public:
 			}
 
 			if (Log::isDebug(5)){
-				  Read read;
-				  if (isRead1Affected) {
-					  read = reads.getRead(readIdx1);
-					  LOG_DEBUG(5, "FilterMatch1 to" << read.getName() << " "
-						  << read.getFastaNoMarkup() << "" << read.getFasta() << " "
-							  << wasPhiX << "" << results1.minAffected << "-" << results1.maxAffected
-							  << ":" << getFilterName(results1.value));
-				  }
-				  if (isRead2Affected) {
-					  read = reads.getRead(readIdx2);
-					  LOG_DEBUG(5, "FilterMatch2 to" << read.getName() << " "
-						  << read.getFastaNoMarkup() << "" << read.getFasta() << " "
-							  << wasPhiX << " "  << results2.minAffected << "-" << results2.maxAffected
-							  << ":"<< getFilterName(results2.value));
+				Read read;
+				if (isRead1Affected) {
+					read = reads.getRead(readIdx1);
+					LOG_DEBUG(5, "FilterMatch1 to" << read.getName() << " "
+							<< read.getFastaNoMarkup() << "" << read.getFasta() << " "
+							<< wasPhiX << "" << results1.minAffected << "-" << results1.maxAffected
+							<< ":" << getFilterName(results1.value));
+				}
+				if (isRead2Affected) {
+					read = reads.getRead(readIdx2);
+					LOG_DEBUG(5, "FilterMatch2 to" << read.getName() << " "
+							<< read.getFastaNoMarkup() << "" << read.getFasta() << " "
+							<< wasPhiX << " "  << results2.minAffected << "-" << results2.maxAffected
+							<< ":"<< getFilterName(results2.value));
 
-				  }
+				}
 			}
 		}
 	}
@@ -594,7 +587,7 @@ public:
 			size = reads.getPairSize();
 
 		LOG_VERBOSE(1, "Applying Artifact filter to" << size << "" << (byPair?"Pairs":"Reads"));
-		#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic)
 		for (long idx = 0; idx < size; idx++) {
 			LOG_DEBUG(5, "filtering read" << (byPair ? "pair " : "" ) << idx);
 
@@ -631,7 +624,7 @@ public:
 	}
 
 	static void _writeFilterRead(ostream &os, Read  &read, SequenceLengthType readOffset, SequenceLengthType readLength, std::string readLabel = "") {
-	    read.write(os, readOffset, readLength, readLabel, FormatOutput::FastqUnmasked());
+		read.write(os, readOffset, readLength, readLabel, FormatOutput::FastqUnmasked());
 	}
 
 	const ReadSet &getSequences() const {
@@ -641,55 +634,55 @@ public:
 	static std::string getArtifactFasta() {
 		std::stringstream ss;
 		ss << ">PrimerDimer" << std::endl;
-	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGAGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTTG" << std::endl;
-	    ss << ">RNA_Linker" << std::endl;
-	    ss << "ATCTCGTATGCCGTCTTCTGCTTGATCTCGTATGCCGTCTTCTGCTTG" << std::endl;
+		ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGAGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTTG" << std::endl;
+		ss << ">RNA_Linker" << std::endl;
+		ss << "ATCTCGTATGCCGTCTTCTGCTTGATCTCGTATGCCGTCTTCTGCTTG" << std::endl;
 		ss << ">Homopolymer-A" << std::endl;
 		ss << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
 		ss << ">Homopolymer-C" << std::endl;
 		ss << "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" << std::endl;
 
-	    // from TagDust Lassmann T., et al. (2009) TagDust - A program to eliminate artifacts from next generation sequencing data. Bioinformatics.
-	    ss << ">Solexa_5_prime_adapter" << std::endl;
-	    ss << "AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAG" << std::endl;
-	    ss << ">Solexa_3_prime_adapter" << std::endl;
-	    ss << "TTTTCGTATGCCGTCTTCTGCTTG" << std::endl;
-	    ss << ">Gex_Adapter_1" << std::endl;
-	    ss << "GATCGTCGGACTGTAGAACTCTGAAC" << std::endl;
-	    ss << ">Gex_Adapter_1_2" << std::endl;
-	    ss << "ACAGGTTCAGAGTTCTACAGTCCGAC" << std::endl;
-	    ss << ">Gex_Adapter_2" << std::endl;
-	    ss << "CAAGCAGAAGACGGCATACGANN" << std::endl;
-	    ss << ">Gex_Adapter_2_2" << std::endl;
-	    ss << "TCGTATGCCGTCTTCTGCTTG" << std::endl;
-	    ss << ">Gex_PCR_Primer_1" << std::endl;
-	    ss << "CAAGCAGAAGACGGCATACGA" << std::endl;
-	    ss << ">Gex_PCR_Primer_2" << std::endl;
-	    ss << "AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA" << std::endl;
-	    ss << ">Gex_Sequencing_Primer" << std::endl;
-	    ss << "CGACAGGTTCAGAGTTCTACAGTCCGACGATC" << std::endl;
-	    ss << ">Adapters1" << std::endl;
-	    ss << "GATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG" << std::endl;
-	    ss << ">Adapters1_1" << std::endl;
-	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
-	    ss << ">PCR_Primers1" << std::endl;
-	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
-	    ss << ">PCR Primers1_1" << std::endl;
-	    ss << "CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT" << std::endl;
-	    ss << ">Genomic_DNA_Sequencing_Primer" << std::endl;
-	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
-	    ss << ">PE_Adapters1" << std::endl;
-	    ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG" << std::endl;
-	    ss << ">PE_Adapters1_" << std::endl;
-	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
-	    ss << ">PE_PCR_Primers1" << std::endl;
-	    ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
-	    ss << ">PE_PCR_Primers1_1" << std::endl;
-	    ss << "CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
-	    ss << ">PE_Sequencing_Primer" << std::endl;
-	    ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
-	    ss << ">PE_Sequencing_Primer_1" << std::endl;
-	    ss << "CGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
+		// from TagDust Lassmann T., et al. (2009) TagDust - A program to eliminate artifacts from next generation sequencing data. Bioinformatics.
+		ss << ">Solexa_5_prime_adapter" << std::endl;
+		ss << "AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAG" << std::endl;
+		ss << ">Solexa_3_prime_adapter" << std::endl;
+		ss << "TTTTCGTATGCCGTCTTCTGCTTG" << std::endl;
+		ss << ">Gex_Adapter_1" << std::endl;
+		ss << "GATCGTCGGACTGTAGAACTCTGAAC" << std::endl;
+		ss << ">Gex_Adapter_1_2" << std::endl;
+		ss << "ACAGGTTCAGAGTTCTACAGTCCGAC" << std::endl;
+		ss << ">Gex_Adapter_2" << std::endl;
+		ss << "CAAGCAGAAGACGGCATACGANN" << std::endl;
+		ss << ">Gex_Adapter_2_2" << std::endl;
+		ss << "TCGTATGCCGTCTTCTGCTTG" << std::endl;
+		ss << ">Gex_PCR_Primer_1" << std::endl;
+		ss << "CAAGCAGAAGACGGCATACGA" << std::endl;
+		ss << ">Gex_PCR_Primer_2" << std::endl;
+		ss << "AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA" << std::endl;
+		ss << ">Gex_Sequencing_Primer" << std::endl;
+		ss << "CGACAGGTTCAGAGTTCTACAGTCCGACGATC" << std::endl;
+		ss << ">Adapters1" << std::endl;
+		ss << "GATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG" << std::endl;
+		ss << ">Adapters1_1" << std::endl;
+		ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
+		ss << ">PCR_Primers1" << std::endl;
+		ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
+		ss << ">PCR Primers1_1" << std::endl;
+		ss << "CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT" << std::endl;
+		ss << ">Genomic_DNA_Sequencing_Primer" << std::endl;
+		ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
+		ss << ">PE_Adapters1" << std::endl;
+		ss << "GATCGGAAGAGCGGTTCAGCAGGAATGCCGAG" << std::endl;
+		ss << ">PE_Adapters1_" << std::endl;
+		ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
+		ss << ">PE_PCR_Primers1" << std::endl;
+		ss << "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
+		ss << ">PE_PCR_Primers1_1" << std::endl;
+		ss << "CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
+		ss << ">PE_Sequencing_Primer" << std::endl;
+		ss << "ACACTCTTTCCCTACACGACGCTCTTCCGATCT" << std::endl;
+		ss << ">PE_Sequencing_Primer_1" << std::endl;
+		ss << "CGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT" << std::endl;
 		return ss.str();
 	}
 
@@ -1215,7 +1208,7 @@ public:
 	static std::string getPhiX() {
 		std::stringstream ss;
 		ss << ">gi|9626372|ref|NC_001422.1| Coliphage phiX174, complete genome" << std::endl;
-        ss << "GAGTTTTATCGCTTCCATGACGCAGAAGTTAACACTTTCGGATATTTCTGATGAGTCGAAAAATTATCTT" << std::endl;
+		ss << "GAGTTTTATCGCTTCCATGACGCAGAAGTTAACACTTTCGGATATTTCTGATGAGTCGAAAAATTATCTT" << std::endl;
 		ss << "GATAAAGCAGGAATTACTACTGCTTGTTTACGAATTAAATCGAAGTGGACTGCTGGCGGAAAATGAGAAA" << std::endl;
 		ss << "ATTCGACCTATCCTTGCGCAGCTCGAGAAGCTCTTACTTTGCGACCTTTCGCCATCAACTAACGATTCTG" << std::endl;
 		ss << "TCAAAAACTGACGCGTTGGATGAGGAGAAGTGGCTTAATATGCTTGGCACGTTCGTCAAGGACTGGTTTA" << std::endl;

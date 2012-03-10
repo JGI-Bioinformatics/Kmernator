@@ -20,56 +20,49 @@ public:
 
 	unsigned int &getDeDupEditDistance()
 	{
-	    return deDupEditDistance;
+		return deDupEditDistance;
 	}
 
 	unsigned int &getDeDupLength()
 	{
-	    return deDupLength;
+		return deDupLength;
 	}
 
 	unsigned int &getDeDupMode()
 	{
-	    return deDupMode;
+		return deDupMode;
 	}
 
 	unsigned int &getDeDupSingle()
 	{
-	    return deDupSingle;
+		return deDupSingle;
 	}
 
 	unsigned int &getDeDupStartOffset()
 	{
-	    return deDupStartOffset;
+		return deDupStartOffset;
 	}
 
 	void _resetDefaults() {
-	    GeneralOptions::_resetDefaults();
-	    FilterKnownOdditiesOptions::_resetDefaults();
+		GeneralOptions::_resetDefaults();
+		FilterKnownOdditiesOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-	    // *::_setOptions(desc,p);
+		// *::_setOptions(desc,p);
 		// This class does not support non-default options for:
 		// GeneralOptions or FilterKnownOdditiesOptions
-	    po::options_description opts("Duplicate Fragment Filter (PCR duplicates)");
-	    opts.add_options()
-				("dedup-mode", po::value<unsigned int>()->default_value(deDupMode),
-						"if 0, no fragment de-duplication will occur.  if 1, single orientation (AB and BA are separated) will collapse to consensus. if 2, both orientations (AB and BA are the same) will collapse")
+		po::options_description opts("Duplicate Fragment Filter (PCR duplicates)");
+		opts.add_options()
+						("dedup-mode", po::value<unsigned int>()->default_value(deDupMode), "if 0, no fragment de-duplication will occur.  if 1, single orientation (AB and BA are separated) will collapse to consensus. if 2, both orientations (AB and BA are the same) will collapse")
 
-		        ("dedup-single", po::value<unsigned int>()->default_value(deDupSingle),
-				    "if 0, no single read de-duplication will occur.  if 1, then single read deduplication will occur")
+						("dedup-single", po::value<unsigned int>()->default_value(deDupSingle), "if 0, no single read de-duplication will occur.  if 1, then single read deduplication will occur")
 
-				("dedup-edit-distance", po::value<unsigned int>()->default_value(deDupEditDistance),
-						"if -1, no fragment de-duplication will occur, if 0, only exact match, ...")
+						("dedup-edit-distance", po::value<unsigned int>()->default_value(deDupEditDistance), "if -1, no fragment de-duplication will occur, if 0, only exact match, ...")
 
-				("dedup-start-offset", po::value<unsigned int>()->default_value(deDupStartOffset),
-						"de-duplication start offset to find unique fragments, must be multiple of 4")
+						("dedup-start-offset", po::value<unsigned int>()->default_value(deDupStartOffset), "de-duplication start offset to find unique fragments, must be multiple of 4")
 
-				("dedup-length", po::value<unsigned int>()->default_value(deDupLength),
-						"de-duplication length to find unique fragments, must be multiple of 4 (length on each read of a paired fragment or doubled when in single-end mode)")
-
-						;
-	    desc.add(opts);
+						("dedup-length", po::value<unsigned int>()->default_value(deDupLength), "de-duplication length to find unique fragments, must be multiple of 4 (length on each read of a paired fragment or doubled when in single-end mode)");
+		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
@@ -86,7 +79,7 @@ public:
 		setOpt<unsigned int>("dedup-edit-distance", getDeDupEditDistance());
 		if (getDeDupEditDistance() > 1) {
 			LOG_ERROR(1, "Unsupported option dedup-edit-distance > 1!" << std::endl << getDesc() << std::endl << "Unsupported option dedup-edit-distance > 1!");
-		    ret = false;
+			ret = false;
 		}
 		setOpt<unsigned int>("dedup-start-offset", getDeDupStartOffset());
 		setOpt<unsigned int>("dedup-length", getDeDupLength());
@@ -124,16 +117,16 @@ public:
 
 	static void _buildDuplicateFragmentMap(KSV &ksv, ReadSet &reads, unsigned char bytes, bool useReverseComplement, bool paired, unsigned int startOffset = DuplicateFragmentFilterOptions::getOptions().getDeDupStartOffset()) {
 		// build one KS per thread, then merge, skipping singletons
-        // no need to include quality scores
+		// no need to include quality scores
 
 		// build the kmer spectrum with the concatenated prefixes
 		// from each read in the pair
 		int numThreads = ksv.size();
 		KmerWeights::Vector tmpKmerv(numThreads);
 		for(int i = 0; i < numThreads; i++) {
-		  ksv[i] = KS(reads.getPairSize() / 64 / numThreads, false);
-		  tmpKmerv[i].resize(1);
-		  tmpKmerv[i].valueAt(0) = 1.0;
+			ksv[i] = KS(reads.getPairSize() / 64 / numThreads, false);
+			tmpKmerv[i].resize(1);
+			tmpKmerv[i].valueAt(0) = 1.0;
 		}
 		long pairSize =  reads.getPairSize();
 
@@ -143,7 +136,7 @@ public:
 		SequenceLengthType sequenceLength = bytes * 4;
 		long skippedDiscard = 0, skippedInvalid = 0, skippedTooShort = 0, skippedUnpaired = 0;
 
-	    #pragma omp parallel for reduction(+:skippedDiscard) reduction(+:skippedTooShort) reduction(+:skippedUnpaired) reduction(+:skippedInvalid)
+#pragma omp parallel for reduction(+:skippedDiscard) reduction(+:skippedTooShort) reduction(+:skippedUnpaired) reduction(+:skippedInvalid)
 		for(long pairIdx = 0; pairIdx < pairSize; pairIdx++) {
 			Pair &pair = reads.getPair(pairIdx);
 			int threadNum = omp_get_thread_num();
@@ -231,10 +224,10 @@ public:
 			}
 		}
 		if (Log::isDebug(3)) {
-		  for (int i = 0; i < numThreads; i++) {
-			  LOG_DEBUG(3, "spectrum " << i);
-			  ksv[i].printHistograms();
-		  }
+			for (int i = 0; i < numThreads; i++) {
+				LOG_DEBUG(3, "spectrum " << i);
+				ksv[i].printHistograms();
+			}
 		} else {
 			LOG_VERBOSE(2, "merging duplicate fragment spectrums" );
 		}
@@ -253,7 +246,7 @@ public:
 		// (singletons will not be included in this round)
 		KSElementVector elems;
 
-		#pragma omp parallel private(elems)
+#pragma omp parallel private(elems)
 		{
 			int threadId = omp_get_thread_num();
 			for(KSWeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
@@ -309,39 +302,39 @@ public:
 
 		ReadSetSizeType affectedCount = 0;
 
-		#pragma omp parallel reduction(+:affectedCount)
+#pragma omp parallel reduction(+:affectedCount)
 		for(KSWeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
-		    if (it->value().getCount() >= cutoffThreshold) {
-		    	RPW rpw = it->value().getEachInstance();
+			if (it->value().getCount() >= cutoffThreshold) {
+				RPW rpw = it->value().getEachInstance();
 
-		    	ReadSet tmpReadSet1;
+				ReadSet tmpReadSet1;
 
-		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+				for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
-		    		ReadSetSizeType readIdx = rpwit->readId;
+					ReadSetSizeType readIdx = rpwit->readId;
 
-		    		const Read &read1 = reads.getRead(readIdx);
-		    		tmpReadSet1.append( read1 );
+					const Read &read1 = reads.getRead(readIdx);
+					tmpReadSet1.append( read1 );
 
-		    	}
+				}
 
-		    	Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
+				Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
 
-		    	#pragma omp critical (BCUR_newReads)
-		    	{
-		    	   newReads.append(consensus1);
-		    	}
-		    	affectedCount += rpw.size();
+#pragma omp critical (BCUR_newReads)
+				{
+					newReads.append(consensus1);
+				}
+				affectedCount += rpw.size();
 
-		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+				for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
-		    		ReadSetSizeType readIdx = rpwit->readId;
+					ReadSetSizeType readIdx = rpwit->readId;
 
-		    	    Read &read1 = reads.getRead(readIdx);
-		    		read1.discard();
-		    	}
+					Read &read1 = reads.getRead(readIdx);
+					read1.discard();
+				}
 
-		    }
+			}
 		}
 		LOG_DEBUG(1, "Clearing duplicate pair map: " << MemoryUtils::getMemoryUsage() );
 		ks.reset();
@@ -362,59 +355,59 @@ public:
 		int numThreads = omp_get_max_threads();
 		ReadSet _threadNewReads[numThreads];
 
-		#pragma omp parallel num_threads(numThreads) reduction(+:affectedCount)
+#pragma omp parallel num_threads(numThreads) reduction(+:affectedCount)
 		for(KSWeakIterator it = ks.weak.beginThreaded(); it != ks.weak.endThreaded(); it++) {
-		    if (it->value().getCount() >= cutoffThreshold) {
-		    	RPW rpw = it->value().getEachInstance();
+			if (it->value().getCount() >= cutoffThreshold) {
+				RPW rpw = it->value().getEachInstance();
 
-		    	ReadSet tmpReadSet1;
-		    	ReadSet tmpReadSet2;
-		    	ReadSet &threadNewReads = _threadNewReads[omp_get_thread_num()];
+				ReadSet tmpReadSet1;
+				ReadSet tmpReadSet2;
+				ReadSet &threadNewReads = _threadNewReads[omp_get_thread_num()];
 
-		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+				for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
-		    		// iterator readId is actually the pairIdx built above
-		    		ReadSetSizeType pairIdx = rpwit->readId;
+					// iterator readId is actually the pairIdx built above
+					ReadSetSizeType pairIdx = rpwit->readId;
 
-		    		// correct orientation
-		    		bool isCorrectOrientation = true;
-		    		if (pairIdx >= pairSize) {
-		    			isCorrectOrientation = false;
-		    			pairIdx = pairIdx - pairSize;
-		    		}
-		    		Pair &pair = reads.getPair(pairIdx);
-		    		const Read &read1 = reads.getRead(isCorrectOrientation ? pair.read1 : pair.read2);
-		    		const Read &read2 = reads.getRead(isCorrectOrientation ? pair.read2 : pair.read1);
+					// correct orientation
+					bool isCorrectOrientation = true;
+					if (pairIdx >= pairSize) {
+						isCorrectOrientation = false;
+						pairIdx = pairIdx - pairSize;
+					}
+					Pair &pair = reads.getPair(pairIdx);
+					const Read &read1 = reads.getRead(isCorrectOrientation ? pair.read1 : pair.read2);
+					const Read &read2 = reads.getRead(isCorrectOrientation ? pair.read2 : pair.read1);
 
-		    		tmpReadSet1.append( read1 );
-		    		tmpReadSet2.append( read2 );
+					tmpReadSet1.append( read1 );
+					tmpReadSet2.append( read2 );
 
-		    	}
+				}
 
-		    	Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
-		    	Read consensus2 = tmpReadSet2.getConsensusRead(minQual);
+				Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
+				Read consensus2 = tmpReadSet2.getConsensusRead(minQual);
 
-		    	threadNewReads.append(consensus1);
-		    	threadNewReads.append(consensus2);
+				threadNewReads.append(consensus1);
+				threadNewReads.append(consensus2);
 
-		    	affectedCount += 2 * rpw.size();
+				affectedCount += 2 * rpw.size();
 
-		    	for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+				for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
-		    	    ReadSetSizeType pairIdx = rpwit->readId;
+					ReadSetSizeType pairIdx = rpwit->readId;
 
-		    	    // orientation does not matter here, but correcting the index is important!
-		    	    if (pairIdx >= pairSize) {
-		    	    	pairIdx = pairIdx - pairSize;
-		    	    }
-		    	    Pair &pair = reads.getPair(pairIdx);
-		    	    Read &read1 = reads.getRead(pair.read1);
-		    	    Read &read2 = reads.getRead(pair.read2);
-		    		read1.discard();
-		    		read2.discard();
-		    	}
+					// orientation does not matter here, but correcting the index is important!
+					if (pairIdx >= pairSize) {
+						pairIdx = pairIdx - pairSize;
+					}
+					Pair &pair = reads.getPair(pairIdx);
+					Read &read1 = reads.getRead(pair.read1);
+					Read &read2 = reads.getRead(pair.read2);
+					read1.discard();
+					read2.discard();
+				}
 
-		    }
+			}
 		}
 		for(int i = 0 ; i < numThreads; i++)
 			newReads.append(_threadNewReads[i]);
@@ -435,7 +428,7 @@ public:
 
 		SequenceLengthType affectedCount = 0;
 
-        bool useReverseComplement = (DuplicateFragmentFilterOptions::getOptions().getDeDupMode() == 2);
+		bool useReverseComplement = (DuplicateFragmentFilterOptions::getOptions().getDeDupMode() == 2);
 
 		// build the paired duplicate fragment map
 		_buildDuplicateFragmentMap(ksv, reads, bytes, useReverseComplement, paired);
@@ -484,29 +477,29 @@ public:
 
 	static ReadSetSizeType filterDuplicateFragments(ReadSet &reads, unsigned char sequenceLength = DuplicateFragmentFilterOptions::getOptions().getDeDupLength(), unsigned int cutoffThreshold = 2, unsigned int editDistance = DuplicateFragmentFilterOptions::getOptions().getDeDupEditDistance()) {
 
-	  if ( DuplicateFragmentFilterOptions::getOptions().getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
-		  LOG_VERBOSE(1, "Skipping filter and merge of duplicate fragments");
-		  return 0;
-	  }
-	  ReadSetSizeType affectedCount = 0;
+		if ( DuplicateFragmentFilterOptions::getOptions().getDeDupMode() == 0 || editDistance == (unsigned int) -1) {
+			LOG_VERBOSE(1, "Skipping filter and merge of duplicate fragments");
+			return 0;
+		}
+		ReadSetSizeType affectedCount = 0;
 
-	  // select the number of bytes from each pair to scan
-	  unsigned char bytes = sequenceLength / 4;
-	  if (bytes == 0) {
+		// select the number of bytes from each pair to scan
+		unsigned char bytes = sequenceLength / 4;
+		if (bytes == 0) {
 			bytes = 1;
-	  }
-	  SequenceLengthType oldKmerSize = KmerSizer::getSequenceLength();
-	  KmerSizer::set(bytes * 4 * 2);
+		}
+		SequenceLengthType oldKmerSize = KmerSizer::getSequenceLength();
+		KmerSizer::set(bytes * 4 * 2);
 
-	  affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, true);
+		affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, true);
 
-	  if (DuplicateFragmentFilterOptions::getOptions().getDeDupSingle() == 1)
-		  affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, false);
+		if (DuplicateFragmentFilterOptions::getOptions().getDeDupSingle() == 1)
+			affectedCount += _filterDuplicateFragments(reads, bytes, cutoffThreshold, editDistance, false);
 
-      KmerSizer::set(oldKmerSize);
-      ReadSet::madviseMmapsNormal();
+		KmerSizer::set(oldKmerSize);
+		ReadSet::madviseMmapsNormal();
 
-	  return affectedCount;
+		return affectedCount;
 	}
 
 };

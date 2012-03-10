@@ -58,12 +58,12 @@ Kmer &kmer2 = *((Kmer *) (twoBit2));
 Kmer &kmer3 = *((Kmer *) (twoBit3));
 
 #define SET_KMERS(fasta1, fasta2, fasta3) \
-    TwoBitSequence::compressSequence(fasta1,   twoBit1);\
-    TwoBitSequence::compressSequence(fasta2,   twoBit2);\
-    TwoBitSequence::compressSequence(fasta3,   twoBit3);\
-    KmerSizer::set(std::strlen(fasta1));\
-    BOOST_CHECK_EQUAL( fasta1, kmer1.toFasta());\
-    BOOST_CHECK_EQUAL( fasta2, kmer2.toFasta());
+		TwoBitSequence::compressSequence(fasta1,   twoBit1);\
+		TwoBitSequence::compressSequence(fasta2,   twoBit2);\
+		TwoBitSequence::compressSequence(fasta3,   twoBit3);\
+		KmerSizer::set(std::strlen(fasta1));\
+		BOOST_CHECK_EQUAL( fasta1, kmer1.toFasta());\
+		BOOST_CHECK_EQUAL( fasta2, kmer2.toFasta());
 
 void testKmerCompare() {
 
@@ -430,7 +430,7 @@ void testKmerArray(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
 	Kmer::IndexType count = 0;
 	for (KmerArray<float>::Iterator it = kmersFloat.begin(); it
-			!= kmersFloat.end(); it++) {
+	!= kmersFloat.end(); it++) {
 		BOOST_CHECK_EQUAL(kmersFloat.valueAt(count), it->value());
 		BOOST_CHECK_EQUAL(kmersFloat[count].toFasta(), it->key().toFasta());
 		count++;
@@ -525,9 +525,9 @@ public:
 
 void testKmerMap(SequenceLengthType size) {
 	std::string
-			A("ACGTCGTAACGTCGTA"),
-			B("TACGACGTTACGACGT"),
-			C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+	A("ACGTCGTAACGTCGTA"),
+	B("TACGACGTTACGACGT"),
+	C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
 	SET_KMERS(A.c_str(), B.c_str(), C.c_str());
 	KmerSizer::set(size);
 
@@ -554,30 +554,30 @@ void testKmerMap(SequenceLengthType size) {
 	Kmer::IndexType s = kmersC.size();
 	BOOST_CHECK_EQUAL(s, kmersC.size());
 
-      Kmernator::MmapFile mmapF = kmerF.store();
-	  BOOST_CHECK(mmapF.is_open());
-	  BOOST_CHECK(mmapF.size() > 0);
-	  Kmernator::MmapFile mmapP = kmerP.store();
-	  BOOST_CHECK(mmapP.is_open());
-	  BOOST_CHECK(mmapP.size() > 0);
+	Kmernator::MmapFile mmapF = kmerF.store();
+	BOOST_CHECK(mmapF.is_open());
+	BOOST_CHECK(mmapF.size() > 0);
+	Kmernator::MmapFile mmapP = kmerP.store();
+	BOOST_CHECK(mmapP.is_open());
+	BOOST_CHECK(mmapP.size() > 0);
 
 	{
 
-	  KmerMap<float> kmf = KmerMap<float>::restore(mmapF.data());
-	  KmerMap<Pair>  kmp = KmerMap<Pair>::restore(mmapP.data());
+		KmerMap<float> kmf = KmerMap<float>::restore(mmapF.data());
+		KmerMap<Pair>  kmp = KmerMap<Pair>::restore(mmapP.data());
 
-	  KmerMap<float> kcf(mmapF.data());
-	  KmerMap<Pair>  kcp(mmapP.data());
+		KmerMap<float> kcf(mmapF.data());
+		KmerMap<Pair>  kcp(mmapP.data());
 
-	  for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
-	      Kmer &kmer = kmersC[i];
-	      BOOST_CHECK_EQUAL( kmerF[kmer], kmf[kmer] );
-	      BOOST_CHECK_EQUAL( kmerP[kmer].first,  kmp[kmer].first );
-	      BOOST_CHECK_EQUAL( kmerP[kmer].second, kmp[kmer].second );
-	      BOOST_CHECK_EQUAL( kmerF[kmer], kcf[kmer] );
-	      BOOST_CHECK_EQUAL( kmerP[kmer].first,  kcp[kmer].first );
-	      BOOST_CHECK_EQUAL( kmerP[kmer].second, kcp[kmer].second );
-	  }
+		for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
+			Kmer &kmer = kmersC[i];
+			BOOST_CHECK_EQUAL( kmerF[kmer], kmf[kmer] );
+			BOOST_CHECK_EQUAL( kmerP[kmer].first,  kmp[kmer].first );
+			BOOST_CHECK_EQUAL( kmerP[kmer].second, kmp[kmer].second );
+			BOOST_CHECK_EQUAL( kmerF[kmer], kcf[kmer] );
+			BOOST_CHECK_EQUAL( kmerP[kmer].first,  kcp[kmer].first );
+			BOOST_CHECK_EQUAL( kmerP[kmer].second, kcp[kmer].second );
+		}
 	}
 
 	kmerF.clear();
@@ -615,7 +615,7 @@ void testKmerMap(SequenceLengthType size) {
 	Kmer::IndexType countThread;
 
 	countThread = 0;
-	#pragma omp parallel num_threads(1) reduction(+: countThread)
+#pragma omp parallel num_threads(1) reduction(+: countThread)
 	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
@@ -624,7 +624,7 @@ void testKmerMap(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
 
 	countThread = 0;
-	#pragma omp parallel num_threads(2) reduction(+: countThread)
+#pragma omp parallel num_threads(2) reduction(+: countThread)
 	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
@@ -633,7 +633,7 @@ void testKmerMap(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
 
 	countThread = 0;
-	#pragma omp parallel num_threads(3) reduction(+: countThread)
+#pragma omp parallel num_threads(3) reduction(+: countThread)
 	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
@@ -642,7 +642,7 @@ void testKmerMap(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
 
 	countThread = 0;
-	#pragma omp parallel num_threads(4) reduction(+: countThread)
+#pragma omp parallel num_threads(4) reduction(+: countThread)
 	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
@@ -651,7 +651,7 @@ void testKmerMap(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
 
 	countThread = 0;
-	#pragma omp parallel num_threads(7) reduction(+: countThread)
+#pragma omp parallel num_threads(7) reduction(+: countThread)
 	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
@@ -660,7 +660,7 @@ void testKmerMap(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(kmerF.size(), countThread);
 
 	countThread = 0;
-	#pragma omp parallel num_threads(31) reduction(+: countThread)
+#pragma omp parallel num_threads(31) reduction(+: countThread)
 	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
@@ -710,133 +710,3 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 	testKmerMap(12);
 
 }
-
-//
-// $Log: KmerTest.cpp,v $
-// Revision 1.38  2010-05-18 20:50:21  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.37.12.1  2010-05-07 22:59:41  regan
-// refactored base type declarations
-//
-// Revision 1.37  2010-05-01 21:57:51  regan
-// merged head with serial threaded build partitioning
-//
-// Revision 1.36.2.1  2010-04-27 22:53:43  regan
-// *** empty log message ***
-//
-// Revision 1.36  2010-04-21 23:39:39  regan
-// got kmermap mmap store and restore working
-//
-// Revision 1.35  2010-02-26 13:01:22  regan
-// reformatted
-//
-// Revision 1.34  2009-12-14 05:32:15  regan
-// optimized array resizing to malloc at logarithmic stepping
-//
-// Revision 1.33  2009-11-28 01:00:10  regan
-// fixed bugs and warnings
-//
-// Revision 1.32  2009-11-26 09:03:34  regan
-// refactored and stuff
-//
-// Revision 1.31  2009-11-24 13:35:32  cfurman
-// removed KmerPtr class.
-//
-// Revision 1.30  2009-11-06 16:59:14  regan
-// added base substitution/permutations table and build function
-//
-// Revision 1.29  2009-11-04 19:30:46  cfurman
-// added 'std::for_each' test for KmerMap iterator
-//
-// Revision 1.28  2009-11-04 18:26:18  regan
-// refactored
-// added statistics calculations and histograms
-//
-// Revision 1.27  2009-11-03 17:15:43  regan
-// minor refactor
-//
-// Revision 1.26  2009-11-02 18:49:07  regan
-// fixed linking issues
-//
-// Revision 1.25  2009-10-31 23:44:19  regan
-// fixed bug in KmerArray::remove
-// refactored memory pool out of KmerArray
-//
-// Revision 1.24  2009-10-30 19:27:49  regan
-// added iterator goodness, but KmerMap::Iterator still does not work
-//
-// Revision 1.23  2009-10-30 00:51:37  regan
-// bug fix and working on executable
-//
-// Revision 1.22  2009-10-29 23:30:03  regan
-// checkpoint
-//
-// Revision 1.21  2009-10-29 23:04:51  regan
-// works
-//
-// Revision 1.20  2009-10-29 20:59:24  cfurman
-// fixed testing bugs
-//
-// Revision 1.19  2009-10-29 19:01:35  regan
-// checkpoint
-//
-// Revision 1.18  2009-10-29 18:11:44  cfurman
-// fixed testing bugs
-//
-// Revision 1.17  2009-10-29 07:03:35  regan
-// fixed some bugs , added others
-// KmerArray is working, *Sorted methods are untested
-//
-// Revision 1.16  2009-10-28 18:51:11  regan
-// made KmerArray behave properly and not like a KmerPtrArray
-//
-// Revision 1.15  2009-10-28 18:43:02  regan
-// added debug flags, fixed tests, bugs
-//
-// Revision 1.14  2009-10-28 02:29:57  cfurman
-// fixed KmerArray  bugs
-//
-// Revision 1.13  2009-10-28 00:04:28  regan
-// added more bugs
-//
-// Revision 1.12  2009-10-27 19:02:08  regan
-// added tests
-//
-// Revision 1.11  2009-10-27 07:16:11  regan
-// checkpoint
-// defined KmerMap and KmerArray lookup methods
-//
-// Revision 1.10  2009-10-26 23:04:35  regan
-// checkpoint make Kmer private inner class
-//
-// Revision 1.9  2009-10-26 17:42:26  regan
-// templated KmerArray
-//
-// Revision 1.8  2009-10-24 00:37:50  regan
-// fixed tests
-//
-// Revision 1.7  2009-10-24 00:32:47  regan
-// added bugs
-//
-// Revision 1.6  2009-10-24 00:03:51  regan
-// checkpoint
-//
-// Revision 1.5  2009-10-23 23:22:44  regan
-// checkpoint
-//
-// Revision 1.4  2009-10-23 21:54:48  regan
-// checkpoint
-//
-// Revision 1.3  2009-10-23 20:32:52  cfurman
-// more kmer changes
-//
-// Revision 1.2  2009-10-23 17:22:45  regan
-// added more tests
-//
-// Revision 1.1  2009-10-23 07:06:57  regan
-// more unit testing
-//   ReadSetTest
-//   KmerTest
-//
-//

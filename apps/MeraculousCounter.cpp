@@ -69,32 +69,35 @@ int main(int argc, char *argv[]) {
 
 	ReadSet reads;
 
-	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
+	try {
+		OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
-	reads.appendAllFiles(inputs, world.rank(), world.size());
+		reads.appendAllFiles(inputs, world.rank(), world.size());
 
-	LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-	setGlobalReadSetOffsets(world, reads);
-	long numBuckets = 0;
-	numBuckets = KS::estimateWeakKmerBucketSize(reads);
+		setGlobalReadSetOffsets(world, reads);
+		long numBuckets = 0;
+		numBuckets = KS::estimateWeakKmerBucketSize(reads);
 
-	numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
+		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
 
-	KS spectrum(world, numBuckets);
+		KS spectrum(world, numBuckets);
 
-	spectrum.buildKmerSpectrum(reads);
-	if (Log::isVerbose(1)) {
-		std::string hist = spectrum.getHistogram(false);
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
+		spectrum.buildKmerSpectrum(reads);
+		if (Log::isVerbose(1)) {
+			std::string hist = spectrum.getHistogram(false);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
+		}
+		std::string outputFilenameBase = outputFilename + ".mercount.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength());
+		spectrum.dumpCounts(outputFilenameBase);
+		outputFilenameBase = outputFilename + ".mergraph.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength()) + ".D" + boost::lexical_cast<std::string>(KmerOptions::getOptions().getMinDepth());
+		spectrum.dumpGraphs(outputFilenameBase);
+	} catch (...) {
+		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
 	}
-	std::string outputFilenameBase = outputFilename + ".mercount.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength());
-	spectrum.dumpCounts(outputFilenameBase);
-	outputFilenameBase = outputFilename + ".mergraph.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength()) + ".D" + boost::lexical_cast<std::string>(KmerOptions::getOptions().getMinDepth());
-	spectrum.dumpGraphs(outputFilenameBase);
-
 	world.barrier();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 

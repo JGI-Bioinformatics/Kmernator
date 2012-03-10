@@ -92,7 +92,7 @@ public:
 		}
 	};
 	typedef M DataType;
-    typedef typename DataType::ReadPositionWeightVector ReadPositionWeightVector;
+	typedef typename DataType::ReadPositionWeightVector ReadPositionWeightVector;
 	typedef KmerMap<DataType> KMType;
 	typedef KmerMap<unsigned char> KmerCountMap;
 	typedef typename KMType::ConstIterator KMIterator;
@@ -120,15 +120,15 @@ protected:
 
 public:
 	ReadSelector(const ReadSet &reads, const KMType &map):
-	_reads(reads),
-	_map(map),
-	_trims(),
-	_picks(),
-	_counts(),
-	_needCounts(false),
-	_duplicateSet(),
-	_needDuplicateCheck(false),
-	_lastSortedPick(0)
+		_reads(reads),
+		_map(map),
+		_trims(),
+		_picks(),
+		_counts(),
+		_needCounts(false),
+		_duplicateSet(),
+		_needDuplicateCheck(false),
+		_lastSortedPick(0)
 	{
 		_bimodalSigmas = Options::getOptions().getBimodalSigmas();
 		// Let the kernel know how these pages will be used
@@ -178,7 +178,7 @@ public:
 
 	void setNeedCounts() {
 		if (_needCounts) {
-		  return;
+			return;
 		}
 		_counts = KmerCountMap(_map.getNumBuckets());
 		// TODO verify counts are initialized to 0
@@ -209,7 +209,7 @@ public:
 		}
 	}
 
-protected:
+	protected:
 	bool _testDup(ReadSetSizeType readIdx) {
 		bool isGood = true;
 		if (!_reads.isValidRead(readIdx))
@@ -247,7 +247,7 @@ protected:
 		}
 	}
 
-public:
+	public:
 	bool isNew(ReadSetSizeType readIdx1, ReadSetSizeType readIdx2 = ReadSet::MAX_READ_IDX) {
 		// check readIdx1
 		if (readIdx1 != ReadSet::MAX_READ_IDX ) {
@@ -325,7 +325,7 @@ public:
 	}
 	bool isPassingRead(ReadSetSizeType readIdx, ScoreType minimumScore, SequenceLengthType minimumLength) {
 		if (! isPassingRead(readIdx) )
-		return false;
+			return false;
 		ReadTrimType &trim = _trims[readIdx];
 		if (minimumLength > _reads.getMaxSequenceLength()) {
 			// use actual length of this sequence
@@ -335,15 +335,15 @@ public:
 	}
 	bool isPassingPair(const ReadSet::Pair &pair, ScoreType minimumScore, SequenceLengthType minimumLength, bool bothPass) {
 		if (bothPass)
-		return isPassingRead(pair.read1, minimumScore, minimumLength) && isPassingRead(pair.read2, minimumScore, minimumLength);
+			return isPassingRead(pair.read1, minimumScore, minimumLength) && isPassingRead(pair.read2, minimumScore, minimumLength);
 		else
-		return isPassingRead(pair.read1, minimumScore, minimumLength) || isPassingRead(pair.read2, minimumScore, minimumLength);
+			return isPassingRead(pair.read1, minimumScore, minimumLength) || isPassingRead(pair.read2, minimumScore, minimumLength);
 	}
 	bool isPairAvailable(const ReadSet::Pair &pair, bool bothPass) {
 		if (bothPass)
-		return isPassingRead(pair.read1) && _trims[pair.read1].isAvailable && isPassingRead(pair.read2) && _trims[pair.read2].isAvailable;
+			return isPassingRead(pair.read1) && _trims[pair.read1].isAvailable && isPassingRead(pair.read2) && _trims[pair.read2].isAvailable;
 		else
-		return (isPassingRead(pair.read1) && _trims[pair.read1].isAvailable) || (isPassingRead(pair.read2) && _trims[pair.read2].isAvailable);
+			return (isPassingRead(pair.read1) && _trims[pair.read1].isAvailable) || (isPassingRead(pair.read2) && _trims[pair.read2].isAvailable);
 	}
 
 	int pickAllPassingReads(ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
@@ -376,7 +376,7 @@ public:
 			if (contribution > 0) {
 				KmerCountMap::ValueType pickedCount = 0;
 				if (!_counts.getValueIfExists(kmers[j], pickedCount)) {
-					#pragma omp critical (ReadSelector_counts)
+#pragma omp critical (ReadSelector_counts)
 					{
 						pickedCount =  _counts.getOrSetElement(kmers[j], pickedCount).value();
 					}
@@ -447,7 +447,7 @@ public:
 		int allAreDone = 0;
 
 		long pairsSize = _reads.getPairSize();
-		#pragma omp parallel
+#pragma omp parallel
 		{
 			int threadId = omp_get_thread_num();
 
@@ -466,10 +466,10 @@ public:
 				}
 			}
 
-			#pragma omp atomic
+#pragma omp atomic
 			heapSize += heapedPairs[threadId].size();
 
-			#pragma omp barrier
+#pragma omp barrier
 			LOG_VERBOSE_OPTIONAL(1, threadId == 0, "building heap out of " << heapSize << " pairs" );
 
 			std::make_heap(heapedPairs[threadId].begin(), heapedPairs[threadId].end(), PairScoreCompare(this));
@@ -495,7 +495,7 @@ public:
 					std::pop_heap(heapedPairs[threadId].begin(), heapedPairs[threadId].end(), PairScoreCompare(this));
 					heapedPairs[threadId].pop_back();
 
-					#pragma omp atomic
+#pragma omp atomic
 					heapSize--;
 
 				} else {
@@ -512,7 +512,7 @@ public:
 						PairScore bestPair = fauxPairScore;
 						LOG_DEBUG(4, "chose " << pairScore.pair.read1 << ", " << pairScore.pair.read2 << ": " << pairScore.score);
 
-						#pragma omp barrier
+#pragma omp barrier
 
 						for(int i = 0 ; i < numThreads; i++) {
 							if (bestPair < bestPairs[i] ) {
@@ -523,26 +523,26 @@ public:
 						if (bestPair.pair == pairScore.pair && bestPair.pair != fauxPair && !isEmpty) {
 
 							pickIfNew(pairScore.pair);
-							#pragma omp atomic
+#pragma omp atomic
 							picked++;
 							LOG_DEBUG(4, "Selected pair: " << pairScore.pair.read1 << " " << pairScore.pair.read2);
 
 						}
 
 						if (isEmpty && !threadIsDone ) {
-							#pragma omp atomic
+#pragma omp atomic
 							allAreDone++;
 							threadIsDone = true;
 						}
 
-						#pragma omp barrier
+#pragma omp barrier
 
 					} else {
 						if (pairScore.score > minimumScore && isPassingPair(pairScore.pair, minimumScore, minimumLength, bothPass)) {
 							LOG_DEBUG(4, "replacing Pair(" << pairScore.pair.read1 << ", " << pairScore.pair.read2 << "): "
 									<< pairScore.score << " " << (isPassingRead(pairScore.pair.read1) ? _trims[pairScore.pair.read1].score : -2.0) << " "
 									<< (isPassingRead(pairScore.pair.read2) ? _trims[pairScore.pair.read2].score : -2.0));
-							#pragma omp atomic
+#pragma omp atomic
 							heapSize++;
 
 							heapedPairs[threadId].push_back(pairScore);
@@ -611,15 +611,15 @@ public:
 	}
 
 	void trimReadByMarkupLength(const Read &read, ReadTrimType &trim, SequenceLengthType markupLength) {
-		  if ( markupLength == 0 ) {
-			  trim.trimLength = read.getLength();
-		  } else {
-			  // TODO find longest stretch...
-			  // trim at first N or X markup
-			  trim.trimOffset = 0;
-			  trim.trimLength = markupLength - 1;
-		  }
-		  trim.score = trim.trimLength;
+		if ( markupLength == 0 ) {
+			trim.trimLength = read.getLength();
+		} else {
+			// TODO find longest stretch...
+			// trim at first N or X markup
+			trim.trimOffset = 0;
+			trim.trimLength = markupLength - 1;
+		}
+		trim.score = trim.trimLength;
 	}
 
 	template<typename U>
@@ -710,15 +710,15 @@ public:
 	}
 
 	void _setNumKmers( SequenceLengthType markupLength, SequenceLengthType &numKmers) {
-		  if ( markupLength != 0 ) {
-			  // find first N or X markup and that is the maximum trim point
-			  SequenceLengthType maxTrimPoint = markupLength;
-			  if (maxTrimPoint > KmerSizer::getSequenceLength()) {
-				  numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
-			  } else {
-				  numKmers = 0;
-			  }
-		  }
+		if ( markupLength != 0 ) {
+			// find first N or X markup and that is the maximum trim point
+			SequenceLengthType maxTrimPoint = markupLength;
+			if (maxTrimPoint > KmerSizer::getSequenceLength()) {
+				numKmers = maxTrimPoint - KmerSizer::getSequenceLength();
+			} else {
+				numKmers = 0;
+			}
+		}
 	}
 	void scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore) {
 		KA kmers = getKmersForRead(read);
@@ -744,7 +744,7 @@ public:
 		bool useKmers = KmerOptions::getOptions().getKmerSize() != 0;
 
 		long readsSize = _reads.getSize();
-		#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic)
 		for(long i = 0; i < readsSize; i++) {
 			ReadTrimType &trim = _trims[i];
 			const Read &read = _reads.getRead(i);
@@ -775,9 +775,9 @@ public:
 
 	// sorts the latest batch of picks to work best with mmaped ReadSets
 	void optimizePickOrder(ReadSetSizeType offset = ReadSet::MAX_READ_IDX) {
-	    if (offset == ReadSet::MAX_READ_IDX) {
-	        offset = _lastSortedPick;
-	    }
+		if (offset == ReadSet::MAX_READ_IDX) {
+			offset = _lastSortedPick;
+		}
 		if (offset >= (ReadSetSizeType) _picks.size())
 			return;
 
@@ -828,43 +828,3 @@ public:
 };
 
 #endif
-
-
-// $Log: ReadSelector.h,v $
-// Revision 1.23  2010-08-18 17:50:40  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.22.8.1  2010-08-17 18:07:05  regan
-// minor refactor
-//
-// Revision 1.22  2010-05-24 21:48:46  regan
-// merged changes from RNADedupMods-20100518
-//
-// Revision 1.21.2.1  2010-05-20 03:42:46  regan
-// optimized
-//
-// Revision 1.21  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.20.2.4  2010-05-12 20:46:50  regan
-// bugfix in names of output files
-//
-// Revision 1.20.2.3  2010-05-12 18:25:10  regan
-// help destructor ordering
-//
-// Revision 1.20.2.2  2010-05-10 17:57:41  regan
-// fixing types
-//
-// Revision 1.20.2.1  2010-05-07 22:59:32  regan
-// refactored base type declarations
-//
-// Revision 1.20  2010-05-06 22:55:05  regan
-// merged changes from CodeCleanup-20100506
-//
-// Revision 1.19  2010-05-06 22:26:18  regan
-// changed debug level for messages
-//
-// Revision 1.18  2010-05-06 21:46:54  regan
-// merged changes from PerformanceTuning-20100501
-//
-//

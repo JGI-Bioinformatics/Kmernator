@@ -63,10 +63,9 @@ public:
 		p.add("input-file", -1);
 		po::options_description opts("Randomly Sample Options");
 		opts.add_options()
-				("by-pair", po::value<int>()->default_value(1), "If set, pairs are sampled, if not set, reads are sampled")
-				("num-samples",  po::value<int>()->default_value(1000), "The number of samples to output")
-				("min-bytes-per-record", po::value<int>()->default_value(900), "The minimum number of bytes between two records (should be >2x greatest record size)"
-				);
+								("by-pair", po::value<int>()->default_value(1), "If set, pairs are sampled, if not set, reads are sampled")
+								("num-samples",  po::value<int>()->default_value(1000), "The number of samples to output")
+								("min-bytes-per-record", po::value<int>()->default_value(900), "The minimum number of bytes between two records (should be >2x greatest record size)");
 		desc.add(opts);
 		GeneralOptions::_setOptions(desc, p);
 	}
@@ -198,15 +197,3 @@ int main(int argc, char *argv[]) {
 	}
 
 }
-
-// $Log: FixPair.cpp,v $
-// Revision 1.4  2010-05-18 20:50:18  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.3.2.1  2010-05-07 22:59:29  regan
-// refactored base type declarations
-//
-// Revision 1.3  2010-05-06 21:46:57  regan
-// merged changes from PerformanceTuning-20100501
-//
-//

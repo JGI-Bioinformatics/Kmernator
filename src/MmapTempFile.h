@@ -60,11 +60,11 @@ public:
 		MmapFile mmap;
 
 		FileHandle(std::string _filename)
-			: filename(_filename) {
+		: filename(_filename) {
 			osPtr.reset(new std::ofstream(filename.c_str()));
 		}
 		FileHandle(const FileHandle &copy)
-			: filename(copy.filename), osPtr(copy.osPtr), mmap(copy.mmap) {}
+		: filename(copy.filename), osPtr(copy.osPtr), mmap(copy.mmap) {}
 		FileHandle &operator=(const FileHandle &copy) {
 			if (this == &copy)
 				return *this;
@@ -222,8 +222,8 @@ public:
 				}
 				throw("Should never get here");
 			} else {
-			    size_type blocks = *blockAllocation;
-			    sss.free_n(allocation, blocks, blockSize);
+				size_type blocks = *blockAllocation;
+				sss.free_n(allocation, blocks, blockSize);
 			}
 		}
 		MmapAllocator() {
@@ -245,11 +245,3 @@ public:
 
 #endif
 
-//
-// $Log: MmapTempFile.h,v $
-// Revision 1.2  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.1.2.1  2010-05-12 18:25:04  regan
-// refactored
-//

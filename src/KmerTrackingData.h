@@ -249,12 +249,12 @@ public:
 				if (extTrack.getExtensionCount(e, d) > 0) {
 					if (d == ExtensionTracking::Left) {
 						_leftB = Extension::getBase(e);
-					    _leftQ = ExtensionTracking::getMinQuality();
-					    assignCount++;
+						_leftQ = ExtensionTracking::getMinQuality();
+						assignCount++;
 					} else {
 						_rightB = Extension::getBase(e);
-					    _rightQ = ExtensionTracking::getMinQuality();
-					    assignCount++;
+						_rightQ = ExtensionTracking::getMinQuality();
+						assignCount++;
 					}
 				}
 			}
@@ -303,7 +303,7 @@ public:
 
 		ReadPositionWeight(ReadIdType _read = 0, PositionType _pos = 0,
 				WeightType _weight = 0.0) :
-			ReadPosition(_read, _pos), weight(_weight) {
+					ReadPosition(_read, _pos), weight(_weight) {
 		}
 	};
 	typedef std::vector<ReadPositionWeight> ReadPositionWeightVector;
@@ -329,7 +329,7 @@ public:
 			return false;
 		} else {
 
-			#pragma omp atomic
+#pragma omp atomic
 			discarded++;
 
 			return true;
@@ -360,7 +360,7 @@ public:
 		return discarded;
 	}
 
-private:
+	private:
 	static WeightType minimumWeight;
 	static CountType minimumDepth;
 	static unsigned long discarded;
@@ -370,11 +370,11 @@ private:
 	static bool useWeightedByDefault;
 
 
-protected:
+	protected:
 	CountType count;
 	WeightType weightedCount;
 
-public:
+	public:
 	TrackingData() :
 		count(0),  weightedCount(0.0) {
 	}
@@ -442,9 +442,9 @@ public:
 	std::string toString() const {
 		std::stringstream ss;
 		ss << count << ":" << std::fixed << std::setprecision(2)
-				<< getNormalizedDirectionBias();
+		<< getNormalizedDirectionBias();
 		ss << ':' << std::fixed << std::setprecision(2)
-				<< ((double) weightedCount / (double) count);
+		<< ((double) weightedCount / (double) count);
 		return ss.str();
 	}
 
@@ -455,9 +455,9 @@ public:
 
 	template<typename U>
 	TrackingData &add(const U &other) {
-			count += other.getCount();
-			weightedCount += other.getWeightedCount();
-			return *this;
+		count += other.getCount();
+		weightedCount += other.getWeightedCount();
+		return *this;
 	}
 	template<typename U>
 	TrackingData &operator=(const U &other) {
@@ -634,9 +634,9 @@ public:
 	std::string toString() const {
 		std::stringstream ss;
 		ss << getCount() << ":" << std::fixed << std::setprecision(2)
-				<< getNormalizedDirectionBias();
+		<< getNormalizedDirectionBias();
 		ss << ':' << std::fixed << std::setprecision(2)
-				<< ((double) getWeightedCount() / (double) getCount());
+		<< ((double) getWeightedCount() / (double) getCount());
 		return ss.str();
 	}
 
@@ -720,9 +720,9 @@ public:
 	std::string toString() const {
 		std::stringstream ss;
 		ss << getCount() << ":" << std::fixed << std::setprecision(2)
-				<< getNormalizedDirectionBias();
+		<< getNormalizedDirectionBias();
 		ss << ':' << std::fixed << std::setprecision(2)
-				<< ((double) getWeightedCount() / (double) getCount());
+		<< ((double) getWeightedCount() / (double) getCount());
 		return ss.str();
 	}
 
@@ -801,7 +801,7 @@ public:
 	double _getWeightedCount() const {
 		double weightedCount = 0.0;
 		for (ReadPositionWeightVector::const_iterator it = instances->begin(); it
-				!= instances->end(); it++)
+		!= instances->end(); it++)
 			if (it->weight < 0.0)
 				weightedCount -= it->weight;
 			else
@@ -824,9 +824,9 @@ public:
 	std::string toString() const {
 		std::stringstream ss;
 		ss << getCount() << ":" << std::fixed << std::setprecision(2)
-				<< getNormalizedDirectionBias();
+		<< getNormalizedDirectionBias();
 		ss << ':' << std::fixed << std::setprecision(2)
-				<< ((double) getWeightedCount() / (double) getCount());
+		<< ((double) getWeightedCount() / (double) getCount());
 		return ss.str();
 	}
 	TrackingDataWithAllReads &operator=(const TrackingDataWithAllReads &copy) {
@@ -855,9 +855,9 @@ public:
 	TrackingDataWithAllReads &add(const U &other) {
 		if (other.getCount() > 0) {
 			ReadPositionWeightVector rpwv = other.getEachInstance();
-	        instances->insert(instances->end(), rpwv.begin(), rpwv.end());
-	        directionBias += other.getDirectionBias();
-	        weightedCount += other.getWeightedCount();
+			instances->insert(instances->end(), rpwv.begin(), rpwv.end());
+			directionBias += other.getDirectionBias();
+			weightedCount += other.getWeightedCount();
 		}
 		return *this;
 	}
@@ -1071,7 +1071,7 @@ template<typename T>
 class TrackingDataMinimal : public ExtensionTrackingInterface {
 public:
 	typedef T DataType;
-    typedef	typename TrackingData::CountType CountType;
+	typedef	typename TrackingData::CountType CountType;
 	typedef typename TrackingData::WeightType WeightType;
 	typedef typename TrackingData::ReadIdType ReadIdType;
 	typedef typename TrackingData::PositionType PositionType;
@@ -1084,7 +1084,7 @@ public:
 	TrackingDataMinimal() : count(0) {}
 	void reset() {
 		TrackingData::resetForGlobals(getCount());
-	    count = 0;
+		count = 0;
 	}
 
 	bool track(double weight, bool forward, ReadIdType readIdx, PositionType readPos)
@@ -1129,7 +1129,7 @@ public:
 		if (weightD < weight)
 			count = other.getCount();
 		else
-		    count = weightD;
+			count = weightD;
 		return *this;
 	};
 
@@ -1140,7 +1140,7 @@ public:
 		if (weightD < weight)
 			count += other.getCount();
 		else
-		    count += weightD;
+			count += weightD;
 		return *this;
 	};
 
@@ -1160,42 +1160,3 @@ std::ostream &operator<<(std::ostream &stream, TrackingDataMinimal<T> &ob) {
 
 
 #endif
-
-// $Log: KmerTrackingData.h,v $
-// Revision 1.6  2010-08-18 17:50:40  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.5.4.1  2010-07-13 19:45:51  regan
-// bugfix in casting TrackingData*
-//
-// Revision 1.5  2010-06-22 23:06:31  regan
-// merged changes in CorruptionBugfix-20100622 branch
-//
-// Revision 1.4.6.1  2010-06-22 23:01:55  regan
-// named all critical sections
-//
-// Revision 1.4  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.3.2.1  2010-05-07 22:59:33  regan
-// refactored base type declarations
-//
-// Revision 1.3  2010-05-06 22:55:05  regan
-// merged changes from CodeCleanup-20100506
-//
-// Revision 1.2.10.1  2010-05-06 18:45:35  regan
-// broke it...
-//
-// Revision 1.2  2010-05-01 21:57:54  regan
-// merged head with serial threaded build partitioning
-//
-// Revision 1.1.2.2  2010-04-27 05:38:32  regan
-// added count cast operator
-//
-// Revision 1.1.2.1  2010-04-26 04:59:46  regan
-// bugfix and templated some tracking methods
-//
-// Revision 1.1  2010-04-21 23:39:37  regan
-// got kmermap mmap store and restore working
-//
-//

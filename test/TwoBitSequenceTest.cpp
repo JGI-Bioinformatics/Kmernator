@@ -60,16 +60,16 @@ SequenceLengthType twoBitLength, sequenceLength;
 //static void permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1, TwoBitEncoding *out2, TwoBitEncoding *out3, SequenceLengthType sequenceLength, SequenceLengthType permuteBaseIdx);
 
 #define PERMUTE_BASE(inFasta, targetFasta1, targetFasta2, targetFasta3, baseIdx) \
-	  sequenceLength = std::strlen(inFasta);\
-	  twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
-	  TwoBitSequence::compressSequence(inFasta, in);\
-	  TwoBitSequence::permuteBase(in, out1, out2, out3, sequenceLength, baseIdx);\
-	  TwoBitSequence::uncompressSequence(out1, sequenceLength, fasta);\
-	  BOOST_CHECK_EQUAL(targetFasta1, fasta);\
-	  TwoBitSequence::uncompressSequence(out2, sequenceLength, fasta);\
-	  BOOST_CHECK_EQUAL(targetFasta2, fasta);\
-	  TwoBitSequence::uncompressSequence(out3, sequenceLength, fasta);\
-	  BOOST_CHECK_EQUAL(targetFasta3, fasta);
+		sequenceLength = std::strlen(inFasta);\
+		twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
+		TwoBitSequence::compressSequence(inFasta, in);\
+		TwoBitSequence::permuteBase(in, out1, out2, out3, sequenceLength, baseIdx);\
+		TwoBitSequence::uncompressSequence(out1, sequenceLength, fasta);\
+		BOOST_CHECK_EQUAL(targetFasta1, fasta);\
+		TwoBitSequence::uncompressSequence(out2, sequenceLength, fasta);\
+		BOOST_CHECK_EQUAL(targetFasta2, fasta);\
+		TwoBitSequence::uncompressSequence(out3, sequenceLength, fasta);\
+		BOOST_CHECK_EQUAL(targetFasta3, fasta);
 
 void testPermuteBase() {
 	PERMUTE_BASE("A", "C", "G", "T", 0);
@@ -83,28 +83,28 @@ void testPermuteBase() {
 	PERMUTE_BASE("AG", "AA", "AC", "AT", 1);
 	PERMUTE_BASE("AT", "AA", "AC", "AG", 1);
 
-    PERMUTE_BASE("ACGT", "CCGT", "GCGT", "TCGT", 0);
-    PERMUTE_BASE("ACGT", "AAGT", "AGGT", "ATGT", 1);
-    PERMUTE_BASE("ACGT", "ACAT", "ACCT", "ACTT", 2);
-    PERMUTE_BASE("ACGT", "ACGA", "ACGC", "ACGG", 3);
+	PERMUTE_BASE("ACGT", "CCGT", "GCGT", "TCGT", 0);
+	PERMUTE_BASE("ACGT", "AAGT", "AGGT", "ATGT", 1);
+	PERMUTE_BASE("ACGT", "ACAT", "ACCT", "ACTT", 2);
+	PERMUTE_BASE("ACGT", "ACGA", "ACGC", "ACGG", 3);
 
-    PERMUTE_BASE("ACGTT", "CCGTT", "GCGTT", "TCGTT", 0);
-    PERMUTE_BASE("ACGTG", "AAGTG", "AGGTG", "ATGTG", 1);
-    PERMUTE_BASE("ACGTC", "ACATC", "ACCTC", "ACTTC", 2);
-    PERMUTE_BASE("ACGTA", "ACGAA", "ACGCA", "ACGGA", 3);
-    PERMUTE_BASE("ACGTT", "ACGTA", "ACGTC", "ACGTG", 4);
+	PERMUTE_BASE("ACGTT", "CCGTT", "GCGTT", "TCGTT", 0);
+	PERMUTE_BASE("ACGTG", "AAGTG", "AGGTG", "ATGTG", 1);
+	PERMUTE_BASE("ACGTC", "ACATC", "ACCTC", "ACTTC", 2);
+	PERMUTE_BASE("ACGTA", "ACGAA", "ACGCA", "ACGGA", 3);
+	PERMUTE_BASE("ACGTT", "ACGTA", "ACGTC", "ACGTG", 4);
 
 }
 
 //static void shiftLeft(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases);
 
 #define LEFT_SHIFT(inFasta,targetFasta,shiftAmount)\
-  sequenceLength = std::strlen(inFasta);\
-  twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
-  TwoBitSequence::compressSequence(inFasta, in);\
-  TwoBitSequence::shiftLeft(in,out,twoBitLength,shiftAmount);\
-  TwoBitSequence::uncompressSequence(out, sequenceLength, fasta);\
-  BOOST_CHECK_EQUAL(targetFasta,fasta);
+		sequenceLength = std::strlen(inFasta);\
+		twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
+		TwoBitSequence::compressSequence(inFasta, in);\
+		TwoBitSequence::shiftLeft(in,out,twoBitLength,shiftAmount);\
+		TwoBitSequence::uncompressSequence(out, sequenceLength, fasta);\
+		BOOST_CHECK_EQUAL(targetFasta,fasta);
 
 void testLeftShift() {
 	LEFT_SHIFT("ACGT","ACGT",0);
@@ -140,14 +140,14 @@ void testLeftShift() {
 }
 
 #define REV_COMP(fwd,rev) \
-  TwoBitSequence::compressSequence(fwd, in);\
-  TwoBitSequence::compressSequence(rev, test); \
-  sequenceLength = std::strlen(fwd);\
-  twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
-  TwoBitSequence::reverseComplement(in,out,sequenceLength);\
-  BOOST_CHECK_EQUAL( memcmp(out,test,twoBitLength), 0);\
-  TwoBitSequence::uncompressSequence(out, sequenceLength, fasta);\
-  BOOST_CHECK_EQUAL(rev,fasta);
+		TwoBitSequence::compressSequence(fwd, in);\
+		TwoBitSequence::compressSequence(rev, test); \
+		sequenceLength = std::strlen(fwd);\
+		twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
+		TwoBitSequence::reverseComplement(in,out,sequenceLength);\
+		BOOST_CHECK_EQUAL( memcmp(out,test,twoBitLength), 0);\
+		TwoBitSequence::uncompressSequence(out, sequenceLength, fasta);\
+		BOOST_CHECK_EQUAL(rev,fasta);
 
 void testReverseComplement() {
 
@@ -290,9 +290,9 @@ void testMarkup() {
 }
 
 #define TEST_GC(inFasta,count)\
-  sequenceLength = std::strlen(inFasta);\
-  TwoBitSequence::compressSequence(inFasta, in);\
-  BOOST_CHECK_EQUAL((long)TwoBitSequence::getGC(in,sequenceLength),(long)count);
+		sequenceLength = std::strlen(inFasta);\
+		TwoBitSequence::compressSequence(inFasta, in);\
+		BOOST_CHECK_EQUAL((long)TwoBitSequence::getGC(in,sequenceLength),(long)count);
 
 
 void testGC()
@@ -329,53 +329,3 @@ BOOST_AUTO_TEST_CASE( TwoBitSequenceTest )
 	testPermuteBase();
 	testGC();
 }
-
-//
-// $Log: TwoBitSequenceTest.cpp,v $
-// Revision 1.11  2010-05-18 20:50:21  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.10.12.1  2010-05-18 16:43:30  regan
-// added count gc methods and lookup tables
-//
-// Revision 1.10  2010-05-01 21:57:51  regan
-// merged head with serial threaded build partitioning
-//
-// Revision 1.9.2.1  2010-04-23 23:39:16  regan
-// added more tests
-//
-// Revision 1.9  2010-04-21 00:33:18  regan
-// merged with branch to detect duplicated fragment pairs with edit distance
-//
-// Revision 1.8.2.1  2010-04-19 18:20:50  regan
-// refactored base permutation
-//
-// Revision 1.8  2010-04-16 22:44:25  regan
-// merged HEAD with changes for mmap and intrusive pointer
-//
-// Revision 1.7.2.1  2010-04-04 16:22:29  regan
-// bugfix
-//
-// Revision 1.7  2010-02-26 13:01:21  regan
-// reformatted
-//
-// Revision 1.6  2010-01-13 23:49:23  regan
-// fixed warnings
-//
-// Revision 1.5  2009-10-27 22:13:43  cfurman
-// removed bit shift table
-//
-// Revision 1.4  2009-10-23 00:13:56  cfurman
-// reverse complement now works
-//
-// Revision 1.3  2009-10-22 21:46:47  regan
-// fixed ushort to ulong conversion problems
-//
-// Revision 1.2  2009-10-22 20:49:18  cfurman
-// tests added
-//
-// Revision 1.1  2009-10-22 07:04:03  regan
-// added a few unit tests
-// minor refactor
-//
-//

@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(1, "Reading Input Files");
 	reads.appendAllFiles(inputs);
 	LOG_VERBOSE(1,"loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
-		<< " Bases ");
+			<< " Bases ");
 	reads.identifyPairs();
 
 	OfstreamMap ofmap = OfstreamMap(outputFilename, ".fastq");
@@ -105,22 +105,10 @@ int main(int argc, char *argv[]) {
 			if (pos == std::string::npos)
 				read2Label.erase();
 			else
-			    read2Label.erase( 0, pos +1);
+				read2Label.erase( 0, pos +1);
 		}
 
 		reads.write(ofmap, pair, 0, MAX_SEQUENCE_LENGTH, read1Label, 0, MAX_SEQUENCE_LENGTH, read2Label, FormatOutput::FastqUnmasked(), true);
 	}
 
 }
-
-// $Log: FixPair.cpp,v $
-// Revision 1.4  2010-05-18 20:50:18  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.3.2.1  2010-05-07 22:59:29  regan
-// refactored base type declarations
-//
-// Revision 1.3  2010-05-06 21:46:57  regan
-// merged changes from PerformanceTuning-20100501
-//
-//

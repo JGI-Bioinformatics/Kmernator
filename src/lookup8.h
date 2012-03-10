@@ -283,15 +283,3 @@ static ub8 hash3( register ub1 *k, register ub8  length, register ub8  level)
 };
 
 #endif // lookup8.h
-
-// $Log: lookup8.h,v $
-// Revision 1.4  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.3.2.1  2010-05-07 22:59:32  regan
-// refactored base type declarations
-//
-// Revision 1.3  2010-05-06 21:46:54  regan
-// merged changes from PerformanceTuning-20100501
-//
-//

@@ -138,12 +138,12 @@ Sequence::Sequence(const Sequence &copy)  {
 	*this = copy;
 }
 Sequence::Sequence(std::string fasta, bool usePreAllocation) :
-	_flags(0) {
+			_flags(0) {
 	setSequence(fasta, usePreAllocation);
 }
 
 Sequence::Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart) :
-	_flags(0) {
+			_flags(0) {
 	setSequence(mmapRecordStart, mmapQualRecordStart);
 }
 
@@ -212,7 +212,7 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 	TwoBitEncoding _stackBuffer[ needMalloc ? 0 : buffSize ];
 	TwoBitEncoding *buffer = _stackBuffer;
 	if (needMalloc) {
-	    buffer = new TwoBitEncoding[ buffSize ];
+		buffer = new TwoBitEncoding[ buffSize ];
 	}
 
 	if (buffer == NULL)
@@ -223,36 +223,36 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 	long totalMarkupSize = 0;
 	MarkupElementSizeType markupSizes = TwoBitSequence::getMarkupElementSize(markupBases, totalMarkupSize);
 	if (totalMarkupSize == 0 && markupBases.size() != 0) {
-	    // markups exist, but totalMarkupSize will not be stored.
-	    // signal for discarded record
+		// markups exist, but totalMarkupSize will not be stored.
+		// signal for discarded record
 		setFlag(DISCARDED);
 	}
 	try {
 		unsigned int size =
 				sizeof(SequenceLengthType)
-		        + buffSize
+				+ buffSize
 				+ totalMarkupSize
 				+ extraBytes;
 		if (usePreAllocation && size <= DataPtrListVector::size) {
 			_data = preAllocatedDataPtrs->retrieveDataPtr();
 			setFlag(PREALLOCATED);
 		} else {
-		    _data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
-	    }
+			_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
+		}
 	} catch (...) {
 		throw std::runtime_error(
 				"Cannot allocate memory in Sequence::setSequence()");
 	}
 
-    *_getLength() = length;
+	*_getLength() = length;
 	memcpy(_getTwoBitSequence(), buffer, buffSize);
 
-    // free the buffer
+	// free the buffer
 	if (needMalloc)
-	    delete [] buffer;
+		delete [] buffer;
 
-    if (totalMarkupSize > 0)
-	   setMarkups(markupSizes, markupBases);
+	if (totalMarkupSize > 0)
+		setMarkups(markupSizes, markupBases);
 
 }
 
@@ -265,15 +265,15 @@ void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, const BaseLocati
 	extraBytes += markupBytes;
 	setSequence(mmapRecordStart, extraBytes, mmapQualRecordStart);
 	if (markupBytes > 0)
-	    setMarkups(markupElementSize, markups);
+		setMarkups(markupElementSize, markups);
 }
 void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes, Sequence::RecordPtr mmapQualRecordStart) {
 	reset(MMAPED);
 	long size = sizeof(Sequence::RecordPtr)+extraBytes;
 	if (mmapQualRecordStart != NULL)
 		setFlag(HASFASTAQUAL);
-		setFlag(HASQUALS);
-		size += sizeof(Sequence::RecordPtr);
+	setFlag(HASQUALS);
+	size += sizeof(Sequence::RecordPtr);
 	try {
 		_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
 	} catch (...) {
@@ -306,7 +306,7 @@ void Sequence::unsetFlag(char f) {
 	}
 }
 void Sequence::setMarkups(MarkupElementSizeType markupElementSize, const BaseLocationVectorType &markups) {
-    // assume memory has been allocated already
+	// assume memory has been allocated already
 	SequenceLengthType size = markups.size();
 	if (size == 0) {
 		unsetFlag(MARKUPS4);
@@ -354,7 +354,7 @@ void Sequence::setMarkups(MarkupElementSizeType markupElementSize, const BaseLoc
 
 string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset, SequenceLengthType trimLength) const {
 	if ( !isValid() )
-	    return string("");
+		return string("");
 
 	if (isMmaped()) {
 		string name, bases, quals;
@@ -385,15 +385,15 @@ string Sequence::getFasta(SequenceLengthType trimOffset, SequenceLengthType trim
 		SequencePtr sequencePtr = getCache();
 		fasta = sequencePtr->getFasta(trimOffset, trimLength);
 	} else {
-	    SequenceLengthType len = getLength();
-	    assert(trimOffset <= len);
-	    if (trimLength > len - trimOffset)
-	    	trimLength = len - trimOffset;
-	    if (trimLength <= 1) {
-		    // to support printing paired reads where 1 read is trimmed to 0
-		    return string(1, 'N');
-	    }
-	    fasta = TwoBitSequence::getFasta(getTwoBitSequence(), trimOffset, trimLength);
+		SequenceLengthType len = getLength();
+		assert(trimOffset <= len);
+		if (trimLength > len - trimOffset)
+			trimLength = len - trimOffset;
+		if (trimLength <= 1) {
+			// to support printing paired reads where 1 read is trimmed to 0
+			return string(1, 'N');
+		}
+		fasta = TwoBitSequence::getFasta(getTwoBitSequence(), trimOffset, trimLength);
 	}
 	BaseLocationVectorType markups = getMarkups();
 	TwoBitSequence::applyMarkup(fasta, markups);
@@ -462,7 +462,7 @@ const SequenceLengthType *Sequence::_getMarkupBasesCount() const {
 		if (hasFastaQual()) {
 			return (SequenceLengthType *) (_getQualRecord() + 1);
 		} else {
-		    return (SequenceLengthType *) (_getRecord() + 1);
+			return (SequenceLengthType *) (_getRecord() + 1);
 		}
 	} else {
 		return (SequenceLengthType *) (_getTwoBitSequence()
@@ -579,7 +579,7 @@ SequenceLengthType Sequence::getTwoBitEncodingSequenceLength() const {
 SequenceLengthType Sequence::_getStoredMarkupBasesCount() const {
 	assert(isValid());
 	if (isMarkups4()) {
-        return *_getMarkupBasesCount();
+		return *_getMarkupBasesCount();
 	} else if (isMarkups1()) {
 		return *_getMarkupBasesCount1();
 	} else if(isMarkups2()) {
@@ -600,34 +600,34 @@ BaseLocationVectorType Sequence::_getMarkups() const {
 	BaseLocationVectorType markups;
 	SequenceLengthType size = _getStoredMarkupBasesCount();
 	if (size > 0) {
-	    markups.reserve(size);
+		markups.reserve(size);
 
-        if (isMarkups4()) {
-            const BaseLocationType *ptr = _getMarkupBases();
-		    for (SequenceLengthType i = 0; i < size; i++) {
-			    markups.push_back(*(ptr++));
-		    }
+		if (isMarkups4()) {
+			const BaseLocationType *ptr = _getMarkupBases();
+			for (SequenceLengthType i = 0; i < size; i++) {
+				markups.push_back(*(ptr++));
+			}
 		} else if (isMarkups1()) {
 			const BaseLocationType1 *ptr = _getMarkupBases1();
 			for (SequenceLengthType i = 0; i < size; i++) {
-			    markups.push_back(BaseLocationType( ptr->first, ptr->second) );
-			    ptr++;
+				markups.push_back(BaseLocationType( ptr->first, ptr->second) );
+				ptr++;
 			}
 		} else {
 			const BaseLocationType2 *ptr = _getMarkupBases2();
-		    for (SequenceLengthType i = 0; i < size; i++) {
-			    markups.push_back(BaseLocationType( ptr->first, ptr->second));
+			for (SequenceLengthType i = 0; i < size; i++) {
+				markups.push_back(BaseLocationType( ptr->first, ptr->second));
 				ptr++;
-		    }
+			}
 		}
 	}
 	// if the sequence is discarded
 	// or the first base is masked, then the whole sequence is discarded and masked
 	if (isDiscarded() || (size>0 && markups[0].first == 'X' && markups[0].second == 0)) {
-	    markups.clear();
+		markups.clear();
 		markups.reserve(getLength());
 		for(SequenceLengthType i = 0 ; i < getLength(); i++)
-		    markups.push_back(BaseLocationType('X', i));
+			markups.push_back(BaseLocationType('X', i));
 	}
 	return markups;
 }
@@ -648,7 +648,7 @@ void Sequence::readMmaped(std::string &name, std::string &bases, std::string &qu
 	// TODO fix hack on NULL lastPtr.  Presently only works for single-lined fastas
 	RecordPtr record(getRecord()), lastRecord(NULL), qualRecord(NULL), lastQualRecord(NULL);
 	if (hasFastaQual()) {
-	    qualRecord = getQualRecord();
+		qualRecord = getQualRecord();
 		lastQualRecord = NULL;
 	}
 	SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord, FASTQ_START_CHAR);
@@ -664,7 +664,7 @@ Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
 double Read::qualityToProbability[256];
 
 int Read::initializeQualityToProbability(unsigned char minQualityScore, char startChar) {
-    #pragma omp critical (FastqStartChar)
+#pragma omp critical (FastqStartChar)
 	{
 		if (startChar != FASTQ_START_CHAR) {
 			LOG_DEBUG_OPTIONAL(1, true, "Switching quality scale for FASTQ (std vs Illumina) to " << (int) startChar);
@@ -682,7 +682,7 @@ int Read::initializeQualityToProbability(unsigned char minQualityScore, char sta
 	return 1;
 }
 int Read::qualityToProbabilityInitialized =
-	Read::initializeQualityToProbability(0, Kmernator::FASTQ_START_CHAR_ILLUMINA);
+		Read::initializeQualityToProbability(0, Kmernator::FASTQ_START_CHAR_ILLUMINA);
 
 void Read::setMinQualityScore(unsigned char minQualityScore, char startChar) {
 	Read::initializeQualityToProbability(minQualityScore, startChar);
@@ -702,8 +702,8 @@ Read::Read(Sequence::RecordPtr mmapRecordStart, std::string markupFasta, Sequenc
 }
 Read &Read::operator=(const Read &other) {
 	Sequence::operator=(other);
-    // there are no extra data members
-    return *this;
+	// there are no extra data members
+	return *this;
 }
 Read Read::clone(bool usePreAllocation) const {
 	return Read(getName(), getFasta(), getQuals(), usePreAllocation);
@@ -724,7 +724,7 @@ bool Read::recordHasQuals() const {
 		return true;
 	else
 		// TODO make this more general
-	    return *getRecord() == '@'; // FASTQ
+		return *getRecord() == '@'; // FASTQ
 }
 
 ProbabilityBases Read::getProbabilityBases(unsigned char minQuality) const {
@@ -761,7 +761,7 @@ const char * Read::_getQual() const {
 		return (char *) (_getMarkupBases() + *_getMarkupBasesCount());
 	} else {
 		// there are no markups, so there is no markup count...
-	    return (char *) (_getMarkupBasesCount());
+		return (char *) (_getMarkupBasesCount());
 	}
 }
 char * Read::_getQual() {
@@ -812,7 +812,7 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes, b
 	if (qualBytes.empty()) {
 		unsetFlag(HASQUALS);
 	} else {
-	    setFlag(HASQUALS);
+		setFlag(HASQUALS);
 		memcpy(_getQual(), qualBytes.c_str(), qualBytes.length());
 	}
 	strcpy(_getName(), name.c_str());
@@ -820,53 +820,53 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes, b
 void Read::setRead(Sequence::RecordPtr mmapRecordStart, Sequence::RecordPtr mmapQualRecordStart) {
 	setSequence(mmapRecordStart, 0, mmapQualRecordStart);
 	if (recordHasQuals())
-	  setFlag(HASQUALS);
+		setFlag(HASQUALS);
 }
 void Read::setRead(Sequence::RecordPtr mmapRecordStart, std::string markupFasta, Sequence::RecordPtr mmapQualRecordStart) {
 	BaseLocationVectorType markups = TwoBitSequence::compressSequence(markupFasta.c_str(), NULL);
-    setSequence(mmapRecordStart, markups, 0, mmapQualRecordStart);
-    if (recordHasQuals())
-       setFlag(HASQUALS);
+	setSequence(mmapRecordStart, markups, 0, mmapQualRecordStart);
+	if (recordHasQuals())
+		setFlag(HASQUALS);
 }
 
 void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, char mask) {
-  if (isDiscarded())
-	  return;
+	if (isDiscarded())
+		return;
 
-  string fasta = getFasta();
-  string origFasta = fasta;
-  SequenceLengthType len = getLength();
-  if (offset >= len) {
-	  throw std::invalid_argument("offset can not be greater than length of sequence");
-  }
-  if (offset + length > len)
-    length = len - offset;
+	string fasta = getFasta();
+	string origFasta = fasta;
+	SequenceLengthType len = getLength();
+	if (offset >= len) {
+		throw std::invalid_argument("offset can not be greater than length of sequence");
+	}
+	if (offset + length > len)
+		length = len - offset;
 
-  // save some memory if the first base is being masked, the whole sequence is discarded
-  // so only need to mark the first base
-  if ((fasta.length()>0 && fasta[0] == 'X')
-		|| (offset == 0 && mask == 'X')) {
+	// save some memory if the first base is being masked, the whole sequence is discarded
+	// so only need to mark the first base
+	if ((fasta.length()>0 && fasta[0] == 'X')
+			|| (offset == 0 && mask == 'X')) {
 		setFlag(DISCARDED);
 		return;
-  }
-  fasta.replace(offset, length, length, mask);
+	}
+	fasta.replace(offset, length, length, mask);
 
-  if (isMmaped()) {
-	RecordPtr record = getRecord();
-	RecordPtr qualRecord = NULL;
-	if (hasFastaQual())
-		qualRecord = getQualRecord();
+	if (isMmaped()) {
+		RecordPtr record = getRecord();
+		RecordPtr qualRecord = NULL;
+		if (hasFastaQual())
+			qualRecord = getQualRecord();
 
-	reset();
-	setRead(record, fasta, qualRecord);
+		reset();
+		setRead(record, fasta, qualRecord);
 
-  } else {
-	string name  = getName();
-	string qual  = getQuals();
+	} else {
+		string name  = getName();
+		string qual  = getQuals();
 
-	reset();
-	setRead(name, fasta, qual);
-  }
+		reset();
+		setRead(name, fasta, qual);
+	}
 }
 
 string Read::getName() const {
@@ -1185,7 +1185,7 @@ ProbabilityBases &ProbabilityBases::operator*=(const ProbabilityBases &other) {
 }
 ProbabilityBases &ProbabilityBases::operator*=(double factor) {
 	for(size_t i = 0; i <  _bases.size(); i++) {
-	    _bases[i] *= factor;
+		_bases[i] *= factor;
 	}
 	return *this;
 }
@@ -1220,204 +1220,3 @@ std::string ProbabilityBases::toString() const {
 	}
 	return ss.str();
 }
-//
-// $Log: Sequence.cpp,v $
-// Revision 1.36  2010-08-18 17:50:39  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.35.4.1  2010-07-20 20:02:56  regan
-// autodetect fastq quality range
-//
-// Revision 1.35  2010-06-22 23:06:31  regan
-// merged changes in CorruptionBugfix-20100622 branch
-//
-// Revision 1.34.6.1  2010-06-22 22:58:55  regan
-// added has fasta qual flag to differentiate from has quals
-// modified markups to acutally save memory when discarded
-//
-// Revision 1.34  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.33.2.3  2010-05-10 22:40:20  regan
-// minor refactor -- replaced invalid flag
-//
-// Revision 1.33.2.2  2010-05-10 20:44:35  regan
-// minor refactor moved code into cpp
-//
-// Revision 1.33.2.1  2010-05-07 22:59:32  regan
-// refactored base type declarations
-//
-// Revision 1.33  2010-05-06 22:55:05  regan
-// merged changes from CodeCleanup-20100506
-//
-// Revision 1.32.4.1  2010-05-06 18:45:36  regan
-// broke it...
-//
-// Revision 1.32  2010-05-05 06:28:35  regan
-// merged changes from FixPairOutput-20100504
-//
-// Revision 1.31.4.1  2010-05-05 05:57:53  regan
-// fixed pairing
-// fixed name to exclude labels and comments after whitespace
-// applied some performance optimizations from other branch
-// created FixPair application
-//
-// Revision 1.31.2.1  2010-05-02 04:38:39  regan
-// replaced mmap quals flag with paired
-//
-// Revision 1.31  2010-05-01 21:57:53  regan
-// merged head with serial threaded build partitioning
-//
-// Revision 1.30  2010-04-22 23:41:32  regan
-// fixed a few bugs
-//
-// Revision 1.29.4.8  2010-04-30 23:53:14  regan
-// attempt to fix a bug.  clearing Sequence caches when it makes sense
-//
-// Revision 1.29.4.7  2010-04-30 23:33:37  regan
-// replaced read cache with LRU 3rd party cache
-//
-// Revision 1.29.4.6  2010-04-30 22:29:58  regan
-// added comments about dangling pointer
-//
-// Revision 1.29.4.5  2010-04-30 21:53:52  regan
-// reuse memory efficiently for cache lookups
-//
-// Revision 1.29.4.4  2010-04-29 06:58:43  regan
-// reworked output parameters to include option to print unmasked reads
-//
-// Revision 1.29.4.3  2010-04-28 22:28:11  regan
-// refactored writing routines
-//
-// Revision 1.29.4.2  2010-04-26 22:53:45  regan
-// bugfixes
-//
-// Revision 1.29.4.1  2010-04-23 17:46:20  regan
-// merged bugfixes from head
-//
-// Revision 1.29  2010-04-16 22:44:18  regan
-// merged HEAD with changes for mmap and intrusive pointer
-//
-// Revision 1.28.2.9.2.2  2010-04-16 21:38:09  regan
-// minor performance change
-//
-// Revision 1.28.2.9.2.1  2010-04-16 05:30:00  regan
-// checkpoint.. broke it
-//
-// Revision 1.28.2.9  2010-04-15 21:31:50  regan
-// bugfix in markups and duplicate fragment filter
-//
-// Revision 1.28.2.8  2010-04-15 17:29:02  regan
-// checkpoint, working with some optimizations
-//
-// Revision 1.28.2.7  2010-04-14 22:36:06  regan
-// round of bugfixes
-//
-// Revision 1.28.2.6  2010-04-14 20:53:49  regan
-// checkpoint and passes unit tests!
-//
-// Revision 1.28.2.5  2010-04-14 03:51:20  regan
-// checkpoint. compiles but segfaults
-//
-// Revision 1.28.2.4  2010-04-12 22:37:47  regan
-// checkpoint
-//
-// Revision 1.28.2.3  2010-04-12 20:59:45  regan
-// mmap checkpoint
-//
-// Revision 1.28.2.2  2010-04-05 02:56:08  regan
-// bugfixes
-//
-// Revision 1.28.2.1  2010-04-04 15:31:27  regan
-// checkpoint - refactored underlying data structure t compress markups
-//
-// Revision 1.28  2010-03-16 06:42:50  regan
-// bugfixes
-//
-// Revision 1.27  2010-03-15 14:58:42  regan
-// fixed major bug in markups
-//
-// Revision 1.26  2010-03-08 22:14:38  regan
-// replaced zero bases with markup bases to mask out reads that match the filter pattern
-// bugfix in overrunning the mask
-//
-// Revision 1.25  2010-03-03 17:38:48  regan
-// fixed quality scores
-//
-// Revision 1.24  2010-03-03 17:10:49  regan
-// let zero trimmed reads print out with a single N to support pairs staying together
-//
-// Revision 1.23  2010-02-26 13:01:16  regan
-// reformatted
-//
-// Revision 1.22  2010-02-22 14:41:03  regan
-// bugfix in printing
-//
-// Revision 1.21  2010-01-14 18:04:14  regan
-// bugfixes
-//
-// Revision 1.20  2010-01-13 23:46:46  regan
-// made const class modifications
-//
-// Revision 1.19  2010-01-13 21:16:00  cfurman
-// added setMinQualityScore
-//
-// Revision 1.18  2010-01-13 00:24:30  regan
-// use less memory for reference sequences and those without quality
-//
-// Revision 1.17  2010-01-06 15:20:24  regan
-// code to screen out primers
-//
-// Revision 1.16  2009-12-24 00:55:57  regan
-// made const iterators
-// fixed some namespace issues
-// added support to output trimmed reads
-//
-// Revision 1.15  2009-11-28 01:00:07  regan
-// fixed bugs and warnings
-//
-// Revision 1.14  2009-11-21 15:58:29  regan
-// changed some types
-// bugfix in reading and using qual files
-//
-// Revision 1.13  2009-11-10 07:04:59  regan
-// bugfix in quality lookup table -- use float!
-//
-// Revision 1.12  2009-11-07 00:28:41  cfurman
-// ReadSet now takes fasta, fastq or  fasta+qual files.
-//
-// Revision 1.11  2009-11-06 04:07:13  regan
-// bugfix when stack size is limited
-//
-// Revision 1.10  2009-11-04 19:32:03  cfurman
-// now reads in fasta (with optional qual) files
-//
-// Revision 1.9  2009-11-02 18:27:00  regan
-// added getMarkups()
-// added quality to probability lookup table
-//
-// Revision 1.8  2009-10-30 00:51:40  regan
-// bug fix and working on executable
-//
-// Revision 1.7  2009-10-22 20:49:15  cfurman
-// tests added
-//
-// Revision 1.6  2009-10-22 07:04:06  regan
-// added a few unit tests
-// minor refactor
-//
-// Revision 1.5  2009-10-22 00:07:43  cfurman
-// more kmer related classes added
-//
-// Revision 1.4  2009-10-21 00:00:58  cfurman
-// working on kmers....
-//
-// Revision 1.3  2009-10-20 20:56:27  cfurman
-// Got it to compile!
-//
-// Revision 1.2  2009-10-20 17:25:50  regan
-// added CVS tags
-//
-//
-
-

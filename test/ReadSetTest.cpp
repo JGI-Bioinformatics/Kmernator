@@ -121,9 +121,9 @@ void testFastaWithQualFile(string f, string q) {
 }
 
 #define TEST_TRIM_NAME_PARSER(_target,_test) \
-	target = _target; test = _test; \
-	SequenceRecordParser::trimName(test); \
-	BOOST_CHECK_EQUAL(target,test);
+		target = _target; test = _test; \
+		SequenceRecordParser::trimName(test); \
+		BOOST_CHECK_EQUAL(target,test);
 
 void testParser()
 {
@@ -198,9 +198,9 @@ void testStore(string filename) {
 
 void testKmerMap(SequenceLengthType size) {
 	std::string
-			A("ACGTCGTAACGTCGTA"),
-			B("TACGACGTTACGACGT"),
-			C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+	A("ACGTCGTAACGTCGTA"),
+	B("TACGACGTTACGACGT"),
+	C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
 	int oldSize = KmerSizer::getSequenceLength();
 	KmerSizer::set(size);
 
@@ -251,71 +251,3 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 	Sequence::clearCaches();
 
 }
-
-//
-// $Log: ReadSetTest.cpp,v $
-// Revision 1.15  2010-05-06 21:46:51  regan
-// merged changes from PerformanceTuning-20100501
-//
-// Revision 1.14  2010-05-05 06:28:38  regan
-// merged changes from FixPairOutput-20100504
-//
-// Revision 1.13.4.1  2010-05-05 05:57:56  regan
-// fixed pairing
-// fixed name to exclude labels and comments after whitespace
-// applied some performance optimizations from other branch
-// created FixPair application
-//
-// Revision 1.13.2.1  2010-05-03 21:34:37  regan
-// added consensus unit tests
-//
-// Revision 1.13  2010-05-01 21:57:51  regan
-// merged head with serial threaded build partitioning
-//
-// Revision 1.12.8.2  2010-04-30 23:53:17  regan
-// attempt to fix a bug.  clearing Sequence caches when it makes sense
-//
-// Revision 1.12.8.1  2010-04-30 21:53:59  regan
-// reuse memory efficiently for cache lookups
-//
-// Revision 1.12  2010-03-14 16:57:09  regan
-// minor refactor
-//
-// Revision 1.11  2010-03-04 06:37:13  regan
-// bugfix
-//
-// Revision 1.10  2010-02-26 13:01:21  regan
-// reformatted
-//
-// Revision 1.9  2010-02-22 14:41:18  regan
-// minor bug fixes
-//
-// Revision 1.8  2010-01-13 07:20:10  regan
-// refactored filter
-// checkpoint on read picker
-//
-// Revision 1.7  2009-12-23 07:16:50  regan
-// fixed reading of fasta files
-// parallelized reading of multiple files
-//
-// Revision 1.6  2009-11-28 01:00:10  regan
-// fixed bugs and warnings
-//
-// Revision 1.5  2009-11-07 00:28:38  cfurman
-// ReadSet now takes fasta, fastq or  fasta+qual files.
-//
-// Revision 1.4  2009-10-30 00:51:37  regan
-// bug fix and working on executable
-//
-// Revision 1.3  2009-10-23 20:32:52  cfurman
-// more kmer changes
-//
-// Revision 1.2  2009-10-23 07:06:57  regan
-// more unit testing
-//   ReadSetTest
-//   KmerTest
-//
-// Revision 1.1  2009-10-23 01:24:56  cfurman
-// ReadSet test created
-//
-

@@ -50,58 +50,6 @@
 #error "mpi is required for this library"
 #endif
 
-// collective
-void reduceOMPThreads(mpi::communicator &world) {
-	Options::getOptions().validateOMPThreads();
-#ifdef _USE_OPENMP
-	int numThreads = omp_get_max_threads();
-	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
-	omp_set_num_threads(numThreads);
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
-#endif
-}
-
-// collective
-void validateMPIWorld(mpi::communicator &world) {
-	int provided;
-	MPI_Query_thread(&provided);
-#ifdef _USE_OPENMP
-	if (provided != MPI_THREAD_FUNNELED && omp_get_max_threads() > 1) {
-		if (world.rank() == 0)
-			LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_FUNNELED (" << provided << "), reducing OpenMP threads to 1")
-		omp_set_num_threads(1);
-	}
-#endif
-	reduceOMPThreads(world);
-}
-
-template< typename OptionsTempl >
-mpi::communicator initializeWorldAndOptions(int argc, char *argv[]) {
-	int threadProvided;
-	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
-	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
-	mpi::environment env(argc, argv);
-	mpi::communicator world;
-	MPI_Comm_set_errhandler( world, MPI::ERRORS_THROW_EXCEPTIONS );
-
-	try {
-		Logger::setWorld(&world);
-
-		if (!OptionsTempl::parseOpts(argc, argv))
-			LOG_THROW("Please fix the command line arguments." << std::endl << OptionsTempl::getOptionsErrorMsg());
-
-		if (GeneralOptions::getOptions().getGatheredLogs())
-			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);
-
-		validateMPIWorld(world);
-
-	} catch (...) {
-		MPI_Finalize();
-		exit(1);
-	}
-	world.barrier();
-	return world;
-}
 
 // collective
 std::string getRankSubdir(mpi::communicator &world, std::string prefix) {
@@ -411,16 +359,16 @@ public:
 		long kmerSubsample = KS::getKmerSubsample();
 
 		std::stringstream ss;
-		#pragma omp parallel num_threads(numThreads)
+#pragma omp parallel num_threads(numThreads)
 		{
 			int threadId = omp_get_thread_num();
 
-			#pragma omp master
+#pragma omp master
 			{
 				LOG_DEBUG(2, "message buffers ready");
 				world.barrier();
 			}
-			#pragma omp barrier
+#pragma omp barrier
 
 			// allow the master thread to only handle communications
 			int loopThreadId = threadId, loopNumThreads = numThreads;
@@ -428,48 +376,48 @@ public:
 				loopThreadId--; loopNumThreads--;
 			}
 			if (loopThreadId >= 0) {
-			  for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
-			  {
+				for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
+				{
 
-				const Read &read = store.getRead( readIdx );
+					const Read &read = store.getRead( readIdx );
 
-				if (read.isDiscarded())
-					continue;
-
-				DataPointers pointers(*this);
-				KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
-				ReadSetSizeType globalReadIdx = readIdx + globalReadSetOffset;
-				LOG_DEBUG(3, "_buildKmerSpectrumMPI(): Read " << readIdx << " (" << globalReadIdx << ") " << kmers.size() );
-
-				for (PositionType readPos = 0 ; readPos < kmers.size(); readPos++) {
-					int rankDest, threadDest;
-					if (kmerSubsample > 1 && kmers[readPos].hash() % kmerSubsample != 0) {
+					if (read.isDiscarded())
 						continue;
-					}	
-					const WeightedExtensionMessagePacket &v = kmers.valueAt(readPos);
-					WeightType weight = v.getWeight();
-					if ( TrackingData::isDiscard( (weight<0.0) ? 0.0-weight : weight ) )  {
-						LOG_DEBUG(4, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << kmers[readPos].toFasta());
-					} else {
 
-						this->getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize, true);
+					DataPointers pointers(*this);
+					KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
+					ReadSetSizeType globalReadIdx = readIdx + globalReadSetOffset;
+					LOG_DEBUG(3, "_buildKmerSpectrumMPI(): Read " << readIdx << " (" << globalReadIdx << ") " << kmers.size() );
 
-						if (rankDest == rank && threadDest == threadId) {
-							this->append(pointers, kmers[readPos], v.getWeight(), globalReadIdx, readPos, isSolid, v.getLeft(), v.getRight());
+					for (PositionType readPos = 0 ; readPos < kmers.size(); readPos++) {
+						int rankDest, threadDest;
+						if (kmerSubsample > 1 && kmers[readPos].hash() % kmerSubsample != 0) {
+							continue;
+						}
+						const WeightedExtensionMessagePacket &v = kmers.valueAt(readPos);
+						WeightType weight = v.getWeight();
+						if ( TrackingData::isDiscard( (weight<0.0) ? 0.0-weight : weight ) )  {
+							LOG_DEBUG(4, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << kmers[readPos].toFasta());
 						} else {
-							msgBuffers->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, v, kmers[readPos]);
+
+							this->getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize, true);
+
+							if (rankDest == rank && threadDest == threadId) {
+								this->append(pointers, kmers[readPos], v.getWeight(), globalReadIdx, readPos, isSolid, v.getLeft(), v.getRight());
+							} else {
+								msgBuffers->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, v, kmers[readPos]);
+							}
+						}
+					}
+
+					if (loopThreadId == 0 && readIdx % 1000000 == 0) {
+						if (world.rank() == 0) {
+							LOG_VERBOSE_OPTIONAL(1, true, "distributed processing " << (readIdx * world.size()) << " reads");
+						} else {
+							LOG_DEBUG(2, "local processed: " << readIdx << " reads");
 						}
 					}
 				}
-
-				if (loopThreadId == 0 && readIdx % 1000000 == 0) {
-					if (world.rank() == 0) {
-						LOG_VERBOSE_OPTIONAL(1, true, "distributed processing " << (readIdx * world.size()) << " reads");
-					} else {
-						LOG_DEBUG(2, "local processed: " << readIdx << " reads");
-					}
-				}
-			  }
 			}
 
 			LOG_DEBUG(2, "finished generating kmers from reads");
@@ -486,10 +434,10 @@ public:
 		LOG_DEBUG(1, "finished _buildKmerSpectrumMPI");
 	}
 
-        SizeTracker reduceSizeTracker(mpi::communicator &world) {
+	SizeTracker reduceSizeTracker(mpi::communicator &world) {
 		SizeTracker s = this->getSizeTracker();
 		SizeTrackerElements &elements = s.elements;
-                int inct = elements.size();
+		int inct = elements.size();
 		int ct, tmpct;
 		LOG_DEBUG_OPTIONAL(1, true, "my sizeTracker size: " << inct);
 		MPI_Allreduce(&inct, &ct, 1, MPI_INT, MPI_MAX, world);
@@ -498,28 +446,28 @@ public:
 		SizeTracker newTracker;
 		newTracker.resize(ct);
 		SizeTrackerElements &newElements = newTracker.elements;
-                
-                long in[ct*4], out[ct*4];
-                long *tmp = &in[0];
-                for(int i = 0; i < ct; i++) {
+
+		long in[ct*4], out[ct*4];
+		long *tmp = &in[0];
+		for(int i = 0; i < ct; i++) {
 			// repeat the last record, if shorter than the global max size
 			tmpct = i;
 			if (tmpct >= inct) tmpct = inct - 1;
-                        *(tmp++) = elements[tmpct].rawKmers;
-                        *(tmp++) = elements[tmpct].rawGoodKmers;
-                        *(tmp++) = elements[tmpct].uniqueKmers;
-                        *(tmp++) = elements[tmpct].singletonKmers;
-                }
-                MPI_Allreduce(in, out, ct*4, MPI_LONG_LONG_INT, MPI_SUM, world);
-                tmp = &out[0];
-                for(int i = 0; i < ct ; i++) {
-                        newElements[i].rawKmers = *(tmp++);
-                        newElements[i].rawGoodKmers = *(tmp++);
-                        newElements[i].uniqueKmers = *(tmp++);
-                        newElements[i].singletonKmers = *(tmp++);
-                }
+			*(tmp++) = elements[tmpct].rawKmers;
+			*(tmp++) = elements[tmpct].rawGoodKmers;
+			*(tmp++) = elements[tmpct].uniqueKmers;
+			*(tmp++) = elements[tmpct].singletonKmers;
+		}
+		MPI_Allreduce(in, out, ct*4, MPI_LONG_LONG_INT, MPI_SUM, world);
+		tmp = &out[0];
+		for(int i = 0; i < ct ; i++) {
+			newElements[i].rawKmers = *(tmp++);
+			newElements[i].rawGoodKmers = *(tmp++);
+			newElements[i].uniqueKmers = *(tmp++);
+			newElements[i].singletonKmers = *(tmp++);
+		}
 		return newTracker;
-        }
+	}
 
 	class MPIHistogram : public Histogram {
 	public:
@@ -564,7 +512,7 @@ public:
 	};
 
 	void buildKmerSpectrum(const ReadSet &store ) {
-		return this->buildKmerSpectrum(store, false);
+		this->buildKmerSpectrum(store, false);
 	}
 
 	void buildKmerSpectrum(const ReadSet &store, bool isSolid) {
@@ -599,7 +547,7 @@ public:
 		LOG_DEBUG(2, "Individual histogram\n" << histogram.toString());
 		histogram.reduce(world);
 		return histogram;
-        }
+	}
 
 	virtual std::string getHistogram(bool solidOnly = false) {
 		return _getHistogram(solidOnly).toString();
@@ -689,10 +637,10 @@ public:
 	typedef MPIAllToAllMessageBuffer< PurgeVariantKmerMessageHeader, PurgeVariantKmerMessageHeaderProcessor > PurgeVariantKmerMessageBuffer;
 
 	void variantWasPurged(long count = 1) {
-		#pragma omp atomic
+#pragma omp atomic
 		_purgedVariants += count;
 	}
-private:
+	private:
 	PurgeVariantKmerMessageBuffer *msgPurgeVariant;
 
 	long _purgedVariants;
@@ -794,7 +742,7 @@ protected:
 
 public:
 	DistributedOfstreamMap(mpi::communicator &world, std::string outputFilePathPrefix = Options::getOptions().getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix(), std::string tempPath = Options::getOptions().getTmpDir())
-	 :  OfstreamMap(getTempPath(tempPath), suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
+	:  OfstreamMap(getTempPath(tempPath), suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
 		_tempPrefix = OfstreamMap::getOutputPrefix();
 		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << "," << tempPath <<")");
 		setBuildInMemory(Options::getOptions().getBuildOutputInMemory());
@@ -1062,7 +1010,7 @@ protected:
 
 public:
 	DistributedReadSelector(mpi::communicator &world, const ReadSet &reads, const KMType &map)
-		: RS(reads, map), _world(world) {
+	: RS(reads, map), _world(world) {
 		LOG_DEBUG(3, this->_map.toString());
 	}
 	OFM getOFM(std::string outputFile, std::string suffix = FormatOutput::getDefaultSuffix()) {
@@ -1073,15 +1021,15 @@ public:
 	/*
 	 * ReadTrim
 	 * each rank IRecv FileReadyMessage tag=2*numThreads for each file to output from previous rank (except rank that first opens file)
-     * each rank & thread Irecv RequestMessage tag = threadId
-     * each rank & thread Irecv ResponseMessage tag = threadId + numThreads
-     *
-     * each rank & thread maintains linear buffer of read kmer values
-     * RequestMessage process( callback ) adds message to response
-     * ResponseMessage process( callback ) populates data in kmer values linear buffer
-     *
-     * periodically (by batch) communication flushes, checkpoints, and read trims get updated, files get written.
-     *
+	 * each rank & thread Irecv RequestMessage tag = threadId
+	 * each rank & thread Irecv ResponseMessage tag = threadId + numThreads
+	 *
+	 * each rank & thread maintains linear buffer of read kmer values
+	 * RequestMessage process( callback ) adds message to response
+	 * ResponseMessage process( callback ) populates data in kmer values linear buffer
+	 *
+	 * periodically (by batch) communication flushes, checkpoints, and read trims get updated, files get written.
+	 *
 message:
 receiveMessage[worldSize-1] { numReads, trimLengths[numReads], twoBitLengths[numReads], TwoBitReadBytes[ numReads ] }, numReads, trimLengths[numReads]
     last is reduction from worldSize cycles ago, apply to input files and output
@@ -1124,17 +1072,17 @@ done when empty cycle is received
 
 
 	class ReqRespKmerMessageHeaderProcessor;
-    typedef MPIAllToAllMessageBuffer< ReqRespKmerMessageHeader, ReqRespKmerMessageHeaderProcessor > ReqRespKmerMessageBuffer;
+	typedef MPIAllToAllMessageBuffer< ReqRespKmerMessageHeader, ReqRespKmerMessageHeaderProcessor > ReqRespKmerMessageBuffer;
 
-    class ReqRespKmerMessageHeaderProcessor {
-    public:
+	class ReqRespKmerMessageHeaderProcessor {
+	public:
 		KmerValueVectorVector &_kmerValues;
 		RS *_readSelector;
 		int _numThreads;
 
 		ReqRespKmerMessageHeaderProcessor(KmerValueVectorVector &kmerValues, RS &readSelector, int numThreads): _kmerValues(kmerValues), _readSelector(&readSelector), _numThreads(numThreads)  {}
 
- 		// store response in kmer value vector
+		// store response in kmer value vector
 		int processRespond(ReqRespKmerMessageHeader *msg, MessagePackage &msgPkg) {
 			LOG_DEBUG(5, "RespondKmerMessage: " << msg->requestId << " " << msg->getScore() << " recv Source: " << msgPkg.source << " recvTag: " << msgPkg.tag);
 			assert( msgPkg.tag == omp_get_thread_num() + _numThreads);
@@ -1223,83 +1171,83 @@ done when empty cycle is received
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier. message buffers ready");
 		_world.barrier();
 
-		#pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
+#pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
 		{
-		  while (batchReadIdx < mostReads) {
-			int threadId = omp_get_thread_num();
+			while (batchReadIdx < mostReads) {
+				int threadId = omp_get_thread_num();
 
-			// initialize read/kmer buffers
-			batchBuffer[threadId].resize(0);
-			readIndexBuffer[threadId].resize(0);
-			readOffsetBuffer[threadId].resize(0);
-			batchBuffer[threadId].reserve(reserveBB);
-			readIndexBuffer[threadId].reserve(reserveOffsets);
-			readOffsetBuffer[threadId].reserve(reserveOffsets);
+				// initialize read/kmer buffers
+				batchBuffer[threadId].resize(0);
+				readIndexBuffer[threadId].resize(0);
+				readOffsetBuffer[threadId].resize(0);
+				batchBuffer[threadId].reserve(reserveBB);
+				readIndexBuffer[threadId].reserve(reserveOffsets);
+				readOffsetBuffer[threadId].reserve(reserveOffsets);
 
-			LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0 && threadId == 0, "trimming batch: " << batchReadIdx * _world.size());
+				LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0 && threadId == 0, "trimming batch: " << batchReadIdx * _world.size());
 
-			LOG_DEBUG(3, "Starting batch for kmer lookups: " << batchReadIdx);
+				LOG_DEBUG(3, "Starting batch for kmer lookups: " << batchReadIdx);
 
-			// allow master thread to only handle communications
-			int loopThreadId = threadId, loopNumThreads = numThreads;
-			if (loopNumThreads > 1) {
-				loopThreadId--; loopNumThreads--;
-			}
-			if (loopThreadId >= 0) {
-			  for(ReadSetSizeType i = loopThreadId ; i < batchSize ; i+=loopNumThreads) {
-
-				ReadSetSizeType readIdx = batchReadIdx + i;
-				if (readIdx >= readsSize)
-					continue;
-				const Read &read = this->_reads.getRead(readIdx);
-				if (read.isDiscarded()) {
-					continue;
+				// allow master thread to only handle communications
+				int loopThreadId = threadId, loopNumThreads = numThreads;
+				if (loopNumThreads > 1) {
+					loopThreadId--; loopNumThreads--;
 				}
-				ReadSetSizeType offset = batchBuffer[threadId].size();
-				readOffsetBuffer[threadId].push_back( offset );
-				readIndexBuffer[threadId].push_back(readIdx);
+				if (loopThreadId >= 0) {
+					for(ReadSetSizeType i = loopThreadId ; i < batchSize ; i+=loopNumThreads) {
 
-				Sequence::BaseLocationVectorType markups = read.getMarkups();
-				SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
+						ReadSetSizeType readIdx = batchReadIdx + i;
+						if (readIdx >= readsSize)
+							continue;
+						const Read &read = this->_reads.getRead(readIdx);
+						if (read.isDiscarded()) {
+							continue;
+						}
+						ReadSetSizeType offset = batchBuffer[threadId].size();
+						readOffsetBuffer[threadId].push_back( offset );
+						readIndexBuffer[threadId].push_back(readIdx);
 
-				if (useKmers) {
-					_batchKmerLookup(read, markupLength, offset, batchBuffer[threadId], *reqRespBuffer, threadId, numThreads, rank, worldSize);
-				} else {
-					this->trimReadByMarkupLength(read, this->_trims[readIdx], markupLength);
+						Sequence::BaseLocationVectorType markups = read.getMarkups();
+						SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
+
+						if (useKmers) {
+							_batchKmerLookup(read, markupLength, offset, batchBuffer[threadId], *reqRespBuffer, threadId, numThreads, rank, worldSize);
+						} else {
+							this->trimReadByMarkupLength(read, this->_trims[readIdx], markupLength);
+						}
+					}
 				}
-			  }
-			}
-			assert(readOffsetBuffer[threadId].size() == readIndexBuffer[threadId].size());
+				assert(readOffsetBuffer[threadId].size() == readIndexBuffer[threadId].size());
 
-			reqRespBuffer->sendReceive(); // flush/send all pending requests for this thread's batch
-			reqRespBuffer->sendReceive();
-			reqRespBuffer->sendReceive(); // receive all pending responses for this threads's batch
-			reqRespBuffer->sendReceive();
+				reqRespBuffer->sendReceive(); // flush/send all pending requests for this thread's batch
+				reqRespBuffer->sendReceive();
+				reqRespBuffer->sendReceive(); // receive all pending responses for this threads's batch
+				reqRespBuffer->sendReceive();
 
-			LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
-			for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
-				ReadSetSizeType &readIdx = readIndexBuffer[threadId][i];
+				LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
+				for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
+					ReadSetSizeType &readIdx = readIndexBuffer[threadId][i];
 
-				KmerValueVectorIterator buffBegin = (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i] );
-				KmerValueVectorIterator buffEnd = ( ((i+1) < readOffsetBuffer[threadId].size()) ? (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i+1]) : batchBuffer[threadId].end() );
-				ReadTrimType &trim = this->_trims[readIdx];
-				for(KmerValueVectorIterator it = buffBegin; it != buffEnd; it++)
-					if (*it == -1)
-						LOG_WARN(1, "readIdx: " << readIdx << " pos: " << (it - buffBegin) << " did not get updated!");
+					KmerValueVectorIterator buffBegin = (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i] );
+					KmerValueVectorIterator buffEnd = ( ((i+1) < readOffsetBuffer[threadId].size()) ? (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i+1]) : batchBuffer[threadId].end() );
+					ReadTrimType &trim = this->_trims[readIdx];
+					for(KmerValueVectorIterator it = buffBegin; it != buffEnd; it++)
+						if (*it == -1)
+							LOG_WARN(1, "readIdx: " << readIdx << " pos: " << (it - buffBegin) << " did not get updated!");
 
-				if (useKmers) {
-					this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);
+					if (useKmers) {
+						this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);
+					}
+
+					this->setTrimHeaders(trim, useKmers);
 				}
 
-				this->setTrimHeaders(trim, useKmers);
+				//LOG_DEBUG(2, "Finished assigning trim values: " << batchReadIdx);
+				batchReadIdx += batchSize;
+
+				// local & world threads are okay to start without sync
 			}
-
-			//LOG_DEBUG(2, "Finished assigning trim values: " << batchReadIdx);
-			batchReadIdx += batchSize;
-
-			// local & world threads are okay to start without sync
-		  }
-		  reqRespBuffer->finalize();
+			reqRespBuffer->finalize();
 		}
 
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier.  Finished trimming, waiting for remote processes");
@@ -1324,6 +1272,61 @@ keep track of globalReadIds, or at least read-file boundaries
  *
  */
 
+
+
+// collective
+void reduceOMPThreads(mpi::communicator &world) {
+	Options::getOptions().validateOMPThreads();
+#ifdef _USE_OPENMP
+	int numThreads = omp_get_max_threads();
+	numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
+	omp_set_num_threads(numThreads);
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
+#endif
+}
+
+// collective
+void validateMPIWorld(mpi::communicator &world) {
+	int provided;
+	MPI_Query_thread(&provided);
+#ifdef _USE_OPENMP
+	if (provided != MPI_THREAD_FUNNELED && omp_get_max_threads() > 1) {
+		if (world.rank() == 0)
+			LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_FUNNELED (" << provided << "), reducing OpenMP threads to 1")
+			omp_set_num_threads(1);
+	}
+#endif
+	reduceOMPThreads(world);
+}
+
+
+template< typename OptionsTempl >
+mpi::communicator initializeWorldAndOptions(int argc, char *argv[]) {
+	int threadProvided;
+	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
+	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
+	mpi::environment env(argc, argv);
+	mpi::communicator world;
+	MPI_Comm_set_errhandler( world, MPI::ERRORS_THROW_EXCEPTIONS );
+
+	try {
+		Logger::setWorld(&world);
+
+		if (!OptionsTempl::parseOpts(argc, argv))
+			LOG_THROW("Please fix the command line arguments." << std::endl << OptionsTempl::getOptionsErrorMsg());
+
+		if (GeneralOptions::getOptions().getGatheredLogs())
+			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);
+
+		validateMPIWorld(world);
+
+	} catch (...) {
+		MPI_Finalize();
+		exit(1);
+	}
+	world.barrier();
+	return world;
+}
 
 
 #endif /* DISTRIBUTED_FUNCTIONS_H_ */

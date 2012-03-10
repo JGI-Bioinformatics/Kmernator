@@ -37,17 +37,13 @@ public:
 		po::options_description opts("Contig Extension Options");
 		opts.add_options()
 
-		("minimum-consensus", po::value<double>()->default_value(85),
-				"minimum percent consensus to call the next base")
+				("minimum-consensus", po::value<double>()->default_value(85), "minimum percent consensus to call the next base")
 
-		("minimum-coverage", po::value<double>()->default_value(4.8),
-				"minimum (probability-weighted) coverage to continue calling the next base")
+				("minimum-coverage", po::value<double>()->default_value(4.8), "minimum (probability-weighted) coverage to continue calling the next base")
 
-		("maximum-delta-ratio", po::value<double>()->default_value(0.33),
-				"maximum allowable change in coverage between adjacent kmers")
+				("maximum-delta-ratio", po::value<double>()->default_value(0.33), "maximum allowable change in coverage between adjacent kmers")
 
-		("contig-file", po::value<std::string>(),
-				"filename of input contigs.fa");
+				("contig-file", po::value<std::string>(), "filename of input contigs.fa");
 
 		desc.add(opts);
 

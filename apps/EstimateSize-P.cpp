@@ -56,8 +56,8 @@ class _MPIEstimateSizeOptions: public OptionsBaseInterface {
 public:
 	_MPIEstimateSizeOptions() :
 		maxSamplePoints(100), initialSamplePartitions(1024 * 1024),
-				maxSampleFraction(0.10), maxSamplePartition(0.005),
-				kmerSubsample(0) {
+		maxSampleFraction(0.10), maxSamplePartition(0.005),
+		kmerSubsample(0) {
 	}
 	~_MPIEstimateSizeOptions() {
 	}
@@ -94,21 +94,18 @@ public:
 		p.add("input-file", -1);
 
 		po::options_description opts("EstimateSize Options");
-		opts.add_options()(
-				"max-sample-points",
-				po::value<long>()->default_value(maxSamplePoints),
-				"The maximum number of points to sample at exponentially larger partition steps")(
-				"initial-sample-partitions",
-				po::value<long>()->default_value(initialSamplePartitions),
-				"The starting number of partitions (power-of-two) to double after each point is taken (up to max-smaple-partition fraction)")(
-				"max-sample-fraction", po::value<double>()->default_value(
-						maxSampleFraction),
-				"The maximum amount of data to read")("max-sample-partition",
-				po::value<double>()->default_value(maxSamplePartition),
-				"The maximum amount of data to read for each point")(
-				"kmer-subsample", po::value<long>()->default_value(
-						kmerSubsample),
-				"The 1 / kmer-subsample fraction of kmers to track. 0 to not sample");
+		opts.add_options()
+						("max-sample-points", po::value<long>()->default_value(maxSamplePoints), "The maximum number of points to sample at exponentially larger partition steps")
+
+						("initial-sample-partitions",po::value<long>()->default_value(initialSamplePartitions),"The starting number of partitions (power-of-two) to double after each point is taken (up to max-smaple-partition fraction)")
+
+						("max-sample-fraction", po::value<double>()->default_value(maxSampleFraction), "The maximum amount of data to read")
+
+						("max-sample-partition", po::value<double>()->default_value(maxSamplePartition), "The maximum amount of data to read for each point")
+
+						("kmer-subsample", po::value<long>()->default_value(kmerSubsample),"The 1 / kmer-subsample fraction of kmers to track. 0 to not sample")
+
+						;
 		desc.add(opts);
 
 		MPIOptions::_setOptions(desc, p);
@@ -149,54 +146,54 @@ int main(int argc, char *argv[]) {
 
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
-  
-        long maxSamplePoints = MPIEstimateSizeOptions::getOptions().getMaxSamplePoints();
-        long partitions = MPIEstimateSizeOptions::getOptions().getInitialSamplePartitions();
-        double maxFraction = MPIEstimateSizeOptions::getOptions().getMaxSampleFraction();
-        double maxSamplePartition = MPIEstimateSizeOptions::getOptions().getMaxSamplePartition();
-        double fraction = 0.0;
 
-        unsigned long totalBases = 0;
-        long numBuckets = 0;
-        KS spectrum(world, numBuckets);
-        for (long iter = 0 ; iter < maxSamplePoints && fraction < maxFraction; iter++) {
-            if (partitions > maxSamplePoints && maxSamplePartition * 2. > 1. / partitions)
-               partitions /= 2;
-            fraction += 1. / partitions;
-            
-            LOG_VERBOSE_OPTIONAL(1, world.rank() == 0,  "Starting iteration " << iter << " of " << maxSamplePoints << " at " << fraction*100 << "%");
+	long maxSamplePoints = MPIEstimateSizeOptions::getOptions().getMaxSamplePoints();
+	long partitions = MPIEstimateSizeOptions::getOptions().getInitialSamplePartitions();
+	double maxFraction = MPIEstimateSizeOptions::getOptions().getMaxSampleFraction();
+	double maxSamplePartition = MPIEstimateSizeOptions::getOptions().getMaxSamplePartition();
+	double fraction = 0.0;
 
-	    ReadSet reads;
-	    reads.appendAllFiles(inputs, world.rank()*partitions + iter, world.size()*partitions);
+	unsigned long totalBases = 0;
+	long numBuckets = 0;
+	KS spectrum(world, numBuckets);
+	for (long iter = 0 ; iter < maxSamplePoints && fraction < maxFraction; iter++) {
+		if (partitions > maxSamplePoints && maxSamplePartition * 2. > 1. / partitions)
+			partitions /= 2;
+		fraction += 1. / partitions;
 
-	    unsigned long counts[3], totalCounts[3];
-	    unsigned long &readCount = counts[0] = reads.getSize();
-	    unsigned long &baseCount = counts[2] = reads.getBaseCount();
-	    LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0,  "Starting iteration " << iter << " of " << maxSamplePoints << " at " << fraction*100 << "%");
 
-	    all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
-	    LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[2] << " distributed bases");
-            totalBases += totalCounts[2];
+		ReadSet reads;
+		reads.appendAllFiles(inputs, world.rank()*partitions + iter, world.size()*partitions);
 
-	    if (numBuckets == 0 && KmerOptions::getOptions().getKmerSize() > 0) {
+		unsigned long counts[3], totalCounts[3];
+		unsigned long &readCount = counts[0] = reads.getSize();
+		unsigned long &baseCount = counts[2] = reads.getBaseCount();
+		LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
 
-		numBuckets = KS::estimateWeakKmerBucketSize(reads);
+		all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[2] << " distributed bases");
+		totalBases += totalCounts[2];
 
-		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>()) * partitions;
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
-	        spectrum = KS(world, numBuckets);
-	    }
-	    if (KmerOptions::getOptions().getKmerSize() > 0) {
+		if (numBuckets == 0 && KmerOptions::getOptions().getKmerSize() > 0) {
 
-		spectrum.buildKmerSpectrum(reads);
-		spectrum.trackSpectrum();
+			numBuckets = KS::estimateWeakKmerBucketSize(reads);
 
-		if (Log::isDebug(1)) {
-                	KS::MPIHistogram h = spectrum._getHistogram(false);
-			std::string hist = h.toString();
-			LOG_DEBUG_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
+			numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>()) * partitions;
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
+			spectrum = KS(world, numBuckets);
 		}
-	    }
+		if (KmerOptions::getOptions().getKmerSize() > 0) {
+
+			spectrum.buildKmerSpectrum(reads);
+			spectrum.trackSpectrum();
+
+			if (Log::isDebug(1)) {
+				KS::MPIHistogram h = spectrum._getHistogram(false);
+				std::string hist = h.toString();
+				LOG_DEBUG_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
+			}
+		}
 
 	}
 

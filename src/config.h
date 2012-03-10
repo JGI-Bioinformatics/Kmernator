@@ -94,93 +94,65 @@ const int OMP_MAX_THREADS_DEFAULT = omp_get_max_threads();
 #include <cassert>
 
 namespace Kmernator {
-   typedef const char * RecordPtr;
-   static const char REF_QUAL = 126;
-   static const char FASTQ_START_CHAR_ILLUMINA = 64;
-   static const char FASTQ_START_CHAR_STD = 33;
-   static const char PRINT_REF_QUAL = REF_QUAL;
+typedef const char * RecordPtr;
+static const char REF_QUAL = 126;
+static const char FASTQ_START_CHAR_ILLUMINA = 64;
+static const char FASTQ_START_CHAR_STD = 33;
+static const char PRINT_REF_QUAL = REF_QUAL;
 
-   typedef boost::uint8_t  UI8;
-   typedef boost::uint16_t UI16;
-   typedef boost::uint32_t UI32;
-   typedef boost::uint64_t UI64;
+typedef boost::uint8_t  UI8;
+typedef boost::uint16_t UI16;
+typedef boost::uint32_t UI32;
+typedef boost::uint64_t UI64;
 
-   typedef boost::int8_t  I8;
-   typedef boost::int16_t I16;
-   typedef boost::int32_t I32;
-   typedef boost::int64_t I64;
+typedef boost::int8_t  I8;
+typedef boost::int16_t I16;
+typedef boost::int32_t I32;
+typedef boost::int64_t I64;
 
-   #define MAX_I8   127
-   #define MAX_UI8  255u
+#define MAX_I8   127
+#define MAX_UI8  255u
 
-   #define MAX_I16  32767
-   #define MAX_UI16 65535u
+#define MAX_I16  32767
+#define MAX_UI16 65535u
 
-   #define MAX_I32  2147483647
-   #define MAX_UI32 4294967295u
+#define MAX_I32  2147483647
+#define MAX_UI32 4294967295u
 
-   #ifdef IS_64_BIT
-   #define MAX_I64  9223372036854775807
-   #define MAX_UI64 18446744073709551615u
-   #else
-   #error "only 64-bit environments are supported"
-   #define MAX_I64  MAX_I32
-   #define MAX_UI64 MAX_UI32
-   #endif
-
-
-   typedef UI32 SequenceLengthType;
-   #define MPISequenceLengthType MPI_UNSIGNED_LONG
-   #define MAX_SEQUENCE_LENGTH MAX_UI32
-   typedef UI8 SequenceLengthType1;
-   typedef UI16 SequenceLengthType2;
-
-   typedef UI64 ReadSetSizeType;
-   #define MPIReadSetSizeType MPI_UNSIGNED_LONG_LONG
-   #define MAX_READ_SET_SIZE   MAX_UI64
-
-   typedef UI64  KmerNumberType;
-   typedef SequenceLengthType  KmerIndexType;
-   #define MAX_KMER_INDEX MAX_SEQUENCE_LENGTH
-   typedef I64  KmerSizeType;
+#ifdef IS_64_BIT
+#define MAX_I64  9223372036854775807
+#define MAX_UI64 18446744073709551615u
+#else
+#error "only 64-bit environments are supported"
+#define MAX_I64  MAX_I32
+#define MAX_UI64 MAX_UI32
+#endif
 
 
-   typedef boost::iostreams::mapped_file MmapFile;
-   typedef boost::iostreams::mapped_file_source MmapSource;
-   typedef boost::iostreams::stream< MmapSource > MmapIStream;
-   typedef boost::iostreams::filtering_istreambuf FilteredIStream;
-   typedef std::vector< MmapFile > MmapFileVector;
-   typedef std::vector< MmapSource > MmapSourceVector;
+typedef UI32 SequenceLengthType;
+#define MPISequenceLengthType MPI_UNSIGNED_LONG
+#define MAX_SEQUENCE_LENGTH MAX_UI32
+typedef UI8 SequenceLengthType1;
+typedef UI16 SequenceLengthType2;
+
+typedef UI64 ReadSetSizeType;
+#define MPIReadSetSizeType MPI_UNSIGNED_LONG_LONG
+#define MAX_READ_SET_SIZE   MAX_UI64
+
+typedef UI64  KmerNumberType;
+typedef SequenceLengthType  KmerIndexType;
+#define MAX_KMER_INDEX MAX_SEQUENCE_LENGTH
+typedef I64  KmerSizeType;
+
+
+typedef boost::iostreams::mapped_file MmapFile;
+typedef boost::iostreams::mapped_file_source MmapSource;
+typedef boost::iostreams::stream< MmapSource > MmapIStream;
+typedef boost::iostreams::filtering_istreambuf FilteredIStream;
+typedef std::vector< MmapFile > MmapFileVector;
+typedef std::vector< MmapSource > MmapSourceVector;
 
 
 };
 
 #endif
-
-
-// $Log: config.h,v $
-// Revision 1.12  2010-08-18 17:50:40  regan
-// merged changes from branch FeaturesAndFixes-20100712
-//
-// Revision 1.11.4.1  2010-07-20 20:02:56  regan
-// autodetect fastq quality range
-//
-// Revision 1.11  2010-06-23 22:15:15  regan
-// added --threads option
-//
-// Revision 1.10  2010-05-18 20:50:24  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.9.2.2  2010-05-13 00:19:49  regan
-// bugfix in types that affected some reference markups
-//
-// Revision 1.9.2.1  2010-05-07 22:59:32  regan
-// refactored base type declarations
-//
-// Revision 1.9  2010-05-06 22:55:05  regan
-// merged changes from CodeCleanup-20100506
-//
-// Revision 1.8  2010-05-06 21:46:54  regan
-// merged changes from PerformanceTuning-20100501
-//
-//

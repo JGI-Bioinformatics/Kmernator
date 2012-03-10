@@ -69,7 +69,7 @@ void testBimodalPartition()
 			std::cout << i << ":" << f.mean << " " << f.stdDev << " " << f.count << " : " << s.mean << " " << s.stdDev << " " << s.count << std::endl;
 		BOOST_CHECK_EQUAL( p, a+i);
 	}
-	
+
 	// detect bimodal partition with 2 sigma but not 50 sigma
 	for(int i = 0; i < 6 ; i++) {
 		for(int j = 7; j <= 10; j++) {
@@ -99,22 +99,22 @@ void testBimodalPartition()
 	BOOST_CHECK_EQUAL( f.mean, (a[0]+a[1]+a[2]+a[3]+a[4]+a[5]) / 6.0);
 	BOOST_CHECK_EQUAL( s.count, 4);
 	BOOST_CHECK_EQUAL( s.mean, (a[6]+a[7]+a[8]+a[9]) / 4.0);
-	
+
 	p = Statistics::findBimodalPartition(2, f, s, a, a+10);
 	BOOST_CHECK_EQUAL( p, a+6);
 	BOOST_CHECK_EQUAL( f.count, 6);
 	BOOST_CHECK_EQUAL( f.mean, (a[0]+a[1]+a[2]+a[3]+a[4]+a[5]) / 6.0);
 	BOOST_CHECK_EQUAL( s.count, 4);
 	BOOST_CHECK_EQUAL( s.mean, (a[6]+a[7]+a[8]+a[9]) / 4.0);
-	
+
 	p = Statistics::findBimodalPartition(3, f, s, a, a+10);
 	BOOST_CHECK_EQUAL( p, a+6);
 	BOOST_CHECK_EQUAL( f.count, 6);
 	BOOST_CHECK_EQUAL( f.mean, (a[0]+a[1]+a[2]+a[3]+a[4]+a[5]) / 6.0);
 	BOOST_CHECK_EQUAL( s.count, 4);
 	BOOST_CHECK_EQUAL( s.mean, (a[6]+a[7]+a[8]+a[9]) / 4.0);
-	
-	
+
+
 }
 
 void testIpipestream()
@@ -140,12 +140,3 @@ BOOST_AUTO_TEST_CASE( MmapTempfileTest )
 	testBimodalPartition();
 	testIpipestream();
 }
-
-//
-// $Log: MmapTempFileTest.cpp,v $
-// Revision 1.2  2010-05-18 20:50:21  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.1.2.1  2010-05-12 18:25:27  regan
-// added tests
-//

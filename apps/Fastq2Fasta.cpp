@@ -61,11 +61,9 @@ public:
 		po::options_description opts("Fastq to Fasta Options");
 		opts.add_options()
 
-		("split-pairs", po::value<int>()->default_value(0),
-				"if set, pairs will be directed into separate files")
+				("split-pairs", po::value<int>()->default_value(0), "if set, pairs will be directed into separate files")
 
-		("split-size-mbase", po::value<int>()->default_value(0),
-				"maximum size of output fastas.  requires --output-file");
+				("split-size-mbase", po::value<int>()->default_value(0), "maximum size of output fastas.  requires --output-file");
 
 		desc.add(opts);
 
@@ -89,7 +87,7 @@ int main(int argc, char *argv[]) {
 	reads.appendAllFiles(inputs);
 
 	LOG_VERBOSE(1, "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()
-		<< " Bases ");
+			<< " Bases ");
 
 	reads.identifyPairs();
 
@@ -115,7 +113,7 @@ int main(int argc, char *argv[]) {
 		ReadSet::ReadSetSizeType lesserIdx  = std::min(pair.read1, pair.read2);
 
 		if (hasOfMap) {
-		    filekey = reads.getReadFileNamePrefix(lesserIdx);
+			filekey = reads.getReadFileNamePrefix(lesserIdx);
 		} else {
 			filekey.clear();
 		}
@@ -124,9 +122,9 @@ int main(int argc, char *argv[]) {
 			SequenceLengthType len = reads.getRead(lesserIdx).getLength();
 			currentBase += len;
 			if (currentBase > splitSizeBase) {
-			  // new output handle
-			   partitionNum++;
-			   currentBase = len;
+				// new output handle
+				partitionNum++;
+				currentBase = len;
 			}
 			filekey += "-" + boost::lexical_cast<string>( partitionNum );
 		}
@@ -159,22 +157,3 @@ int main(int argc, char *argv[]) {
 	}
 
 }
-
-// $Log: Fastq2Fasta.cpp,v $
-// Revision 1.7  2010-05-24 21:48:50  regan
-// merged changes from RNADedupMods-20100518
-//
-// Revision 1.6.2.1  2010-05-19 00:20:49  regan
-// refactored fomat output options
-// added options to fastq2fasta
-//
-// Revision 1.6  2010-05-18 20:50:18  regan
-// merged changes from PerformanceTuning-20100506
-//
-// Revision 1.5.2.1  2010-05-07 22:59:29  regan
-// refactored base type declarations
-//
-// Revision 1.5  2010-05-06 21:46:57  regan
-// merged changes from PerformanceTuning-20100501
-//
-//

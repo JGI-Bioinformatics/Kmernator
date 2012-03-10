@@ -55,7 +55,7 @@
 #include <boost/accumulators/statistics/weighted_p_square_quantile.hpp>
 
 using namespace boost::accumulators;
-*/
+ */
 
 #include "config.h"
 #include "TwoBitSequence.h"
@@ -85,7 +85,7 @@ public:
 	typedef We WeakDataType;
 	typedef Si SingletonDataType;
 
-    typedef	typename WeakDataType::ReadPositionWeightVector WeakReadPositionWeightVector;
+	typedef	typename WeakDataType::ReadPositionWeightVector WeakReadPositionWeightVector;
 	typedef typename WeakDataType::ReadPositionWeightVector::iterator WeakReadPositionWeightVectorIterator;
 
 	typedef KmerMap<SolidDataType> SolidMapType;
@@ -109,13 +109,13 @@ public:
 	typedef std::vector< KmerSpectrum > Vector;
 
 	typedef Kmer::NumberType NumberType;
-/*
+	/*
 	typedef accumulator_set<double,
 	stats< tag::variance(lazy),
 	tag::mean
 	>
 	> StdAccumulatorType;
-*/
+	 */
 
 public:
 	SolidMapType solid;
@@ -177,10 +177,17 @@ public:
 	inline long getUniqueKmers() const { return uniqueKmers; }
 	inline long getSingletonKmers() const { return singletonKmers; }
 
-        static long &getKmerSubsample() {
-                static long kmerSubsample = 0;
-                return kmerSubsample;
-        }
+	static long &getKmerSubsample() {
+		static long kmerSubsample = 0;
+		return kmerSubsample;
+	}
+
+	void optimize(bool singletonsToo = false) {
+		solid.resort();
+		weak.resort();
+		if (singletonsToo)
+			singleton.resort();
+	}
 
 	Kmernator::MmapFileVector storeMmap(string mmapFilename){
 		LOG_VERBOSE(1, "Saving weak kmer spectrum");
@@ -248,7 +255,7 @@ public:
 	static unsigned long estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = KmerOptions::getOptions().getKmersPerBucket()) {
 		unsigned long baseCount = store.getBaseCount();
 		if (baseCount == 0 || store.getSize() == 0)
-		return 128;
+			return 128;
 		unsigned long avgSequenceLength = baseCount / store.getSize();
 		unsigned long kmersPerRead = (avgSequenceLength - KmerSizer::getSequenceLength() + 1);
 		if (KmerSizer::getSequenceLength() > avgSequenceLength)
@@ -258,7 +265,9 @@ public:
 		unsigned long targetBuckets = rawKmers / targetKmersPerBucket;
 		unsigned long maxBuckets = 256*1024*1024;
 		unsigned long minBuckets = 128;
-		return std::max( std::min(targetBuckets,maxBuckets), minBuckets );
+		unsigned long buckets = std::max( std::min(targetBuckets,maxBuckets), minBuckets );
+		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "estimateWeakKmerBucketSize(" << store.getBaseCount() << ", " << targetKmersPerBucket << "): " << buckets);
+		return buckets;
 	}
 
 	bool hasSolid( const Kmer &kmer ) const {
@@ -297,19 +306,19 @@ public:
 
 	bool hasSingleton( const Kmer &kmer ) const {
 		if (hasSingletons)
-		    return singleton.exists( kmer );
+			return singleton.exists( kmer );
 		else
 			return false;
 	}
 	const SingletonElementType getIfExistsSingleton( const Kmer &kmer ) const {
 		if (hasSingletons)
-		    return singleton.getElementIfExists( kmer );
+			return singleton.getElementIfExists( kmer );
 		else
 			return SingletonElementType();
 	}
 	SingletonElementType getIfExistsSingleton( const Kmer &kmer ) {
 		if (hasSingletons)
-		    return singleton.getElementIfExists( kmer );
+			return singleton.getElementIfExists( kmer );
 		else
 			return SingletonElementType();
 	}
@@ -341,7 +350,7 @@ public:
 			if (!solidElem.isValid()) {
 				weakElem = spectrum->getIfExistsWeak(kmer);
 				if (spectrum->hasSingletons && !weakElem.isValid())
-				singletonElem = spectrum->getIfExistsSingleton(kmer);
+					singletonElem = spectrum->getIfExistsSingleton(kmer);
 			}
 		}
 		double getCount(bool useWeights) {
@@ -414,13 +423,13 @@ public:
 		for(SequenceLengthType idx = 0; idx < size; idx++) {
 			double testCount = weights.valueAt(idx);
 			if (testCount > 0.0 && myCount >= testCount) {
-				#pragma omp critical (KS_consolidate)
+#pragma omp critical (KS_consolidate)
 				{
-				  // refresh myCount within critical block
-				  myCount = getCount(myKmer, useWeights);
-				  if (myCount >= testCount && ( myCount > testCount || myKmer > weights[idx]) ) {
-					migrateKmerData(weights[idx], myKmer);
-				  }
+					// refresh myCount within critical block
+					myCount = getCount(myKmer, useWeights);
+					if (myCount >= testCount && ( myCount > testCount || myKmer > weights[idx]) ) {
+						migrateKmerData(weights[idx], myKmer);
+					}
 				}
 			}
 		}
@@ -435,49 +444,49 @@ public:
 			LOG_DEBUG(6, "Merging kmers " << srcKmer.toFasta() << " to " << dstKmer.toFasta());
 
 			if (hasSolids) {
-			    SolidElementType src = getIfExistsSolid(srcKmer);
-			    if (src.isValid()) {
-			    	SolidElementType dst = getSolid(dstKmer);
-			    	dst.value().add(src.value());
-			    	trans = true;
-			    	src.value().reset();
-			    }
-		    }
-		    if (!trans) {
-		    	WeakElementType src = getIfExistsWeak(srcKmer);
-		    	if (src.isValid()) {
-		    		WeakElementType dst = getWeak(dstKmer);
-		    		dst.value().add(src.value());
-		    		trans = true;
-		    		src.value().reset();
-		    	}
-		    }
-		    if (!trans && hasSingletons) {
-		    	SingletonElementType src = getIfExistsSingleton(srcKmer);
-		    	if (src.isValid()) {
-		    		WeakElementType dst = getIfExistsWeak(dstKmer);
-		    		if (dst.isValid()) {
-		    			// dst Weak exists, so add this src singlton
-		    			dst.value().add(src.value());
-		    		} else {
-		    			// dst Weak does not exist
-		    			SingletonElementType dst2 = getSingleton(dstKmer);
-		    			if (dst2.isValid()) {
-		    				// dst Singleton exists, promote both to new Weak entry
-		    				dst = getWeak(dstKmer);
-		    				dst.value() = dst2.value();
-		    				dst.value().add(src.value());
-		    				dst2.value().reset();
-		    				singleton.remove(dstKmer);
-		    			} else {
-		    				// migrate singleton to dst
-		    				dst2.value() = src.value();
-		    			}
-		    		}
-		    		trans = true;
-		    		src.value().reset();
-		    	}
-		    }
+				SolidElementType src = getIfExistsSolid(srcKmer);
+				if (src.isValid()) {
+					SolidElementType dst = getSolid(dstKmer);
+					dst.value().add(src.value());
+					trans = true;
+					src.value().reset();
+				}
+			}
+			if (!trans) {
+				WeakElementType src = getIfExistsWeak(srcKmer);
+				if (src.isValid()) {
+					WeakElementType dst = getWeak(dstKmer);
+					dst.value().add(src.value());
+					trans = true;
+					src.value().reset();
+				}
+			}
+			if (!trans && hasSingletons) {
+				SingletonElementType src = getIfExistsSingleton(srcKmer);
+				if (src.isValid()) {
+					WeakElementType dst = getIfExistsWeak(dstKmer);
+					if (dst.isValid()) {
+						// dst Weak exists, so add this src singlton
+						dst.value().add(src.value());
+					} else {
+						// dst Weak does not exist
+						SingletonElementType dst2 = getSingleton(dstKmer);
+						if (dst2.isValid()) {
+							// dst Singleton exists, promote both to new Weak entry
+							dst = getWeak(dstKmer);
+							dst.value() = dst2.value();
+							dst.value().add(src.value());
+							dst2.value().reset();
+							singleton.remove(dstKmer);
+						} else {
+							// migrate singleton to dst
+							dst2.value() = src.value();
+						}
+					}
+					trans = true;
+					src.value().reset();
+				}
+			}
 		}
 		assert(trans);
 	}
@@ -487,7 +496,7 @@ public:
 
 		class SizeTrackerElement {
 		public:
-       			long rawKmers;
+			long rawKmers;
 			long rawGoodKmers;
 			long uniqueKmers;
 			long singletonKmers;
@@ -536,7 +545,7 @@ public:
 		void resize(int size) {
 			elements.resize(size, SizeTrackerElement());
 		}
-		
+
 		std::string toString() const {
 			std::stringstream ss;
 			ss << SizeTrackerElement::header() << std::endl;
@@ -556,7 +565,7 @@ public:
 			SizeTrackerElement element(raw, rawGood, unique, single);
 			elements.push_back( element );
 			nextToTrack = raw * 1.3;
-			LOG_DEBUG_OPTIONAL(1, true, "SizeTracker::track(): " << element.toString() << ".  Next to track at above: " << nextToTrack);
+			LOG_DEBUG_OPTIONAL(2, Logger::isMaster(), "SizeTracker::track(): " << element.toString() << ".  Next to track at above: " << nextToTrack);
 		}
 		void reset() {
 			nextToTrack = 128;
@@ -608,9 +617,9 @@ public:
 		}
 	public:
 		Histogram(unsigned int _zoomMax, double _logBase = 2.0) :
-		logBase(_logBase), logFactor(log(logBase)),
-		zoomMax(_zoomMax), zoomLogSkip(0), maxIdx(0), lastBucket(0), buckets(),
-		count(0), totalCount(0.0), totalWeightedCount(0.0) {
+			logBase(_logBase), logFactor(log(logBase)),
+			zoomMax(_zoomMax), zoomLogSkip(0), maxIdx(0), lastBucket(0), buckets(),
+			count(0), totalCount(0.0), totalWeightedCount(0.0) {
 			zoomLogSkip = (unsigned int) ( log((double) zoomMax+1.0)/logFactor - 1.0 );
 			int maxLog2 = 16;
 			maxIdx = (1<<maxLog2) + 1 + zoomMax;
@@ -669,14 +678,14 @@ public:
 			ss << std::fixed << std::setprecision(3);
 			ss << "Counts, Weights and Directions" << std::endl;
 			ss << "Counts:\t" << count
-			<< "\t" << totalCount
-			<< "\t" << (totalCount/count)
-			<< "\t" << std::endl;
+					<< "\t" << totalCount
+					<< "\t" << (totalCount/count)
+					<< "\t" << std::endl;
 
 			ss << "Weights:\t" << count << "\t" << totalWeightedCount
-			<< "\t" << (totalWeightedCount/count)
-			<< "\t" << (totalWeightedCount/totalCount)
-			<< std::endl;
+					<< "\t" << (totalWeightedCount/count)
+					<< "\t" << (totalWeightedCount/totalCount)
+					<< std::endl;
 
 			ss << std::endl;
 
@@ -804,7 +813,7 @@ public:
 			hm.addRecord( it->key(), data.getCount(), data.getWeightedCount() );
 		}
 	}
-/*
+	/*
 	unsigned long autoPromote(unsigned int minKmerCount = 3, double minKmerWeightedCount = 0.0,
 			double minWeakRatio = 0.50, double minSolidRatio = 0.05)
 	{
@@ -864,7 +873,7 @@ public:
 		weak.remove( it->key() );
 		return promoted;
 	}
-*/
+	 */
 	bool shouldBeSolid( WeakElementType &weakElement, double minWeakRatio, double minSolidRatio ) {
 		Kmer &kmer = weakElement.key();
 		WeakDataType &data = weakElement.value();
@@ -872,9 +881,9 @@ public:
 		if ( permutedScores.first <= minSolidRatio * data.getCount()
 				&& permutedScores.second <= minWeakRatio * data.getCount()
 		)
-		return true;
+			return true;
 		else
-		return false;
+			return false;
 	}
 
 	//repeat:
@@ -897,7 +906,7 @@ public:
 
 	// then check permutations of kmers with ratios > thresholdMax
 
-/*
+	/*
 	unsigned long promote(double probabilityQuantile) {
 		unsigned long promoted = 0;
 
@@ -972,8 +981,8 @@ public:
 
 		return promoted;
 	}
-*/
-/*
+	 */
+	/*
 	MeanVectorType getErrorRates( SolidMapType &solidReference, bool useWeighted) {
 
 		std::vector< StdAccumulatorType > accumulators;
@@ -995,7 +1004,7 @@ public:
 	MeanVectorType getErrorRates( SolidMapType &solidReference ) {
 	    return getErrorRates(solidReference, TrackingData::useWeighted());
 	}
-*/
+	 */
 	std::vector< double > getErrorRatios(const Kmer &kmer) {
 		bool useWeighted = TrackingData::useWeighted();
 		std::vector< double > errorRatios;
@@ -1003,13 +1012,13 @@ public:
 		DataPointers pointers( *this, kmer );
 
 		if ( pointers.solidElem.isValid() )
-		baseValue = useWeighted ? pointers.solidElem.value().getWeightedCount() : pointers.solidElem.value().getCount();
+			baseValue = useWeighted ? pointers.solidElem.value().getWeightedCount() : pointers.solidElem.value().getCount();
 		else if ( pointers.weakElem.isValid() )
-		baseValue = useWeighted ? pointers.weakElem.value().getWeightedCount() : pointers.weakElem.value().getCount();
+			baseValue = useWeighted ? pointers.weakElem.value().getWeightedCount() : pointers.weakElem.value().getCount();
 		else if ( pointers.singletonElem.isValid() )
-		baseValue = useWeighted ? pointers.singletonElem.value().getWeightedCount() : pointers.singletonElem.value().getCount();
+			baseValue = useWeighted ? pointers.singletonElem.value().getWeightedCount() : pointers.singletonElem.value().getCount();
 		else
-		return errorRatios;
+			return errorRatios;
 
 		Kmers permutations = Kmers::permuteBases(kmer,true);
 		std::vector<double> previouslyObservedSolids;
@@ -1026,21 +1035,21 @@ public:
 				for(WeakReadPositionWeightVectorIterator it=positions.begin(); it!=positions.end(); it++) {
 					unsigned short pos = it->position;
 					if (positionSums.size() < pos + 1ul)
-					positionSums.resize(pos + 1ul);
+						positionSums.resize(pos + 1ul);
 					positionSums[pos] += useWeighted ? it->weight : 1.0;
 				}
 				for(size_t i=0; i< positionSums.size(); i++) {
 					if(positionSums[i] > 0) {
 						if (weakCounts.size() < i+1ul)
-						weakCounts.resize(i+1ul);
+							weakCounts.resize(i+1ul);
 						weakCounts[i].push_back( count * positionSums[i] / positions.size() );
 					}
 				}
-			//} else if ( pointers.singletonElem.isValid() ) {
-			//	TrackingDataSingleton &data = pointers.singletonElem.value();
-			//	//if (weakCounts.size() < data.getPosition()+1ul)
-			//	//weakCounts.resize(data.getPosition()+1);
-			//	//weakCounts[data.getPosition()].push_back( useWeighted ? pointers.singletonElem.value().getWeightedCount() : pointers.singletonElem.value().getCount() );
+				//} else if ( pointers.singletonElem.isValid() ) {
+				//	TrackingDataSingleton &data = pointers.singletonElem.value();
+				//	//if (weakCounts.size() < data.getPosition()+1ul)
+				//	//weakCounts.resize(data.getPosition()+1);
+				//	//weakCounts[data.getPosition()].push_back( useWeighted ? pointers.singletonElem.value().getWeightedCount() : pointers.singletonElem.value().getCount() );
 			}
 		}
 		std::vector< double > median, nonZeroCount;
@@ -1058,7 +1067,7 @@ public:
 				}
 			}
 			if (previouslyObservedSolids.size() == 0)
-			return errorRatios;
+				return errorRatios;
 
 			// some code to correct for previously Observed Solids
 			for(size_t pos = 0; pos < weakCounts.size(); pos++) {
@@ -1082,7 +1091,7 @@ public:
 	SolidWeakWeightType getPermutedScores( const Kmer &kmer, double permutationWeight = 0.1, double secondWeight = 0.0 ) {
 		SolidWeakWeightType score(0.0,0.0);
 		if (permutationWeight == 0.0)
-		return score;
+			return score;
 		DataPointers pointers(*this, kmer);
 
 		bool isSolid = false;
@@ -1111,9 +1120,9 @@ public:
 				score.first += sScores.first;
 				score.second += sScores.second;
 				if (isSolid)
-				score.first -= secondWeight * base;
+					score.first -= secondWeight * base;
 				else
-				score.second -= secondWeight * base;
+					score.second -= secondWeight * base;
 			}
 		}
 		return score;
@@ -1122,9 +1131,9 @@ public:
 	SequenceLengthType countGC(std::string fasta) {
 		SequenceLengthType count=0;
 		for(size_t i=0; i<fasta.length(); i++)
-		if (fasta[i] == 'G' || fasta[i] == 'C') {
-			count++;
-		}
+			if (fasta[i] == 'G' || fasta[i] == 'C') {
+				count++;
+			}
 		return count;
 	}
 	std::string pretty( const Kmer &kmer, std::string note ) {
@@ -1162,7 +1171,7 @@ public:
 		// ignores reference.weak and everything in reference.solid passed criteria
 
 		unsigned long thisSolidSize(0), thisWeakSize(0), referenceSolidSize(0),
-		trueSolid(0), missingSolid(0), falseWeak(0), falseSolid(0), trueWeak(0);
+				trueSolid(0), missingSolid(0), falseWeak(0), falseSolid(0), trueWeak(0);
 
 		thisWeakSize = weak.size();
 		// compare this->solid to reference.solid
@@ -1213,7 +1222,7 @@ public:
 		if (Options::getOptions().getVerbose() > 2) {
 			for(WeakIterator it(weak.begin()), itEnd(weak.end()); it != itEnd; it++) {
 				if (! reference.solid.exists( it->key() ))
-				os << "TW " << prettyW( it->key(), it->value());
+					os << "TW " << prettyW( it->key(), it->value());
 			}
 		}
 		trueWeak = thisWeakSize - falseWeak;
@@ -1236,12 +1245,12 @@ public:
 	void trackSpectrum(bool force = false) {
 		sizeTracker.track(rawKmers, rawGoodKmers, uniqueKmers, singletonKmers, force);
 	}
-		
+
 	inline void append(DataPointers &pointers, Kmer &least, WeightType weight, ReadSetSizeType readIdx, PositionType readPos, bool isSolid = false, Extension left = Extension(), Extension right = Extension()) {
 		if (omp_get_thread_num() == 0)
 			trackSpectrum(false);
 
-		#pragma omp atomic
+#pragma omp atomic
 		rawKmers++;
 
 		bool keepDirection = true;
@@ -1255,14 +1264,14 @@ public:
 			return;
 		}
 
-		#pragma omp atomic
+#pragma omp atomic
 		rawGoodKmers++;
 
 		if ( isSolid ) {
 			pointers.reset();
 			SolidElementType elem = getSolid( least );
 			if (elem.value().getCount() == 0) {
-				#pragma omp atomic
+#pragma omp atomic
 				uniqueKmers++;
 			}
 			elem.value().track( weight, keepDirection, readIdx, readPos );
@@ -1284,7 +1293,7 @@ public:
 			} else {
 				if ( pointers.singletonElem.isValid() ) {
 
-					#pragma omp atomic
+#pragma omp atomic
 					singletonKmers--;
 
 					// promote singleton to weak & track
@@ -1299,11 +1308,11 @@ public:
 					singleton.remove( least );
 
 				} else {
-					#pragma omp atomic
+#pragma omp atomic
 					uniqueKmers++;
 
 					if (hasSingletons) {
-						#pragma omp atomic
+#pragma omp atomic
 						singletonKmers++;
 
 						// record this new singleton
@@ -1359,8 +1368,8 @@ public:
 		os << pos << " reads" << "\t";
 		if (fullStats) {
 			os << ", " << solid.size() << " solid / " << weak.size() << " weak / "
-			<< TrackingData::getDiscarded() << " discarded / "
-			<< singleton.size() + purgedSingletons << " singleton (" << purgedSingletons << " purged) - kmers so far \n";
+					<< TrackingData::getDiscarded() << " discarded / "
+					<< singleton.size() + purgedSingletons << " singleton (" << purgedSingletons << " purged) - kmers so far \n";
 		}
 		os << MemoryUtils::getMemoryUsage() << std::endl;
 		return os;
@@ -1373,7 +1382,7 @@ public:
 		unsigned long buckets = solid.getNumBuckets();
 		static unsigned long prev_ss = 0;
 		os << ss << " added : " << ss - prev_ss << ",  average:"
-		<< ss/buckets << " Max:" << solid.maxBucket() << " " << MemoryUtils::getMemoryUsage() << std::endl;
+				<< ss/buckets << " Max:" << solid.maxBucket() << " " << MemoryUtils::getMemoryUsage() << std::endl;
 		prev_ss = ss;
 		return os;
 	}
@@ -1384,9 +1393,9 @@ public:
 		if (isLeastComplement) {
 			hash = kmer.hash();
 		} else {
-		    TEMP_KMER(tmp);
-		    kmer.buildLeastComplement(tmp);
-		    hash = tmp.hash();
+			TEMP_KMER(tmp);
+			kmer.buildLeastComplement(tmp);
+			hash = tmp.hash();
 		}
 		if (hasSolids) {
 			smpThreadId = solid.getLocalThreadId(hash, numSMPThreads);
@@ -1403,9 +1412,9 @@ public:
 		if (isLeastComplement) {
 			hash = kmer.hash();
 		} else {
-		    TEMP_KMER(tmp);
-		    kmer.buildLeastComplement(tmp);
-		    hash = tmp.hash();
+			TEMP_KMER(tmp);
+			kmer.buildLeastComplement(tmp);
+			hash = tmp.hash();
 		}
 		if (hasSolids)
 			return solid.getLocalThreadId(hash, smpThreadId, numSMPThreads, dmpThreadId, numDmpThreads);
@@ -1419,9 +1428,9 @@ public:
 		if (isLeastComplement) {
 			hash = kmer.hash();
 		} else {
-		    TEMP_KMER(tmp);
-		    kmer.buildLeastComplement(tmp);
-		    hash = tmp.hash();
+			TEMP_KMER(tmp);
+			kmer.buildLeastComplement(tmp);
+			hash = tmp.hash();
 		}
 		if (hasSolids)
 			return solid.getLocalThreadId(hash, numThreads);
@@ -1434,9 +1443,9 @@ public:
 		if (isLeastComplement) {
 			hash = kmer.hash();
 		} else {
-		    TEMP_KMER(tmp);
-		    kmer.buildLeastComplement(tmp);
-		    hash = tmp.hash();
+			TEMP_KMER(tmp);
+			kmer.buildLeastComplement(tmp);
+			hash = tmp.hash();
 		}
 		if (hasSolids)
 			return solid.getDistributedThreadId(hash, numThreads);
@@ -1509,11 +1518,10 @@ public:
 			singleton.rotateDMPBuffers(numParts);
 		}
 
-
 		// first free up memory
 		if (KmerOptions::getOptions().getMinDepth() <= 1) {
 			LOG_DEBUG(2, "Clearing memory from singletons\n"  << MemoryUtils::getMemoryUsage());
-		    singleton.clear();
+			singleton.clear();
 		}
 
 		LOG_VERBOSE(2, "Merging partial spectrums" );
@@ -1545,6 +1553,7 @@ public:
 			if (it->is_open())
 				madvise(const_cast<char*>(it->data()), it->size(), MADV_RANDOM);
 		}
+
 		return mmaps;
 	}
 
@@ -1586,7 +1595,7 @@ public:
 
 		long size = store.getSize();
 		if (size < batch) {
-		    batch = store.getSize() / 10 + 1;
+			batch = store.getSize() / 10 + 1;
 		}
 		long kmersPerRead = store.getMaxSequenceLength() - KmerSizer::getSequenceLength() + 1;
 		batch = std::min( batch, 128*1024*1024 / kmersPerRead / KmerSizer::getByteSize() / numThreads );
@@ -1602,7 +1611,7 @@ public:
 
 		reservation /= numThreads;
 
-		#pragma omp parallel num_threads(numThreads)
+#pragma omp parallel num_threads(numThreads)
 		{
 			if (numThreads != omp_get_num_threads())
 				throw "OMP thread count mis-match";
@@ -1622,7 +1631,7 @@ public:
 			}
 
 
-            #pragma omp parallel for schedule(dynamic) num_threads(numThreads)
+#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 			for (long i=0; i < batch; i++)
 			{
 				long readIdx = batchIdx + i;
@@ -1640,11 +1649,11 @@ public:
 				for (IndexType j = 0; j < kmers.size(); j++) {
 					int smpThreadId;
 					if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, numParts, true) )
-					    kmerBuffers[ omp_get_thread_num() ][ smpThreadId ].append(kmers[j], kmers.valueAt(j));
+						kmerBuffers[ omp_get_thread_num() ][ smpThreadId ].append(kmers[j], kmers.valueAt(j));
 				}
 			}
 
-			#pragma omp parallel num_threads(numThreads)
+#pragma omp parallel num_threads(numThreads)
 			{
 				if (numThreads != omp_get_num_threads()) {
 					throw "OMP thread count mis-match";
@@ -1682,10 +1691,10 @@ public:
 		buildKmerSpectrum(tmpReadSet);
 	}
 	virtual void buildKmerSpectrum( const ReadSet &store ) {
-		return this->buildKmerSpectrum(store, hasSolids);
+		this->buildKmerSpectrum(store, hasSolids);
 	}
 	virtual void buildKmerSpectrum( const ReadSet &store, bool isSolid ) {
-		return this->buildKmerSpectrum(store, isSolid, 0, 1);
+		this->buildKmerSpectrum(store, isSolid, 0, 1);
 	}
 	void buildKmerSpectrum( const ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts)
 	{
@@ -1695,8 +1704,8 @@ public:
 		if (isSolid) {
 			prepareSolids();
 		} else {
-		    weak.reset(false);
-		    singleton.reset(false);
+			weak.reset(false);
+			singleton.reset(false);
 		}
 
 		long purgeEvery = Options::getOptions().getPeriodicSingletonPurge();
@@ -1712,8 +1721,9 @@ public:
 		}
 
 		if (Log::isDebug(2)) {
-		    printStats(Log::Debug("Stats"), store.getSize(), isSolid, true);
+			printStats(Log::Debug("Stats"), store.getSize(), isSolid, true);
 		}
+
 	}
 
 	bool _setPurgeVariant(DataPointers &pointers, const Kmer &kmer, double threshold, double &v) {
@@ -1809,7 +1819,7 @@ public:
 			remaining = 0;
 			processed = 0;
 			LOG_DEBUG_OPTIONAL(2, true, "Starting threaded kmer scan");
-			#pragma omp parallel num_threads(numThreads) reduction(+: purgedKmers) reduction(+: processed) reduction(+: remaining)
+#pragma omp parallel num_threads(numThreads) reduction(+: purgedKmers) reduction(+: processed) reduction(+: remaining)
 			{
 				int threadId = omp_get_thread_num();
 
@@ -1933,7 +1943,7 @@ public:
 			Kmers permutations2 = Kmers::permuteBases(permutations[i],true);
 			for (int j = i; j<permutations2.size(); j++) {
 				if (permutations2[j] != kmer)
-				// if  (SolidDataType *s = solid.getIfExists(permutations2[j])  )
+					// if  (SolidDataType *s = solid.getIfExists(permutations2[j])  )
 				{
 					os << "   " << permutations2[j].toFasta() /*<< " : " << s->getCount() */<< std::endl;
 				}
@@ -1959,7 +1969,7 @@ public:
 			if (weak.exists(permutations[i])) {
 				WeakElementType w = weak.getElement(permutations[i]);
 				if (w.value().getCount() > count)
-				return true;
+					return true;
 			}
 		}
 		return false;
@@ -1980,7 +1990,7 @@ public:
 				if (permutations2[j] != kmer) {
 					WeakDataType *w = weak.getIfExists(permutations2[j]);
 					if (w && w->getCount() > count)
-					return false;
+						return false;
 				}
 			}
 		}
@@ -2012,7 +2022,7 @@ public:
 	 }
 	 return true;
 	 }*/
-/*
+	/*
 	void calcWeightStats(double &mean, double &deviation)
 	{
 
@@ -2094,7 +2104,7 @@ public:
 
 			}
         }
-        
+
 		os << "Poor Quality: " << pq_count << " (" << pq_count*100.0/count << "%) Correct:  " << pq_correct << " Wrong: " << pq_wrong << std::endl;
 		os << "1st Order  : " << fo_count << " (" << fo_count*100.0/count << "%) Correct:  " << fo_correct << " Wrong: " << fo_wrong << std::endl;
 
@@ -2103,31 +2113,31 @@ public:
 
 		return promoted;
 	}
-*/
+	 */
 
 	void static mergeVector(Vector &vec, int minimumCount = 2) {
 		// solid
 		if (vec.size() <= 1)
 			return;
 		if (vec[0].hasSolids) {
-		  for (size_t i = 1; i < vec.size(); i++) {
-			vec[0].solid.mergeAdd(vec[i].solid);
-		  }
+			for (size_t i = 1; i < vec.size(); i++) {
+				vec[0].solid.mergeAdd(vec[i].solid);
+			}
 		}
 		// weak
 		for (size_t i = 1; i < vec.size(); i++) {
 			vec[0].weak.mergeAdd(vec[i].weak);
 		}
 		if (vec[0].hasSingletons) {
-		  // singleton
-		  for (size_t i = 1; i < vec.size(); i++) {
-			vec[0].singleton.mergePromote(vec[i].singleton, vec[0].weak);
-		  }
-		  if (minimumCount > 1)
-			  vec[0].singleton.clear();
+			// singleton
+			for (size_t i = 1; i < vec.size(); i++) {
+				vec[0].singleton.mergePromote(vec[i].singleton, vec[0].weak);
+			}
+			if (minimumCount > 1)
+				vec[0].singleton.clear();
 		}
 		if (minimumCount > 1)
-		    vec[0].purgeMinDepth(minimumCount);
+			vec[0].purgeMinDepth(minimumCount);
 	}
 };
 
