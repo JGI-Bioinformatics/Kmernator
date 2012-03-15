@@ -16,11 +16,11 @@
 #include "DistributedFunctions.h"
 #include "Meraculous.h"
 
-class _MeraculousCounterOptions : public _MeraculousOptions {
+class _MeraculousCounterOptions : public OptionsBaseInterface {
 public:
 	// use to set/overrided any defaults on options that are stored persistently
 	void _resetDefaults() {
-		_MeraculousOptions::_resetDefaults();
+		MeraculousOptions::_resetDefaults();
 		MPIOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 		KmerOptions::_resetDefaults();
@@ -35,7 +35,7 @@ public:
 	// use to set the description of all options
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 
-		_MeraculousOptions::_setOptions(desc, p);
+		MeraculousOptions::_setOptions(desc, p);
 		MPIOptions::_setOptions(desc,p);
 		KmerOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc, p);
@@ -45,7 +45,7 @@ public:
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
-		ret &= _MeraculousOptions::_parseOptions(vm);
+		ret &= MeraculousOptions::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
 		ret &= KmerOptions::_parseOptions(vm);
 		if (KmerOptions::getOptions().getKmerSize() == 0) {
@@ -73,6 +73,7 @@ int main(int argc, char *argv[]) {
 		OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
+		// TODO save memory! read file and build spectrum in 100MB chunks
 		reads.appendAllFiles(inputs, world.rank(), world.size());
 
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());

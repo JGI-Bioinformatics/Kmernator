@@ -67,6 +67,11 @@ public:
 		ReadTrimType() :
 			trimOffset(0), trimLength(0), score(0.0), label(), isAvailable(true) {
 		}
+		std::string toString() const {
+			std::stringstream ss;
+			ss << "{ trimOffset: " << trimOffset << ", trimLength: " << trimLength << ", score: " << score << ", label: " << label << ", isAvailable: " << isAvailable << "}";
+			return ss.str();
+		}
 	};
 	class PairScore {
 	public:
@@ -331,19 +336,24 @@ public:
 			// use actual length of this sequence
 			minimumLength = _reads.getRead(readIdx).getLength();
 		}
-		return trim.isAvailable && trim.score >= minimumScore && trim.trimLength >= minimumLength;
+		bool passed = (trim.isAvailable & (trim.score >= minimumScore) & (trim.trimLength >= minimumLength));
+		LOG_DEBUG(3, "isPassingRead(" << readIdx << " (" << _reads.getRead(readIdx).getName() << "), " << minimumScore << ", " << minimumLength << "): " << trim.toString() << " " << passed);
+		return passed;
 	}
 	bool isPassingPair(const ReadSet::Pair &pair, ScoreType minimumScore, SequenceLengthType minimumLength, bool bothPass) {
+		bool passed = true;
 		if (bothPass)
-			return isPassingRead(pair.read1, minimumScore, minimumLength) && isPassingRead(pair.read2, minimumScore, minimumLength);
+			passed = (isPassingRead(pair.read1, minimumScore, minimumLength) & isPassingRead(pair.read2, minimumScore, minimumLength));
 		else
-			return isPassingRead(pair.read1, minimumScore, minimumLength) || isPassingRead(pair.read2, minimumScore, minimumLength);
+			passed = (isPassingRead(pair.read1, minimumScore, minimumLength) | isPassingRead(pair.read2, minimumScore, minimumLength));
+		LOG_DEBUG(3, "isPassingPair(" << pair.read1 << " / " << pair.read2 << ", " << minimumScore << ", " << minimumLength << ", " << bothPass << "): " << passed);
+		return passed;
 	}
 	bool isPairAvailable(const ReadSet::Pair &pair, bool bothPass) {
 		if (bothPass)
-			return isPassingRead(pair.read1) && _trims[pair.read1].isAvailable && isPassingRead(pair.read2) && _trims[pair.read2].isAvailable;
+			return (isPassingRead(pair.read1) & _trims[pair.read1].isAvailable & isPassingRead(pair.read2) & _trims[pair.read2].isAvailable);
 		else
-			return (isPassingRead(pair.read1) && _trims[pair.read1].isAvailable) || (isPassingRead(pair.read2) && _trims[pair.read2].isAvailable);
+			return ((isPassingRead(pair.read1) & _trims[pair.read1].isAvailable) | (isPassingRead(pair.read2) & _trims[pair.read2].isAvailable));
 	}
 
 	int pickAllPassingReads(ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {

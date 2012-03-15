@@ -34,6 +34,15 @@ check()
   fi
 }
 
+GOOD=1000-Filtered-readlength.fastq
+check $FR --min-read-length 1 
+GOOD=1000-Filtered-readlength-both.fastq
+check $FR --min-read-length 1 --min-passing-in-pair 2
+
+
+IN=1000.fastq
+GOOD=1000-Filtered.fastq
+
 for thread in {1..3}
 do
   check $FR --thread $thread

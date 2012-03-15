@@ -47,11 +47,11 @@ using namespace std;
 typedef TrackingDataMinimal4f DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 
-class _ContigExtenderOptions : public _ContigExtenderBaseOptions {
+class _ContigExtenderOptions : public OptionsBaseInterface {
 public:
 	virtual ~_ContigExtenderOptions() {}
 	void _resetDefaults() {
-		_ContigExtenderBaseOptions::_resetDefaults();
+		ContigExtenderBaseOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 		FilterKnownOdditiesOptions::_resetDefaults();
 		DuplicateFragmentFilterOptions::_resetDefaults();
@@ -62,7 +62,7 @@ public:
 		GeneralOptions::getOptions().getFormatOutput() = 3;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		_ContigExtenderBaseOptions::_setOptions(desc, p);
+		ContigExtenderBaseOptions::_setOptions(desc, p);
 		GeneralOptions::_setOptions(desc,p);
 		FilterKnownOdditiesOptions::_setOptions(desc,p);
 		DuplicateFragmentFilterOptions::_setOptions(desc,p);
@@ -73,7 +73,7 @@ public:
 		ret &= GeneralOptions::_parseOptions(vm);
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
-		ret &= _ContigExtenderBaseOptions::_parseOptions(vm);
+		ret &= ContigExtenderBaseOptions::_parseOptions(vm);
 		return ret;
 	}
 };
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
 
 	OptionsBaseInterface::FileListType inputFiles = Options::getOptions().getInputFiles();
 	OptionsBaseInterface::FileListType contigFiles;
-	contigFiles.push_back(ContigExtenderOptions::getOptions().getContigFile());
+	contigFiles.push_back(ContigExtenderBaseOptions::getOptions().getContigFile());
 
 	ReadSet reads;
 	LOG_VERBOSE(1, "Reading Input Files" );

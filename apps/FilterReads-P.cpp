@@ -37,10 +37,10 @@ typedef TrackingDataWithDirection DataType;
 typedef DistributedKmerSpectrum<DataType, DataType> KS;
 typedef DistributedReadSelector<DataType> RS;
 
-class _MPIFilterReadsOptions : public _FilterReadsBaseOptions {
+class _MPIFilterReadsOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
-		_FilterReadsBaseOptions::_resetDefaults();
+		FilterReadsBaseOptions::_resetDefaults();
 		MPIOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 		KmerOptions::_resetDefaults();
@@ -53,7 +53,7 @@ public:
 		KmerOptions::getOptions().getSaveKmerMmap() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		_FilterReadsBaseOptions::_setOptions(desc, p);
+		FilterReadsBaseOptions::_setOptions(desc, p);
 		GeneralOptions::_setOptions(desc, p);
 		MPIOptions::_setOptions(desc,p);
 		KmerOptions::_setOptions(desc,p);
@@ -68,7 +68,7 @@ public:
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
 
-		ret &= _FilterReadsBaseOptions::_parseOptions(vm);
+		ret &= FilterReadsBaseOptions::_parseOptions(vm);
 
 		return ret;
 	}
@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
 
 	mpi::communicator world = initializeWorldAndOptions< MPIFilterReadsOptions >(argc, argv);
 
-	if (MPIFilterReadsOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
+	if (FilterReadsBaseOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
 		LOG_THROW("Distributed version does not support max-kmer-output-depth option");
 
 	MemoryUtils::getMemoryUsage();
@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
 			spectrum.trackSpectrum(true);
 			KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
 
-			std::string sizeHistoryFile = MPIFilterReadsOptions::getOptions().getSizeHistoryFile();
+			std::string sizeHistoryFile = FilterReadsBaseOptions::getOptions().getSizeHistoryFile();
 			if (!sizeHistoryFile.empty()) {
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Writing size history file to: " << sizeHistoryFile);
 				if (world.rank() == 0) {

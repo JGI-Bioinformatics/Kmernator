@@ -94,15 +94,16 @@ public:
 		return GeneralOptions::_parseOptions(vm);
 	}
 };
+typedef OptionsBaseTemplate< _TnfDistanceBaseOptions > TnfDistanceBaseOptions;
 
-class _TnfDistanceOptions : public _TnfDistanceBaseOptions {
+class _TnfDistanceOptions : public OptionsBaseInterface {
 public:
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("input-file", -1);
-		_TnfDistanceBaseOptions::_setOptions(desc,p);
+		TnfDistanceBaseOptions::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
-		return _TnfDistanceBaseOptions::_parseOptions(vm);
+		return TnfDistanceBaseOptions::_parseOptions(vm);
 	}
 };
 
@@ -437,7 +438,7 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	string interFile = TnfDistanceOptions::getOptions().getInterFile();
+	string interFile = TnfDistanceBaseOptions::getOptions().getInterFile();
 	if (!interFile.empty()) {
 		OfstreamMap om(interFile, "");
 		ostream &os = om.getOfstream("");
@@ -451,11 +452,11 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	string intraFile = TnfDistanceOptions::getOptions().getIntraFile();
+	string intraFile = TnfDistanceBaseOptions::getOptions().getIntraFile();
 	if (!intraFile.empty()) {
 		OfstreamMap om(intraFile, "");
 		ostream &os = om.getOfstream("");
-		long window = TnfDistanceOptions::getOptions().getIntraWindow();
+		long window = TnfDistanceBaseOptions::getOptions().getIntraWindow();
 		long step = window / 10;
 		for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < reads.getSize(); readIdx++) {
 			Read read = reads.getRead(readIdx);
@@ -471,7 +472,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	string clusterFile = TnfDistanceOptions::getOptions().getClusterFile();
+	string clusterFile = TnfDistanceBaseOptions::getOptions().getClusterFile();
 	if (!clusterFile.empty()) {
 		bool debug = Log::isDebug(1);
 		long size = readTnfs.size();
@@ -487,7 +488,7 @@ int main(int argc, char *argv[]) {
 		//TODO optimize this and the the while loop (use LT, and directed updates to minVec)
 		vector< vector<double>::iterator > minVec;
 		minVec.resize( size );
-		float clusterThreshold = TnfDistanceOptions::getOptions().getClusterThreshold();
+		float clusterThreshold = TnfDistanceBaseOptions::getOptions().getClusterThreshold();
 
 
 #pragma omp parallel for schedule(dynamic)

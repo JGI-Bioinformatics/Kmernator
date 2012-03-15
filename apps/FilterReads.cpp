@@ -34,10 +34,10 @@
 typedef TrackingDataWithDirection DataType;
 typedef KmerSpectrum<DataType, DataType> KS;
 typedef ReadSelector<DataType> RS;
-class _FilterReadsOptions : public _FilterReadsBaseOptions {
+class _FilterReadsOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
-		_FilterReadsBaseOptions::_resetDefaults();
+		FilterReadsBaseOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 		FilterKnownOdditiesOptions::_resetDefaults();
 		DuplicateFragmentFilterOptions::_resetDefaults();
@@ -45,7 +45,7 @@ public:
 		KmerOptions::getOptions().getSaveKmerMmap() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		_FilterReadsBaseOptions::_setOptions(desc, p);
+		FilterReadsBaseOptions::_setOptions(desc, p);
 		GeneralOptions::_setOptions(desc, p);
 		KmerOptions::_setOptions(desc, p);
 		FilterKnownOdditiesOptions::_setOptions(desc, p);
@@ -58,7 +58,7 @@ public:
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
 
-		ret &= _FilterReadsBaseOptions::_parseOptions(vm);
+		ret &= FilterReadsBaseOptions::_parseOptions(vm);
 		return ret;
 	}
 };
@@ -128,7 +128,7 @@ int main(int argc, char *argv[]) {
 			spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, KmerOptions::getOptions().getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
 			spectrum.optimize();
 			spectrum.trackSpectrum(true);
-			std::string sizeHistoryFile = FilterReadsOptions::getOptions().getSizeHistoryFile();
+			std::string sizeHistoryFile = FilterReadsBaseOptions::getOptions().getSizeHistoryFile();
 			if (!sizeHistoryFile.empty()) {
 				LOG_VERBOSE(1, "Writing size history file to: " << sizeHistoryFile);
 				OfstreamMap ofm(sizeHistoryFile, "");

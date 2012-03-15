@@ -184,6 +184,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			LOG_VERBOSE(1, "Selecting reads over depth: " << depth << " (" << tmpMinDepth << ") ");
 
 			if (reads.hasPairs()) {
+				LOG_DEBUG(3, "getBothPairs: " << FilterReadsBaseOptions::getOptions().getBothPairs() << " " << FilterReadsBaseOptions::getOptions().getMinPassingInPair());
 				picked = selector.pickAllPassingPairs(tmpMinDepth,
 						Options::getOptions().getMinReadLength(),
 						FilterReadsBaseOptions::getOptions().getBothPairs());
