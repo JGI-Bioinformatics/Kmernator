@@ -60,18 +60,18 @@ public:
 	SendTextMessageBuffer(mpi::communicator &world, int messageSize) : SendTextMessageBufferBase(world, messageSize) {}
 };
 
-class _MPITestOptions : public _MPIOptions {
+class _MPITestOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {}
 	void _setOptions(po::options_description &desc,
 			po::positional_options_description &p) {
 		GeneralOptions::getOptions()._setOptions(desc,p);
-		_MPIOptions::_setOptions(desc,p);
+		MPIOptions::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= GeneralOptions::getOptions()._parseOptions(vm);
-		ret &= _MPIOptions::_parseOptions(vm);
+		ret &= MPIOptions::_parseOptions(vm);
 		return ret;
 	}
 };

@@ -41,22 +41,22 @@ void testKmerMatch() {
 
 }
 
-class _KmerMatchTestOptions : public _MatcherInterfaceOptions, public _KmerMatchOptions, public _MPIOptions {
+class _KmerMatchTestOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {}
 	void _setOptions(po::options_description &desc,
 			po::positional_options_description &p) {
 		GeneralOptions::getOptions()._setOptions(desc,p);
-		_MatcherInterfaceOptions::_setOptions(desc,p);
-		_KmerMatchOptions::_setOptions(desc,p);
-		_MPIOptions::_setOptions(desc,p);
+		MatcherInterfaceOptions::_setOptions(desc,p);
+		KmerMatchOptions::_setOptions(desc,p);
+		MPIOptions::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= GeneralOptions::getOptions()._parseOptions(vm);
-		ret &= _MatcherInterfaceOptions::_parseOptions(vm);
-		ret &= _KmerMatchOptions::_parseOptions(vm);
-		ret &= _MPIOptions::_parseOptions(vm);
+		ret &= MatcherInterfaceOptions::_parseOptions(vm);
+		ret &= KmerMatchOptions::_parseOptions(vm);
+		ret &= MPIOptions::_parseOptions(vm);
 		return ret;
 	}
 };

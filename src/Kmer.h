@@ -109,6 +109,7 @@ public:
 
 };
 
+// this is the ONLY options class that is okay to extend, as there are no member variables
 class _KmerBaseOptions : public OptionsBaseInterface {
 public:
 	_KmerBaseOptions(int _kmerSize = 0) : defaultkmerSize(_kmerSize) {}
