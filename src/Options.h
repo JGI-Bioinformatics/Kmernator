@@ -263,7 +263,7 @@ class _GeneralOptions : public OptionsBaseInterface {
 public:
 	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"),
 	formatOutput(0), buildOutputInMemory(false),
-	minQuality(5), depthRange(2), minReadLength(25), bimodalSigmas(-1.0),
+	minQuality(3), depthRange(2), minReadLength(25), bimodalSigmas(-1.0),
 	variantSigmas(-1.0), ignoreQual(0),
 	periodicSingletonPurge(0),
 

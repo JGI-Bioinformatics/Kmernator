@@ -53,7 +53,7 @@ class _FilterKnownOdditiesOptions : public OptionsBaseInterface {
 public:
 	_FilterKnownOdditiesOptions() : skipArtifactFilter(0), artifactFilterMatchLength(24),
 	artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
-	maskSimpleRepeats(1), phiXOutput(0), filterOutput(0) {}
+	maskSimpleRepeats(0), phiXOutput(0), filterOutput(0) {}
 	~_FilterKnownOdditiesOptions() {}
 
 	unsigned int &getArtifactFilterEditDistance()
