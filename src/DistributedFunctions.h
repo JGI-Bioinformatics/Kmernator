@@ -372,10 +372,13 @@ public:
 
 			// allow the master thread to only handle communications
 			int loopThreadId = threadId, loopNumThreads = numThreads;
+			bool isRunningInLoop = true;
 			if (numThreads > 1) {
+				if (loopThreadId == 0)
+					isRunningInLoop = false;
 				loopThreadId--; loopNumThreads--;
 			}
-			if (loopThreadId >= 0) {
+			if (isRunningInLoop) {
 				for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
 				{
 
