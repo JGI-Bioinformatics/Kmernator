@@ -1,6 +1,12 @@
-args <- commandArgs(TRUE)
+# Invoke with Rscript EstimateSize.R input.file [ maxErrorRate(0.075 default)]
 
+args <- commandArgs(TRUE)
 file <- args[1]
+
+maxErrorRate <- 0.075
+if (length(args) == 2) {
+  maxErrorRate <- args[2]
+}
 
 data <- read.table(file, header = TRUE, sep="\t")
 rawKmers <- data[1]
@@ -20,9 +26,10 @@ fun3 <- function(x, ax, bx) {
 }
 
 cont <- nls.control(maxiter=500, tol=1e-5, minFactor=1/1024,warnOnly=TRUE)
-res <- nls(uniqueKmers ~ fun3(rawKmers, errorRate, genomeSize), d , trace=TRUE, control=cont, start=list(errorRate=0.01, genomeSize=5000000), algorithm='port', lower=list(errorRate=0.0001, genomeSize=500), upper=list(errorRate=0.05, genomeSize=100000000000))
+res <- nls(uniqueKmers ~ fun3(rawKmers, errorRate, genomeSize), d , trace=FALSE, control=cont, start=list(errorRate=0.01, genomeSize=5000000), algorithm='port', lower=list(errorRate=0.0001, genomeSize=500), upper=list(errorRate=maxErrorRate, genomeSize=100000000000))
 
-print(summary(res))
+#print(summary(res))
 
-res
+#res
 
+coef(res)
