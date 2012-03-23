@@ -1762,7 +1762,11 @@ public:
 
 	inline int getLocalThreadId(NumberType hash, int numThreads) const {
 		// stripe across all buckets
-		return (hash & BUCKET_MASK) % numThreads;
+		assert(numThreads > 0);
+		if (_buckets.size() > 0)
+			return (hash & BUCKET_MASK) % numThreads;
+		else
+			return 0;
 	}
 	inline int getLocalThreadId(const KeyType &key, int numThreads) const {
 		return getLocalThreadId(key.hash(), numThreads);
