@@ -56,6 +56,8 @@
 #include <boost/unordered_set.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/tokenizer.hpp>
+
 
 #include <boost/iostreams/device/file_descriptor.hpp>
 #include <boost/iostreams/stream.hpp>
@@ -824,7 +826,7 @@ public:
 		is.seekg(current);
 		return size;
 	}
-	static bool fileExists(std::string &filePath) {
+	static bool fileExists(std::string filePath) {
 		std::ifstream ifs(filePath.c_str());
 		return fileExists(ifs);
 	}
@@ -843,6 +845,27 @@ public:
 			ss << buf;
 		}
 		return ss.str();
+	}
+	static std::string getBasePath(std::string path) {
+		std::string basePath;
+		if (path[0] == '/') {
+			basePath = path.substr(0, path.find_last_of('/'));
+		} else {
+			std::string PATH = getenv("PATH");
+			std::string name = path;
+			size_t pos = path.find_last_of('/');
+			if (pos != std::string::npos)
+				name = path.substr( pos + 1);
+			boost::char_separator<char> sep(":");
+			boost::tokenizer< boost::char_separator<char> > tok(PATH, sep);
+			for(boost::tokenizer< boost::char_separator<char> >::iterator it = tok.begin(); it != tok.end() ; it++) {
+				if (fileExists( *it + "/" + name )) {
+					basePath = *it;
+					break;
+				}
+			}
+		}
+		return basePath;
 	}
 };
 
