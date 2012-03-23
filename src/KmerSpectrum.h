@@ -545,6 +545,12 @@ public:
 		void resize(int size) {
 			elements.resize(size, SizeTrackerElement());
 		}
+		SizeTrackerElement getLastElement() const {
+			if (elements.empty())
+				return SizeTrackerElement();
+			else
+				return elements[elements.size()-1];
+		}
 
 		std::string toString() const {
 			std::stringstream ss;
@@ -576,6 +582,9 @@ public:
 	SizeTracker sizeTracker;
 	SizeTracker getSizeTracker() const {
 		return sizeTracker;
+	}
+	void setSizeTracker(SizeTracker &st) {
+		sizeTracker = st;
 	}
 
 	class Histogram {
