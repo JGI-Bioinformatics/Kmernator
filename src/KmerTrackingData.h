@@ -176,7 +176,9 @@ public:
 	}
 	void trackExtension(Extension ext, DirectionType dir) {
 		if (ext.isValid() && ( ext.getQuality() >= getMinQuality() || !ext.isBase())) {
-			getExtensionCount(ext.getExtension(), dir)++;
+			unsigned int &extension = getExtensionCount(ext.getExtension(), dir);
+#pragma omp atomic
+			extension++;
 		}
 	}
 	unsigned int &getExtensionCount(Extension::ExtensionType ext, DirectionType dir) {
@@ -313,10 +315,17 @@ public:
 		discarded = 0;
 		maxCount = 0;
 		maxWeightedCount = 0.0;
+		totalCount = 0;
+		totalWeight = 0.0;
 	}
 	static void resetForGlobals(CountType count) {
 	}
 	static void setGlobals(CountType count, WeightType weightedCount) {
+#pragma omp atomic
+		totalCount += count;
+#pragma omp atomic
+		totalWeight += weightedCount;
+
 		if (count > maxCount) {
 			maxCount = count;
 		}
@@ -334,6 +343,9 @@ public:
 
 			return true;
 		}
+	}
+	static double getErrorRate() {
+		return 1.0 - (totalWeight / (double) (totalCount+discarded));
 	}
 	static inline bool useWeighted() {
 		return useWeightedByDefault;
@@ -354,6 +366,7 @@ public:
 		return minimumDepth;
 	}
 	static void discard() {
+#pragma omp atomic
 		discarded++;
 	}
 	static unsigned long getDiscarded() {
@@ -364,6 +377,8 @@ public:
 	static WeightType minimumWeight;
 	static CountType minimumDepth;
 	static unsigned long discarded;
+	static unsigned long totalCount;
+	static double totalWeight;
 
 	static CountType maxCount;
 	static WeightType maxWeightedCount;
@@ -399,11 +414,10 @@ public:
 			return false;
 
 		if (count < MAX_COUNT) {
-#ifdef _USE_THREADSAFE_KMER
-#pragma omp critical (TrackingData)
-#endif
 			{
+#pragma omp atomic
 				count++;
+#pragma omp atomic
 				weightedCount += weight;
 			}
 
@@ -486,8 +500,10 @@ public:
 		bool ret = TrackingData::track(weight,forward);
 
 		if (ret) {
-			if (forward)
+			if (forward) {
+#pragma omp atomic
 				directionBias++;
+			}
 		}
 		return ret;
 	}
@@ -770,16 +786,21 @@ public:
 
 		if (TrackingData::isDiscard(weight))
 			return false;
-#ifdef _USE_THREADSAFE_KMER
-#pragma omp critical (TrackingDataWithAllReads)
-#endif
 		{
-			if (forward)
+			if (forward) {
+#pragma omp atomic
 				directionBias++;
+			}
 
 			ReadPositionWeight rpw(readIdx, readPos, weight);
 
-			instances->push_back(rpw);
+#ifdef _USE_THREADSAFE_KMER
+#pragma omp critical (TrackingDataWithAllReads)
+#endif
+			{
+				instances->push_back(rpw);
+			}
+#pragma omp atomic
 			weightedCount += weight < 0.0 ? -weight : weight;
 			assert(getCount() >= directionBias);
 			assert(getCount() >= getWeightedCount());

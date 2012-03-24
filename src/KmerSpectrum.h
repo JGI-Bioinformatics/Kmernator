@@ -570,7 +570,8 @@ public:
 			}
 			SizeTrackerElement element(raw, rawGood, unique, single);
 			elements.push_back( element );
-			nextToTrack = raw * 1.3;
+			if (raw >= nextToTrack)
+				nextToTrack *= 1.05;
 			LOG_DEBUG_OPTIONAL(2, Logger::isMaster(), "SizeTracker::track(): " << element.toString() << ".  Next to track at above: " << nextToTrack);
 		}
 		void reset() {
