@@ -195,8 +195,13 @@ int main(int argc, char *argv[]) {
 	KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
 	std::string reducedSizeTrackerFile = outputFilename;
 	if (reducedSizeTrackerFile.empty()) {
-		reducedSizeTrackerFile = UniqueName::generateUniqueName();
+		reducedSizeTrackerFile = UniqueName::generateUniqueName("tmp-estimateSize");
 	}
+	float errorRate = TrackingData::getErrorRate();
+	LOG_DEBUG_OPTIONAL(1, true, "Kmer error rate: " << errorRate);
+	float commonErrorRate = 0.0;
+	MPI_Reduce(&errorRate, &commonErrorRate, 1, MPI_FLOAT, MPI_SUM, 0, world);
+	commonErrorRate /= (float) world.size();
 	if (world.rank() == 0) {
 		{
 			LOG_VERBOSE_OPTIONAL(1, true, "Writing size tracking file to:" << reducedSizeTrackerFile);
@@ -205,7 +210,10 @@ int main(int argc, char *argv[]) {
 			ofm.getOfstream("") << reducedSizeTracker.toString();
 		}
 		std::string basePath = FileUtils::getBasePath(argv[0]);
-		std::string command("Rscript " + basePath + "/EstimateSize.R " + reducedSizeTrackerFile);
+		std::stringstream cmdss;
+		cmdss << "Rscript " << basePath << "/EstimateSize.R " << reducedSizeTrackerFile; // << " " << (commonErrorRate*1.25);
+		std::string command = cmdss.str();
+
 		if (!FileUtils::getBasePath("Rscript").empty() || basePath.empty()) {
 
 			LOG_DEBUG_OPTIONAL(1, true, "Executing: " << command);
@@ -230,6 +238,7 @@ int main(int argc, char *argv[]) {
 					ss >> genomeSize;
 				}
 			}
+			LOG_VERBOSE_OPTIONAL(1, true, "Estimated Kmer-quality errorRate: " << commonErrorRate);
 			LOG_VERBOSE_OPTIONAL(1, true, "Distributed readCount: " << totalReads);
 			LOG_VERBOSE_OPTIONAL(1, true, "Estimated fractionRead: " << fraction);
 			LOG_VERBOSE_OPTIONAL(1, true, "Estimated errorRate: " << errorRate);
@@ -242,7 +251,7 @@ int main(int argc, char *argv[]) {
 			LOG_VERBOSE_OPTIONAL(1, true, "Estimated totalRawKmers: " << totalRawKmers);
 			LOG_VERBOSE_OPTIONAL(1, true, "Estimated totalUniqueKmers: " << estimatedUniqueKmers);
 			if (reducedSizeTrackerFile.compare(outputFilename) != 0) {
-				LOG_DEBUG_OPTIONAL(1, true, "Removing temporaty size tracking file: " << reducedSizeTrackerFile);
+				LOG_DEBUG_OPTIONAL(1, true, "Removing temporary size tracking file: " << reducedSizeTrackerFile);
 				unlink(reducedSizeTrackerFile.c_str());
 			}
 		} else {
