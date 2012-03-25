@@ -56,7 +56,7 @@ using namespace std;
 // TODO add outputformat of fasta
 class _FilterReadsBaseOptions : public OptionsBaseInterface {
 public:
-	_FilterReadsBaseOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), sizeHistoryFile("") {}
+	_FilterReadsBaseOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), sizeHistoryFile("") {}
 	virtual ~_FilterReadsBaseOptions() {}
 
 	int &getMaxKmerDepth() {
@@ -67,6 +67,9 @@ public:
 	}
 	int &getMinPassingInPair() {
 		return bothPairs;
+	}
+	int &getRemainderTrim() {
+		return remainderTrim;
 	}
 	bool getBothPairs() {
 		return bothPairs == 2;
@@ -90,6 +93,8 @@ public:
 
 				("min-passing-in-pair", po::value<int>()->default_value(bothPairs), "1 or 2 reads in a pair must pass filters")
 
+				("remainder-trim", po::value<int>()->default_value(remainderTrim), "if set, a final round letting single reads and lesser trimmed reads will be selected")
+
 				("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile), "if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)");
 
 		desc.add(opts);
@@ -101,6 +106,7 @@ public:
 		setOpt<int>("max-kmer-output-depth", maxKmerDepth);
 		setOpt<int>("partition-by-depth", partitionByDepth);
 		setOpt<int>("min-passing-in-pair", bothPairs);
+		setOpt<int>("remainder-trim", remainderTrim);
 		setOpt<std::string>("size-history-file", sizeHistoryFile);
 
 		// verify mutually exclusive options are not set
@@ -123,7 +129,7 @@ public:
 	}
 
 protected:
-	int maxKmerDepth, partitionByDepth, bothPairs;
+	int maxKmerDepth, partitionByDepth, bothPairs, remainderTrim;
 	std::string sizeHistoryFile;
 };
 typedef OptionsBaseTemplate< _FilterReadsBaseOptions > FilterReadsBaseOptions;
