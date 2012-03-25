@@ -545,6 +545,12 @@ public:
 		void resize(int size) {
 			elements.resize(size, SizeTrackerElement());
 		}
+		SizeTrackerElement getLastElement() const {
+			if (elements.empty())
+				return SizeTrackerElement();
+			else
+				return elements[elements.size()-1];
+		}
 
 		std::string toString() const {
 			std::stringstream ss;
@@ -564,7 +570,8 @@ public:
 			}
 			SizeTrackerElement element(raw, rawGood, unique, single);
 			elements.push_back( element );
-			nextToTrack = raw * 1.3;
+			if (raw >= nextToTrack)
+				nextToTrack *= 1.05;
 			LOG_DEBUG_OPTIONAL(2, Logger::isMaster(), "SizeTracker::track(): " << element.toString() << ".  Next to track at above: " << nextToTrack);
 		}
 		void reset() {
@@ -576,6 +583,9 @@ public:
 	SizeTracker sizeTracker;
 	SizeTracker getSizeTracker() const {
 		return sizeTracker;
+	}
+	void setSizeTracker(SizeTracker &st) {
+		sizeTracker = st;
 	}
 
 	class Histogram {

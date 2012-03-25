@@ -337,7 +337,8 @@ public:
 
 	void _buildKmerSpectrumMPI(const ReadSet &store, bool isSolid) {
 		assert(store.isGlobal());
-		assert(store.getGlobalSize() > 0);
+		if (store.getGlobalSize() == 0)
+			return;
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
 		int worldSize = world.size();
@@ -372,10 +373,13 @@ public:
 
 			// allow the master thread to only handle communications
 			int loopThreadId = threadId, loopNumThreads = numThreads;
+			bool isRunningInLoop = true;
 			if (numThreads > 1) {
+				if (loopThreadId == 0)
+					isRunningInLoop = false;
 				loopThreadId--; loopNumThreads--;
 			}
-			if (loopThreadId >= 0) {
+			if (isRunningInLoop) {
 				for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
 				{
 
@@ -720,6 +724,8 @@ public:
  */
 class DistributedOfstreamMap : public OfstreamMap
 {
+public:
+	static const long long int WRITE_BLOCK_SIZE = (8 * 1024 * 1024); // Write in 8MB chunks if possible
 
 private:
 	mpi::communicator _world;
@@ -845,12 +851,17 @@ public:
 			}
 			LOG_DEBUG(2, "Writing " << mySize << " at " << myStart << " to " << fullPath);
 			char *data = const_cast<char*>(contents.data());
-			long long int  offset = 0;
+			long long int offset = 0;
 			long long int maxwrite = 0xf000000; // keep writes to less than max int size at a time to avoid MPI overflows
+			long long int bytesToEndofBlock = WRITE_BLOCK_SIZE - (myStart % WRITE_BLOCK_SIZE);
+			bytesToEndofBlock = std::min(bytesToEndofBlock, mySize - offset);
+			bytesToEndofBlock = bytesToEndofBlock == 0 ? maxwrite : bytesToEndofBlock;
 			while (offset < mySize) {
 				long long int thisWriteSize = std::min(maxwrite, mySize - offset);
+				thisWriteSize = std::min(bytesToEndofBlock, thisWriteSize);
 				MPI_File_write_at(ourFile, myStart+offset, data+offset, thisWriteSize, MPI_BYTE, MPI_STATUS_IGNORE);
 				offset += thisWriteSize;
+				bytesToEndofBlock = maxwrite;
 			}
 			LOG_DEBUG_OPTIONAL(1, _world.rank()==0, "Closing " << fullPath);
 			MPI_File_close(&ourFile);
@@ -889,7 +900,7 @@ public:
 	static void mergeFiles(mpi::communicator &world, std::string rankFile, std::string globalFile, bool unlinkAfter = false) {
 		long long int mySize = 0;
 		char *buf[2];
-		int bufSize = 1024*1024*32;
+		int bufSize = WRITE_BLOCK_SIZE;
 		buf[0] = new char[bufSize];
 		buf[1] = new char[bufSize];
 		int bufId = 0;
@@ -931,8 +942,10 @@ public:
 		MPI_Status status;
 		MPI_Request writeRequest = MPI_REQUEST_NULL;
 		myPos = myStart;
+		long long int bytesToEndofBlock = WRITE_BLOCK_SIZE - (myStart % WRITE_BLOCK_SIZE);
+		bytesToEndofBlock = std::min(bytesToEndofBlock, mySize);
 		while (myPos < myStart + mySize) {
-			err = MPI_File_read(myFile, buf[bufId % 2], bufSize, MPI_BYTE, &status);
+			err = MPI_File_read(myFile, buf[bufId % 2], bytesToEndofBlock == 0 ? bufSize : bytesToEndofBlock, MPI_BYTE, &status);
 			if (err != MPI_SUCCESS) {
 				LOG_THROW("Could not read from " << rankFile);
 			}
@@ -945,11 +958,13 @@ public:
 			if (err != MPI_SUCCESS) {
 				LOG_THROW("Could not wait for write of " << globalFile);
 			}
-			err = MPI_File_iwrite_at(ourFile, myPos, buf[bufId++ % 2], sendBytes, MPI_BYTE, &writeRequest);
+			err = MPI_File_iwrite_at(ourFile, myPos, buf[bufId % 2], sendBytes, MPI_BYTE, &writeRequest);
 			if (err != MPI_SUCCESS) {
 				LOG_THROW("Could not write to " << globalFile);
 			}
+			bufId++;
 			myPos += sendBytes;
+			bytesToEndofBlock = 0;
 		}
 		err = MPI_Wait(&writeRequest, MPI_STATUS_IGNORE);
 		if (err != MPI_SUCCESS) throw;

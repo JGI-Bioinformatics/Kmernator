@@ -37,6 +37,8 @@ KmerSizer KmerSizer::singleton;
 TrackingData::WeightType TrackingData::minimumWeight = 0.01;
 TrackingData::CountType TrackingData::minimumDepth = 10;
 unsigned long TrackingData::discarded = 0;
+unsigned long TrackingData::totalCount = 0;
+double TrackingData::totalWeight = 0.0;
 
 TrackingData::CountType TrackingData::maxCount = 0;
 TrackingData::WeightType TrackingData::maxWeightedCount = 0;
