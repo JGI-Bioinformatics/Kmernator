@@ -175,10 +175,13 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			maxDepth = 1;
 		}
 
+		bool hasRemainderTrim = false;
 		for (unsigned int depth = maxDepth; depth >= 1; depth /= 2) {
 
 			string ofname = outputFilename;
-			if (maxDepth > 1) {
+			if (hasRemainderTrim) {
+				ofname += "-Remainder";
+			} else if (maxDepth > 1) {
 				ofname += "-PartitionDepth" + boost::lexical_cast< string >( depth );
 			}
 			OFM ofmap = selector.getOFM(ofname);
@@ -209,9 +212,15 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			oldPicked += picked;
 
 			if (minDepth > depth) {
-				break;
+				if ((!hasRemainderTrim) && FilterReadsBaseOptions::getOptions().getRemainderTrim() > 0) {
+					FilterReadsBaseOptions::getOptions().getMinPassingInPair() = 1;
+					GeneralOptions::getOptions().getMinReadLength() = FilterReadsBaseOptions::getOptions().getRemainderTrim();
+					hasRemainderTrim=true;
+					depth *= 2;
+				} else {
+					break;
+				}
 			}
-
 		}
 	}
 	LOG_VERBOSE(1, "Done.  Cleaning up. " << MemoryUtils::getMemoryUsage());

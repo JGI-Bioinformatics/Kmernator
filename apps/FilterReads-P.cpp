@@ -221,13 +221,10 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (!outputFilename.empty()) {
-			bool remainderTrim = false;
 			for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
 				std::string pickOutputFilename = outputFilename;
 				if (KmerOptions::getOptions().getKmerSize() > 0) {
 					pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
-					if (remainderTrim)
-						pickOutputFilename += "-Remainder";
 					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << thisDepth);
 				} else {
 					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << Options::getOptions().getMinReadLength());
@@ -245,14 +242,6 @@ int main(int argc, char *argv[]) {
 				LOG_VERBOSE(1, "Writing Files");
 
 				selectReads(thisDepth, reads, selector, pickOutputFilename);
-				if (minDepth == thisDepth && !remainderTrim && FilterReadsBaseOptions::getOptions().getRemainderTrim() > 0) {
-					if (FilterReadsBaseOptions::getOptions().getRemainderTrim() != GeneralOptions::getOptions().getMinReadLength() || FilterReadsBaseOptions::getOptions().getMinPassingInPair() != 1) {
-						thisDepth *= depthStep;
-						remainderTrim = true;
-						FilterReadsBaseOptions::getOptions().getMinPassingInPair() = 1;
-						GeneralOptions::getOptions().getMinReadLength() = FilterReadsBaseOptions::getOptions().getRemainderTrim();
-					}
-				}
 			}
 		}
 		spectrum.reset();
