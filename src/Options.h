@@ -231,6 +231,11 @@ public:
 			std::cerr << "Please fix the command line arguments:" << std::endl << std::endl << e.what();
 			std::cerr << std::endl << std::endl;
 			exit(1);
+		} catch (...) {
+			std::cerr << getDesc() << std::endl << std::endl;
+			std::cerr << "Please fix the command line arguments: something is wrong... " << std::endl << std::endl;
+			std::cerr << std::endl << std::endl;
+			exit(1);
 		}
 
 	}
