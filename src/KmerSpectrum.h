@@ -68,6 +68,44 @@ using namespace boost::accumulators;
 #include "Options.h"
 #include "Log.h"
 
+class _KmerSpectrumOptions;
+class _KmerSpectrumOptions : public OptionsBaseInterface {
+public:
+	_KmerSpectrumOptions() : kmerSubsample(1) {
+	}
+	virtual ~_KmerSpectrumOptions() {}
+
+	long &getKmerSubsample() {
+		return kmerSubsample;
+	}
+
+	void _resetDefaults() {
+		// *::_resetDefaults();
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		// *::_setOptions(desc,p);
+		po::options_description opts("Kmer Spectrum Options");
+		opts.add_options()
+
+				("kmer-subsample", po::value<long>()->default_value(kmerSubsample),"The 1 / kmer-subsample fraction of kmers to track. 1 to not sample")
+
+				;
+
+		desc.add(opts);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+
+		setOpt<long> ("kmer-subsample", kmerSubsample);
+
+		return ret;
+	}
+private:
+	long kmerSubsample;
+};
+typedef OptionsBaseTemplate< _KmerSpectrumOptions > KmerSpectrumOptions;
+
+
 template<typename So = TrackingDataMinimal4, typename We = TrackingDataMinimal4, typename Si = TrackingDataSingleton>
 class KmerSpectrum {
 public:
@@ -178,8 +216,7 @@ public:
 	inline long getSingletonKmers() const { return singletonKmers; }
 
 	static long &getKmerSubsample() {
-		static long kmerSubsample = 0;
-		return kmerSubsample;
+		return KmerSpectrumOptions::getOptions().getKmerSubsample();
 	}
 
 	void optimize(bool singletonsToo = false) {

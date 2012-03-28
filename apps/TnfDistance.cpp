@@ -392,8 +392,7 @@ public:
 } mvo;
 
 int main(int argc, char *argv[]) {
-	if (!TnfDistanceOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	TnfDistanceOptions::parseOpts(argc, argv);
 
 	ReadSet refs;
 	ReadSet reads;

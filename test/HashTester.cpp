@@ -68,8 +68,7 @@ public:
 typedef OptionsBaseTemplate< _HashTesterOptions > HashTesterOptions;
 
 int main(int argc, char *argv[]) {
-	if (!HashTesterOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	HashTesterOptions::parseOpts(argc, argv);
 
 	MemoryUtils::getMemoryUsage();
 	cerr << MemoryUtils::getMemoryUsage() << endl;

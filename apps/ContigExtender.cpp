@@ -81,8 +81,7 @@ typedef OptionsBaseTemplate< _ContigExtenderOptions > ContigExtenderOptions;
 
 int main(int argc, char *argv[]) {
 
-	if (!ContigExtenderOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	ContigExtenderOptions::parseOpts(argc, argv);
 
 	OptionsBaseInterface::FileListType inputFiles = Options::getOptions().getInputFiles();
 	OptionsBaseInterface::FileListType contigFiles;

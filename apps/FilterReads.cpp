@@ -66,14 +66,7 @@ typedef OptionsBaseTemplate< _FilterReadsOptions > FilterReadsOptions;
 
 int main(int argc, char *argv[]) {
 
-	try {
-		if (!FilterReadsOptions::parseOpts(argc, argv))
-			throw invalid_argument("Please fix the command line arguments");
-	} catch (...) {
-		std::cerr << FilterReadsOptions::getDesc() << std::endl << std::endl;
-		std::cerr << "Please fix the command line arguments and/or OpenMP environment" << std::endl;
-		exit(1);
-	}
+	FilterReadsOptions::parseOpts(argc, argv);
 
 	MemoryUtils::getMemoryUsage();
 	std::string outputFilename = Options::getOptions().getOutputFile();

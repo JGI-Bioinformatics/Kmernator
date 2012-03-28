@@ -135,8 +135,7 @@ int main(int argc, char *argv[]) {
 	SSOptions::getOptions().getDefaultFileNum() = world.rank();
 	Logger::setWorld(&world);
 #endif
-	if (!SSOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	SSOptions::parseOpts(argc, argv);
 
 	OPipestream *ops = NULL;
 	std::string pipeCommand = SSOptions::getOptions().getPipeCommand();

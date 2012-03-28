@@ -210,10 +210,22 @@ public:
 
 class Log
 {
+public:
+	static std::string &getErrorMessages() {
+		static std::string errorMessages;
+		return errorMessages;
+	}
+
+private:
 	static Logger verboseOstream;
 	static Logger debugOstream;
 	static Logger warningOstream;
 	static Logger errorOstream;
+
+	static void setErrorMessage(std::string &msg) {
+		getErrorMessages() += msg + "\n";
+	}
+
 	static inline Logger &getDebugOstream() {
 		return debugOstream;
 	}
@@ -303,6 +315,7 @@ public:
 		return Error(msg);
 	}
 	static inline Logger &Error(std::string msg, bool bypassMPI = true) {
+		setErrorMessage(msg);
 		return _log(getErrorOstream(), msg, bypassMPI);
 	}
 };
@@ -323,7 +336,7 @@ private:
 	std::string _msg;
 };
 
-#define LOG_THROW(log) {  std::stringstream ss ; ss << log; Log::Error(ss.str(), true); throw LoggedException(ss.str()); }
+#define LOG_THROW(log) {  std::stringstream ss ; ss << log; Log::Error(ss.str() , true); throw LoggedException(Log::getErrorMessages()); }
 #define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), level >= 3); }
 #define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), level >= 2); }
 #define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { std::stringstream ss ; ss << log; Log::Warn(ss.str(), true); }

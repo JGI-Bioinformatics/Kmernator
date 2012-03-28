@@ -61,8 +61,7 @@ public:
 typedef OptionsBaseTemplate< _FixPair > FixPair;
 
 int main(int argc, char *argv[]) {
-	if (!FixPair::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	FixPair::parseOpts(argc, argv);
 
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	std::string outputFilename = Options::getOptions().getOutputFile();

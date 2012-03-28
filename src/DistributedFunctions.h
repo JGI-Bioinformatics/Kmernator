@@ -1327,8 +1327,7 @@ mpi::communicator initializeWorldAndOptions(int argc, char *argv[]) {
 	try {
 		Logger::setWorld(&world);
 
-		if (!OptionsTempl::parseOpts(argc, argv))
-			LOG_THROW("Please fix the command line arguments." << std::endl << OptionsTempl::getOptionsErrorMsg());
+		OptionsTempl::parseOpts(argc, argv);
 
 		if (GeneralOptions::getOptions().getGatheredLogs())
 			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);

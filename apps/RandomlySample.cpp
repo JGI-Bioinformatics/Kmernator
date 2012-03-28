@@ -84,8 +84,7 @@ typedef OptionsBaseTemplate< _RSOptions > RSOptions;
 
 
 int main(int argc, char *argv[]) {
-	if (!RSOptions::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	RSOptions::parseOpts(argc, argv);
 
 	std::srand(static_cast<unsigned>(std::time(0)));
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();

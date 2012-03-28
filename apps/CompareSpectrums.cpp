@@ -123,8 +123,7 @@ void evaluatePerRead(std::ostream &os, KS &ks1, KS &ks2, ReadSet &readSet1);
 
 int main(int argc, char *argv[]) {
 
-	if (!CS_Options::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	CS_Options::parseOpts(argc, argv);
 
 	MemoryUtils::getMemoryUsage();
 	ReadSet readSet1, readSet2;

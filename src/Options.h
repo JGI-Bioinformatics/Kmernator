@@ -200,32 +200,39 @@ public:
 	static std::string getOptionsErrorMsg() {
 		return getOptions().getOptionsErrorMsg();
 	}
-	static bool parseOpts(int argc, char *argv[]) {
+	static void parseOpts(int argc, char *argv[]) {
 		// set any defaults
-		_resetDefaults();
-
-		// load all the descriptions
-		_setOptions(getDesc(), getPosDesc());
-
-		// process the command line
-		po::store(po::command_line_parser(argc, argv).options(getDesc()).positional(getPosDesc()).run(), getVarMap());
-
-		// update the varmap
-		po::notify( getVarMap() );
-
-		// post-process
 		bool ret = true;
 		try {
+			_resetDefaults();
+
+			// load all the descriptions
+			_setOptions(getDesc(), getPosDesc());
+
+			// process the command line
+			po::store(po::command_line_parser(argc, argv).options(getDesc()).positional(getPosDesc()).run(), getVarMap());
+
+			// update the varmap
+			po::notify( getVarMap() );
+
+			// post-process
+
 			ret = _parseOptions( getVarMap() );
+
 			if (hasOptionsErrorMsg())
 				LOG_THROW(getOptionsErrorMsg());
+			if (!Log::getErrorMessages().empty())
+				LOG_THROW("");
+			if (!ret)
+				LOG_THROW("one or more options are invalid");
+
 		} catch (std::exception &e) {
 			std::cerr << getDesc() << std::endl << std::endl;
-			std::cerr << "Please fix the command line arguments:" << std::endl << e.what();
+			std::cerr << "Please fix the command line arguments:" << std::endl << std::endl << e.what();
 			std::cerr << std::endl << std::endl;
-			ret = false;
+			exit(1);
 		}
-		return ret;
+
 	}
 
 
@@ -241,6 +248,9 @@ protected:
 
 class _MySpecificOptions : public OptionsBaseInterface {
 public:
+	_MySpecificOptions() {
+	}
+	virtual ~_MySpecificOptions() {}
 	void _resetDefaults() {
 		// *::_resetDefaults();
 	}

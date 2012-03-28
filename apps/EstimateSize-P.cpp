@@ -56,8 +56,7 @@ class _MPIEstimateSizeOptions: public OptionsBaseInterface {
 public:
 	_MPIEstimateSizeOptions() :
 		samplePartitions(50),
-		maxSampleFraction(0.05),
-		kmerSubsample(1000) {
+		maxSampleFraction(0.05) {
 	}
 	~_MPIEstimateSizeOptions() {
 	}
@@ -68,18 +67,17 @@ public:
 	double &getMaxSampleFraction() {
 		return maxSampleFraction;
 	}
-	long &getKmerSubsample() {
-		return kmerSubsample;
-	}
 	void _resetDefaults() {
 		MPIOptions::_resetDefaults();
 		KmerOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
+		KmerSpectrumOptions::_resetDefaults();
 		// assign defaults
 		GeneralOptions::getOptions().getMmapInput() = 0;
 		GeneralOptions::getOptions().getVerbose() = 1;
 		KmerOptions::getOptions().getMinDepth() = 1;
 		KmerOptions::getOptions().getSaveKmerMmap() = 0;
+		KmerSpectrumOptions::getOptions().getKmerSubsample() = 1000;
 	}
 
 	void _setOptions(po::options_description &desc,
@@ -94,7 +92,6 @@ public:
 
 						("max-sample-fraction", po::value<double>()->default_value(maxSampleFraction), "The maximum amount of data to read")
 
-						("kmer-subsample", po::value<long>()->default_value(kmerSubsample),"The 1 / kmer-subsample fraction of kmers to track. 0 to not sample")
 
 						;
 		desc.add(opts);
@@ -102,25 +99,23 @@ public:
 		MPIOptions::_setOptions(desc, p);
 		GeneralOptions::_setOptions(desc, p);
 		KmerOptions::_setOptions(desc, p);
+		KmerSpectrumOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
 		ret &= KmerOptions::_parseOptions(vm);
+		ret &= KmerSpectrumOptions::_parseOptions(vm);
 
 		setOpt<long> ("sample-partitions", samplePartitions);
 		setOpt<double> ("max-sample-fraction", maxSampleFraction);
-		setOpt<long> ("kmer-subsample", kmerSubsample);
-
-		KS::getKmerSubsample() = getKmerSubsample();
 
 		return ret;
 	}
 protected:
 	long samplePartitions;
 	double maxSampleFraction;
-	long kmerSubsample;
 
 };
 typedef OptionsBaseTemplate< _MPIEstimateSizeOptions > MPIEstimateSizeOptions;
@@ -165,16 +160,17 @@ int main(int argc, char *argv[]) {
 		totalReads += totalCounts[0];
 		totalBases += totalCounts[2];
 
-		if (numBuckets == 0 && KmerOptions::getOptions().getKmerSize() > 0) {
-
-			numBuckets = KS::estimateWeakKmerBucketSize(reads) * partitions / KS::getKmerSubsample();
-
-			numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
-			spectrum = KS(world, numBuckets);
-		}
 		if (KmerOptions::getOptions().getKmerSize() > 0) {
+
+			if (numBuckets == 0) {
+
+				numBuckets = KS::estimateWeakKmerBucketSize(reads) * partitions / KS::getKmerSubsample();
+
+				numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
+
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
+				spectrum = KS(world, numBuckets);
+			}
 
 			spectrum.buildKmerSpectrum(reads);
 			spectrum.trackSpectrum(true);

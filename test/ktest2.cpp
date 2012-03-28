@@ -77,8 +77,7 @@ typedef OptionsBaseTemplate< _Ktest2Options > Ktest2Options;
 
 int main(int argc, char *argv[]) {
 
-	if (!Ktest2Options::parseOpts(argc, argv))
-		throw std::invalid_argument("Please fix the command line arguments");
+	Ktest2Options::parseOpts(argc, argv);
 
 	ReadSet refReads, reads;
 
