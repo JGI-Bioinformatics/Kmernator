@@ -242,7 +242,6 @@ int main(int argc, char *argv[]) {
 				LOG_VERBOSE(1, "Writing Files");
 
 				selectReads(thisDepth, reads, selector, pickOutputFilename);
-
 			}
 		}
 		spectrum.reset();
