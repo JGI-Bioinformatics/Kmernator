@@ -74,6 +74,9 @@ void ReadSet::incrementFile(SequenceStreamParserPtr parser) {
 }
 
 void ReadSet::_trackSequentialPair(const Read &read) {
+	std::string readName = read.getName();
+	if (!isPairedRead(readName))
+		return;
 	if (_reads.size() > 1 && !previousReadName.empty()) {
 		if (isPair(previousReadName, read)) {
 			// mark the previous read, but not this one
@@ -513,7 +516,9 @@ const ReadSet::ReadIdxVector ReadSet::getReadIdxVector() const {
 	return readIdxs;
 }
 
-
+bool ReadSet::isPairedRead(const std::string &readName) {
+	return SequenceRecordParser::isPairedRead(readName);
+}
 bool ReadSet::isPair(const std::string &readNameA, const std::string &readNameB) {
 	return SequenceRecordParser::isPair(readNameA, readNameB);
 }
@@ -585,7 +590,10 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 		if ((pair.read1 == MAX_READ_IDX || pair.read2 == MAX_READ_IDX)
 				&& pair.read1 != pair.read2) {
 			ReadSetSizeType idx = pair.lesser();
-			unmatchedNames[SequenceRecordParser::commonName(_reads[idx].getName())] = idx;
+			std::string readName = _reads[idx].getName();
+			if (isPairedRead(readName)) {
+				unmatchedNames[SequenceRecordParser::commonName( readName )] = idx;
+			}
 		}
 	}
 

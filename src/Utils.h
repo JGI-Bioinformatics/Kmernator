@@ -568,27 +568,34 @@ public:
 	static std::string commonName(const std::string &readName) {
 		return readName.substr(0, readName.length() - 1);
 	}
+
+	// returns 0 for unpaired reads, 1 or 2 if the read is paired.
+	// supports the following three patterns: xxx/1 xxx/2, xxx/A xxx/B, or xxx/F xxx/R
 	static int readNum(const std::string &readName) {
 		int retVal = 0;
 		int len = readName.length();
+		if (len < 2)
+			return retVal;
+		if (readName[len - 2] != '/')
+			return retVal;
 		char c = readName[len - 1];
 		switch (c) {
 		case '1':
-			if (readName[len - 2] != '/')
-				break;
 		case 'A':
 		case 'F':
 			retVal = 1;
 			break;
 		case '2':
-			if (readName[len - 2] != '/')
-				break;
 		case 'B':
 		case 'R':
 			retVal = 2;
 			break;
 		}
 		return retVal;
+	}
+
+	static bool isPairedRead(const std::string &readName) {
+		return readNum(readName) != 0;
 	}
 
 	static bool isPair(const std::string &readNameA, const std::string readNameB) {

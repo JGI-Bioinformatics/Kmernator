@@ -428,6 +428,8 @@ public:
 	inline bool hasPairs() const {
 		return getPairSize() != 0 && getPairSize() < getSize();
 	}
+
+	static bool isPairedRead(const std::string &readName);
 	static bool isPair(const Read &readA, const Read &readB);
 	static bool isPair(const std::string &readNameA, const Read &readB);
 	static bool isPair(const std::string &readNameA, const std::string &readNameB);
