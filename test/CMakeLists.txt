@@ -175,7 +175,9 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runFilterTests.sh test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/phix.mercount.m21 test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/phix.mergraph.m21.D2 test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runMeraculousTests.sh test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runRandomlySampleTests.sh test/ )
 
 add_test(filter runFilterTests.sh)
 add_test(meraculous runMeraculousTests.sh)
+add_test(randomlysample runRandomlySampleTests.sh)
 
