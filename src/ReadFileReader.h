@@ -306,14 +306,19 @@ public:
 	void seekToPartition(int rank, int size) {
 		unsigned long lastPos = getFileSize();
 		unsigned long firstPos = 0;
+		LOG_DEBUG(2, "ReadFileReader(" << _path <<")::seekToPartition(" << rank << ", " << size << ")");
+		setLastPos(lastPos);
 		if (size > 1) {
 			unsigned long blockSize = getBlockSize(size);
 			if (rank + 1 != size ) {
 				seekToNextRecord( blockSize * (rank+1) );
 				lastPos = getPos();
 			}
-			seekToNextRecord( blockSize * rank );
-			firstPos = getPos();
+			if (seekToNextRecord( blockSize * rank )) {
+				firstPos = getPos();
+			} else {
+				firstPos = lastPos;
+			}
 		}
 		setLastPos(lastPos);
 		LOG_DEBUG(2, "ReadFileReader(" << _path <<")::seekToPartition(" << rank << ", " << size << ") " << firstPos << ", reading until " << lastPos);
@@ -566,9 +571,15 @@ public:
 				return false;
 			}
 
-			while ( (!endOfStream()) && _stream->peek() != _marker) {
-				nextLine();
+			while ( (!isPastPartition()) && (!endOfStream()) && _stream->peek() != _marker) {
+				std::string line = nextLine();
+				LOG_DEBUG(4, "reading line (" << tellg() << "): " << line);
 			}
+			if (isPastPartition()) {
+				LOG_WARN(1, "seekToNextRecord(" << minimumPos << "): is past partition: " << tellg());
+				return false;
+			}
+
 			if (_marker == '@' && (!endOfStream())) {
 				// since '@' is a valid quality character in a FASTQ (sometimes)
 				// verify that the next line is not also starting with '@', as that would be the true start of the record
