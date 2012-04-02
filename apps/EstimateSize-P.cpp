@@ -95,11 +95,11 @@ public:
 
 						;
 		desc.add(opts);
+		KmerSpectrumOptions::_setOptions(desc, p);
 
 		MPIOptions::_setOptions(desc, p);
 		GeneralOptions::_setOptions(desc, p);
 		KmerOptions::_setOptions(desc, p);
-		KmerSpectrumOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
