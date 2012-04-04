@@ -429,7 +429,7 @@ public:
 			msgBuffers->finalize();
 
 		} // omp parallel
-		LOG_VERBOSE_OPTIONAL(1, true, "distributed processed " << store.getGlobalSize() << " reads");
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed processed " << store.getGlobalSize() << " reads");
 
 		delete msgBuffers;
 
