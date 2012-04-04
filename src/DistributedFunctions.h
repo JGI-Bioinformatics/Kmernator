@@ -841,13 +841,11 @@ public:
 			MPI_File ourFile;
 			err = MPI_File_open(world, const_cast<char*>(fullPath.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &ourFile);
 			if (err != MPI_SUCCESS) {
-				LOG_ERROR(1, "Could not open " << fullPath << " collectively");
-				throw;
+				LOG_THROW("Could not open " << fullPath << " collectively");
 			}
 			err = MPI_File_set_size(ourFile, totalSize);
 			if (err != MPI_SUCCESS) {
-				LOG_ERROR(1, "Could not set the size for " << fullPath << " to " << totalSize);
-				throw;
+				LOG_THROW("Could not set the size for " << fullPath << " to " << totalSize);
 			}
 			LOG_DEBUG(2, "Writing " << mySize << " at " << myStart << " to " << fullPath);
 			char *data = const_cast<char*>(contents.data());
@@ -889,7 +887,7 @@ public:
 			Iterator it = this->_map->find(key);
 			std::string myFilePath;
 			if (it == this->_map->end()) {
-				LOG_WARN(1, "Could not find " << myFilePath << " in DistributedOfstreamMap");
+				LOG_DEBUG_OPTIONAL(1, true, "Could not find myFilePath " << myFilePath << " (" << key << ") in DistributedOfstreamMap");
 			} else {
 				myFilePath = getFilePath(key);
 			}
@@ -909,17 +907,19 @@ public:
 		int rank = world.rank();
 		int size = world.size();
 		int err;
+		bool isOpen = false;
 		MPI_File myFile;
 		err = MPI_File_open(MPI_COMM_SELF, const_cast<char*>(rankFile.c_str()), MPI_MODE_RDONLY, info, &myFile);
-		if (err != MPI_SUCCESS) {
-			LOG_WARN(1, "Could not open " << rankFile << " myself.  Merging 0 bytes");
+		if (!(rankFile.empty()) && err != MPI_SUCCESS) {
+			LOG_DEBUG_OPTIONAL(1, true, "Could not open " << rankFile << " (for " << globalFile << ") myself.  Merging 0 bytes");
 		} else {
+			isOpen = true;
 			err = MPI_File_get_size(myFile, &mySize);
 		}
 
 		long long int sendPos[size], recvPos[size], totalSize = 0, myStart = 0, myPos = 0;
 		for(int i = 0; i < size; i++)
-			sendPos[i] = rank == i ? mySize : 0;
+			sendPos[i] = (rank == i) ? mySize : 0;
 		MPI_Allreduce(&sendPos, &recvPos, size, MPI_LONG_LONG_INT, MPI_SUM, world);
 		for(int i = 0; i < size; i++) {
 			if (rank == i)
@@ -927,7 +927,7 @@ public:
 			totalSize += recvPos[i];
 		}
 
-		LOG_DEBUG_OPTIONAL(2, rank==0, "Writing to '" << globalFile << "' at " << myStart << " for " << totalSize << " bytes");
+		LOG_DEBUG_OPTIONAL(2, true, "Writing to '" << globalFile << "' at " << myStart << " for " << mySize << " total: "<< totalSize << " bytes");
 
 		MPI_File ourFile;
 		err = MPI_File_open(world, const_cast<char*>(globalFile.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
@@ -944,7 +944,7 @@ public:
 		myPos = myStart;
 		long long int bytesToEndofBlock = WRITE_BLOCK_SIZE - (myStart % WRITE_BLOCK_SIZE);
 		bytesToEndofBlock = std::min(bytesToEndofBlock, mySize);
-		while (myPos < myStart + mySize) {
+		while (isOpen && myPos < myStart + mySize) {
 			err = MPI_File_read(myFile, buf[bufId % 2], bytesToEndofBlock == 0 ? bufSize : bytesToEndofBlock, MPI_BYTE, &status);
 			if (err != MPI_SUCCESS) {
 				LOG_THROW("Could not read from " << rankFile);
@@ -966,19 +966,25 @@ public:
 			myPos += sendBytes;
 			bytesToEndofBlock = 0;
 		}
+		assert(myPos == myStart + mySize);
 		err = MPI_Wait(&writeRequest, MPI_STATUS_IGNORE);
-		if (err != MPI_SUCCESS) throw;
+		if (err != MPI_SUCCESS)
+			LOG_THROW("Error waiting for write request " << rankFile << " to " << globalFile);
 
 		err = MPI_File_close(&ourFile);
-		if (err != MPI_SUCCESS) throw;
+		if (err != MPI_SUCCESS)
+			LOG_THROW("Error closing for global file: " << globalFile);
+
 		err = MPI_File_close(&myFile);
-		if (err != MPI_SUCCESS) throw;
+		if (isOpen && err != MPI_SUCCESS)
+			LOG_THROW("Error closing for rankfile file: " << rankFile);
 
 		delete [] buf[0];
 		delete [] buf[1];
 
-		if (unlinkAfter)
+		if (isOpen && unlinkAfter)
 			unlink(rankFile.c_str());
+		LOG_DEBUG_OPTIONAL(1, true, "Finished with temporary: " << rankFile);
 	}
 
 	static std::string writeGlobalReadSet(mpi::communicator &world, const ReadSet &readSet, std::string outputFile = Options::getOptions().getOutputFile(), std::string suffix = "", FormatOutput format = FormatOutput::Fasta())

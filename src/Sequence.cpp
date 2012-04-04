@@ -192,8 +192,8 @@ void *Sequence::restore(void *_src, long size) {
 	try {
 		_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
 	} catch (...) {
-		throw std::runtime_error(
-				"Cannot allocate memory in Sequence::restore()");
+		LOG_THROW(
+				"RuntimeError: Cannot allocate memory in Sequence::restore()");
 	}
 	memcpy(_data.get(), src, size);
 	return src + size;
@@ -216,8 +216,8 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 	}
 
 	if (buffer == NULL)
-		throw std::runtime_error(
-				"Could not allocate buffer memory in Sequence::setSequence");
+		LOG_THROW(
+				"RuntimeError: Could not allocate buffer memory in Sequence::setSequence");
 
 	BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(fasta, buffer);
 	long totalMarkupSize = 0;
@@ -240,8 +240,8 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 			_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
 		}
 	} catch (...) {
-		throw std::runtime_error(
-				"Cannot allocate memory in Sequence::setSequence()");
+		LOG_THROW(
+				"RuntimeError: Cannot allocate memory in Sequence::setSequence()");
 	}
 
 	*_getLength() = length;
@@ -277,7 +277,7 @@ void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes,
 	try {
 		_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
 	} catch (...) {
-		throw std::runtime_error("Can not allocate memory for Sequence::setSequence(mmap)");
+		LOG_THROW("RuntimeError: Can not allocate memory for Sequence::setSequence(mmap)");
 	}
 
 	*_getRecord() = mmapRecordStart;
@@ -799,8 +799,8 @@ const void *Read::_getEnd() const {
 void Read::setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation) {
 	assert(!isMmaped());
 	if (fasta.length() != qualBytes.length())
-		throw std::invalid_argument(
-				"fasta length != qual length for name = " + name + " " + fasta + " " + qualBytes);
+		LOG_THROW(
+				"InvalidFormat for setRead(): fasta length != qual length for name = " << name << " " << fasta << " " << qualBytes);
 
 	// do not store quals if it is a reference
 	if (qualBytes.length() > 1 && qualBytes[0] == REF_QUAL) {
@@ -837,7 +837,7 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
 	string origFasta = fasta;
 	SequenceLengthType len = getLength();
 	if (offset >= len) {
-		throw std::invalid_argument("offset can not be greater than length of sequence");
+		LOG_THROW("Read::markupBases(): offset can not be greater than length of sequence");
 	}
 	if (offset + length > len)
 		length = len - offset;
@@ -1144,7 +1144,7 @@ BaseQual ProbabilityBase::getBaseQual() const {
 			}
 		}
 	}
-	throw;
+	LOG_THROW("Should not get here: ProbabilityBase::getBaseQual()");
 }
 
 

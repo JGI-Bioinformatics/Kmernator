@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	std::string outputFilename = Options::getOptions().getOutputFile();
 	if (outputFilename.empty())
-		throw std::invalid_argument("Please specify an --ouput-file");
+		LOG_THROW("Invalid: Please specify an --ouput-file");
 	ReadSet reads;
 	LOG_VERBOSE(1, "Reading Input Files");
 	reads.appendAllFiles(inputs);
@@ -84,7 +84,7 @@ int main(int argc, char *argv[]) {
 		if (reads.isValidRead(pair.read1)) {
 			const Read &read = reads.getRead(pair.read1);
 			if (! read.isMmaped() )
-				throw std::invalid_argument(read.getName());
+				LOG_THROW("Invalid read: " << read.getName());
 			Kmernator::RecordPtr record = read.getRecord();
 			SequenceRecordParser::nextLine(read1Label, record);
 			size_t pos = read1Label.find_first_of(" \t");
@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
 		if (reads.isValidRead(pair.read2)) {
 			const Read &read = reads.getRead(pair.read2);
 			if (! read.isMmaped() )
-				throw std::invalid_argument(read.getName());
+				LOG_THROW("Invalid: read: " << read.getName());
 			Kmernator::RecordPtr record = read.getRecord();
 			SequenceRecordParser::nextLine(read2Label, record);
 			size_t pos = read2Label.find_first_of(" \t");

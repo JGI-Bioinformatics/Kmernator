@@ -121,7 +121,7 @@ private:
 		case(1) : _type = FASTA; break;
 		case(2) : _type = FASTQ_UNMASKED; break;
 		case(3) : _type = FASTA_UNMASKED; break;
-		default: throw;
+		default: LOG_THROW("Invalid format type: " << type);
 		}
 	}
 
@@ -244,7 +244,7 @@ public:
 			else if (isStringStream())
 				return *ss;
 			else
-				throw;
+				LOG_THROW("Invalid state for OfstreamMap - not file, not memory!");
 		}
 		std::string getFilePath() const {
 			return filePath;
@@ -453,7 +453,7 @@ public:
 
 	StoreType getStore(RawType value) {
 		if (value < _minValue || value > _maxValue)
-			throw std::invalid_argument("getStore() out of range");
+			LOG_THROW( "InvalidArgument: getStore() out of range" );
 		return ((RawType) steps) * (value - _minValue)
 				/ (_maxValue - _minValue);
 	}
@@ -487,7 +487,7 @@ public:
 
 		char &marker = nameLine[0];
 		if (marker != '>' && marker != '@') {
-			throw std::invalid_argument( (std::string("Can not parse name without a marker: ") + nameLine).c_str() );
+			LOG_THROW( "Can not parse name without a marker: " <<  nameLine );
 		} else {
 			// remove marker
 			nameLine.erase(0,1);
@@ -513,7 +513,7 @@ public:
 			nextLine(buf,   record);
 			nextLine(quals, record);
 			if (buf[0] != '+') {
-				throw "Invalid FASTQ record!";
+				LOG_THROW( "Invalid FASTQ record!" );
 			}
 		} else if (*record == '>') {
 			// FASTA
@@ -531,7 +531,7 @@ public:
 				nextLine(buf, qualRecord);
 				trimName(buf);
 				if (buf != name) {
-					throw "fasta and qual do not match names!";
+					LOG_THROW( "fasta and qual do not match names!" );
 				}
 
 				// TODO FIXME HACK!
@@ -545,7 +545,7 @@ public:
 				quals.assign(bases.length(), Kmernator::REF_QUAL);
 			}
 		} else {
-			throw "Do not know how to parse this file!";
+			LOG_THROW( "Do not know how to parse this file!" );
 		}
 	}
 	static std::string convertQualIntsToChars(const std::string &qualInts, char fastqStartChar) {
