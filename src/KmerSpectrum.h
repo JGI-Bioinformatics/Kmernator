@@ -690,7 +690,7 @@ public:
 			elem.visitedCount += count;
 			elem.visitedWeight += weight;
 			if (count < weight)
-				throw std::invalid_argument("count < weight!");
+				LOG_THROW("InvalidArgument: Histogram::addRecord(): count < weight!" << count << " vs " << weight);
 		}
 		void resetTotals() {
 			count = 0;
@@ -1661,7 +1661,7 @@ public:
 #pragma omp parallel num_threads(numThreads)
 		{
 			if (numThreads != omp_get_num_threads())
-				throw "OMP thread count mis-match";
+				LOG_THROW("RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << numThreads << " vs " << omp_get_num_threads());
 		}
 		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads << " over " << store.getSize() << " reads");
 
@@ -1703,7 +1703,7 @@ public:
 #pragma omp parallel num_threads(numThreads)
 			{
 				if (numThreads != omp_get_num_threads()) {
-					throw "OMP thread count mis-match";
+					LOG_THROW("RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP()2: thread count mis-match " << numThreads << " vs " << omp_get_num_threads());
 				}
 
 				for(int threads = 0; threads < numThreads; threads++)
@@ -1844,7 +1844,7 @@ public:
 		LOG_VERBOSE(1, "Purging kmer variants within " << editDistance << " edit distance which are >= " << variantSigmas << " sigmas less abundant than a more abundant version");
 
 		if (hasSolids) {
-			throw; // TODO unsupported
+			LOG_THROW("KmerSpectrum::purgeVariants(): Unsupported when hasSolids is set"); // TODO unsupported
 		}
 		double minDepth = KmerOptions::getOptions().getMinDepth();
 		int numThreads = omp_get_max_threads();

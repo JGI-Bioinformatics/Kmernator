@@ -353,7 +353,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSou
 	{
 
 		if (omp_get_num_threads() != numThreads)
-			throw "OMP thread count discrepancy!";
+			LOG_THROW("ReadSet::appendFastqBlockedOMP(): OMP thread count discrepancy!" << omp_get_num_threads() << " vs " << numThreads);
 		int threadId = omp_get_thread_num();
 
 		ReadSet myReads;
@@ -540,7 +540,7 @@ Read ReadSet::fakePair(const Read &unPaired) {
 	} else if (readNum == 2) {
 		newName += '1';
 	} else if (readNum == 0)
-		throw std::invalid_argument( (std::string("Can not fake pair reads that were not paired end to start with: ") + name).c_str() );
+		LOG_THROW( "ReadSet::fakePair(): Can not fake pair reads that were not paired end to start with: " << name);
 	return Read(newName, "N", "A", true);
 }
 

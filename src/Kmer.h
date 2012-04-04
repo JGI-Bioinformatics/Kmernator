@@ -751,8 +751,8 @@ public:
 			return *this;
 		}
 		if (_begin == NULL)
-			throw std::runtime_error(
-					"Could not allocate memory in KmerArray operator=()");
+			LOG_THROW(
+					"RuntimeError: KmerArray::operator=(): Could not allocate memory in KmerArray operator=()");
 
 		_copyRange(other._begin, other.getValueStart(), 0, 0, _size, false);
 
@@ -820,24 +820,24 @@ public:
 	// never thread safe!
 	const Kmer &operator[](IndexType index) const {
 		if (index >= size())
-			throw std::invalid_argument(
-					"attempt to access index greater than size in KmerArray operator[] const");
+			LOG_THROW(
+					"Invalid: Kmer::operator[](): attempt to access index greater than size in KmerArray operator[] const");
 		return get(index);
 	}
 
 	// never thread safe!
 	Kmer &operator[](IndexType index) {
 		if (index >= size())
-			throw std::invalid_argument(
-					"attempt to access index greater than size in KmerArray operator[]");
+			LOG_THROW(
+					"Invalid: Kmer::operator[](): attempt to access index greater than size in KmerArray operator[]");
 		return get(index);
 	}
 
 	// never thread safe!
 	const ValueType &valueAt(IndexType index) const {
 		if (index >= _size) {
-			throw std::invalid_argument(
-					"attempt to access index greater than size in KmerArray valueAt() const");
+			LOG_THROW(
+					"Invalid: Kmer::valueAt(): attempt to access index greater than size in KmerArray valueAt() const");
 		}
 		return *(getValueStart() + index);
 	}
@@ -845,8 +845,8 @@ public:
 	// never thread safe!
 	ValueType &valueAt(IndexType index) {
 		if (index >= _size) {
-			throw std::invalid_argument(
-					"attempt to access index greater than size in KmerArray valueAt()");
+			LOG_THROW(
+					"Invalid: Kmer::valueAt(): attempt to access index greater than size in KmerArray valueAt()");
 		}
 		return *(getValueStart() + index);
 	}
@@ -938,8 +938,8 @@ public:
 		_setMemory(size, idx, reserveExtra);
 
 		if (_begin == NULL && size > 0) {
-			throw std::runtime_error(
-					"Could not allocate memory in KmerArray resize()");
+			LOG_THROW(
+					"RuntimeError: KmerArray::resize(): Could not allocate memory in KmerArray resize()");
 		}
 
 		if (size > oldSize && idx == MAX_INDEX) {
@@ -1031,8 +1031,8 @@ public:
 			if (newBegin == NULL) {
 				LOG_ERROR(0, "Attempt to malloc " << newCapacity
 						* getElementByteSize());
-				throw std::runtime_error(
-						"Could not allocate memory in KmerArray _setMemory()");
+				LOG_THROW(
+						"RuntimeError: Could not allocate memory in KmerArray _setMemory()");
 			}
 
 			memChanged = true;
@@ -1112,8 +1112,8 @@ public:
 		SequenceLengthType numKmers = length - KmerSizer::getSequenceLength()
 		+ 1;
 		if (_size != numKmers)
-			throw std::invalid_argument(
-					"attempt to build an incorrectly sized KmerArray in KmerArray build()");
+			LOG_THROW(
+					"Invalid: attempt to build an incorrectly sized KmerArray in KmerArray build()");
 		;
 
 		KmerArray &kmers = *this;
@@ -1326,7 +1326,7 @@ protected:
 	void _insertAt(IndexType idx, const Kmer &target) {
 		assert(!isMmaped()); // mmaped can not be modified!
 		if (idx > size())
-			throw std::invalid_argument("attempt to access index greater than size in KmerArray insertAt");
+			LOG_THROW("Invalid: attempt to access index greater than size in KmerArray insertAt");
 		resize(size() + 1, idx);
 		get(idx) = target;
 	}
@@ -1445,7 +1445,7 @@ public:
 		if (idx1 == idx2)
 			return;
 		if (idx1 >= size() || idx2 >= size())
-			throw std::invalid_argument("attempt to access index greater than size in KmerArray swap()");
+			LOG_THROW("Invalid: attempt to access index greater than size in KmerArray swap()");
 
 		setExclusiveLock();
 		get(idx1).swap(get(idx2));
@@ -2047,7 +2047,7 @@ public:
 	// optimized merge for DMP threaded (blocked) KmerMaps
 	void merge(const KmerMap &src) const {
 		if (getNumBuckets() != src.getNumBuckets()) {
-			throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
+			LOG_THROW("Invalid: Can not merge two KmerMaps of differing sizes!");
 		}
 
 		long bucketsSize = getNumBuckets();
@@ -2057,7 +2057,7 @@ public:
 			BucketType &b = const_cast<BucketType&>(src._buckets[idx]);
 
 			if (! _mergeTrivial(a,b) ) {
-				throw std::invalid_argument("Expected one bucket to be zero in this optimized method: KmerMap::merge(const KmerMap &src) const");
+				LOG_THROW("Invalid: Expected one bucket to be zero in this optimized method: KmerMap::merge(const KmerMap &src) const");
 			}
 		}
 
@@ -2065,7 +2065,7 @@ public:
 
 	void mergeAdd(KmerMap &src) {
 		if (getNumBuckets() != src.getNumBuckets()) {
-			throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
+			LOG_THROW("Invalid: Can not merge two KmerMaps of differing sizes!");
 		}
 		BucketType merged;
 		if (!isSorted())
@@ -2118,9 +2118,9 @@ public:
 	template< typename OtherDataType >
 	void mergePromote(KmerMap &src, KmerMap< OtherDataType > &mergeDest) {
 		// TODO fixme
-		throw std::invalid_argument("This method is broken for threaded execution somehow (even with pragmas disabled)");
+		LOG_THROW("Invalid: This method is broken for threaded execution somehow (even with pragmas disabled)");
 		if (getNumBuckets() != src.getNumBuckets()) {
-			throw std::invalid_argument("Can not merge two KmerMaps of differing sizes!");
+			LOG_THROW("Invalid: Can not merge two KmerMaps of differing sizes!");
 		}
 		// calculated chunk size to ensure thread safety of merge operation
 		int chunkSize = mergeDest.getNumBuckets() / src.getNumBuckets();

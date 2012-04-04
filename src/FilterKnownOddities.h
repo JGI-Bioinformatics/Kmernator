@@ -168,7 +168,7 @@ public:
 	FilterKnownOddities(int _length = FilterKnownOdditiesOptions::getOptions().getArtifactFilterMatchLength(), int _numErrors = FilterKnownOdditiesOptions::getOptions().getArtifactFilterEditDistance()) :
 		length(_length), filter(512*1024), numErrors(_numErrors) {
 		if (length > 28) {
-			throw std::invalid_argument("FilterKnownOddities must use 7 bytes or less (<= 28 bases)");
+			LOG_THROW("Invalid: FilterKnownOddities must use 7 bytes or less (<= 28 bases)");
 		}
 		twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(length);
 		// T is 11, A is 00, so mask is all T's surrounded by A's

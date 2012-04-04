@@ -119,14 +119,14 @@ public:
 		_ifs.open(_path.c_str());
 
 		if (_ifs.fail())
-			throw runtime_error("Could not open : " + _path);
+			LOG_THROW("ReadFileReader::openFastaFile(): Could not open : " << _path);
 
 	}
 	void openQualFile(string qualFilePath) {
 		if (!qualFilePath.empty()) {
 			_qs.open(qualFilePath.c_str());
 			if (_qs.fail())
-				throw runtime_error("Could not open : " + qualFilePath);
+				LOG_THROW("ReadFileReader::openQualFile(): Could not open : " << qualFilePath);
 		} else {
 			_qs.open((_path + ".qual").c_str());
 			LOG_DEBUG(3, "ReadFileReader() opened " << _path << ".qual " << _qs.good());
@@ -152,7 +152,7 @@ public:
 	}
 	void setParser(istream &fs1) {
 		if (fs1.fail() || !fs1.good())
-			throw;
+			LOG_THROW("ReadFileRader::setParser(): istream fail() or !good()");
 		setParser(fs1, fs1.peek());
 	}
 	template<typename U> void setParser(U &data, char marker) {
@@ -162,7 +162,7 @@ public:
 		else if (marker == '>')
 			_parser = SequenceStreamParserPtr(new FastaStreamParser(data));
 		else
-			throw std::invalid_argument("Unknown file format");
+			LOG_THROW("ReadFileReader::setParser(): Unknown file format: marker == " << marker);
 	}
 	SequenceStreamParserPtr getParser() {
 		return _parser;
@@ -226,7 +226,7 @@ public:
 					<< _parser->lineNumber() << " position:" << _parser->tellg() << " " \
 					<< _parser->getName() << _parser->getBases() << _parser->getQuals() \
 					<< " '" << _parser->getLineBuffer() << _parser->nextLine() << "'";
-			throw runtime_error(error.str());
+			LOG_THROW("ReadFileReader::nextRead(RecordPtr): " << error.str());
 		}
 	}
 	bool nextRead(RecordPtr &recordStart, string &name, string &bases, string &quals, bool &isMultiline) {
@@ -253,7 +253,7 @@ public:
 
 			if (quals.length() != bases.length())
 				if (!(quals.length() == 1 && quals[0] == Read::REF_QUAL))
-					throw runtime_error((string("Number of bases and quals not equal: ") + bases + " " + quals).c_str());
+					LOG_THROW("ReadFileReader::nextRead(name,base,qual): Number of bases and quals not equal: " << bases << " " << quals);
 			LOG_DEBUG(5, "nextRead(name, bases, quals) " << name);
 			return true;
 		}
@@ -264,7 +264,7 @@ public:
 					<< _parser->lineNumber() << " position:" << _parser->tellg() << " " \
 					<< _parser->getName() << _parser->getBases() << _parser->getQuals() \
 					<< " '" << _parser->getLineBuffer() << _parser->nextLine() << "'";
-			throw runtime_error(error.str());
+			LOG_THROW("ReadFileReader::nextRead(name,base,qual): " << error.str());
 		}
 	}
 
@@ -703,11 +703,11 @@ public:
 
 			if (_basesBuffer[threadNum].empty() || _basesBuffer[threadNum].length()
 					== _basesBuffer[threadNum].max_size())
-				throw runtime_error("Missing or too many bases");
+				LOG_THROW("FastqStreamParser::readBases(): Missing or too many bases");
 
 			string &qualName = nextLine();
 			if (qualName.empty() || qualName[0] != '+')
-				throw runtime_error((string("Missing '+' in fastq, got: ") + _basesBuffer[threadNum] + " " + qualName).c_str());
+				LOG_THROW("FastqStreamParser::readBases(): Missing '+' in fastq, got: " <<  _basesBuffer[threadNum] << " " << qualName);
 
 			_isMultiline[threadNum] = false;
 			return _basesBuffer[threadNum];
@@ -761,7 +761,7 @@ public:
 			}
 			RecordPtr recordPtr = _recordPtr;
 			if (*recordPtr != _marker) {
-				throw std::invalid_argument("Could not FastaStreamParser::readRecord()");
+				LOG_THROW("FastaStreamParser::readRecord(): Could not FastaStreamParser::readRecord()");
 			}
 			std::string &name = _nameBuffer[threadNum];
 			nextLine(name, recordPtr);  // name
@@ -804,7 +804,7 @@ public:
 				if (++count > 1)
 					_isMultiline[threadNum] = true;
 				if (_basesBuffer[threadNum].size() == _basesBuffer[threadNum].max_size())
-					throw runtime_error("Sequence/Qual too large to read");
+					LOG_THROW("FastaStreamParser::getBasesOrQuals(): Sequence/Qual too large to read");
 
 				if (peek() == fasta_marker)
 					break;
@@ -868,7 +868,7 @@ public:
 			string &qualName = _qualParser.readName();
 			string &name = FastaStreamParser::readName();
 			if (name != qualName)
-				throw runtime_error("fasta and quals have different names");
+				LOG_THROW("FastaQualStreamParser::readName(): fasta and quals have different names");
 			return name;
 		}
 

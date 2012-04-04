@@ -399,7 +399,7 @@ public:
 					score += contribution * (maxPickedKmerDepth - pickedCount);
 				}
 			} else {
-				throw "Reads should have already been trimmed to exclude this kmer: " + kmers[j].toFasta();
+				LOG_THROW("rescoreByBestCoveringSubset(): Reads should have already been trimmed to exclude this kmer: " << kmers[j].toFasta());
 			}
 		}
 
@@ -775,12 +775,12 @@ public:
 
 	ReadSetSizeType pickAllCovering() {
 		optimizePickOrder();
-		throw;
+		LOG_THROW("Unsupported function: pickAllCovering()");
 	}
 
 	ReadSetSizeType pickCoverageNormalizedSubset() {
 		optimizePickOrder();
-		throw;
+		LOG_THROW("Unsupported function: pickCoverageNormalizedSubset()");
 	}
 
 	// sorts the latest batch of picks to work best with mmaped ReadSets

@@ -435,7 +435,7 @@ public:
 		case FormatOutput::FASTA: os << read.toFasta(trimOffset, trimLength, label); break;
 		case FormatOutput::FASTQ_UNMASKED: os << read.toFastq(trimOffset, trimLength, label, true) ; break;
 		case FormatOutput::FASTA_UNMASKED: os << read.toFasta(trimOffset, trimLength, label, true); break;
-		default: throw std::invalid_argument("Invalid format");
+		default: LOG_THROW("Invalid format for Sequence::write(): " << format.getType());
 		}
 		return os;
 	}
@@ -451,7 +451,7 @@ public:
 		case FormatOutput::FASTA: length += 1 + 2 + sequenceLength   + read.getName().length() + (label.length() > 0 ? 1 + label.length() : 0); break;
 		case FormatOutput::FASTQ_UNMASKED: length += 2 + 4 + read.getLength()*2 + read.getName().length() + (label.length() > 0 ? 1 + label.length() : 0); break;
 		case FormatOutput::FASTA_UNMASKED: length += 1 + 2 + read.getLength()   + read.getName().length() + (label.length() > 0 ? 1 + label.length() : 0); break;
-		default: throw std::invalid_argument("Invalid format");
+		default: LOG_THROW("Invalid format for Sequence::getIntendedWriteSize(): " << format.getType());
 		}
 		return length;
 	}
