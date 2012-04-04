@@ -15,16 +15,14 @@
 #include "ReadSet.h"
 #include "Options.h"
 #include "MatcherInterface.h"
+#include "KmerAlign.h"
 
 class _KmerMatchOptions  : public _KmerBaseOptions {
 public:
-	_KmerMatchOptions() : _KmerBaseOptions(), maxPositionsFromEdge(0),includeMate(1) {}
+	_KmerMatchOptions() : _KmerBaseOptions(), maxPositionsFromEdge(0) {}
 	~_KmerMatchOptions() {}
-	int &getMaxPositionsFromEdge() {
+	int &getMatchMaxPositionsFromEdge() {
 		return maxPositionsFromEdge;
-	}
-	bool getIncludeMate() {
-		return includeMate == 1;
 	}
 	void _resetDefaults() {
 		_KmerBaseOptions::_resetDefaults();
@@ -34,22 +32,19 @@ public:
 		po::options_description opts("Kmer-Match Options");
 		opts.add_options()
 
-				("max-positions-from-edge", po::value<int>()->default_value(maxPositionsFromEdge), "if >0 then match only reads with max-postitions-from-edge bases of either end")
+				("match-max-positions-from-edge", po::value<int>()->default_value(maxPositionsFromEdge), "if >0 then match only reads with max-postitions-from-edge bases of either end")
 
-				("include-mate", po::value<int>()->default_value(includeMate), "1 - include mates, 0 - do not")
 				;
 		desc.add(opts);
 
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = _KmerBaseOptions::_parseOptions(vm);
-		setOpt<int>("max-positions-from-edge", maxPositionsFromEdge);
-		setOpt<int>("include-mate", includeMate);
-
+		setOpt<int>("match-max-positions-from-edge", maxPositionsFromEdge);
 		return ret;
 	}
 protected:
-	int maxPositionsFromEdge, includeMate;
+	int maxPositionsFromEdge;
 };
 typedef OptionsBaseTemplate< _KmerMatchOptions > KmerMatchOptions;
 
@@ -59,7 +54,7 @@ public:
 	typedef MatcherInterface::MatchResults MatchResults;
 	typedef DistributedKmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads, TrackingDataSingletonWithReadPosition > KS;
 
-	KmerMatch(mpi::communicator &world, const ReadSet &target, bool returnPairedMatches = KmerMatchOptions::getOptions().getIncludeMate())
+	KmerMatch(mpi::communicator &world, const ReadSet &target, bool returnPairedMatches = MatcherInterfaceOptions::getOptions().getIncludeMate())
 	: MatcherInterface(world, target, returnPairedMatches), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {
 		assert(target.isGlobal());
 		_spectrum._buildKmerSpectrumMPI(target, true);
@@ -80,7 +75,7 @@ public:
 		MatchResults matchResults;
 		matchResults.resize(query.getSize());
 		bool includeMates = getTarget().hasPairs() && isReturnPairedMatches();
-		int maxPositionsFromEdge = KmerMatchOptions::getOptions().getMaxPositionsFromEdge();
+		int maxPositionsFromEdge = KmerMatchOptions::getOptions().getMatchMaxPositionsFromEdge();
 		int maxKmersFromEdge = maxPositionsFromEdge - KmerSizer::getSequenceLength() + 1;
 
 		for(unsigned int i = 0; i < query.getSize(); i++) {
@@ -99,8 +94,8 @@ public:
 					TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
 					for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
 						ReadSet::ReadSetSizeType globalReadIdx = it->readId;
-						matchResults[i].insert( globalReadIdx );
 						LOG_DEBUG(5, "KmerMatch::matchLocal: localRead " << i << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
+						matchResults[i].insert( globalReadIdx );
 						if (includeMates) {
 							matchResults[i].insert( getTarget().getGlobalPairIdx( globalReadIdx ) );
 						}

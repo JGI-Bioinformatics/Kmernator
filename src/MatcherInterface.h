@@ -15,10 +15,11 @@
 #include "Utils.h"
 #include "Options.h"
 #include "MPIBuffer.h"
+#include "KmerAlign.h"
 
 class _MatcherInterfaceOptions  : public OptionsBaseInterface {
 public:
-	_MatcherInterfaceOptions() : maxReadMatches(400), maxReadDepthMatches(40) {}
+	_MatcherInterfaceOptions() : maxReadMatches(400), maxReadDepthMatches(40), includeMate(1), minOverlap(51), minIdentity(0.99), returnOverlapOnly(0) {}
 	virtual ~_MatcherInterfaceOptions() {}
 
 	int &getMaxReadMatches() {
@@ -27,6 +28,19 @@ public:
 	int &getMaxReadDepthMatches() {
 		return maxReadDepthMatches;
 	}
+	bool getIncludeMate() {
+		return includeMate == 1;
+	}
+	int &getMinOverlap() {
+		return minOverlap;
+	}
+	float &getMinIdentity() {
+		return minIdentity;
+	}
+	bool getReturnOverlapOnly() {
+		return returnOverlapOnly == 1;
+	}
+
 	// use to set/overrided any defaults on options that are stored persistently
 	void _resetDefaults() {}
 	// use to set the description of all options
@@ -36,18 +50,36 @@ public:
 						("max-read-matches", po::value<int>()->default_value(maxReadMatches), "maximum number of (randomly sampled) reads to return for matching. '0' disables.")
 
 						("max-read-depth-matches", po::value<int>()->default_value(maxReadDepthMatches), "maximum number of (randomly sampled) reads per query length to return for matching. '0' disables.")
+
+						("include-mate", po::value<int>()->default_value(includeMate), "1 - include mates, 0 - do not")
+
+						("min-match-overlap", po::value<int>()->default_value(minOverlap), "The minimum amount of overlap for a matching read")
+
+						("min-identity-fraction", po::value<float>()->default_value(minIdentity), "The minimum fraction identity for a matching read (to the end)")
+
+						("return-overlap-only", po::value<int>()->default_value(returnOverlapOnly), "If set to 1 only overlapping reads (or unaligned mates) will be returned")
+
 						;
 		desc.add(opts);
 	}
 	// use to post-process options, returning true if everything is okay
 	bool _parseOptions(po::variables_map &vm) {
 		setOpt<int>("max-read-matches", maxReadMatches);
-		setOpt<int>("max-read-depth-matches", maxReadDepthMatches);
+		setOpt<int>("max-read-depth-matches", maxReadDepthMatches);\
+		setOpt<int>("include-mate", includeMate);
+		setOpt<int>("min-match-overlap", minOverlap);
+		setOpt<float>("min-identity-fraction", minIdentity);
+		setOpt<int>("return-overlap-only", returnOverlapOnly);
+
 		return true;
 	}
 protected:
 	int maxReadMatches;
 	int maxReadDepthMatches;
+	int includeMate;
+	int minOverlap;
+	float minIdentity;
+	int returnOverlapOnly;
 
 };
 typedef OptionsBaseTemplate< _MatcherInterfaceOptions > MatcherInterfaceOptions;
@@ -175,6 +207,7 @@ public:
 		}
 		return;
 	}
+
 	// returns a ReadSetVector of reads that are local (i.e. targets in globalReadIdx space local to the node)
 	// exchanges globalReadSetIds with the responsible nodes, if needed
 	MatchReadResults getLocalReads(MatchResults &globalMatchResults) {
@@ -206,6 +239,10 @@ public:
 		MatchReadResults globalReadSetVector, tmpReadSetVector;
 		globalReadSetVector.resize(query.getSize(), ReadSet());
 		tmpReadSetVector.resize(query.getGlobalSize(), ReadSet());
+
+		bool isPaired = MatcherInterfaceOptions::getOptions().getIncludeMate();
+		bool screenForOverhang = MatcherInterfaceOptions::getOptions().getReturnOverlapOnly();
+
 		int myRank = _world.rank();
 
 		int sendBytes[_world.size()], recvBytes[_world.size()],
@@ -388,6 +425,11 @@ public:
 		ReadSet::ReadSetSizeType maxReadDepth = MatcherInterfaceOptions::getOptions().getMaxReadDepthMatches();
 
 		for (ReadSet::ReadSetSizeType localContigIdx = 0; localContigIdx < globalReadSetVector.size(); localContigIdx++) {
+			if (screenForOverhang) {
+				if (isPaired)
+					globalReadSetVector[localContigIdx].identifyPairs();
+				globalReadSetVector[localContigIdx] = screenAlignmentsForOverhang(query.getRead(localContigIdx), globalReadSetVector[localContigIdx]);
+			}
 			ReadSet::ReadSetSizeType maxReads = std::max(maxReadMatches, maxReadDepth * query.getRead(localContigIdx).getLength() / (getTarget().getSize() > 0 ? getTarget().getAvgSequenceLength() : 76) );
 			if (maxReads > 0) {
 				ReadSet::ReadSetSizeType numReads = globalReadSetVector[localContigIdx].getSize();
@@ -402,6 +444,60 @@ public:
 
 		return globalReadSetVector;
 	}
+
+	bool isPassingRead(KmerAlign &kalign, const Read &read) {
+		Alignment bestAlignment;
+		return isPassingRead(kalign, read, bestAlignment);
+	}
+	bool isPassingRead(KmerAlign &kalign, const Read &read, Alignment &bestAlignment) {
+		bestAlignment = kalign.getAlignment(read);
+		SequenceLengthType minOverlap = MatcherInterfaceOptions::getOptions().getMinOverlap();
+		float minIdentity = MatcherInterfaceOptions::getOptions().getMinIdentity();
+
+		if (bestAlignment.getOverlap() < minOverlap || bestAlignment.getIdentity() < minIdentity)
+			return false;
+		if (bestAlignment.isAtEnd(kalign.getTarget(), read))
+			return true;
+		return false;
+	}
+	// screen matches for those that pass over the edge of the contig
+	// or, if paired, are full match and have pair with no alignment
+	ReadSet screenAlignmentsForOverhang(const Read &contig, ReadSet &matches) {
+		ReadSet screenedMatches;
+		KmerAlign kalign(contig);
+		if (matches.hasPairs()) {
+			for(ReadSet::ReadSetSizeType matchidx = 0; matchidx < matches.getPairSize(); matchidx++) {
+				ReadSet::Pair &pair = matches.getPair(matchidx);
+				Alignment aln1, aln2;
+				const Read &read1 = matches.getRead(pair.read1);
+				const Read &read2 = matches.getRead(pair.read2);
+
+				bool p1 = isPassingRead(kalign, read1, aln1);
+				bool p2 = isPassingRead(kalign, read2, aln2);
+				if (p1) {
+					// only include read1 if it overlaps the end
+					if (aln1.targetAln.isAtEnd(read1))
+						screenedMatches.append(read1);
+					if ((!p2) || aln2.targetAln.isAtEnd(read2))
+						screenedMatches.append(read2);
+				} else if (p2) {
+					if ((!p1) || aln1.targetAln.isAtEnd(read1))
+						screenedMatches.append(read1);
+					// only include read2 if it overlaps the end
+					if (aln2.targetAln.isAtEnd(read2))
+						screenedMatches.append(read2);
+				}
+			}
+		} else {
+			for(ReadSet::ReadSetSizeType matchidx = 0; matchidx < matches.getSize(); matchidx++) {
+				const Read &match = matches.getRead(matchidx);
+				if (isPassingRead(kalign, match))
+					screenedMatches.append(match);
+			}
+		}
+		return screenedMatches;
+	}
+
 	// const version of exchangeGlobalReads
 	//MatchReadResults exchangeGlobalReads(const ReadSet &query, const MatchReadResults &localReadSetVector) {
 	//	MatchReadResults copy = localReadSetVector;

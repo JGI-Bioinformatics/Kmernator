@@ -358,6 +358,13 @@ void TwoBitSequence::reverseComplement(const TwoBitEncoding *in,
 	}
 }
 
+std::string TwoBitSequence::getReverseComplementFasta(const TwoBitEncoding *in, SequenceLengthType length) {
+	SequenceLengthType twoBitLength = fastaLengthToTwoBitLength(length);
+	TwoBitEncoding rev[twoBitLength];
+	reverseComplement(in, rev, length);
+	return getFasta(rev, 0, length);
+}
+
 void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut,
 		SequenceLengthType twoBitLength, unsigned char shiftAmountInBases,
 		bool hasExtraByte) {

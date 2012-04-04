@@ -147,6 +147,8 @@ public:
 
 	static void reverseComplement(const TwoBitEncoding *in, TwoBitEncoding *out, SequenceLengthType length);
 
+	static std::string getReverseComplementFasta(const TwoBitEncoding *in, SequenceLengthType length);
+
 	static void shiftLeft(const void *in, void *out, SequenceLengthType twoBitLength, unsigned char shiftAmountInBases, bool hasExtraByte = false);
 
 	static void extendBase(std::string _fasta, char base, void *twoBitOut, bool toRight);
