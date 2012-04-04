@@ -732,8 +732,32 @@ private:
 	std::string _tempPrefix;
 	std::string _realOutputPrefix;
 
-	static string getTempPath(std::string tempPath) {
-		return tempPath + UniqueName::generateUniqueName("/.tmp-output");
+	static string getSharedGlobalUnique(mpi::communicator &world) {
+		unsigned long unique = 0;
+		if (world.rank() == 0) {
+			unsigned int seed = (unsigned int) (((unsigned long) (MPI_Wtime()*1000)) & 0xffffffff);
+			unique = LongRand::rand(seed);
+		}
+		MPI_Bcast(&unique, 1, MPI_LONG_LONG_INT, 0, world);
+		return boost::lexical_cast<string>( unique );
+	}
+	static string &getGlobalTempDir() {
+		static string tempDir;
+		return tempDir;
+	}
+	static string setGlobalTempPath(mpi::communicator &world, std::string tempPath) {
+		getGlobalTempDir() = tempPath + "/" + getSharedGlobalUnique(world) + "/";
+		mkdir(getGlobalTempDir().c_str(), 0777);
+		return getGlobalTempDir();
+	}
+	static string &getLocalTempDir() {
+		static string tempDir;
+		return tempDir;
+	}
+	static string setLocalTempPath(mpi::communicator &world, std::string tempPath) {
+		getLocalTempDir() = setGlobalTempPath(world, tempPath) + UniqueName::generateUniqueName("/.tmp-output") + "/";
+		mkdir(getLocalTempDir().c_str(), 0777);
+		return getLocalTempDir();
 	}
 protected:
 	virtual void close() {
@@ -748,15 +772,20 @@ protected:
 
 public:
 	DistributedOfstreamMap(mpi::communicator &world, std::string outputFilePathPrefix = Options::getOptions().getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix(), std::string tempPath = Options::getOptions().getTmpDir())
-	:  OfstreamMap(getTempPath(tempPath), suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
+	:  OfstreamMap(setLocalTempPath(world, tempPath), suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
+
 		_tempPrefix = OfstreamMap::getOutputPrefix();
-		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << "," << tempPath <<")");
+		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << "," << getLocalTempDir() << "(" << tempPath <<") )");
 		setBuildInMemory(Options::getOptions().getBuildOutputInMemory());
 	}
 
 	~DistributedOfstreamMap() {
 		LOG_DEBUG_OPTIONAL(2, _world.rank() == 0, "~DistributedOfstreamMap()");
 		this->clear();
+		rmdir(getLocalTempDir().c_str());
+		_world.barrier();
+		if(_world.rank() == 0)
+			rmdir(getGlobalTempDir().c_str());
 	}
 
 	virtual std::string getRank() const {
