@@ -104,7 +104,7 @@ public:
 		mkdir(tmpDir.c_str(), 0777); // all ranks need to mkdir if writing to local disks...
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Created temporary directory for ranked vmatch files: " << tmpDir);
 
-		std::string rankOutputDir = getRankSubdir(world, tmpDir);
+		std::string rankOutputDir = DistributedDirectoryManagement::getRankSubDir(world, tmpDir);
 		_indexName = rankOutputDir + "/myReads";
 
 		_binaryPath = VmatchOptions::getOptions().getVmatchPath();

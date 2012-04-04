@@ -50,23 +50,50 @@
 #error "mpi is required for this library"
 #endif
 
+class DistributedDirectoryManagement {
+public:
 
-// collective
-std::string getRankSubdir(mpi::communicator &world, std::string prefix) {
-	int subRank = world.rank() / 256;
-	std::stringstream ss;
-	ss << prefix << "/rank-subdirs-" << world.size() << "-0x" << std::hex << subRank;
-	std::string subDir = ss.str();
-	if (world.rank() == subRank * 256) {
-		LOG_VERBOSE_OPTIONAL(1, true, "Making rank-subdirs: " << subDir);
+	// collective
+	static std::string _getRankSubDir(mpi::communicator &world, std::string prefix) {
+		int subRank = world.rank() / 256;
+		std::stringstream ss;
+		ss << prefix << "/rank-subdirs-" << world.size() << "-0x" << std::hex << subRank;
+		std::string subDir = ss.str();
+		return subDir;
 	}
-	mkdir(subDir.c_str(), 0777); // all ranks must mkdir if writing to local disks
-	std::string subSubDir = subDir + "/" + boost::lexical_cast<std::string>(world.rank()) + "of" + boost::lexical_cast<std::string>(world.size());
-	LOG_DEBUG(2, "getRankSubdir(" << prefix << "): " << subSubDir);
-	world.barrier();
-	mkdir(subSubDir.c_str(), 0777);
-	return subSubDir;
-}
+	static std::string _makeRankSubDir(mpi::communicator &world, std::string prefix) {
+		int subRank = world.rank() / 256;
+		std::string subDir = _getRankSubDir(world, prefix);
+		LOG_DEBUG_OPTIONAL(1, world.rank() == subRank * 256, "Making rank-subdirs: " << subDir);
+		mkdir(subDir.c_str(), 0777); // all ranks must mkdir if writing to local disks
+		return subDir;
+	}
+	static void _rmRankSubDir(mpi::communicator &world, std::string prefix) {
+		std::string subDir = _getRankSubDir(world, prefix);
+		rmdir(subDir.c_str());  // all ranks must rmdir if writing to local disks
+	}
+
+	static std::string getRankSubDir(mpi::communicator &world, std::string prefix) {
+		std::string subSubDir = _getRankSubDir(world, prefix);
+		std::string subDir = subSubDir + "/" + boost::lexical_cast<std::string>(world.rank()) + "of" + boost::lexical_cast<std::string>(world.size()) + "/";
+		return subDir;
+	}
+	static std::string makeRankSubDir(mpi::communicator &world, std::string prefix) {
+		std::string subSubDir = _makeRankSubDir(world, prefix);
+		std::string subDir = getRankSubDir(world, prefix);
+		LOG_DEBUG(2, "getRankSubDir(" << prefix << "): " << subDir);
+		mkdir(subDir.c_str(), 0777);
+		return subDir;
+	}
+
+	static void rmRankSubDir(mpi::communicator &world, std::string prefix) {
+		std::string subSubDir = _getRankSubDir(world,prefix);
+		std::string subDir = getRankSubDir(world, prefix);
+		rmdir(subDir.c_str());
+		rmdir(subSubDir.c_str());
+	}
+
+};
 
 // collective
 void niceBarrier(mpi::communicator &world, int waitMs = 1) {
@@ -732,8 +759,38 @@ private:
 	std::string _tempPrefix;
 	std::string _realOutputPrefix;
 
-	static string getTempPath(std::string tempPath) {
-		return tempPath + UniqueName::generateUniqueName("/.tmp-output");
+	static string getSharedGlobalUnique(mpi::communicator &world) {
+		unsigned long unique = 0;
+		if (world.rank() == 0) {
+			unsigned int seed = (unsigned int) (((unsigned long) (MPI_Wtime()*1000)) & 0xffffffff);
+			unique = LongRand::rand(seed);
+			LOG_DEBUG_OPTIONAL(1, true, "getSharedGlobalUnique(): " << unique);
+		}
+		MPI_Bcast(&unique, 1, MPI_LONG_LONG_INT, 0, world);
+		return boost::lexical_cast<string>( unique );
+	}
+	static string &getGlobalTempDir() {
+		static string tempDir;
+		return tempDir;
+	}
+	static string setGlobalTempDir(mpi::communicator &world, std::string tempPath) {
+		getGlobalTempDir() = tempPath + "/" + getSharedGlobalUnique(world) + "/";
+		mkdir(getGlobalTempDir().c_str(), 0777); // all ranks need to make in case FS is local
+		LOG_DEBUG_OPTIONAL(1, world.rank()==0, "setGlobalTempDir(): " << getGlobalTempDir());
+		return getGlobalTempDir();
+	}
+	static void rmGlobalTempDir() {
+		rmdir(getGlobalTempDir().c_str());
+		getGlobalTempDir().clear();
+	}
+	static string &getLocalTempDir() {
+		static string tempDir;
+		return tempDir;
+	}
+	static string setLocalTempDir(mpi::communicator &world, std::string tempPath) {
+		getLocalTempDir() = DistributedDirectoryManagement::makeRankSubDir(world, setGlobalTempDir(world, tempPath));
+		mkdir(getLocalTempDir().c_str(), 0777);
+		return getLocalTempDir();
 	}
 protected:
 	virtual void close() {
@@ -748,15 +805,18 @@ protected:
 
 public:
 	DistributedOfstreamMap(mpi::communicator &world, std::string outputFilePathPrefix = Options::getOptions().getOutputFile(), std::string suffix = FormatOutput::getDefaultSuffix(), std::string tempPath = Options::getOptions().getTmpDir())
-	:  OfstreamMap(getTempPath(tempPath), suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
+	:  OfstreamMap(setLocalTempDir(world, tempPath)+"tmp", suffix), _world(world), _tempPrefix(), _realOutputPrefix(outputFilePathPrefix) {
+
 		_tempPrefix = OfstreamMap::getOutputPrefix();
-		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << "," << tempPath <<")");
+		LOG_DEBUG(3, "DistributedOfstreamMap(world, " << outputFilePathPrefix << ", " << suffix << ", " << getLocalTempDir() << " (from " << tempPath <<") )");
 		setBuildInMemory(Options::getOptions().getBuildOutputInMemory());
 	}
 
 	~DistributedOfstreamMap() {
 		LOG_DEBUG_OPTIONAL(2, _world.rank() == 0, "~DistributedOfstreamMap()");
 		this->clear();
+		DistributedDirectoryManagement::rmRankSubDir(_world, getGlobalTempDir());
+		rmGlobalTempDir(); // all ranks need to rmdir in case it is local
 	}
 
 	virtual std::string getRank() const {
