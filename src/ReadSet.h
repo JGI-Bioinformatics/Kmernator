@@ -408,6 +408,7 @@ public:
 
 	ReadPtr parseMmapedRead(ReadSetSizeType index) const;
 	inline const Read &getRead(ReadSetSizeType index) const {
+		assert(isValidRead(index));
 		const Read &read = _reads[index];
 		return read;
 	}

@@ -463,28 +463,41 @@ public:
 	// screen matches for those that pass over the edge of the contig
 	// or, if paired, are full match and have pair with no alignment
 	ReadSet screenAlignmentsForOverhang(const Read &contig, ReadSet &matches) {
+		LOG_DEBUG_OPTIONAL(1, true, "screenAlignmentsForOverhang() on " << contig.toString());
 		ReadSet screenedMatches;
 		KmerAlign kalign(contig);
 		if (matches.hasPairs()) {
 			for(ReadSet::ReadSetSizeType matchidx = 0; matchidx < matches.getPairSize(); matchidx++) {
 				ReadSet::Pair &pair = matches.getPair(matchidx);
 				Alignment aln1, aln2;
-				const Read &read1 = matches.getRead(pair.read1);
-				const Read &read2 = matches.getRead(pair.read2);
+				bool r1 = false, r2 = false, p1 = false, p2 = false, end1 = false, end2 = false;
+				r1 = matches.isValidRead(pair.read1);
+				r2 = matches.isValidRead(pair.read2);
+				Read read1, read2;
+				if (r1) {
+					read1 = matches.getRead(pair.read1);
+					p1 = isPassingRead(kalign, read1, aln1);
+					end1 = aln1.targetAln.isAtEnd(read1);
+						
+				}
+				if (r2) {	
+					read2 = matches.getRead(pair.read2);
+					p2 = isPassingRead(kalign, read2, aln2);
+					end2 = aln2.targetAln.isAtEnd(read2);
+				}
 
-				bool p1 = isPassingRead(kalign, read1, aln1);
-				bool p2 = isPassingRead(kalign, read2, aln2);
+				LOG_DEBUG_OPTIONAL(1, true, "screenAlignmentsForOverhang() " << p1 << " " << aln1.toString() << " " << p2 << " " << aln2.toString());
 				if (p1) {
 					// only include read1 if it overlaps the end
-					if (aln1.targetAln.isAtEnd(read1))
+					if (end1)
 						screenedMatches.append(read1);
-					if ((!p2) || aln2.targetAln.isAtEnd(read2))
+					if (r2 && ((!p2) || end2))
 						screenedMatches.append(read2);
 				} else if (p2) {
-					if ((!p1) || aln1.targetAln.isAtEnd(read1))
+					if (r1 && ((!p1) || end1))
 						screenedMatches.append(read1);
 					// only include read2 if it overlaps the end
-					if (aln2.targetAln.isAtEnd(read2))
+					if (end2)
 						screenedMatches.append(read2);
 				}
 			}
@@ -495,6 +508,7 @@ public:
 					screenedMatches.append(match);
 			}
 		}
+		LOG_DEBUG_OPTIONAL(1, true, "screenedMatches: " << screenedMatches.getSize());
 		return screenedMatches;
 	}
 

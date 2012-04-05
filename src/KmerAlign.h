@@ -48,7 +48,7 @@ public:
 		return isReversed() ? (startPos - endPos) : (endPos - startPos);
 	}
 	bool isReversed() const {
-		return (startPos < endPos);
+		return (startPos > endPos);
 	}
 	bool isAtEnd(const Read &read) const {
 		if (!isAligned())
@@ -57,14 +57,16 @@ public:
 		return isAtEnd(len);
 	}
 	bool isAtEnd(SequenceLengthType len) const {
+		bool ret = false;
 		if (isReversed()) {
 			if (endPos == 0 || startPos == len-1)
-				return true;
+				ret = true;
 		} else {
 			if (startPos == 0 || endPos == len-1)
-				return true;
+				ret = true;
 		}
-		return false;
+		LOG_DEBUG_OPTIONAL(1, true, "isAtEnd(" << len << "): " << ret << " from " << toString());
+		return ret;
 	}
 	std::string toString() const {
 		return "{" + boost::lexical_cast<std::string>(startPos) + "," + boost::lexical_cast<std::string>(endPos) + "}";
@@ -88,7 +90,8 @@ public:
 		return 1.0 - (float) mismatches / (float) getOverlap();
 	}
 	bool isAtEnd(const Read &target, const Read &query) const {
-		return (targetAln.isAtEnd(target) | queryAln.isAtEnd(query));
+		bool ret = (targetAln.isAtEnd(target) | queryAln.isAtEnd(query));
+		return ret;
 	}
 	std::string toString() const {
 		return "Align{" + targetAln.toString() + "," + queryAln.toString() + "mis" + boost::lexical_cast<std::string>(mismatches) + "}";
