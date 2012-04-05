@@ -66,6 +66,9 @@ public:
 		}
 		return false;
 	}
+	std::string toString() const {
+		return "{" + boost::lexical_cast<std::string>(startPos) + "," + boost::lexical_cast<std::string>(endPos) + "}";
+	}
 	SequenceLengthType startPos, endPos;
 };
 class Alignment {
@@ -87,6 +90,9 @@ public:
 	bool isAtEnd(const Read &target, const Read &query) const {
 		return (targetAln.isAtEnd(target) | queryAln.isAtEnd(query));
 	}
+	std::string toString() const {
+		return "Align{" + targetAln.toString() + "," + queryAln.toString() + "mis" + boost::lexical_cast<std::string>(mismatches) + "}";
+	}
 
 	AlignmentRecord targetAln;
 	AlignmentRecord queryAln;
@@ -103,7 +109,7 @@ public:
 		_spectrum.buildKmerSpectrum(target);
 	}
 	Alignment getAlignment(const Read &query) {
-		return getAlignment(_spectrum, query, query);
+		return getAlignment(_spectrum, _read, query);
 	}
 	const Read &getTarget() const {
 		return _read;
@@ -130,6 +136,7 @@ public:
 				}
 			}
 		}
+		LOG_DEBUG_OPTIONAL(1, bestAlignment.getOverlap() > 0, "Aligned " << target.toFasta() << " to " << query.toFasta() << " " << bestAlignment.toString());
 		return bestAlignment;
 	}
 
@@ -150,13 +157,15 @@ public:
 		std::string tseqM = tseq.substr(tpos, minLen);
 		bool revcomp = false;
 		if (tseqM.compare( qseq.substr(qpos, minLen )) != 0 ) {
-			revcomp = true;
-			qseq = TwoBitSequence::getReverseComplementFasta(query.getTwoBitSequence(), queryLen);
-			qpos = queryLen - qpos - minLen;
-			if (tseqM.compare( qseq.substr(qpos, minLen )) != 0 ) {
-				LOG_WARN(1, "did not find a match between " << target.toString() << " and " << query.toString());
+			std::string qseq2 = TwoBitSequence::getReverseComplementFasta(query.getTwoBitSequence(), queryLen);
+			SequenceLengthType qpos2 = queryLen - qpos - minLen;
+			if (tseqM.compare( qseq2.substr(qpos2, minLen )) != 0 ) {
+				LOG_WARN(1, "did not find a match at " << tpos << "," << qpos << "'" << tseqM << "' vs '" << qseq.substr(qpos,minLen) << "' or '" << qseq2.substr(qpos2,minLen) << "' between " << target.toFasta() << " and " << query.toFasta());
 				return alignment;
 			}
+			revcomp = true;
+			qseq = qseq2;
+			qpos = qpos2;
 		}
 
 		AlignmentRecord &q = alignment.queryAln;
@@ -180,7 +189,7 @@ public:
 
 		// fix direction
 		if (revcomp) {
-			q = AlignmentRecord( queryLen - q.endPos, queryLen - q.startPos);
+			q = AlignmentRecord( queryLen - q.startPos, queryLen - q.endPos);
 		}
 		return alignment;
 	}
