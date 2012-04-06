@@ -41,6 +41,14 @@ class AlignmentRecord {
 public:
 	AlignmentRecord() : startPos(0), endPos(0) {}
 	AlignmentRecord(SequenceLengthType _s, SequenceLengthType _e) : startPos(_s), endPos(_e) {}
+	AlignmentRecord(const AlignmentRecord &copy) {
+		*this = copy;
+	}
+	AlignmentRecord &operator=(const AlignmentRecord &copy) {
+		startPos = copy.startPos;
+		endPos = copy.endPos;
+		return *this;
+	}
 	bool isAligned() const {
 		return startPos != endPos;
 	}
@@ -65,14 +73,20 @@ public:
 			if (startPos == 0 || endPos == len-1)
 				ret = true;
 		}
-		LOG_DEBUG(4, "isAtEnd(" << len << "): " << ret << " from " << toString());
+		LOG_DEBUG(5, "isAtEnd(" << len << "): " << ret << " from " << toString());
 		return ret;
 	}
 	bool contains(SequenceLengthType pos) const {
-		if (isReversed())
-			return endPos <= pos && startPos >= pos;
-		else
-			return startPos <= pos && endPos >= pos;
+		bool ret;
+		if (!isAligned()) {
+			ret = false;
+		} else {
+			if (isReversed())
+				ret = ((endPos <= pos) & (pos <= startPos));
+			else
+				ret = ((startPos <= pos) & (pos <= endPos));
+		}
+		return ret;
 	}
 	std::string toString() const {
 		return "{" + boost::lexical_cast<std::string>(startPos) + "," + boost::lexical_cast<std::string>(endPos) + "}";
@@ -83,6 +97,15 @@ class Alignment {
 public:
 	Alignment() : targetAln(), queryAln(), mismatches(0) {}
 	Alignment(AlignmentRecord target, AlignmentRecord query) : targetAln(target), queryAln(query), mismatches(0) {}
+	Alignment(const Alignment &copy) {
+		*this = copy;
+	}
+	Alignment &operator=(const Alignment &copy) {
+		targetAln = copy.targetAln;
+		queryAln = copy.queryAln;
+		mismatches = copy.mismatches;
+		return *this;
+	}
 	bool isAligned() const {
 		return (targetAln.isAligned() & queryAln.isAligned());
 	}
@@ -93,6 +116,8 @@ public:
 		return mismatches;
 	}
 	float getIdentity() const {
+		if (!isAligned())
+			return 0.0;
 		return 1.0 - (float) mismatches / (float) getOverlap();
 	}
 	bool isAtEnd(const Read &target, const Read &query) const {
@@ -124,15 +149,16 @@ public:
 		return _read;
 	}
 	static Alignment getBestAlignment(Alignment a, Alignment b) {
-		if (a.getOverlap()*a.getIdentity() > b.getOverlap()*b.getIdentity())
+		if (a.getOverlap()*a.getIdentity() >= b.getOverlap()*b.getIdentity())
 			return a;
 		else
 			return b;
 	}
 	// targetKS needs to have been built with Read, so that readIDs match
-	static Alignment getAlignment(const KS &targetKS, const Read &target, const Read &query) {
+	static Alignment getAlignment( KS &targetKS, const Read &target, const Read &query) {
 		assert(targetKS.hasSolids);
 		Alignment bestAlignment;
+		LOG_DEBUG(4, "getAlignment(): " << query.getName());
 		KmerWeights kmers(query.getTwoBitSequence(), query.getLength(), true);
 		for(unsigned int j = 0; j < kmers.size(); j++) {
 			KS::SolidElementType element = targetKS.getIfExistsSolid( kmers[j] );
@@ -143,13 +169,15 @@ public:
 					assert(globalReadIdx == 0); // target is the only read
 					Alignment test;
 					SequenceLengthType ksize = KmerSizer::getSequenceLength();
-					if (!bestAlignment.targetAln.contains(it->position) && !bestAlignment.queryAln.contains(j))
+					if ( !( bestAlignment.targetAln.contains(it->position) & bestAlignment.queryAln.contains(j) ) ) {
 						test = getAlignment(target, it->position, query, j, ksize);
-					bestAlignment = getBestAlignment(bestAlignment, test);
+						bestAlignment = getBestAlignment(bestAlignment, test);
+					}
 				}
 			}
 		}
-		LOG_DEBUG_OPTIONAL(2, bestAlignment.getOverlap() > 0, "Aligned " << target.toFasta() << " to " << query.toFasta() << " " << bestAlignment.toString());
+		if (bestAlignment.isAligned())
+			LOG_DEBUG(4, "Aligned " << target.toFasta() << " to " << query.toFasta() << " " << bestAlignment.toString());
 		return bestAlignment;
 	}
 
@@ -163,7 +191,7 @@ public:
 		SequenceLengthType queryLen = qseq.length();
 
 		if (tpos + minLen > targetLen || qpos + minLen > queryLen) {
-			LOG_DEBUG_OPTIONAL(2, true, "no alignment returned because match is out of bounds");
+			LOG_DEBUG(1, "no alignment returned because match is out of bounds: " << tpos << " / " << targetLen << ", " << qpos << "/ " << queryLen << " len: " << minLen << " " << target.toString() << " " << query.toString());
 			return alignment;
 		}
 
@@ -183,8 +211,8 @@ public:
 
 		AlignmentRecord &q = alignment.queryAln;
 		AlignmentRecord &t = alignment.targetAln;
-		q = AlignmentRecord(qpos, qpos+minLen);
-		t = AlignmentRecord(tpos, tpos+minLen);
+		q = AlignmentRecord(qpos, qpos+minLen-1);
+		t = AlignmentRecord(tpos, tpos+minLen-1);
 
 		// extend left
 		while (q.startPos > 0 && t.startPos > 0) {
@@ -196,14 +224,16 @@ public:
 		// extend right
 		while (q.endPos < (queryLen-1) && t.endPos < (targetLen-1)) {
 			q.endPos++; t.endPos++;
-			if (tseq[t.startPos] != qseq[q.startPos])
+			if (tseq[t.endPos] != qseq[q.endPos])
 				alignment.mismatches++;
 		}
 
 		// fix direction
 		if (revcomp) {
-			q = AlignmentRecord( queryLen - q.startPos, queryLen - q.endPos);
+			q = AlignmentRecord( queryLen - 1 - q.startPos, queryLen - 1 - q.endPos);
 		}
+		if (!alignment.isAligned())
+			LOG_WARN(1, "Could not find the alignment for " << tpos << ", " << qpos << " " << target.toString() << query.toString());
 		return alignment;
 	}
 private:
