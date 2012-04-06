@@ -19,7 +19,7 @@
 
 class _MatcherInterfaceOptions  : public OptionsBaseInterface {
 public:
-	_MatcherInterfaceOptions() : maxReadMatches(400), maxReadDepthMatches(40), includeMate(1), minOverlap(51), minIdentity(0.99), returnOverlapOnly(0) {}
+	_MatcherInterfaceOptions() : maxReadMatches(400), maxReadDepthMatches(40), includeMate(1), minOverlap(51), minIdentity(0.986), returnOverlapOnly(0) {}
 	virtual ~_MatcherInterfaceOptions() {}
 
 	int &getMaxReadMatches() {
@@ -97,6 +97,9 @@ public:
 	: _world(world), _target(target), _returnPairedMatches(returnPairedMatches) {
 		assert(_target.isGlobal() && _target.getGlobalSize() > 0);
 	}
+
+// TODO make global file persistant, reuse in exchangeGlobalReads before xfer and before any sampling
+// verify that screen is keeping all paired reads that are not fully contained in the contig
 
 	// returns a list of sets of local reads (i.e. target reads idxs in their globalReadIdx space)
 	// to a query, which should be a global ReadSet
@@ -442,18 +445,17 @@ public:
 			}
 		}
 
-		LOG_DEBUG_OPTIONAL(1, true, "exchangeGlobalReads(): Done " << iteration);
+		LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "exchangeGlobalReads(): Done " << iteration);
 
 		return globalReadSetVector;
 	}
 
-	bool isPassingRead(KmerAlign &kalign, const Read &read) {
+	bool isPassingRead(KmerAlign &kalign, const Read &read, SequenceLengthType minOverlap) {
 		Alignment bestAlignment;
-		return isPassingRead(kalign, read, bestAlignment);
+		return isPassingRead(kalign, read, bestAlignment, minOverlap);
 	}
-	bool isPassingRead(KmerAlign &kalign, const Read &read, Alignment &bestAlignment) {
+	bool isPassingRead(KmerAlign &kalign, const Read &read, Alignment &bestAlignment, SequenceLengthType minOverlap) {
 		bestAlignment = kalign.getAlignment(read);
-		SequenceLengthType minOverlap = MatcherInterfaceOptions::getOptions().getMinOverlap();
 		float minIdentity = MatcherInterfaceOptions::getOptions().getMinIdentity();
 
 		if (bestAlignment.getOverlap() < minOverlap || bestAlignment.getIdentity() < minIdentity)
@@ -465,8 +467,9 @@ public:
 	// screen matches for those that pass over the edge of the contig
 	// or, if paired, are full match and have pair with no alignment
 	ReadSet screenAlignmentsForOverhang(const Read &contig, ReadSet &matches) {
-		LOG_DEBUG_OPTIONAL(2, true, "screenAlignmentsForOverhang() on " << contig.toString());
+		LOG_DEBUG(3, "screenAlignmentsForOverhang() on " << contig.toString());
 		ReadSet screenedMatches;
+		SequenceLengthType minOverlap = MatcherInterfaceOptions::getOptions().getMinOverlap();
 		KmerAlign kalign(contig);
 		if (matches.hasPairs()) {
 			for(ReadSet::ReadSetSizeType matchidx = 0; matchidx < matches.getPairSize(); matchidx++) {
@@ -478,36 +481,42 @@ public:
 				Read read1, read2;
 				if (r1) {
 					read1 = matches.getRead(pair.read1);
-					p1 = isPassingRead(kalign, read1, aln1);
-					end1 = aln1.targetAln.isAtEnd(read1);
+					p1 = isPassingRead(kalign, read1, aln1, minOverlap);
+					end1 = aln1.targetAln.isAtEnd(contig);
 				}
 				if (r2) {	
 					read2 = matches.getRead(pair.read2);
-					p2 = isPassingRead(kalign, read2, aln2);
-					end2 = aln2.targetAln.isAtEnd(read2);
+					p2 = isPassingRead(kalign, read2, aln2, minOverlap);
+					end2 = aln2.targetAln.isAtEnd(contig);
 				}
 
-				LOG_DEBUG_OPTIONAL(2, true, "screenAlignmentsForOverhang() " << p1 << " " << aln1.toString() << " " << p2 << " " << aln2.toString());
+				bool add1 = false, add2 = false;
 				if (p1) {
 					// only include read1 if it overlaps the end
 					if (end1)
-						screenedMatches.append(read1);
-					if (r2 && ((!p2) || end2))
-						screenedMatches.append(read2);
+						add1 = true;
+					if (r2 && ((p2 & end2) || aln2.targetAln.getOverlap() < minOverlap))
+						add2 = true;
 				} else if (p2) {
-					if (r1 && ((!p1) || end1))
-						screenedMatches.append(read1);
+					if (r1 && ((p1 & end1) || aln1.targetAln.getOverlap() < minOverlap))
+						add1 = true;
 					// only include read2 if it overlaps the end
 					if (end2)
-						screenedMatches.append(read2);
+						add2 = true;
 				}
+				LOG_DEBUG(3, "screenAlignmentsForOverhang() (" << add1 << "," << add2 << ") " << p1 << "/" << end1 << " " << aln1.toString() << " pair:" << p2 << "/" << end2 << " " << aln2.toString() << read1.toString() << read2.toString());
+
+				if (add1)
+					screenedMatches.append(read1);
+				if (add2)
+					screenedMatches.append(read2);
 			}
 		} else {
 			for(ReadSet::ReadSetSizeType matchidx = 0; matchidx < matches.getSize(); matchidx++) {
 				const Read &match = matches.getRead(matchidx);
 				Alignment aln;
-				if (isPassingRead(kalign, match, aln))
-					if (aln.targetAln.isAtEnd(match))
+				if (isPassingRead(kalign, match, aln, minOverlap))
+					if (aln.targetAln.isAtEnd(contig))
 						screenedMatches.append(match);
 			}
 		}
