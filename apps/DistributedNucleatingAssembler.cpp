@@ -261,29 +261,26 @@ int main(int argc, char *argv[]) {
 	reads.identifyPairs();
 	setGlobalReadSetOffsets(world, reads);
 
+	timing2 = MPI_Wtime();
+
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "loaded " << reads.getGlobalSize() << " Reads, (local:" << reads.getSize() << " pair:" << reads.getPairSize() << ") in " << (timing2-timing1) << " seconds" );
+
 	if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Preparing artifact filter: ");
 
 		FilterKnownOddities filter;
-		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
-
 		LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Applying sequence artifact filter to Input Files");
 
 		unsigned long filtered = filter.applyFilter(reads);
 
 		LOG_VERBOSE(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
-		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		unsigned long allFiltered;
 		reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
 
 	}
-
-	timing2 = MPI_Wtime();
-
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 1, "loaded " << reads.getGlobalSize() << " Reads in " << (timing2-timing1) << " seconds" );
 
 	boost::shared_ptr< MatcherInterface > matcher;
 	if (KmerBaseOptions::getOptions().getKmerSize() == 0) {
