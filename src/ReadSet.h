@@ -504,6 +504,15 @@ public:
 
 	SequenceStreamParserPtr appendFasta(ReadFileReader &reader, int rank = 0, int size = 1);
 
+	std::string toString() const {
+		std::stringstream ss;
+		ss << "ReadSet{" <<getSize() << ":";
+		for(ReadSetSizeType i = 0 ; i < getSize(); i++)
+			ss << getRead(i).getName() << ", ";
+		ss << "}";
+		return ss.str();
+	}
+
 protected:
 	SequenceStreamParserPtr appendFasta(std::string fastaFilePath, std::string qualFilePath = "", int rank = 0, int size = 1);
 	SequenceStreamParserPtr appendFasta(MmapSource &mmap, int rank = 0, int size = 1);
