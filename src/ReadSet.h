@@ -308,9 +308,11 @@ public:
 
 	// keeps the first reads and returns the truncated ones
 	ReadSet truncate(ReadSetSizeType length) {
+		LOG_DEBUG_OPTIONAL(1, true, "ReadSet::truncate(" << length << ") sized:" << getSize());
 		assert(length < getSize());
 		ReadSet keep = subset(0, length);
 		ReadSet rest = subset(length, getSize() - length);
+		assert(keep.getSize() + rest.getSize() == getSize());
 		*this = keep;
 		return rest;
 	}

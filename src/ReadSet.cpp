@@ -620,8 +620,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			if (readNum == 2) {
 				if (test.read2 != MAX_READ_IDX) {
 					if (isPairable) {
-						Log::Warn() << "Detected a conflicting read2. Skipping pair identification: "
-								<< name << std::endl;
+						LOG_WARN(1, "Detected a conflicting read2. Skipping pair identification: " << name << " common: " << common << " readNum: " << readNum); // << "\n" << this->toString());
 					}
 					isPairable = false;
 					unmatchedNames.erase(unmatchedIt);
@@ -633,9 +632,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			} else {
 				if (test.read1 != MAX_READ_IDX) {
 					if (isPairable) {
-						Log::Warn()
-						<< "Detected a conflicting read1. Skipping pair identification: "
-						<< name << std::endl;
+						LOG_WARN(1, "Detected a conflicting read1. Skipping pair identification: " << name << " common: " << common << " readNum: " << readNum);
 					}
 					isPairable = false;
 					unmatchedNames.erase(unmatchedIt);
