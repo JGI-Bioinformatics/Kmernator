@@ -254,7 +254,7 @@ public:
 				LOG_DEBUG(2, "Prepared order" << (error+1) << ":" << filter.size() << "" << MemoryUtils::getMemoryUsage() );
 			}
 		}
-		LOG_DEBUG(1, "filter is" << filter.size() << ".  Remaining edits is:" << numErrors);
+		LOG_DEBUG(2, "filter is " << filter.size() << ".  Remaining edits is:" << numErrors);
 
 		KmerSizer::set(oldKmerLength);
 	}
