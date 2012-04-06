@@ -65,8 +65,14 @@ public:
 			if (startPos == 0 || endPos == len-1)
 				ret = true;
 		}
-		LOG_DEBUG_OPTIONAL(1, true, "isAtEnd(" << len << "): " << ret << " from " << toString());
+		LOG_DEBUG(4, "isAtEnd(" << len << "): " << ret << " from " << toString());
 		return ret;
+	}
+	bool contains(SequenceLengthType pos) const {
+		if (isReversed())
+			return endPos <= pos && startPos >= pos;
+		else
+			return startPos <= pos && endPos >= pos;
 	}
 	std::string toString() const {
 		return "{" + boost::lexical_cast<std::string>(startPos) + "," + boost::lexical_cast<std::string>(endPos) + "}";
@@ -135,11 +141,15 @@ public:
 				for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
 					ReadSet::ReadSetSizeType globalReadIdx = it->readId;
 					assert(globalReadIdx == 0); // target is the only read
-					bestAlignment = getBestAlignment(bestAlignment, getAlignment(target, it->position, query, j, KmerSizer::getSequenceLength()));
+					Alignment test;
+					SequenceLengthType ksize = KmerSizer::getSequenceLength();
+					if (!bestAlignment.targetAln.contains(it->position) && !bestAlignment.queryAln.contains(j))
+						test = getAlignment(target, it->position, query, j, ksize);
+					bestAlignment = getBestAlignment(bestAlignment, test);
 				}
 			}
 		}
-		LOG_DEBUG_OPTIONAL(1, bestAlignment.getOverlap() > 0, "Aligned " << target.toFasta() << " to " << query.toFasta() << " " << bestAlignment.toString());
+		LOG_DEBUG_OPTIONAL(2, bestAlignment.getOverlap() > 0, "Aligned " << target.toFasta() << " to " << query.toFasta() << " " << bestAlignment.toString());
 		return bestAlignment;
 	}
 

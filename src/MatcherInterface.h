@@ -279,19 +279,20 @@ public:
 					assert(query.isLocalRead(globalContigIdx));
 					ReadSet::ReadSetSizeType localIdx = query.getLocalReadIdx(globalContigIdx);
 					globalReadSetVector[localIdx].append(localReadSetVector[globalContigIdx]);
+					localReadSetVector[globalContigIdx].clear();
 					localReadSets++;
 					continue;
 				}
 				int sendByteCount = localReadSetVector[globalContigIdx].getStoreSize();
 				while (sendByteCount >= maxRankTransmitSize1) {
 					ReadSet::ReadSetSizeType size = localReadSetVector[globalContigIdx].getSize();
-					ReadSet::ReadSetSizeType maxSend = size * maxRankTransmitSize1 * 3 / sendByteCount / 2;
+					ReadSet::ReadSetSizeType maxSend = size / 2;
 					if (maxSend <= 0) {
 						LOG_WARN(1, "Could not send any reads for " << globalContigIdx << " as buffer size is too small");
 						localReadSetVector[globalContigIdx].clear();
 						tmpReadSetVector[globalContigIdx].clear();
 					} else {
-						LOG_DEBUG(4, "globalContig: " << globalContigIdx << " with " << localReadSetVector[globalContigIdx].getSize() << " reads is too big to transmit, reducing to " << maxSend);
+						LOG_DEBUG_OPTIONAL(1, true, "globalContig: " << globalContigIdx << " with " << localReadSetVector[globalContigIdx].getSize() << " reads is too big to transmit, reducing to " << maxSend);
 						// temporarily store in globalReadSetVector
 						tmpReadSetVector[globalContigIdx].append(localReadSetVector[globalContigIdx].truncate(maxSend));
 					}
@@ -360,11 +361,12 @@ public:
 				LOG_THROW("Could not allocate totalSend bytes! " << totalSend);
 
 			char *tmp = sendBuf;
-			for (ReadSet::ReadSetSizeType globalContigIdx = 0; globalContigIdx
-			< query.getGlobalSize(); globalContigIdx++) {
+			for (ReadSet::ReadSetSizeType globalContigIdx = 0; globalContigIdx < query.getGlobalSize(); globalContigIdx++) {
 				int storeSize = 0;
 				if (query.isLocalRead(globalContigIdx)) {
 					// do not encode and send reads to self
+					assert(localReadSetVector[globalContigIdx].getSize() == 0);
+					assert(tmpReadSetVector[globalContigIdx].getSize() == 0);
 				} else {
 					if (sendingGlobalContigIdx.find(globalContigIdx) != sendingGlobalContigIdx.end()) {
 						storeSize = localReadSetVector[globalContigIdx].store(tmp);
@@ -463,7 +465,7 @@ public:
 	// screen matches for those that pass over the edge of the contig
 	// or, if paired, are full match and have pair with no alignment
 	ReadSet screenAlignmentsForOverhang(const Read &contig, ReadSet &matches) {
-		LOG_DEBUG_OPTIONAL(1, true, "screenAlignmentsForOverhang() on " << contig.toString());
+		LOG_DEBUG_OPTIONAL(2, true, "screenAlignmentsForOverhang() on " << contig.toString());
 		ReadSet screenedMatches;
 		KmerAlign kalign(contig);
 		if (matches.hasPairs()) {
@@ -478,7 +480,6 @@ public:
 					read1 = matches.getRead(pair.read1);
 					p1 = isPassingRead(kalign, read1, aln1);
 					end1 = aln1.targetAln.isAtEnd(read1);
-						
 				}
 				if (r2) {	
 					read2 = matches.getRead(pair.read2);
@@ -486,7 +487,7 @@ public:
 					end2 = aln2.targetAln.isAtEnd(read2);
 				}
 
-				LOG_DEBUG_OPTIONAL(1, true, "screenAlignmentsForOverhang() " << p1 << " " << aln1.toString() << " " << p2 << " " << aln2.toString());
+				LOG_DEBUG_OPTIONAL(2, true, "screenAlignmentsForOverhang() " << p1 << " " << aln1.toString() << " " << p2 << " " << aln2.toString());
 				if (p1) {
 					// only include read1 if it overlaps the end
 					if (end1)
@@ -504,11 +505,13 @@ public:
 		} else {
 			for(ReadSet::ReadSetSizeType matchidx = 0; matchidx < matches.getSize(); matchidx++) {
 				const Read &match = matches.getRead(matchidx);
-				if (isPassingRead(kalign, match))
-					screenedMatches.append(match);
+				Alignment aln;
+				if (isPassingRead(kalign, match, aln))
+					if (aln.targetAln.isAtEnd(match))
+						screenedMatches.append(match);
 			}
 		}
-		LOG_DEBUG_OPTIONAL(1, true, "screenedMatches: " << screenedMatches.getSize());
+		LOG_DEBUG_OPTIONAL(2, true, "screenedMatches: " << screenedMatches.getSize());
 		return screenedMatches;
 	}
 
@@ -593,7 +596,10 @@ public:
 			tmp = sendBuf + sendRankDispl[i];
 			for(int j = 0; j < numMatchHitSets ; j++) {
 				long pos = i * numMatchHitSets + j;
+				//std::set<ReadSet::ReadSetSizeType> test(rankHitGlobalIndexes[i][j].begin(), rankHitGlobalIndexes[i][j].end());
+				//LOG_DEBUG_OPTIONAL(1, test.size() != sendCounts[pos], "buildingSendBuffer mismatch problem: " << i << ", " << j << " size " << test.size() << " vs. " << sendCounts[pos]);
 				for(int k = 0; k < sendCounts[pos]; k++) {
+					//LOG_DEBUG_OPTIONAL(1, test.size() != sendCounts[pos], "buildingSendBuffer: " << rankHitGlobalIndexes[i][j][k]);
 					*tmp = rankHitGlobalIndexes[i][j][k];
 					tmp++;
 				}
