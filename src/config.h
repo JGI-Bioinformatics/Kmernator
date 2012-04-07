@@ -58,11 +58,7 @@ namespace mpi = boost::mpi;
 //#define _USE_THREADSAFE_KMER
 #include <omp.h>
 
-#ifdef ENABLE_MPI
-const int MAX_FILE_PARALLELISM = 1;
-#else
 const int MAX_FILE_PARALLELISM = 4;
-#endif
 
 #else
 

@@ -429,7 +429,8 @@ public:
 	// by default no pairs are identified
 	ReadSetSizeType identifyPairs();
 	inline bool hasPairs() const {
-		return getPairSize() != 0 && getPairSize() < getSize();
+		bool hasPairs = (getPairSize() != 0 && getPairSize() < getSize());
+		return hasPairs;
 	}
 
 	static bool isPairedRead(const std::string &readName);
@@ -444,10 +445,21 @@ public:
 	inline const Pair &getPair(ReadSetSizeType pairIndex) const {
 		return _pairs[pairIndex];
 	}
-	ReadSetSizeType getGlobalPairIdx(ReadSetSizeType globalIdx) const {
-		// FIXME hack!!!
+	ReadSetSizeType getLocalPairIdx(ReadSetSizeType localIdx) const {
 		assert(hasPairs());
-		return (globalIdx & 0x1) == 0 ? globalIdx + 1 : globalIdx - 1;
+		if (!getRead(localIdx).isPaired())
+			return MAX_READ_IDX;
+		// pairs are at the front of the readset, so jump to the pairIdx that it would be if it existed...
+		ReadSetSizeType pairIdx = localIdx / 2;
+		if (pairIdx < getPairSize()) {
+			const Pair &pair = getPair(pairIdx);
+			if (localIdx == pair.read1)
+				return pair.read2;
+			if (localIdx == pair.read2)
+				return pair.read1;
+		}
+		LOG_WARN(1, "Could not find mate pair for " << localIdx << " pairidx: " << pairIdx << " read: " << getRead(localIdx).getName());
+		return MAX_READ_IDX;
 	}
 
 	const ReadIdxVector getReadIdxVector() const;

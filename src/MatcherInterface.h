@@ -627,6 +627,8 @@ public:
 		delete [] sendRankCount;
 		delete [] sendRankDispl;
 
+		bool includeMates = true;//getTarget().hasPairs() && isReturnPairedMatches();
+
 		// consolidate into localMatchResults
 		MatchResults localMatchResults(globalMatchResults.size());
 		for(int i = 0; i < numRanks; i++) {
@@ -634,7 +636,17 @@ public:
 			for(int j = 0; j < numMatchHitSets ; j++) {
 				long pos = i * numMatchHitSets + j;
 				for(int k = 0; k < recvCounts[pos]; k++) {
-					localMatchResults[j].insert( *tmp );
+					ReadSet::ReadSetSizeType globalReadIdx = *tmp;
+					localMatchResults[j].insert( globalReadIdx );
+					if (includeMates) {
+						ReadSet::ReadSetSizeType localReadIdx = getTarget().getLocalReadIdx( globalReadIdx );
+						ReadSet::ReadSetSizeType localReadPairIdx = getTarget().getLocalPairIdx( localReadIdx );
+						if ( getTarget().isValidRead(localReadPairIdx) ) {
+							ReadSet::ReadSetSizeType globalReadPairIdx = getTarget().getGlobalReadIdx( localReadPairIdx );
+							LOG_DEBUG(4, "Adding mate for " << getTarget().getRead(localReadIdx).getName() << ": " << getTarget().getRead(localReadPairIdx).getName() )
+							localMatchResults[i].insert(globalReadPairIdx);
+						}
+					}
 					tmp++;
 				}
 			}

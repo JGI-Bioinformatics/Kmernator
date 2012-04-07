@@ -75,6 +75,7 @@ void ReadSet::incrementFile(SequenceStreamParserPtr parser) {
 
 void ReadSet::_trackSequentialPair(const Read &read) {
 	std::string readName = read.getName();
+	LOG_DEBUG(5, "_trackSequentialPair(" << readName << "): looking at " << _reads.size() - 1);
 	if (!isPairedRead(readName))
 		return;
 	if (_reads.size() > 1 && !previousReadName.empty()) {
@@ -87,6 +88,7 @@ void ReadSet::_trackSequentialPair(const Read &read) {
 			Read &lastRead = _reads[_reads.size() - 2];
 			lastRead.markPaired();
 			previousReadName.clear();
+			LOG_DEBUG(5, "_trackSequentialPair(" << readName << "): set pair at " << _reads.size() - 1);
 		} else {
 			previousReadName = read.getName();
 		}
@@ -163,26 +165,15 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFileMmap(string fastaFilePath
 
 void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank, int size) {
 
-#ifdef _USE_OPENMP
 	int fileCount = files.size();
 	ReadSet myReads[ fileCount ];
 	SequenceStreamParserPtr parsers[ fileCount ];
-	int numThreads = omp_get_max_threads() / MAX_FILE_PARALLELISM;
-	if ( numThreads >= 1 ) {
-		omp_set_nested(1);
-	} else {
-		numThreads = omp_get_max_threads();
-		omp_set_nested(0);
-	}
+	int numThreads = std::min(omp_get_max_threads(), MAX_FILE_PARALLELISM);
 	LOG_DEBUG(2, "reading " << fileCount << " file(s) using " << numThreads << " files at a time");
-
-#endif
 
 	long filesSize = files.size();
 #pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 	for (long i = 0; i < filesSize; i++) {
-
-		LOG_DEBUG(2, "reading " << files[i] << " using " << omp_get_max_threads() << " threads per file");
 
 		string qualFile;
 		if (!Options::getOptions().getIgnoreQual()) {
@@ -196,31 +187,47 @@ void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank
 				LOG_DEBUG(2, "detected qual file: " << qualFile);
 			}
 		}
-#ifdef _USE_OPENMP
 		// append int this thread's ReadSet buffer (note: line continues)
 		parsers[i] = myReads[ i ].appendAnyFile(files[i], qualFile, rank, size);
-#else
-		SequenceStreamParserPtr parser = appendAnyFile(files[i], qualFile, rank, size);
-		incrementFile(parser);
-#endif
-
-		LOG_DEBUG(2, "finished reading " << files[i]);
+		LOG_DEBUG_OPTIONAL(2, true, "finished reading " << files[i]);
+		myReads[i].identifyPairs();
+		if (myReads[i].hasPairs() && myReads[i].getPairSize() != myReads[i].getSize() / 2)
+			LOG_WARN(1, "Paired file: " << files[i] << " has incomplete number of pairs in my slice: " << myReads[i].getPairSize() << " vs reads: " <<  myReads[i].getSize());
 
 	}
-#ifdef _USE_OPENMP
-	omp_set_nested(OMP_NESTED_DEFAULT);
 	LOG_DEBUG(2,"concatenating ReadSet buffers");
+	// First add any files with paired reads
 	for(int i = 0; i< (long) files.size(); i++) {
-		append(myReads[i]);
-		incrementFile(parsers[i]);
+		if (myReads[i].hasPairs()) {
+			append(myReads[i]);
+			myReads[i].clear();
+			incrementFile(parsers[i]);
+		}
 	}
-#endif
+	// Then add any unpaired files
+	for(int i = 0; i< (long) files.size(); i++) {
+		if (myReads[i].getSize() > 0) {
+			append(myReads[i]);
+			myReads[i].clear();
+			incrementFile(parsers[i]);
+		}
+	}
 
 	// Let the kernel know how these pages will be used
 	if (Options::getOptions().getMmapInput() == 0)
 		madviseMmapsDontNeed();
 	else
 		madviseMmapsNormal();
+
+	if (Log::isDebug(4)) {
+		std::stringstream ss;
+		for(ReadSetSizeType i = 0; i < getPairSize(); i++) {
+			const Pair &pair = getPair(i);
+			ss << "Pair: " << i << " (" << pair.read1 << ", " << pair.read2 << "): " << (isValidRead(pair.read1)?getRead(pair.read1).getName(): "x1") << " " << (isValidRead(pair.read2)?getRead(pair.read2).getName(): "x2") << "\n";
+		}
+		std::string s = ss.str();
+		LOG_DEBUG(4, "IdentifyPairs:" << getPairSize() << "\n" << s);
+	}
 }
 
 void ReadSet::append(const Read &read) {
@@ -330,153 +337,9 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastaData(string &fastaData, int
 	return reader.getParser();
 }
 
-ReadSet::SequenceStreamParserPtr ReadSet::appendFastqBlockedOMP(ReadSet::MmapSource &mmap)
-{
-
-	unsigned long startIdx = _reads.size();
-	unsigned long blockSize = 0;
-
-	// set OMP variables
-	omp_set_nested(1);
-	int numThreads = omp_get_max_threads();
-	if (numThreads > MAX_FILE_PARALLELISM)
-		numThreads = MAX_FILE_PARALLELISM;
-	unsigned long numReads[ numThreads ];
-	unsigned long seekPos[ numThreads ];
-	for(int i = 0; i < numThreads; i++)
-		numReads[i] = 0;
-	SequenceStreamParserPtr singleParser;
-
-	LOG_DEBUG(2, "appendFastqBlockedOMP(mmap): " << mmap << " with " << numThreads << " threads");
-
-#pragma omp parallel num_threads(numThreads)
-	{
-
-		if (omp_get_num_threads() != numThreads)
-			LOG_THROW("ReadSet::appendFastqBlockedOMP(): OMP thread count discrepancy!" << omp_get_num_threads() << " vs " << numThreads);
-		int threadId = omp_get_thread_num();
-
-		ReadSet myReads;
-		ReadFileReader reader(mmap);
-
-		if (threadId == 0)
-			singleParser = reader.getParser();
-
-		unsigned long lastPos = MAX_UI64;
-#pragma omp single
-		{
-			lastPos = reader.getFileSize();
-			blockSize = lastPos / numThreads;
-
-			if (blockSize < 100)
-				blockSize = 100;
-			LOG_DEBUG(2, "Reading " << mmap << " with " << numThreads << " threads" );
-		}
-
-
-		string name,bases,quals;
-		bool hasNext = true;
-
-		unsigned long minimumPos = blockSize * threadId;
-		if (minimumPos >= lastPos) {
-			seekPos[ threadId ] = lastPos;
-		} else {
-			reader.seekToNextRecord( minimumPos );
-			seekPos[ threadId ] = reader.getPos();
-		}
-		hasNext = seekPos[ threadId ] < lastPos;
-
-#pragma omp barrier
-
-		if (hasNext && threadId + 1 < numThreads )
-			lastPos = seekPos[ threadId + 1 ];
-
-		if (hasNext)
-			hasNext = (seekPos[ threadId ] < lastPos);
-
-#pragma omp barrier
-
-		if (!hasNext)
-			seekPos[ threadId ] = 0;
-
-#pragma omp barrier
-
-		if (hasNext && threadId != 0 && seekPos[ threadId ] == seekPos[ threadId-1 ])
-			hasNext = false;
-
-		if (!hasNext) {
-			seekPos[ threadId ] = 0;
-			lastPos = 0;
-		}
-
-		if (reader.isMmaped() && Options::getOptions().getMmapInput() != 0) {
-			RecordPtr recordPtr = reader.getStreamRecordPtr();
-			RecordPtr qualPtr = reader.getStreamQualRecordPtr();
-			RecordPtr nextRecordPtr = recordPtr;
-			std::string name, bases, quals;
-			bool isMultiline;
-			while (hasNext && reader.nextRead(nextRecordPtr, name, bases, quals, isMultiline)) {
-				if (isMultiline) {
-					// store the read in memory, as mmap does not currently work
-					Read read(name,bases,quals);
-					myReads.addRead(read, bases.length(), threadId);
-				} else {
-					Read read(recordPtr, qualPtr);
-					myReads.addRead(read, bases.length(), threadId);
-				}
-
-				recordPtr = nextRecordPtr;
-				qualPtr = reader.getStreamQualRecordPtr();
-				hasNext = (reader.getPos() < lastPos);
-			}
-		} else {
-			while (hasNext && reader.nextRead(name, bases, quals)) {
-				Read read(name, bases, quals);
-				myReads.addRead(read, bases.length(), threadId);
-				hasNext = (reader.getPos() < lastPos);
-			}
-		}
-
-		numReads[ omp_get_thread_num() ] = myReads.getSize();
-
-#pragma omp critical (readsetGlobals)
-		{
-			// set global counters
-			_baseCount += myReads._baseCount;
-			_setMaxSequenceLength(myReads.getMaxSequenceLength());
-		}
-
-#pragma omp barrier
-
-#pragma omp single
-		{
-			ReadSetSizeType newReads = 0;
-			for(int i=0; i < numThreads; i++) {
-				ReadSetSizeType tmp = newReads;
-				newReads += numReads[i];
-				numReads[i] = tmp;
-			}
-
-			_reads.resize(startIdx + newReads);
-		}
-
-		for(ReadSetSizeType j = 0; j < myReads.getSize(); j++)
-			_reads[startIdx + numReads[ omp_get_thread_num() ] + j] = myReads.getRead(j);
-	}
-
-	incrementFile(singleParser);
-	// reset omp variables
-	omp_set_nested(OMP_NESTED_DEFAULT);
-	return singleParser;
-}
-
 ReadSet::SequenceStreamParserPtr ReadSet::appendFastq(ReadSet::MmapSource &mmap)
 {
-#ifdef _USE_OPENMP
-	return appendFastqBlockedOMP(mmap);
-#else
 	return appendFasta(mmap);
-#endif
 }
 
 ReadSet::ReadPtr ReadSet::parseMmapedRead(ReadSetSizeType index) const {
@@ -572,7 +435,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			_pairs.push_back( Pair(spIdx, spIdx+1) );
 			read2.markPaired();
 			spIdx++;
-			LOG_DEBUG(4, "Paired sequential reads: " << read1.getName() << " " << read2.getName());
+			LOG_DEBUG(4, "Paired sequential reads: " << spIdx << ", " << spIdx+1 << ": " << read1.getName() << " " << read2.getName());
 			sequentialPairs++;
 		}
 	}

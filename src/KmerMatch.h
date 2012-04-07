@@ -74,7 +74,6 @@ public:
 		assert(!query.isGlobal());
 		MatchResults matchResults;
 		matchResults.resize(query.getSize());
-		bool includeMates = getTarget().hasPairs() && isReturnPairedMatches();
 		int maxPositionsFromEdge = KmerMatchOptions::getOptions().getMatchMaxPositionsFromEdge();
 		int maxKmersFromEdge = maxPositionsFromEdge - KmerSizer::getSequenceLength() + 1;
 
@@ -96,9 +95,6 @@ public:
 						ReadSet::ReadSetSizeType globalReadIdx = it->readId;
 						LOG_DEBUG(5, "KmerMatch::matchLocal: localRead " << i << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
 						matchResults[i].insert( globalReadIdx );
-						if (includeMates) {
-							matchResults[i].insert( getTarget().getGlobalPairIdx( globalReadIdx ) );
-						}
 					}
 				}
 			}
