@@ -31,6 +31,12 @@ public:
 	bool getIncludeMate() {
 		return includeMate == 1;
 	}
+	void setIncludeMate(bool v) {
+		if (v)
+			includeMate = 1;
+		else
+			includeMate = 0;
+	}
 	int &getMinOverlap() {
 		return minOverlap;
 	}
@@ -93,8 +99,8 @@ public:
 	typedef ReadSet::ReadSetVector MatchReadResults;
 	typedef boost::unordered_set<ReadSet::ReadSetSizeType> ReadIdxSet;
 
-	MatcherInterface(mpi::communicator &world, const ReadSet &target, bool returnPairedMatches = true)
-	: _world(world), _target(target), _returnPairedMatches(returnPairedMatches) {
+	MatcherInterface(mpi::communicator &world, const ReadSet &target)
+	: _world(world), _target(target) {
 		assert(_target.isGlobal() && _target.getGlobalSize() > 0);
 	}
 
@@ -106,7 +112,7 @@ public:
 	virtual MatchResults matchLocal(const ReadSet &query) {
 		assert(query.isGlobal());
 		std::string queryFile = UniqueName::generateUniqueGlobalName( GeneralOptions::getOptions().getTmpDir() + "/MatcherInterface-" );
-		queryFile = DistributedOfstreamMap::writeGlobalReadSet(_world, query, queryFile, "", FormatOutput::Fasta());
+		queryFile = DistributedOfstreamMap::writeGlobalReadSet(_world, query, queryFile, "", FormatOutput::Fasta(), false);
 		LOG_DEBUG(3, "Running matchLocal on " << queryFile);
 		MatchResults results = this->matchLocal(queryFile);
 		assert(results.size() == query.getGlobalSize());
@@ -177,13 +183,13 @@ public:
 	MatchReadResults convertLocalMatchesToGlobalReads(const ReadSet &query, MatchResults &matchResults) {
 		assert(query.isGlobal() && query.getGlobalSize() > 0);
 		assert(matchResults.size() == query.getGlobalSize());
-		debuglog(3, "LocalMatches", matchResults);
+		debuglog(3, "MatcherInterface::converLocalMatchesToGlobalReads(): LocalMatches", matchResults);
 		MatchReadResults localReads = getLocalReads(matchResults);
 		assert(localReads.size() == query.getGlobalSize());
-		debuglog(3, "LocalReads", localReads);
+		debuglog(3, "MatcherInterface::converLocalMatchesToGlobalReads(): LocalReads", localReads);
 		MatchReadResults globalReads = exchangeGlobalReads(query, localReads);
 		assert(globalReads.size() == query.getSize());
-		debuglog(3, "GlobalReads", globalReads);
+		debuglog(3, "MatcherInterface::converLocalMatchesToGlobalReads(): GlobalReads", globalReads);
 		recordTime("returnMatch", MPI_Wtime());
 		return globalReads;
 	}
@@ -215,6 +221,7 @@ public:
 	// exchanges globalReadSetIds with the responsible nodes, if needed
 	MatchReadResults getLocalReads(MatchResults &globalMatchResults) {
 		MatchResults matchResults = exchangeGlobalReadIdxs(globalMatchResults);
+		debuglog(3, "MatcherInterface::getLocalReads(): after exchange LocalMatches", matchResults);
 		assert(matchResults.size() == globalMatchResults.size());
 
 		int myRank = _world.rank();
@@ -627,7 +634,7 @@ public:
 		delete [] sendRankCount;
 		delete [] sendRankDispl;
 
-		bool includeMates = true;//getTarget().hasPairs() && isReturnPairedMatches();
+		bool includeMates = getTarget().hasPairs() && MatcherInterfaceOptions::getOptions().getIncludeMate();
 
 		// consolidate into localMatchResults
 		MatchResults localMatchResults(globalMatchResults.size());
@@ -637,14 +644,15 @@ public:
 				long pos = i * numMatchHitSets + j;
 				for(int k = 0; k < recvCounts[pos]; k++) {
 					ReadSet::ReadSetSizeType globalReadIdx = *tmp;
+					ReadSet::ReadSetSizeType localReadIdx = getTarget().getLocalReadIdx( globalReadIdx );
+					LOG_DEBUG(4, "exchangeGlobalReadIdxs(): Adding result: " << j << " " << globalReadIdx << " " << getTarget().getRead(localReadIdx).getName());
 					localMatchResults[j].insert( globalReadIdx );
 					if (includeMates) {
-						ReadSet::ReadSetSizeType localReadIdx = getTarget().getLocalReadIdx( globalReadIdx );
 						ReadSet::ReadSetSizeType localReadPairIdx = getTarget().getLocalPairIdx( localReadIdx );
 						if ( getTarget().isValidRead(localReadPairIdx) ) {
 							ReadSet::ReadSetSizeType globalReadPairIdx = getTarget().getGlobalReadIdx( localReadPairIdx );
-							LOG_DEBUG(4, "Adding mate for " << getTarget().getRead(localReadIdx).getName() << ": " << getTarget().getRead(localReadPairIdx).getName() )
-							localMatchResults[i].insert(globalReadPairIdx);
+							LOG_DEBUG(4, "exchangeGlobalReadIdxs(): Adding mate for result: " << j << " " << globalReadPairIdx << " " << getTarget().getRead(localReadIdx).getName() << ": " << getTarget().getRead(localReadPairIdx).getName() );
+							localMatchResults[j].insert(globalReadPairIdx);
 						}
 					}
 					tmp++;
@@ -666,12 +674,10 @@ public:
 
 	mpi::communicator &getWorld() { return _world; }
 	const ReadSet &getTarget() const { return _target; }
-	bool isReturnPairedMatches() const { return _returnPairedMatches; }
 
 protected:
 	mpi::communicator &_world;
 	const ReadSet &_target;
-	bool _returnPairedMatches;
 };
 
 #endif /* MATCHERINTERFACE_H_ */

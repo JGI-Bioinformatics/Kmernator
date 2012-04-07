@@ -711,6 +711,7 @@ public:
 		} else {
 			resize(0);
 		}
+		LOG_DEBUG(5, "KmerArray(," << length << "," << leastComplement << ",):" << size());
 	}
 
 	KmerArray(const KmerArray &copy) :

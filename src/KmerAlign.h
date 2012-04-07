@@ -53,7 +53,9 @@ public:
 		return startPos != endPos;
 	}
 	SequenceLengthType getOverlap() const {
-		return isReversed() ? (startPos - endPos) : (endPos - startPos);
+		if (!isAligned())
+			return 0;
+		return (isReversed() ? (startPos - endPos) : (endPos - startPos)) + 1;
 	}
 	bool isReversed() const {
 		return (startPos > endPos);
@@ -164,6 +166,7 @@ public:
 			KS::SolidElementType element = targetKS.getIfExistsSolid( kmers[j] );
 			if (element.isValid()) {
 				TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
+				LOG_DEBUG(5, "getAlignment(): isvalid " << j << " rpwv: " << rpwv.size());
 				for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
 					ReadSet::ReadSetSizeType globalReadIdx = it->readId;
 					assert(globalReadIdx == 0); // target is the only read
@@ -174,24 +177,26 @@ public:
 						bestAlignment = getBestAlignment(bestAlignment, test);
 					}
 				}
+			} else {
+				LOG_DEBUG(5, "getAlignment(): " << kmers[j].toFasta() << " was not present");
 			}
 		}
-		if (bestAlignment.isAligned())
-			LOG_DEBUG(4, "Aligned " << target.toFasta() << " to " << query.toFasta() << " " << bestAlignment.toString());
+		LOG_DEBUG(4, "" << (bestAlignment.isAligned()? "Aligned ":"Did not Align ") << target.toFasta() << " to " << query.toFasta() << " " << bestAlignment.toString());
 		return bestAlignment;
 	}
 
 	// fast zipper alignment to the end of one of the reads
 	static Alignment getAlignment(const Read &target, SequenceLengthType tpos, const Read &query, SequenceLengthType qpos, SequenceLengthType minLen) {
 		Alignment alignment;
+		LOG_DEBUG(5, "getAlignment(" << target.getName() << ", " << tpos << ", " << query.getName() << ", " << qpos << ", " << minLen << ")");
 
-		std::string tseq = target.getFastaTrim();
-		std::string qseq = query.getFastaTrim();
+		std::string tseq = target.getFasta();
+		std::string qseq = query.getFasta();
 		SequenceLengthType targetLen = tseq.length();
 		SequenceLengthType queryLen = qseq.length();
 
 		if (tpos + minLen > targetLen || qpos + minLen > queryLen) {
-			LOG_DEBUG(1, "no alignment returned because match is out of bounds: " << tpos << " / " << targetLen << ", " << qpos << "/ " << queryLen << " len: " << minLen << " " << target.toString() << " " << query.toString());
+			LOG_DEBUG(3, "no alignment returned because match is out of bounds: " << tpos << " / " << targetLen << ", " << qpos << "/ " << queryLen << " len: " << minLen << " " << target.toString() << " " << query.toString());
 			return alignment;
 		}
 

@@ -1047,12 +1047,12 @@ public:
 		LOG_DEBUG_OPTIONAL(1, true, "Finished with temporary: " << rankFile);
 	}
 
-	static std::string writeGlobalReadSet(mpi::communicator &world, const ReadSet &readSet, std::string outputFile = Options::getOptions().getOutputFile(), std::string suffix = "", FormatOutput format = FormatOutput::Fasta())
+	static std::string writeGlobalReadSet(mpi::communicator &world, const ReadSet &readSet, std::string outputFile = Options::getOptions().getOutputFile(), std::string suffix = "", FormatOutput format = FormatOutput::Fasta(), bool trimmed = true)
 	{
 		DistributedOfstreamMap om(world, outputFile, suffix);
 		om.setBuildInMemory();
 		std::string fileKey = "";
-		readSet.writeAll(om.getOfstream(fileKey), format);
+		readSet.writeAll(om.getOfstream(fileKey), format, trimmed);
 		om.clear();
 		std::string filename = om.getRealFilePath(fileKey);
 

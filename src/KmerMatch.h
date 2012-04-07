@@ -54,8 +54,8 @@ public:
 	typedef MatcherInterface::MatchResults MatchResults;
 	typedef DistributedKmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads, TrackingDataSingletonWithReadPosition > KS;
 
-	KmerMatch(mpi::communicator &world, const ReadSet &target, bool returnPairedMatches = MatcherInterfaceOptions::getOptions().getIncludeMate())
-	: MatcherInterface(world, target, returnPairedMatches), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {
+	KmerMatch(mpi::communicator &world, const ReadSet &target)
+	: MatcherInterface(world, target), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {
 		assert(target.isGlobal());
 		_spectrum._buildKmerSpectrumMPI(target, true);
 		_spectrum.optimize();
@@ -82,6 +82,7 @@ public:
 			KmerWeights kmers(read.getTwoBitSequence(), read.getLength(), true);
 			unsigned int lowerMaxKmer = maxPositionsFromEdge > 0 ? maxKmersFromEdge : kmers.size();
 			unsigned int upperMinKmer = maxPositionsFromEdge > 0 ? kmers.size() - maxKmersFromEdge : 0;
+			LOG_DEBUG(4, "KmerMatch::matchLocal: " << i << " " << read.toString() << " kmers: " << kmers.size());
 
 			for(unsigned int j = 0; j < kmers.size(); j++) {
 				if (j > lowerMaxKmer && j < upperMinKmer ) {

@@ -93,10 +93,8 @@ public:
 			std::string indexName,
 			const ReadSet &target,
 			bool cacheIndexes =
-					VmatchOptions::getOptions().getVmatchPreload(),
-					bool returnPairedMatches = true) :
-						MatcherInterface(world, target, returnPairedMatches),
-						_indexName(indexName) {
+			VmatchOptions::getOptions().getVmatchPreload()
+		) :  MatcherInterface(world, target), _indexName(indexName) {
 
 		std::string	tmpDir = VmatchOptions::getOptions().getVmatchIndexPath() + "/";
 		mkdir(tmpDir.c_str(), 0777); // all ranks need to mkdir if writing to local disks...
@@ -146,6 +144,7 @@ public:
 	MatchResults matchLocal(std::string queryFile) {
 		VmatchMatchResults matches = _match(queryFile);
 		MatchResults contigReadHits;
+		bool returnPairs = MatcherInterfaceOptions::getOptions().getIncludeMate();
 
 		int myRank = getWorld().rank();
 		for (VmatchMatchResults::iterator match = matches.begin(); match
@@ -158,7 +157,7 @@ public:
 
 			contigReadHits[globalContigIdx].insert(globalReadIdx);
 			// include pairs
-			if (this->isReturnPairedMatches()) {
+			if (returnPairs) {
 				if (globalReadIdx % 2 == 0)
 					contigReadHits[globalContigIdx].insert(globalReadIdx + 1);
 				else

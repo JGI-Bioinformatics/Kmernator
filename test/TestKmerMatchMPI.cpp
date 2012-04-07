@@ -31,6 +31,7 @@
 
 #include "DistributedFunctions.h"
 #include "KmerMatch.h"
+#include "KmerAlign.h"
 
 // Note for versbosity: export BOOST_TEST_LOG_LEVEL=message
 
@@ -49,6 +50,7 @@ public:
 		GeneralOptions::getOptions()._setOptions(desc,p);
 		MatcherInterfaceOptions::_setOptions(desc,p);
 		KmerMatchOptions::_setOptions(desc,p);
+		KmerAlignOptions::_setOptions(desc,p);
 		MPIOptions::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
@@ -56,6 +58,7 @@ public:
 		ret &= GeneralOptions::getOptions()._parseOptions(vm);
 		ret &= MatcherInterfaceOptions::_parseOptions(vm);
 		ret &= KmerMatchOptions::_parseOptions(vm);
+		ret &= KmerAlignOptions::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
 		return ret;
 	}
@@ -75,10 +78,11 @@ bool containsRead(const ReadSet &rs, const Read &read) {
 	return hasRead;
 }
 
-bool testMatchesSelf(mpi::communicator &world, ReadSet &q, ReadSet &t, bool includePair) {
+bool testMatchesSelf(mpi::communicator &world, ReadSet &q, ReadSet &t) {
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "running testMatchesSelf on " << q.getSize() << " " << t.getSize());
 	bool passed = true;
-	KmerMatch matcher(world, t, includePair);
+	bool isPair = MatcherInterfaceOptions::getOptions().getIncludeMate();
+	KmerMatch matcher(world, t);
 	//std::cout << matcher.getKmerSpectrum().solid.toString() << std::endl;
 	MatcherInterface::MatchReadResults results = matcher.match(q);
 	passed &= results.size() == q.getSize();
@@ -91,15 +95,47 @@ bool testMatchesSelf(mpi::communicator &world, ReadSet &q, ReadSet &t, bool incl
 			passed = false;
 		}
 		//std::cout << std::endl;
+
+		KmerAlign testAlign(r);
+		bool pairMatched = false;
+		for(ReadSet::ReadSetSizeType j = 0 ; j <rs.getSize(); j++) {
+			if (j % 2 == 0)
+				pairMatched = false;
+			Read query = rs.getRead(j);
+			Alignment aln = testAlign.getAlignment(query);
+			if ( aln.getOverlap() >= KmerSizer::getSequenceLength() ) {
+				pairMatched = true;
+			}
+			if (isPair) {
+				if (j % 2 == 1 && !pairMatched) {
+					LOG_WARN(1, "neither pair matched! " << aln.toString() << " of " << r.toString() << " to " << query.toString());
+					passed = false;
+				}
+			} else {
+				if (!pairMatched) {
+					LOG_WARN(1, "read did not match! " << aln.toString() << " of " << r.toString() << " to " << query.toString());
+					passed = false;
+				}
+				pairMatched = false;
+			}
+		}
 	}
 	if (!passed)
 		LOG_WARN(1, "Failed testMatchesSelf!");
+	LOG_VERBOSE(1, "Done with testMatchesSelf()");
 	return passed;
 }
 int main(int argc, char **argv)
 {
 
 	mpi::communicator world = initializeWorldAndOptions< KmerMatchTestOptions >(argc, argv);
+
+	TrackingData::setMinimumWeight(0.0);
+	KmerOptions::getOptions().getMinKmerQuality() = 0;
+	GeneralOptions::getOptions().getMinQuality() = 2;
+	KmerSizer::set(21);
+	MatcherInterfaceOptions::getOptions().getMaxReadMatches() = 10000;
+	MatcherInterfaceOptions::getOptions().getMinOverlap() = KmerSizer::getSequenceLength();
 
 	ReadSet reads, reads2, greads, greads2;
 	reads.appendAnyFile("10.fastq");
@@ -114,14 +150,17 @@ int main(int argc, char **argv)
 	greads2.identifyPairs();
 	setGlobalReadSetOffsets(world, greads2);
 
-	KmerSizer::set(21);
 
 	bool passed = true;
 
-	passed &= testMatchesSelf(world, greads, greads, false);
-	//passed &= testMatchesSelf(world, greads, greads, true);
-	//passed &= testMatchesSelf(world, greads2, greads2, false);
-	passed &= testMatchesSelf(world, greads2, greads2, true);
+	MatcherInterfaceOptions::getOptions().setIncludeMate(true);
+	passed &= testMatchesSelf(world, greads, greads);
+	passed &= testMatchesSelf(world, greads2, greads2);
+
+	MatcherInterfaceOptions::getOptions().setIncludeMate(false);
+	LOG_VERBOSE(1, "Ignoring pairs for matching");
+	passed &= testMatchesSelf(world, greads, greads);
+	passed &= testMatchesSelf(world, greads2, greads2);
 
 	MPI_Finalize();
 	return passed ? 0 : -1;
