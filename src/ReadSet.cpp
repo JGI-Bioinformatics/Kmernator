@@ -73,29 +73,25 @@ void ReadSet::incrementFile(SequenceStreamParserPtr parser) {
 	addMmaps( MmapSourcePair( parser->getMmap(), parser->getQualMmap() ));
 }
 
-void ReadSet::_trackSequentialPair(const Read &read) {
+bool ReadSet::_isSequentialPair(const Read &read) {
 	std::string readName = read.getName();
-	LOG_DEBUG(5, "_trackSequentialPair(" << readName << "): looking at " << _reads.size() - 1);
-	if (!isPairedRead(readName))
-		return;
-	if (_reads.size() > 1 && !previousReadName.empty()) {
+	LOG_DEBUG(5, "_isSequentialPair(" << readName << ")");
+	if (!isPairedRead(readName)) {
+		previousReadName.clear();
+		return false;
+	}
+	if (!previousReadName.empty()) {
 		if (isPair(previousReadName, read)) {
-			// mark the previous read, but not this one
-			// signaling, in conjunction with NOT populating this entry in _pairs
-			// that these two are sequential and paired...
-			// this gets around the parallel nature of building ReadSets in multiple threads
-			// as the pairs are identified after all ReadSets are consolidated
-			Read &lastRead = _reads[_reads.size() - 2];
-			lastRead.markPaired();
 			previousReadName.clear();
-			LOG_DEBUG(5, "_trackSequentialPair(" << readName << "): set pair at " << _reads.size() - 1);
+			return true;
 		} else {
 			previousReadName = read.getName();
+			return false;
 		}
 	} else {
 		previousReadName = read.getName();
+		return false;
 	}
-
 }
 
 void ReadSet::circularize(long extraLength) {
@@ -117,7 +113,6 @@ void ReadSet::addRead(const Read &read, SequenceLengthType readLength, int rank)
 	_reads.push_back(read);
 	_baseCount += readLength;
 	_setMaxSequenceLength(readLength);
-	_trackSequentialPair(read);
 	_setFastqStart(read);
 	long countReads = getSize();
 	LOG_DEBUG(5, "addRead(" << read.getName() << ", " << readLength << ", " << rank << ") len: " << read.getLength() << " size: " << countReads);
@@ -227,7 +222,7 @@ void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank
 			ss << "Pair: " << i << " (" << pair.read1 << ", " << pair.read2 << "): " << (isValidRead(pair.read1)?getRead(pair.read1).getName(): "x1") << " " << (isValidRead(pair.read2)?getRead(pair.read2).getName(): "x2") << "\n";
 		}
 		std::string s = ss.str();
-		LOG_DEBUG(4, "IdentifyPairs:" << getPairSize() << "\n" << s);
+		LOG_DEBUG(4, "AppendAllFiles(): IdentifedPairs:" << getPairSize() << "\n" << s);
 	}
 }
 
@@ -410,6 +405,7 @@ Read ReadSet::fakePair(const Read &unPaired) {
 
 ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	ReadSetSizeType size = getSize();
+	LOG_DEBUG_OPTIONAL(2, true, "ReadSet::identifyPairs(): " << size << " reads, " << _pairs.size() << " pairs starting");
 
 	// find the last Pair to be identified
 	ReadSetSizeType readIdx = 0;
@@ -429,15 +425,15 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	// were flagged during addRead()
 	long sequentialPairs = 0;
 	for(ReadSetSizeType spIdx = readIdx; spIdx < size - 1; spIdx++) {
-		Read &read1 = _reads[spIdx];
-		Read &read2 = _reads[spIdx+1];
-		if (read1.isPaired() && ! read2.isPaired()) {
-			// special signal that these two are sequential pairs
-			_pairs.push_back( Pair(spIdx, spIdx+1) );
-			read2.markPaired();
-			spIdx++;
-			LOG_DEBUG(4, "Paired sequential reads: " << spIdx << ", " << spIdx+1 << ": " << read1.getName() << " " << read2.getName());
+		Read &read = _reads[spIdx];
+		if (_isSequentialPair(read)) {
+			assert(spIdx > 0);
+			read.markPaired();
+			Read &readMate = _reads[spIdx-1];
+			readMate.markPaired();
+			_pairs.push_back( Pair(spIdx-1, spIdx) );
 			sequentialPairs++;
+			LOG_DEBUG(4, "Paired sequential reads: " << spIdx-1 << ", " << spIdx << ": " << read.getName() << " " << readMate.getName());
 		}
 	}
 
