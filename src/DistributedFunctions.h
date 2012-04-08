@@ -62,6 +62,7 @@ public:
 		return subDir;
 	}
 	static std::string _makeRankSubDir(mpi::communicator &world, std::string prefix) {
+		mkdir(prefix.c_str(), 0777); // all ranks must mkdir if writing to local disks
 		int subRank = world.rank() / 256;
 		std::string subDir = _getRankSubDir(world, prefix);
 		LOG_DEBUG_OPTIONAL(1, world.rank() == subRank * 256, "Making rank-subdirs: " << subDir);
