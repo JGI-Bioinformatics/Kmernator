@@ -258,14 +258,20 @@ public:
 		sendDisp[_world.size()], recvDisp[_world.size()];
 
 		ReadIdxSet sendingGlobalContigIdx;
+		ReadSet::ReadSetSizeType globalSize = query.getGlobalSize();
+		ReadSet::ReadSetSizeType sendingReads;
 
 		ReadSet empty;
-		int emptyBase = empty.getStoreSize() * query.getGlobalSize();
+		int emptyBase = empty.getStoreSize() * globalSize;
+		// maximum size for a single ReadSet per rank (1/2 the full buffer)
 		int maxRankTransmitSize1 = ( MPIOptions::getOptions().getTotalBufferSize() / _world.size() / 2);
-		if (maxRankTransmitSize1 < 10240)
-			maxRankTransmitSize1 = 10240;
-		int maxRankTransmitSize = maxRankTransmitSize1 + emptyBase / _world.size() + 1024;
-		long maxBuffer = maxRankTransmitSize * _world.size();
+		// minimum size
+		if (maxRankTransmitSize1 < 4096)
+			maxRankTransmitSize1 = 4096;
+		// maximum size for a round of communication (2 readSets or all emptySet signals)
+		int maxRankTransmitSize = std::max(maxRankTransmitSize1*2, emptyBase) + 64;
+		maxRankTransmitSize += 1024 - (maxRankTransmitSize % 1024); // make a multiple of 1kb
+		long maxBuffer = (maxRankTransmitSize) * _world.size() + 1024;
 		bool isDone = false;
 		long iteration = 0;
 		while (! isDone ) {
@@ -273,13 +279,13 @@ public:
 			long localReadSets = 0;
 			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "exchangeGlobalReads: " << iteration << ". Maximum transmit buffer is: " << maxRankTransmitSize1 << ", " << maxRankTransmitSize << " / " << maxBuffer);
 			isDone = true;
-			int totalSend = 0, totalRecv = 0;
+			int totalSend = 0, totalRecv = 0; sendingReads = 0;
 			for (int rank = 0; rank < _world.size(); rank++) {
 				sendBytes[rank] = 1; // artificially pad by one byte to ensure negative 'isDone' flag can be sent
 				recvBytes[rank] = 0;
 			}
 
-			for (ReadSet::ReadSetSizeType globalContigIdx = 0; globalContigIdx < query.getGlobalSize(); globalContigIdx++) {
+			for (ReadSet::ReadSetSizeType globalContigIdx = 0; globalContigIdx < globalSize; globalContigIdx++) {
 				int rank;
 				ReadSet::ReadSetSizeType rankReadIdx;
 				query.getRankReadForGlobalReadIdx(globalContigIdx, rank, rankReadIdx);
@@ -289,11 +295,13 @@ public:
 					ReadSet::ReadSetSizeType localIdx = query.getLocalReadIdx(globalContigIdx);
 					globalReadSetVector[localIdx].append(localReadSetVector[globalContigIdx]);
 					localReadSetVector[globalContigIdx].clear();
+					tmpReadSetVector[globalContigIdx].clear();
 					localReadSets++;
 					continue;
 				}
 				int sendByteCount = localReadSetVector[globalContigIdx].getStoreSize();
 				while (sendByteCount >= maxRankTransmitSize1) {
+					// reduce the transmission read set into a smaller chunk
 					ReadSet::ReadSetSizeType size = localReadSetVector[globalContigIdx].getSize();
 					ReadSet::ReadSetSizeType maxSend = size / 2;
 					if (maxSend <= 0) {
@@ -307,9 +315,13 @@ public:
 					}
 					sendByteCount = localReadSetVector[globalContigIdx].getStoreSize();
 				}
-				if (sendBytes[rank] + sendByteCount < maxRankTransmitSize1) {
+				if ((int) (sendBytes[rank] + sendByteCount + (emptyBase*(globalSize - globalContigIdx + 1))) < maxRankTransmitSize) {
+					// enough room for this plus all remaining sets if they are empty
 					sendingGlobalContigIdx.insert(globalContigIdx);
+					sendingReads += localReadSetVector[globalContigIdx].getSize();
 				} else {
+					// no room for this set this round
+					// keep reads in localReadSetVector[globalContigIdx] for next round
 					isDone = false;
 					long requiredSendByteCount = sendByteCount;
 					sendByteCount = empty.getStoreSize();
@@ -323,7 +335,7 @@ public:
 					isDone = false;
 				}
 				sendBytes[rank] += sendByteCount;
-				assert(sendBytes[rank] <= maxRankTransmitSize + emptyBase && sendBytes[rank] >= 0); // i.e. no overflow
+				assert(sendBytes[rank] <= maxBuffer / _world.size() && sendBytes[rank] >= 0); // i.e. no overflow
 				LOG_DEBUG(4, "GlobalContig: " << globalContigIdx << " sending " << localReadSetVector[ globalContigIdx ].getSize() << " reads / "<< sendByteCount << " bytes to " << rank << " total: " << sendBytes[rank]);
 			}
 			for (int rank = 0; rank < _world.size(); rank++) {
@@ -337,7 +349,7 @@ public:
 				assert(totalSend >= 0); // i.e. no overflow
 				LOG_DEBUG_OPTIONAL(2, true, "Sending to rank " << rank << " sendBytes " << sendBytes[rank] << " sendDisp[] " << sendDisp[rank] << ". 0 == recvBytes[] "<< recvBytes[rank]);
 			}
-			LOG_DEBUG_OPTIONAL(1, true, "iteration " << iteration << " Sending bytes: " << totalSend << " readSets: " << sendingGlobalContigIdx.size() + localReadSets << (isDone ? " isDone" : ""));
+			LOG_DEBUG_OPTIONAL(1, true, "iteration " << iteration << " Sending bytes: " << totalSend << " readSets: " << sendingGlobalContigIdx.size() + localReadSets << " sending Reads: " << sendingReads << (isDone ? " isDone" : ""));
 
 			MPI_Alltoall(sendBytes, 1, MPI_INT, recvBytes, 1, MPI_INT, _world);
 
@@ -370,7 +382,7 @@ public:
 				LOG_THROW("Could not allocate totalSend bytes! " << totalSend);
 
 			char *tmp = sendBuf;
-			for (ReadSet::ReadSetSizeType globalContigIdx = 0; globalContigIdx < query.getGlobalSize(); globalContigIdx++) {
+			for (ReadSet::ReadSetSizeType globalContigIdx = 0; globalContigIdx < globalSize; globalContigIdx++) {
 				int storeSize = 0;
 				if (query.isLocalRead(globalContigIdx)) {
 					// do not encode and send reads to self

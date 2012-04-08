@@ -437,7 +437,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 		}
 	}
 
-	LOG_DEBUG(2, "Paired sequential reads (fast): " << sequentialPairs);
+	LOG_DEBUG_OPTIONAL(2, true, "Paired sequential reads (fast): " << sequentialPairs);
 
 	newPairs += sequentialPairs;
 
@@ -523,7 +523,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 			LOG_VERBOSE(3, "Processed " << countNewPaired << " pairs for pairing");
 	}
 
-	LOG_VERBOSE(2, "Identified new pairs: " << newPairs << " (" << sequentialPairs << " sequential)");
+	LOG_VERBOSE_OPTIONAL(2, true, "Identified new pairs: " << newPairs << " (" << sequentialPairs << " sequential)");
 
 	return _pairs.size();
 }
