@@ -794,7 +794,7 @@ private:
 
 		if (out.areAllFinal()) {
 			// wait for all to process the last buffer, update checkpoints, then check it
-			LOG_DEBUG_OPTIONAL(1, true, "sendReceive() Starting areAllFinal barrier on buffer: " << thisBuffer << " " << threadsSending);
+			LOG_DEBUG_OPTIONAL(2, true, "sendReceive() Starting areAllFinal barrier on buffer: " << thisBuffer << " " << threadsSending);
 			assert(out.isReadyOut());
 			assert(last.isUnused());
 
@@ -805,10 +805,10 @@ private:
 					out.reset();
 					in.reset();
 				}
-				LOG_DEBUG_OPTIONAL(1, true, "sendReceive() Found checkpoint. master stopping on buffer: " << thisBuffer << " " << threadsSending);
+				LOG_DEBUG_OPTIONAL(1, omp_get_thread_num() == 0, "sendReceive() areAllFinal() Found checkpoint. master stopping on buffer: " << thisBuffer << " " << threadsSending);
 				return numReceived;
 			} else {
-				LOG_DEBUG_OPTIONAL(1, true, "sendReceive() did not reach checkpoint. buffer: " << thisBuffer << " " << threadsSending);
+				LOG_DEBUG_OPTIONAL(2, true, "sendReceive() areAllFinal() did not reach checkpoint. buffer: " << thisBuffer << " " << threadsSending);
 			}
 		}
 
