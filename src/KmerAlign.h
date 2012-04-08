@@ -60,22 +60,24 @@ public:
 	bool isReversed() const {
 		return (startPos > endPos);
 	}
-	bool isAtEnd(const Read &read) const {
+	bool isAtEnd(const Read &read, SequenceLengthType dist = 0) const {
 		if (!isAligned())
 			return false;
 		SequenceLengthType len = read.getLength();
-		return isAtEnd(len);
+		return isAtEnd(len, dist);
 	}
-	bool isAtEnd(SequenceLengthType len) const {
+	bool isAtEnd(SequenceLengthType len, SequenceLengthType dist = 0) const {
 		bool ret = false;
+		if (dist > len)
+			dist = len-1;
 		if (isReversed()) {
-			if (endPos == 0 || startPos == len-1)
+			if (endPos <= dist || startPos >= len-1-dist)
 				ret = true;
 		} else {
-			if (startPos == 0 || endPos == len-1)
+			if (startPos <= dist || endPos >= len-1-dist)
 				ret = true;
 		}
-		LOG_DEBUG(5, "isAtEnd(" << len << "): " << ret << " from " << toString());
+		LOG_DEBUG(5, "isAtEnd(" << len << "," << dist <<"): " << ret << " from " << toString());
 		return ret;
 	}
 	bool contains(SequenceLengthType pos) const {
@@ -168,8 +170,7 @@ public:
 				TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
 				LOG_DEBUG(5, "getAlignment(): isvalid " << j << " rpwv: " << rpwv.size());
 				for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
-					ReadSet::ReadSetSizeType globalReadIdx = it->readId;
-					assert(globalReadIdx == 0); // target is the only read
+					assert(it->readId == 0); // target is the only read
 					Alignment test;
 					SequenceLengthType ksize = KmerSizer::getSequenceLength();
 					if ( !( bestAlignment.targetAln.contains(it->position) & bestAlignment.queryAln.contains(j) ) ) {
@@ -206,7 +207,7 @@ public:
 			std::string qseq2 = TwoBitSequence::getReverseComplementFasta(query.getTwoBitSequence(), queryLen);
 			SequenceLengthType qpos2 = queryLen - qpos - minLen;
 			if (tseqM.compare( qseq2.substr(qpos2, minLen )) != 0 ) {
-				LOG_WARN(1, "did not find a match at " << tpos << "," << qpos << "'" << tseqM << "' vs '" << qseq.substr(qpos,minLen) << "' or '" << qseq2.substr(qpos2,minLen) << "' between " << target.toFasta() << " and " << query.toFasta());
+				LOG_DEBUG_OPTIONAL(2, qpos2 + minLen < query.getFirstMarkupLength(), "did not find a match at " << tpos << "," << qpos << "'" << tseqM << "' vs '" << qseq.substr(qpos,minLen) << "' or '" << qseq2.substr(qpos2,minLen) << "' between " << target.toFasta() << " and " << query.toFasta());
 				return alignment;
 			}
 			revcomp = true;

@@ -19,7 +19,7 @@
 
 class _MatcherInterfaceOptions  : public OptionsBaseInterface {
 public:
-	_MatcherInterfaceOptions() : maxReadMatches(400), maxReadDepthMatches(40), includeMate(1), minOverlap(51), minIdentity(0.986), returnOverlapOnly(0) {}
+	_MatcherInterfaceOptions() : maxReadMatches(500), maxReadDepthMatches(20), includeMate(1), minOverlap(51), minIdentity(0.986), returnOverlapOnly(0) {}
 	virtual ~_MatcherInterfaceOptions() {}
 
 	int &getMaxReadMatches() {
@@ -195,8 +195,7 @@ public:
 	}
 
 	// randomly downsizes overly full MatchHitSets in the MatchResults
-	void sampleMatches(MatchResults &matchResults) {
-		ReadSet::ReadSetSizeType maxMatches = MatcherInterfaceOptions::getOptions().getMaxReadMatches();
+	void sampleMatches(MatchResults &matchResults, ReadSet::ReadSetSizeType maxMatches = MatcherInterfaceOptions::getOptions().getMaxReadMatches()) {
 
 		if (maxMatches <= 0)
 			return;
@@ -437,10 +436,11 @@ public:
 		ReadSet::ReadSetSizeType maxReadDepth = MatcherInterfaceOptions::getOptions().getMaxReadDepthMatches();
 
 		for (ReadSet::ReadSetSizeType localContigIdx = 0; localContigIdx < globalReadSetVector.size(); localContigIdx++) {
+			LOG_DEBUG_OPTIONAL(2, true, "exchangeGlobalReads(): contig " << localContigIdx << ", " << globalReadSetVector[localContigIdx].getSize() << " reads");
 			if (screenForOverhang) {
 				if (isPaired)
 					globalReadSetVector[localContigIdx].identifyPairs();
-				globalReadSetVector[localContigIdx] = screenAlignmentsForOverhang(query.getRead(localContigIdx), globalReadSetVector[localContigIdx]);
+				globalReadSetVector[localContigIdx] = screenAlignmentsForOverhang(query.getRead(localContigIdx), globalReadSetVector[localContigIdx], isPaired);
 			}
 			ReadSet::ReadSetSizeType maxReads = std::max(maxReadMatches, maxReadDepth * query.getRead(localContigIdx).getLength() / (getTarget().getSize() > 0 ? getTarget().getAvgSequenceLength() : 76) );
 			if (maxReads > 0) {
@@ -473,12 +473,13 @@ public:
 	}
 	// screen matches for those that pass over the edge of the contig
 	// or, if paired, are full match and have pair with no alignment
-	ReadSet screenAlignmentsForOverhang(const Read &contig, ReadSet &matches) {
+	ReadSet screenAlignmentsForOverhang(const Read &contig, ReadSet &matches, bool isPaired) {
 		LOG_DEBUG(3, "screenAlignmentsForOverhang() on " << contig.toString());
 		ReadSet screenedMatches;
 		SequenceLengthType minOverlap = MatcherInterfaceOptions::getOptions().getMinOverlap();
 		KmerAlign kalign(contig);
-		if (matches.hasPairs()) {
+		LOG_DEBUG_OPTIONAL(2, true, "screenAlignmentsForOverhang(): contig " << contig.getName() << ", " << matches.getSize() << " reads, " << matches.getPairSize() << " pairs");
+		if (isPaired && matches.hasPairs()) {
 			for(ReadSet::ReadSetSizeType matchidx = 0; matchidx < matches.getPairSize(); matchidx++) {
 				ReadSet::Pair &pair = matches.getPair(matchidx);
 				Alignment aln1, aln2;
@@ -488,13 +489,19 @@ public:
 				Read read1, read2;
 				if (r1) {
 					read1 = matches.getRead(pair.read1);
+					SequenceLengthType r1len = read1.getLength();
 					p1 = isPassingRead(kalign, read1, aln1, minOverlap);
 					end1 = aln1.targetAln.isAtEnd(contig);
+					if (p1 & !end1) // allow perfect full length matches up to a readlength in the contig
+						end1 |= (aln1.targetAln.isAtEnd(contig, r1len/2) & (aln1.getIdentity() == 1.0) & (aln1.getOverlap() == r1len));
 				}
 				if (r2) {	
 					read2 = matches.getRead(pair.read2);
+					SequenceLengthType r2len = read2.getLength();
 					p2 = isPassingRead(kalign, read2, aln2, minOverlap);
 					end2 = aln2.targetAln.isAtEnd(contig);
+					if (p2 & !end2) // allow perfect full length matches up to a readlength in the contig
+						end2 |= (aln2.targetAln.isAtEnd(contig, r2len/2) & (aln2.getIdentity() == 1.0) & (aln2.getOverlap() == r2len));
 				}
 
 				bool add1 = false, add2 = false;
@@ -511,7 +518,7 @@ public:
 					if (end2)
 						add2 = true;
 				}
-				LOG_DEBUG(3, "screenAlignmentsForOverhang() (" << add1 << "," << add2 << ") " << p1 << "/" << end1 << " " << aln1.toString() << " pair:" << p2 << "/" << end2 << " " << aln2.toString() << read1.toString() << read2.toString());
+				LOG_DEBUG(4, "screenAlignmentsForOverhang() (" << add1 << "," << add2 << ") " << p1 << "/" << end1 << " " << aln1.toString() << " pair:" << p2 << "/" << end2 << " " << aln2.toString() << read1.toString() << read2.toString());
 
 				if (add1)
 					screenedMatches.append(read1);
@@ -660,7 +667,7 @@ public:
 			}
 			assert(tmp == recvBuf + recvRankDispl[i] + recvRankCount[i]);
 		}
-		sampleMatches(localMatchResults);
+		sampleMatches(localMatchResults, MatcherInterfaceOptions::getOptions().getMaxReadMatches() * 20);
 
 		delete [] recvRankDispl;
 		delete [] recvRankCount;
