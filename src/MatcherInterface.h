@@ -19,7 +19,7 @@
 
 class _MatcherInterfaceOptions  : public OptionsBaseInterface {
 public:
-	_MatcherInterfaceOptions() : maxReadMatches(500), maxReadDepthMatches(20), includeMate(1), minOverlap(51), minIdentity(0.986), returnOverlapOnly(0) {}
+	_MatcherInterfaceOptions() : maxReadMatches(500), maxReadDepthMatches(20), includeMate(1), minOverlap(51), minIdentity(0.986), returnOverlapOnly(1) {}
 	virtual ~_MatcherInterfaceOptions() {}
 
 	int &getMaxReadMatches() {
