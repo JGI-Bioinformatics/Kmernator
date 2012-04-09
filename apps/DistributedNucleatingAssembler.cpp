@@ -294,7 +294,7 @@ int main(int argc, char *argv[]) {
 			kmerStep);
 	maxKmerSize = boost::mpi::all_reduce(world, maxKmerSize, mpi::minimum<
 			SequenceLengthType>());
-	LOG_VERBOSE(1, "Kmer size ranges: " << minKmerSize << "\t" << maxKmerSize << "\t" << kmerStep);
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Kmer size ranges: " << minKmerSize << "\t" << maxKmerSize << "\t" << kmerStep);
 	maxExtend = maxKmerSize;
 
 	timing1 = timing2;
