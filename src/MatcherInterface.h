@@ -100,33 +100,47 @@ public:
 	typedef boost::unordered_set<ReadSet::ReadSetSizeType> ReadIdxSet;
 
 	MatcherInterface(mpi::communicator &world, const ReadSet &target)
-	: _world(world), _target(target) {
+	: _world(world), _target(target), globalQueryFile(), rmGlobalQueryFile(false) {
 		assert(_target.isGlobal() && _target.getGlobalSize() > 0);
 	}
-
-// TODO make global file persistant, reuse in exchangeGlobalReads before xfer and before any sampling
-// verify that screen is keeping all paired reads that are not fully contained in the contig
+	~MatcherInterface() {
+		cleanGlobalQueryFile();
+	}
+	void cleanGlobalQueryFile() {
+		if (rmGlobalQueryFile) {
+			unlink(globalQueryFile.c_str());
+			globalQueryFile.clear();
+		}
+		rmGlobalQueryFile = false;
+		_world.barrier();
+	}
 
 	// returns a list of sets of local reads (i.e. target reads idxs in their globalReadIdx space)
 	// to a query, which should be a global ReadSet
-	virtual MatchResults matchLocal(const ReadSet &query) {
+	MatchResults matchLocal(const ReadSet &query) {
 		assert(query.isGlobal());
+		cleanGlobalQueryFile();
 		std::string queryFile = UniqueName::generateUniqueGlobalName( GeneralOptions::getOptions().getTmpDir() + "/MatcherInterface-" );
-		queryFile = DistributedOfstreamMap::writeGlobalReadSet(_world, query, queryFile, "", FormatOutput::Fasta(), false);
-		LOG_DEBUG(3, "Running matchLocal on " << queryFile);
-		MatchResults results = this->matchLocal(queryFile);
+		globalQueryFile = DistributedOfstreamMap::writeGlobalReadSet(_world, query, queryFile, "", FormatOutput::Fasta(), false);
+		rmGlobalQueryFile = true;
+
+		LOG_DEBUG(3, "Running matchLocal on " << globalQueryFile);
+		MatchResults results = this->matchLocalImpl(globalQueryFile);
 		assert(results.size() == query.getGlobalSize());
-		LOG_DEBUG(3, "Waiting for rest of world to finish");
-		_world.barrier();
-		if (_world.rank() == 0)
-			unlink(queryFile.c_str());
 		return results;
 	}
 
 	// returns a list of sets of local reads (i.e. target reads idxs in their globalReadIdx space)
 	// to a query, in its localReadIdxSpace space (should be full global copy, not a global ReadSet)
-	virtual MatchResults matchLocal(std::string queryFile) {
-		LOG_THROW("You must implement this function for your specific MatcherInterface");
+	MatchResults matchLocal(std::string queryFile) {
+		globalQueryFile = queryFile;
+		rmGlobalQueryFile = false;
+		MatchResults results = this->matchLocalImpl(queryFile);
+		return results;
+	}
+
+	virtual MatchResults matchLocalImpl(std::string(queryFile)) {
+		LOG_THROW("Base class must implement the matchLocalImpl(string) method!");
 	}
 
 	// returns a ReadSetVector of (possibly copied Read) results over the target global reads (i.e. full set)
@@ -219,9 +233,21 @@ public:
 	// returns a ReadSetVector of reads that are local (i.e. targets in globalReadIdx space local to the node)
 	// exchanges globalReadSetIds with the responsible nodes, if needed
 	MatchReadResults getLocalReads(MatchResults &globalMatchResults) {
+
 		MatchResults matchResults = exchangeGlobalReadIdxs(globalMatchResults);
 		debuglog(3, "MatcherInterface::getLocalReads(): after exchange LocalMatches", matchResults);
 		assert(matchResults.size() == globalMatchResults.size());
+
+		bool isPaired = MatcherInterfaceOptions::getOptions().getIncludeMate();
+		bool screenForOverhang = MatcherInterfaceOptions::getOptions().getReturnOverlapOnly();
+		bool screenNow = screenForOverhang && !globalQueryFile.empty();
+		ReadSetStream *rss = NULL;
+		if (screenNow) {
+			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "getLocalReads(): will screenForOverhang");
+			rss = new ReadSetStream(globalQueryFile);
+		} else {
+			sampleMatches(matchResults, MatcherInterfaceOptions::getOptions().getMaxReadMatches() * 20);
+		}
 
 		int myRank = _world.rank();
 		MatchReadResults matchReadResults(matchResults.size(), ReadSet());
@@ -233,7 +259,22 @@ public:
 				if (! read.isDiscarded() )
 					matchReadResults[i].append( read );
 			}
+			if (screenNow) {
+				if (isPaired)
+					matchReadResults[i].identifyPairs();
+				if (rss->readNext()) {
+					Read contig = rss->getRead();
+					matchReadResults[i] = screenAlignmentsForOverhang(contig, matchReadResults[i], isPaired);
+				} else {
+					LOG_WARN(1, "mismatch between globalQuery file and number of reads");
+					assert(false); // should not get here
+				}
+			}
 		}
+
+		if (screenNow)
+			delete rss;
+
 		recordTime("returnLocalReads", MPI_Wtime());
 		return matchReadResults;
 	}
@@ -250,7 +291,7 @@ public:
 		tmpReadSetVector.resize(query.getGlobalSize(), ReadSet());
 
 		bool isPaired = MatcherInterfaceOptions::getOptions().getIncludeMate();
-		bool screenForOverhang = MatcherInterfaceOptions::getOptions().getReturnOverlapOnly();
+		bool screenForOverhang = MatcherInterfaceOptions::getOptions().getReturnOverlapOnly() && globalQueryFile.empty();
 
 		int myRank = _world.rank();
 
@@ -262,14 +303,15 @@ public:
 		ReadSet::ReadSetSizeType sendingReads;
 
 		ReadSet empty;
-		int emptyBase = empty.getStoreSize() * globalSize;
+		int emptyReadSetSize = empty.getStoreSize();
+		int emptyBase = emptyReadSetSize * globalSize;
 		// maximum size for a single ReadSet per rank (1/2 the full buffer)
 		int maxRankTransmitSize1 = ( MPIOptions::getOptions().getTotalBufferSize() / _world.size() / 2);
 		// minimum size
 		if (maxRankTransmitSize1 < 4096)
 			maxRankTransmitSize1 = 4096;
-		// maximum size for a round of communication (2 readSets or all emptySet signals)
-		int maxRankTransmitSize = std::max(maxRankTransmitSize1*2, emptyBase) + 64;
+		// maximum size for a round of communication (2 readSets + all emptySet signals)
+		int maxRankTransmitSize = maxRankTransmitSize1*2 + emptyBase + 64;
 		maxRankTransmitSize += 1024 - (maxRankTransmitSize % 1024); // make a multiple of 1kb
 		long maxBuffer = (maxRankTransmitSize) * _world.size() + 1024;
 		bool isDone = false;
@@ -315,7 +357,7 @@ public:
 					}
 					sendByteCount = localReadSetVector[globalContigIdx].getStoreSize();
 				}
-				if ((int) (sendBytes[rank] + sendByteCount + (emptyBase*(globalSize - globalContigIdx + 1))) < maxRankTransmitSize) {
+				if (sendByteCount <= emptyReadSetSize || (int) (sendBytes[rank] + sendByteCount + (emptyReadSetSize*(globalSize - globalContigIdx - 1))) < maxRankTransmitSize) {
 					// enough room for this plus all remaining sets if they are empty
 					sendingGlobalContigIdx.insert(globalContigIdx);
 					sendingReads += localReadSetVector[globalContigIdx].getSize();
@@ -328,7 +370,7 @@ public:
 					ReadIdxSet::iterator readIdIt = sendingGlobalContigIdx.find(globalContigIdx);
 					if (readIdIt != sendingGlobalContigIdx.end())
 						sendingGlobalContigIdx.erase(readIdIt);
-					LOG_DEBUG(3, "Skipping globalContigIdx this round(" << iteration << "): " << globalContigIdx << " need " << requiredSendByteCount << " prepared: " << sendBytes[rank] << " remaining: " << maxRankTransmitSize - sendBytes[rank]);
+					LOG_DEBUG_OPTIONAL(3, true, "Skipping globalContigIdx this round(" << iteration << "): " << globalContigIdx << " need " << requiredSendByteCount << " prepared: " << sendBytes[rank] << " remaining: " << maxRankTransmitSize - sendBytes[rank]);
 				}
 				if (tmpReadSetVector[globalContigIdx].getSize() > 0) {
 					// some reads are waiting for a future communication
@@ -396,6 +438,7 @@ public:
 						tmpReadSetVector[globalContigIdx].swap(localReadSetVector[globalContigIdx]);
 					} else {
 						storeSize = empty.store(tmp);
+						LOG_DEBUG_OPTIONAL(3, true, "Not sending " << globalContigIdx << " with " << localReadSetVector[globalContigIdx].getSize() << " and " << tmpReadSetVector[globalContigIdx].getSize());
 					}
 				}
 				tmp += storeSize;
@@ -679,7 +722,6 @@ public:
 			}
 			assert(tmp == recvBuf + recvRankDispl[i] + recvRankCount[i]);
 		}
-		sampleMatches(localMatchResults, MatcherInterfaceOptions::getOptions().getMaxReadMatches() * 20);
 
 		delete [] recvRankDispl;
 		delete [] recvRankCount;
@@ -697,6 +739,8 @@ public:
 protected:
 	mpi::communicator &_world;
 	const ReadSet &_target;
+	std::string globalQueryFile;
+	bool rmGlobalQueryFile;
 };
 
 #endif /* MATCHERINTERFACE_H_ */

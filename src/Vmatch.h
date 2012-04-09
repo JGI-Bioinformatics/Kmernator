@@ -138,10 +138,8 @@ public:
 		if (ret != 0)
 			LOG_THROW("mkvtree failed to build(" << ret << "): " << cmd << " Log:\n" << FileUtils::dumpFile(logFile));
 	}
-	MatchResults matchLocal(const ReadSet &query) {
-		return MatcherInterface::matchLocal(query);
-	}
-	MatchResults matchLocal(std::string queryFile) {
+
+	MatchResults matchLocalImpl(std::string queryFile) {
 		VmatchMatchResults matches = _match(queryFile);
 		MatchResults contigReadHits;
 		bool returnPairs = MatcherInterfaceOptions::getOptions().getIncludeMate();

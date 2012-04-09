@@ -60,13 +60,10 @@ public:
 		_spectrum._buildKmerSpectrumMPI(target, true);
 		_spectrum.optimize();
 	}
-	MatchResults matchLocal(std::string queryFile) {
+	MatchResults matchLocalImpl(std::string queryFile) {
 		ReadSet query;
 		query.appendAnyFile(queryFile);
-		return this->_matchLocal(query);
-	}
-	virtual MatchResults matchLocal(const ReadSet &query) {
-		return MatcherInterface::matchLocal(query);
+		return _matchLocal(query);
 	}
 
 	// works on the full copy of the query set
