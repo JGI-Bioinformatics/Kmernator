@@ -61,29 +61,29 @@ public:
 		_spectrum.optimize();
 	}
 	MatchResults matchLocalImpl(std::string queryFile) {
-		ReadSet query;
-		query.appendAnyFile(queryFile);
+		ReadSetStream query(queryFile);;
 		return _matchLocal(query);
 	}
 
 	// works on the full copy of the query set
-	MatchResults _matchLocal(const ReadSet &query) {
-		assert(!query.isGlobal());
+	MatchResults _matchLocal(ReadSetStream &query) {
 		MatchResults matchResults;
-		matchResults.resize(query.getSize());
 		int maxPositionsFromEdge = KmerMatchOptions::getOptions().getMatchMaxPositionsFromEdge();
 		int maxKmersFromEdge = maxPositionsFromEdge - KmerSizer::getSequenceLength() + 1;
 
-		for(unsigned int i = 0; i < query.getSize(); i++) {
-			const Read &read = query.getRead(i);
+		ReadSet::ReadSetSizeType contigIdx = 0;
+		while(query.readNext()) {
+			Read read = query.getRead();
+			matchResults.push_back(MatchHitSet());
+
 			KmerWeights kmers(read.getTwoBitSequence(), read.getLength(), true);
 			unsigned int lowerMaxKmer = maxPositionsFromEdge > 0 ? maxKmersFromEdge : kmers.size();
 			unsigned int upperMinKmer = maxPositionsFromEdge > 0 ? kmers.size() - maxKmersFromEdge : 0;
-			LOG_DEBUG(4, "KmerMatch::matchLocal: " << i << " " << read.toString() << " kmers: " << kmers.size());
+			LOG_DEBUG(4, "KmerMatch::matchLocal: " << contigIdx << " " << read.toString() << " kmers: " << kmers.size());
 
 			for(unsigned int j = 0; j < kmers.size(); j++) {
 				if (j > lowerMaxKmer && j < upperMinKmer ) {
-					LOG_DEBUG(5, "Skipping match to middle of " << i << " len:" << read.getLength() << " kmer:" << j);
+					LOG_DEBUG(5, "Skipping match to middle of " << contigIdx << " len:" << read.getLength() << " kmer:" << j);
 					continue;
 				}
 				KS::SolidElementType element = _spectrum.getIfExistsSolid( kmers[j] );
@@ -91,11 +91,13 @@ public:
 					TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
 					for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
 						ReadSet::ReadSetSizeType globalReadIdx = it->readId;
-						LOG_DEBUG(5, "KmerMatch::matchLocal: localRead " << i << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
-						matchResults[i].insert( globalReadIdx );
+						LOG_DEBUG(5, "KmerMatch::matchLocal: localRead " << contigIdx << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
+						matchResults[contigIdx].insert( globalReadIdx );
 					}
 				}
 			}
+			contigIdx++;
+			LOG_DEBUG_OPTIONAL(1, contigIdx % (100*getWorld().size()) == (100*getWorld().rank()), "KmerMatch::_matchLocal(): processed " << contigIdx << " with " << matchResults[contigIdx-1].size());
 		}
 
 		return matchResults;
