@@ -195,6 +195,7 @@ public:
 	// a MatchResults of globalReadIdx
 	// and returns the global ReadSetVector (possibly copied reads) for the local reads within the query
 	MatchReadResults convertLocalMatchesToGlobalReads(const ReadSet &query, MatchResults &matchResults) {
+		LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "convertLocalMatches():");
 		assert(query.isGlobal() && query.getGlobalSize() > 0);
 		assert(matchResults.size() == query.getGlobalSize());
 		debuglog(3, "MatcherInterface::converLocalMatchesToGlobalReads(): LocalMatches", matchResults);
@@ -246,6 +247,7 @@ public:
 			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "getLocalReads(): will screenForOverhang");
 			rss = new ReadSetStream(globalQueryFile);
 		} else {
+			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "getLocalReads(): will subsampling matchResults");
 			sampleMatches(matchResults, MatcherInterfaceOptions::getOptions().getMaxReadMatches() * 20);
 		}
 

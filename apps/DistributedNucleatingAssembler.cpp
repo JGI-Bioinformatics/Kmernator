@@ -150,6 +150,7 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 
 		ReadSet::ReadSetSizeType poolSize = contigReadSet[i].getSize();
 
+		double extTime = MPI_Wtime();
 		if (poolSize > minimumCoverage) {
 			LOG_VERBOSE_OPTIONAL(2, true, "Extending " << oldRead.getName() << " with " << poolSize << " pool of reads");
 			newRead = Cap3::extendContig(oldRead, contigReadSet[i]);
@@ -157,17 +158,17 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 		} else {
 			poolsWithoutMinimumCoverage++;
 		}
+		extTime = MPI_Wtime() - extTime;
 		long deltaLen = (long)newLen - (long)oldLen;
 		if (deltaLen > 0) {
 			extendLog << std::endl << "Cap3 Extended " << oldRead.getName() << " "
 					<< deltaLen << " bases to " << newRead.getLength() << ": "
 					<< newRead.getName() << " with " << poolSize
-					<< " reads in the pool";
+					<< " reads in the pool, in " << extTime << " sec";
 			//#pragma omp critical
 			changedContigs.append(newRead);
 		} else {
-			extendLog << std::endl << "Did not extend " << oldRead.getName()
-													<< " with " << poolSize << " reads in the pool";
+			extendLog << std::endl << "Did not extend " << oldRead.getName() << " with " << poolSize << " reads in the pool, in " << extTime << " sec";
 			//#pragma omp critical
 			finalContigs.append(oldRead);
 		}
@@ -322,6 +323,8 @@ int main(int argc, char *argv[]) {
 
 			MatcherInterface::MatchReadResults contigReadSet = matcher->match(contigs, contigFile);
 			assert(contigs.getSize() == contigReadSet.size());
+
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Matches made");
 
 			ReadSet changedContigs;
 			std::string extendLog;
