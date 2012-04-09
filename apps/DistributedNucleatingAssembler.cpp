@@ -142,7 +142,8 @@ std::string extendContigsWithCap3(ReadSet & contigs,
 	std::string cap3Path = Cap3Options::getOptions().getCap3Path();
 
 	int poolsWithoutMinimumCoverage = 0;
-#pragma omp parallel for
+
+	#pragma omp parallel for
 	for (long i = 0; i < (long) contigs.getSize(); i++) {
 		const Read &oldRead = contigs.getRead(i);
 		Read newRead = oldRead;
@@ -217,8 +218,7 @@ std::string extendContigsWithContigExtender(ReadSet & contigs,
 			//#pragma omp critical
 			changedContigs.append(newRead);
 		} else {
-			extendLog << std::endl << "Did not extend " << oldRead.getName()
-													<< " with " << poolSize << " reads in the pool";
+			extendLog << std::endl << "Did not extend " << oldRead.getName() << " with " << poolSize << " reads in the pool";
 			//#pragma omp critical
 			finalContigs.append(oldRead);
 		}
@@ -239,74 +239,74 @@ void finishLongContigs(long maxContigLength, ReadSet &changedContigs, ReadSet &f
 }
 
 int main(int argc, char *argv[]) {
-	// do not apply artifact filtering by default
-	double timing1, timing2;
-
-	mpi::communicator world = initializeWorldAndOptions< DistributedNucleatingAssemblerOptions >(argc, argv);
-
-	timing1 = MPI_Wtime();
-
-	OptionsBaseInterface::FileListType inputFiles =
-			Options::getOptions().getInputFiles();
-	std::string contigFile =
-			ContigExtenderBaseOptions::getOptions().getContigFile();
-	std::string finalContigFile;
-	double minimumCoverage =
-			ContigExtenderBaseOptions::getOptions().getMinimumCoverage();
-	long maxIterations =
-			DistributedNucleatingAssemblerOptions::getOptions().getMaxIterations();
-
-	ReadSet reads;
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files" );
-	reads.appendAllFiles(inputFiles, world.rank(), world.size());
-	reads.identifyPairs();
-	setGlobalReadSetOffsets(world, reads);
-
-	timing2 = MPI_Wtime();
-
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "loaded " << reads.getGlobalSize() << " Reads, (local:" << reads.getSize() << " pair:" << reads.getPairSize() << ") in " << (timing2-timing1) << " seconds" );
-
-	if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
-
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Preparing artifact filter: ");
-
-		FilterKnownOddities filter;
-		LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Applying sequence artifact filter to Input Files");
-
-		unsigned long filtered = filter.applyFilter(reads);
-
-		LOG_VERBOSE(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
-
-		unsigned long allFiltered;
-		reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
-
-	}
-
-	boost::shared_ptr< MatcherInterface > matcher;
-	if (KmerBaseOptions::getOptions().getKmerSize() == 0) {
-		matcher.reset( new Vmatch(world, UniqueName::generateHashName(inputFiles), reads) );
-	} else {
-		matcher.reset( new KmerMatch(world, reads) );
-	}
-
-	SequenceLengthType minKmerSize, maxKmerSize, kmerStep, maxExtend;
-	ContigExtender<KS>::getMinMaxKmerSize(reads, minKmerSize, maxKmerSize,
-			kmerStep);
-	maxKmerSize = boost::mpi::all_reduce(world, maxKmerSize, mpi::minimum<
-			SequenceLengthType>());
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Kmer size ranges: " << minKmerSize << "\t" << maxKmerSize << "\t" << kmerStep);
-	maxExtend = maxKmerSize;
-
-	timing1 = timing2;
-	timing2 = MPI_Wtime();
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Prepared Matcher indexes in " << (timing2-timing1) << " seconds");
-
-	ReadSet finalContigs;
-	ReadSet contigs;
-	contigs.appendFastaFile(contigFile, world.rank(), world.size());
 
 	try {
+
+		double timing1, timing2;
+
+		mpi::communicator world = initializeWorldAndOptions< DistributedNucleatingAssemblerOptions >(argc, argv);
+
+		timing1 = MPI_Wtime();
+
+		OptionsBaseInterface::FileListType inputFiles =
+				Options::getOptions().getInputFiles();
+		std::string contigFile =
+				ContigExtenderBaseOptions::getOptions().getContigFile();
+		std::string finalContigFile;
+		double minimumCoverage =
+				ContigExtenderBaseOptions::getOptions().getMinimumCoverage();
+		long maxIterations =
+				DistributedNucleatingAssemblerOptions::getOptions().getMaxIterations();
+
+		ReadSet reads;
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files" );
+		reads.appendAllFiles(inputFiles, world.rank(), world.size());
+		reads.identifyPairs();
+		setGlobalReadSetOffsets(world, reads);
+
+		timing2 = MPI_Wtime();
+
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "loaded " << reads.getGlobalSize() << " Reads, (local:" << reads.getSize() << " pair:" << reads.getPairSize() << ") in " << (timing2-timing1) << " seconds" );
+
+		if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
+
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Preparing artifact filter: ");
+
+			FilterKnownOddities filter;
+			LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Applying sequence artifact filter to Input Files");
+
+			unsigned long filtered = filter.applyFilter(reads);
+
+			LOG_VERBOSE(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
+
+			unsigned long allFiltered;
+			reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
+
+		}
+
+		boost::shared_ptr< MatcherInterface > matcher;
+		if (KmerBaseOptions::getOptions().getKmerSize() == 0) {
+			matcher.reset( new Vmatch(world, UniqueName::generateHashName(inputFiles), reads) );
+		} else {
+			matcher.reset( new KmerMatch(world, reads) );
+		}
+
+		SequenceLengthType minKmerSize, maxKmerSize, kmerStep, maxExtend;
+		ContigExtender<KS>::getMinMaxKmerSize(reads, minKmerSize, maxKmerSize,
+				kmerStep);
+		maxKmerSize = boost::mpi::all_reduce(world, maxKmerSize, mpi::minimum<
+				SequenceLengthType>());
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Kmer size ranges: " << minKmerSize << "\t" << maxKmerSize << "\t" << kmerStep);
+		maxExtend = maxKmerSize;
+
+		timing1 = timing2;
+		timing2 = MPI_Wtime();
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Prepared Matcher indexes in " << (timing2-timing1) << " seconds");
+
+		ReadSet finalContigs;
+		ReadSet contigs;
+		contigs.appendFastaFile(contigFile, world.rank(), world.size());
 
 		short iteration = 0;
 		while (++iteration <= maxIterations) {
@@ -418,11 +418,11 @@ int main(int argc, char *argv[]) {
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 
+		MPI_Finalize();
+
 	} catch (...) {
 		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
 	}
-
-	MPI_Finalize();
 
 	return 0;
 }
