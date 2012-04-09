@@ -19,7 +19,7 @@
 
 class _MatcherInterfaceOptions  : public OptionsBaseInterface {
 public:
-	_MatcherInterfaceOptions() : maxReadMatches(500), maxReadDepthMatches(20), includeMate(1), minOverlap(51), minIdentity(0.986), returnOverlapOnly(1) {}
+	_MatcherInterfaceOptions() : maxReadMatches(450), maxReadDepthMatches(0), includeMate(1), minOverlap(51), minIdentity(0.986), returnOverlapOnly(1) {}
 	virtual ~_MatcherInterfaceOptions() {}
 
 	int &getMaxReadMatches() {
@@ -93,11 +93,11 @@ typedef OptionsBaseTemplate< _MatcherInterfaceOptions > MatcherInterfaceOptions;
 
 class MatcherInterface : public Timer {
 public:
-	typedef std::set< ReadSet::ReadSetSizeType > MatchHitSet;
-	typedef std::vector< ReadSet::ReadSetSizeType > MatchHitVector;
+	typedef boost::unordered_set< ReadSet::ReadSetSizeType > ReadIdxSet;
+	typedef ReadIdxSet MatchHitSet;
 	typedef std::vector< MatchHitSet > MatchResults;
+	typedef std::vector< ReadSet::ReadSetSizeType > MatchHitVector;
 	typedef ReadSet::ReadSetVector MatchReadResults;
-	typedef boost::unordered_set<ReadSet::ReadSetSizeType> ReadIdxSet;
 
 	MatcherInterface(mpi::communicator &world, const ReadSet &target)
 	: _world(world), _target(target), globalQueryFile(), rmGlobalQueryFile(false) {
@@ -214,8 +214,8 @@ public:
 
 		if (maxMatches <= 0)
 			return;
-
-		for(ReadSet::ReadSetSizeType i = 0 ; i < matchResults.size(); i++) {
+#pragma omp parallel for
+		for(ReadSet::ReadSetSizeType i = 0 ; (long) i < matchResults.size(); i++) {
 			MatchHitSet &mhs = matchResults[i];
 			if (mhs.size() > maxMatches) {
 				MatchHitVector mhv(mhs.begin(), mhs.end());
@@ -225,7 +225,7 @@ public:
 				for(Random<ReadSet::ReadSetSizeType>::SetIterator it = sampledSet.begin(); it != sampledSet.end(); it++) {
 					mhs.insert(mhv[*it]);
 				}
-				LOG_DEBUG_OPTIONAL(1, true, "Reduced " << i << " from " << oldSize << " to " << mhs.size());
+				LOG_DEBUG_OPTIONAL(2, true, "Reduced " << i << " from " << oldSize << " to " << mhs.size());
 			}
 		}
 		return;
@@ -254,7 +254,10 @@ public:
 		int myRank = _world.rank();
 		MatchReadResults matchReadResults(matchResults.size(), ReadSet());
 		for(int i = 0; i < (int) matchResults.size(); i++) {
-			for(MatchHitSet::iterator it = matchResults[i].begin(); it != matchResults[i].end(); it++) {
+			MatchHitVector mhv(matchResults[i].begin(), matchResults[i].end());
+			std::sort(mhv.begin(), mhv.end());
+			matchResults[i].clear();
+			for(MatchHitVector::iterator it = mhv.begin(); it != mhv.end(); it++) {
 				assert(getTarget().isLocalRead( *it ));
 				ReadSet::ReadSetSizeType localReadIdx = getTarget().getLocalReadIdx(myRank, *it);
 				const Read read = getTarget().getRead( localReadIdx );
@@ -293,7 +296,8 @@ public:
 		tmpReadSetVector.resize(query.getGlobalSize(), ReadSet());
 
 		bool isPaired = MatcherInterfaceOptions::getOptions().getIncludeMate();
-		bool screenForOverhang = MatcherInterfaceOptions::getOptions().getReturnOverlapOnly() && globalQueryFile.empty();
+		bool screenForOverlap = MatcherInterfaceOptions::getOptions().getReturnOverlapOnly() && globalQueryFile.empty();
+		LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "exchangeGlobalReads(): will " << (screenForOverlap? " " : "NOT ") << " screenForOverhang");
 
 		int myRank = _world.rank();
 
@@ -494,7 +498,7 @@ public:
 
 		for (ReadSet::ReadSetSizeType localContigIdx = 0; localContigIdx < globalReadSetVector.size(); localContigIdx++) {
 			LOG_DEBUG_OPTIONAL(2, true, "exchangeGlobalReads(): contig " << localContigIdx << ", " << globalReadSetVector[localContigIdx].getSize() << " reads");
-			if (screenForOverhang) {
+			if (screenForOverlap) {
 				if (isPaired)
 					globalReadSetVector[localContigIdx].identifyPairs();
 				globalReadSetVector[localContigIdx] = screenAlignmentsForOverhang(query.getRead(localContigIdx), globalReadSetVector[localContigIdx], isPaired);
@@ -503,7 +507,7 @@ public:
 			if (maxReads > 0) {
 				ReadSet::ReadSetSizeType numReads = globalReadSetVector[localContigIdx].getSize();
 				if (numReads > maxReads) {
-					LOG_DEBUG_OPTIONAL(1, true, "for " << localContigIdx << " sampled from " << numReads << " to " << maxReads);
+					LOG_DEBUG_OPTIONAL(2, true, "for " << localContigIdx << " sampled from " << numReads << " to " << maxReads);
 					globalReadSetVector[localContigIdx] = globalReadSetVector[localContigIdx].randomlySample(maxReads);
 				}
 			}
@@ -549,7 +553,7 @@ public:
 					SequenceLengthType r1len = read1.getLength();
 					p1 = isPassingRead(kalign, read1, aln1, minOverlap);
 					end1 = aln1.targetAln.isAtEnd(contig);
-					if (p1 & !end1) // allow perfect full length matches up to a readlength in the contig
+					if (p1 & !end1) // allow perfect full length matches up to half a readlength away in the contig
 						end1 |= (aln1.targetAln.isAtEnd(contig, r1len/2) & (aln1.getIdentity() == 1.0) & (aln1.getOverlap() == r1len));
 				}
 				if (r2) {	
@@ -557,7 +561,7 @@ public:
 					SequenceLengthType r2len = read2.getLength();
 					p2 = isPassingRead(kalign, read2, aln2, minOverlap);
 					end2 = aln2.targetAln.isAtEnd(contig);
-					if (p2 & !end2) // allow perfect full length matches up to a readlength in the contig
+					if (p2 & !end2) // allow perfect full length matches up to half a readlength away in the contig
 						end2 |= (aln2.targetAln.isAtEnd(contig, r2len/2) & (aln2.getIdentity() == 1.0) & (aln2.getOverlap() == r2len));
 				}
 
@@ -618,7 +622,7 @@ public:
 		int numMatchHitSets = globalMatchResults.size();
 		int numRanks = _world.size();
 		// sort globalReadIdxs by rank, matchHitSet
-		std::vector< std::vector< std::vector< ReadSet::ReadSetSizeType > > > rankHitGlobalIndexes(numRanks);
+		std::vector< std::vector< MatchHitVector > > rankHitGlobalIndexes(numRanks);
 		for(long i = 0; i < numRanks; i++)
 			rankHitGlobalIndexes[i].resize(numMatchHitSets);
 		for(long i = 0; i < numMatchHitSets; i++) {
@@ -653,6 +657,8 @@ public:
 				sendRankDispl[i] = sendRankDispl[i-1] + sendRankCount[i-1];
 			}
 		}
+
+		LOG_DEBUG_OPTIONAL(1, true, "exchangeGlobalReadIdxs(): sending: " << totalSendCount << " readIndexes");
 
 		MPI_Alltoall(sendCounts, numMatchHitSets, MPI_INT, recvCounts, numMatchHitSets, MPI_INT, _world);
 		// Prepare accounting arrays for alltoallv
@@ -724,6 +730,11 @@ public:
 			}
 			assert(tmp == recvBuf + recvRankDispl[i] + recvRankCount[i]);
 		}
+		long totalLocalReads = 0;
+		for(int j = 0; j < numMatchHitSets ; j++) {
+			totalLocalReads += localMatchResults[j].size();
+		}
+		LOG_DEBUG_OPTIONAL(1, true, "exchangeGlobalReadIdxs(): totalLocalReads: " << totalLocalReads);
 
 		delete [] recvRankDispl;
 		delete [] recvRankCount;
