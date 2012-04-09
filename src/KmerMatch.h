@@ -71,6 +71,7 @@ public:
 		int maxPositionsFromEdge = KmerMatchOptions::getOptions().getMatchMaxPositionsFromEdge();
 		int maxKmersFromEdge = maxPositionsFromEdge - KmerSizer::getSequenceLength() + 1;
 
+		long totalMatches = 0;
 		ReadSet::ReadSetSizeType contigIdx = 0;
 		while(query.readNext()) {
 			Read read = query.getRead();
@@ -86,6 +87,7 @@ public:
 					LOG_DEBUG(5, "Skipping match to middle of " << contigIdx << " len:" << read.getLength() << " kmer:" << j);
 					continue;
 				}
+
 				KS::SolidElementType element = _spectrum.getIfExistsSolid( kmers[j] );
 				if (element.isValid()) {
 					TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
@@ -96,8 +98,9 @@ public:
 					}
 				}
 			}
+			totalMatches += matchResults[contigIdx].size();
+			LOG_DEBUG_OPTIONAL(1, contigIdx % (100*getWorld().size()) == (100*getWorld().rank()), "KmerMatch::_matchLocal(): processed " << contigIdx << " with " << matchResults[contigIdx-1].size() << " total: " << totalMatches);
 			contigIdx++;
-			LOG_DEBUG_OPTIONAL(1, contigIdx % (100*getWorld().size()) == (100*getWorld().rank()), "KmerMatch::_matchLocal(): processed " << contigIdx << " with " << matchResults[contigIdx-1].size());
 		}
 
 		return matchResults;
