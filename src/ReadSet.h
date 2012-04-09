@@ -539,6 +539,29 @@ protected:
 
 };
 
+class ReadSetStream {
+public:
+	ReadSetStream(std::string filename) : reader(filename, true) {}
+	
+	bool readNext() {
+		std::string name, seq, quals;
+		bool ret = reader.nextRead(name, seq, quals);
+		if (ret)
+			currentRead = Read(name,seq,quals);
+		else
+			currentRead = Read();
+		return ret;
+	}
+	Read getRead() {
+		return currentRead;
+	}
+
+protected:
+	Read currentRead;
+	ReadFileReader reader;
+
+};
+
 class ReadIndexScore {
 public:
 	ReadSet::ReadSetSizeType readIndex;
