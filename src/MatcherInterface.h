@@ -215,7 +215,7 @@ public:
 		if (maxMatches <= 0)
 			return;
 #pragma omp parallel for
-		for(ReadSet::ReadSetSizeType i = 0 ; (long) i < matchResults.size(); i++) {
+		for(long i = 0 ; i < (long) matchResults.size(); i++) {
 			MatchHitSet &mhs = matchResults[i];
 			if (mhs.size() > maxMatches) {
 				MatchHitVector mhv(mhs.begin(), mhs.end());

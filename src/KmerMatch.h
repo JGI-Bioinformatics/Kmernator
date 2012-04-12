@@ -19,7 +19,7 @@
 
 class _KmerMatchOptions  : public _KmerBaseOptions {
 public:
-	_KmerMatchOptions() : _KmerBaseOptions(), maxPositionsFromEdge(0) {}
+	_KmerMatchOptions() : _KmerBaseOptions(), maxPositionsFromEdge(500) {}
 	~_KmerMatchOptions() {}
 	int &getMatchMaxPositionsFromEdge() {
 		return maxPositionsFromEdge;
@@ -99,7 +99,7 @@ public:
 				}
 			}
 			totalMatches += matchResults[contigIdx].size();
-			LOG_DEBUG_OPTIONAL(1, contigIdx % (100*getWorld().size()) == (100*getWorld().rank()), "KmerMatch::_matchLocal(): processed " << contigIdx << " with " << matchResults[contigIdx-1].size() << " total: " << totalMatches);
+			LOG_DEBUG_OPTIONAL(1, (int) (contigIdx % (100*getWorld().size())) == (100*getWorld().rank()), "KmerMatch::_matchLocal(): processed " << contigIdx << " with " << matchResults[contigIdx-1].size() << " total: " << totalMatches);
 			contigIdx++;
 		}
 
