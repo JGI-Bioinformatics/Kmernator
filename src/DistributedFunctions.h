@@ -970,12 +970,23 @@ public:
 		int err;
 		bool isOpen = false;
 		MPI_File myFile;
-		err = MPI_File_open(MPI_COMM_SELF, const_cast<char*>(rankFile.c_str()), MPI_MODE_RDONLY, info, &myFile);
-		if (!(rankFile.empty()) && err != MPI_SUCCESS) {
-			LOG_DEBUG_OPTIONAL(1, true, "Could not open " << rankFile << " (for " << globalFile << ") myself.  Merging 0 bytes");
+		if (!rankFile.empty()) {
+			err = MPI_File_open(MPI_COMM_SELF, const_cast<char*>(rankFile.c_str()), MPI_MODE_RDONLY, info, &myFile);
+			if (err == MPI_SUCCESS) {
+				isOpen = true;
+				err = MPI_File_get_size(myFile, &mySize);
+				if (err != MPI_SUCCESS) {
+					LOG_WARN(1, "Could not get the size of " << rankFile << " setting to 0 bytes");
+					mySize = 0;
+				}
+			} else {
+				err = MPI_File_close(&myFile);
+				LOG_DEBUG_OPTIONAL(1, true, "Could not open " << rankFile << " (for " << globalFile << ") myself.  Merging 0 bytes");
+				isOpen = false;
+				rankFile.clear();
+			} 
 		} else {
-			isOpen = true;
-			err = MPI_File_get_size(myFile, &mySize);
+			LOG_DEBUG_OPTIONAL(1, true, "No myFile to merge");
 		}
 
 		long long int sendPos[size], recvPos[size], totalSize = 0, myStart = 0, myPos = 0;
@@ -988,7 +999,7 @@ public:
 			totalSize += recvPos[i];
 		}
 
-		LOG_DEBUG_OPTIONAL(2, true, "Writing to '" << globalFile << "' at " << myStart << " for " << mySize << " total: "<< totalSize << " bytes");
+		LOG_DEBUG_OPTIONAL(1, true, "Writing to '" << globalFile << "' at " << myStart << " for " << mySize << " total: "<< totalSize << " bytes");
 
 		MPI_File ourFile;
 		err = MPI_File_open(world, const_cast<char*>(globalFile.c_str()), MPI_MODE_CREATE | MPI_MODE_WRONLY, info, &ourFile);
@@ -1036,7 +1047,8 @@ public:
 		if (err != MPI_SUCCESS)
 			LOG_THROW("Error closing for global file: " << globalFile);
 
-		err = MPI_File_close(&myFile);
+		if (isOpen)
+			err = MPI_File_close(&myFile);
 		if (isOpen && err != MPI_SUCCESS)
 			LOG_THROW("Error closing for rankfile file: " << rankFile);
 
