@@ -209,8 +209,8 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 					<< " / " << reads.getSize() << " reads");
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-			if (picked > 0 && !outputFilename.empty()) {
-				LOG_VERBOSE(1, "Writing " << picked << " reads  to output files");
+			if (!outputFilename.empty()) {
+				LOG_VERBOSE(1, "Writing " << picked << " reads to output files");
 				selector.writePicks(ofmap, oldPicked);
 			}
 			oldPicked += picked;
