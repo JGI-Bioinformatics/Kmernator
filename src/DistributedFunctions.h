@@ -880,7 +880,7 @@ public:
 			Iterator it = this->_map->find(key);
 
 			if (it == this->_map->end()) {
-				LOG_WARN(1, "Could not find " << key << " in DistributedOfstreamMap");
+				LOG_DEBUG_OPTIONAL(1, true, "Could not find " << key << " in DistributedOfstreamMap, contributing 0 bytes");
 			} else {
 				assert(it->second.isStringStream());
 				contents = it->second.getFinalString();
@@ -1011,10 +1011,11 @@ public:
 			LOG_THROW("Could not set the size for " << globalFile << " to " << totalSize);
 		}
 
-		MPI_Status status;
+		MPI_Status status, writeStatus;
 		MPI_Request writeRequest = MPI_REQUEST_NULL;
 		myPos = myStart;
 		long long int bytesToEndofBlock = WRITE_BLOCK_SIZE - (myStart % WRITE_BLOCK_SIZE);
+		int lastWrite = 0;
 		bytesToEndofBlock = std::min(bytesToEndofBlock, mySize);
 		while (isOpen && myPos < myStart + mySize) {
 			err = MPI_File_read(myFile, buf[bufId % 2], bytesToEndofBlock == 0 ? bufSize : bytesToEndofBlock, MPI_BYTE, &status);
@@ -1023,25 +1024,42 @@ public:
 			}
 			int sendBytes;
 			err = MPI_Get_count(&status, MPI_BYTE, &sendBytes);
+			LOG_DEBUG_OPTIONAL(3, true, "Read " << sendBytes << " from " << rankFile);
 			if (sendBytes == 0 || err != MPI_SUCCESS)
 				break;
 
-			err = MPI_Wait(&writeRequest, MPI_STATUS_IGNORE);
+			err = MPI_Wait(&writeRequest, &writeStatus);
 			if (err != MPI_SUCCESS) {
 				LOG_THROW("Could not wait for write of " << globalFile);
 			}
+			if (lastWrite > 0) {
+				int x;
+				err = MPI_Get_count(&writeStatus, MPI_BYTE, &x);
+				if (err != MPI_SUCCESS || x != lastWrite) {
+					LOG_THROW("Last write was for a different size than requested! " << lastWrite << " vs " << x);
+				}
+			}
 			err = MPI_File_iwrite_at(ourFile, myPos, buf[bufId % 2], sendBytes, MPI_BYTE, &writeRequest);
+			lastWrite = sendBytes;
 			if (err != MPI_SUCCESS) {
 				LOG_THROW("Could not write to " << globalFile);
 			}
+			LOG_DEBUG_OPTIONAL(3, true, "Writing at " << myPos << " for " << sendBytes << " to " << globalFile);
 			bufId++;
 			myPos += sendBytes;
 			bytesToEndofBlock = 0;
 		}
 		assert(myPos == myStart + mySize);
-		err = MPI_Wait(&writeRequest, MPI_STATUS_IGNORE);
+		err = MPI_Wait(&writeRequest, &writeStatus);
 		if (err != MPI_SUCCESS)
 			LOG_THROW("Error waiting for write request " << rankFile << " to " << globalFile);
+		if (lastWrite > 0) {
+			int x;
+			err = MPI_Get_count(&writeStatus, MPI_BYTE, &x);
+			if (err != MPI_SUCCESS || x != lastWrite) {
+				LOG_THROW("Last write was for a different size than requested! " << lastWrite << " vs " << x);
+			}
+		}
 
 		err = MPI_File_close(&ourFile);
 		if (err != MPI_SUCCESS)
