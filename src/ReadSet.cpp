@@ -212,7 +212,7 @@ void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank
 			reorder.push_back( files[i] );
 		}
 	}
-	LOG_DEBUG_OPTIONAL(1, Log::isMaster(), "Reordered input files to scan paired files first: " << Log::toString<Options::FileListType>(reorder) );
+	LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Reordered input files to scan paired files first: " << Log::toString<OptionsBaseInterface::FileListType>(reorder) );
 	files = reorder;
 
 	// Let the kernel know how these pages will be used
