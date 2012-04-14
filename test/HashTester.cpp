@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
 
 	ReadSet reads;
 
-	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 	cerr << "Reading Input Files" << endl;
 	reads.appendAllFiles(inputs);
 	cerr << "loaded " << reads.getSize() << " Reads, " << reads.getBaseCount()

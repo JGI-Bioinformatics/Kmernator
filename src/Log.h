@@ -215,6 +215,12 @@ public:
 		static std::string errorMessages;
 		return errorMessages;
 	}
+	template std::string toString<typename T>(const T &container) {
+		std::stringstream ss;
+		for(T::const_iterator it = container.begin() ; it != container.end(); it++)
+			ss << *it << ", ";
+		return ss.str();
+	}
 
 private:
 	static Logger verboseOstream;

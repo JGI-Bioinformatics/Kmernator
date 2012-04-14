@@ -84,8 +84,8 @@ int main(int argc, char *argv[]) {
 	MemoryUtils::getMemoryUsage();
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	OptionsBaseInterface::FileListType references = Options::getOptions().getReferenceFiles();
-	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+	OptionsBaseInterface::FileListType &references = Options::getOptions().getReferenceFiles();
+	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 
 	TrackingDataWithAllReads test;
 	test.track(0.99, true, 1, 2);

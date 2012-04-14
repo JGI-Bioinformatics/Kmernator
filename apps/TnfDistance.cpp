@@ -399,7 +399,7 @@ int main(int argc, char *argv[]) {
 	KmerSizer::set(4);
 	TNF::initStdMap();
 
-	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 	reads.appendAllFiles(inputs);
 
 	KS ksRef;

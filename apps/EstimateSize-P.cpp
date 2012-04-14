@@ -128,7 +128,7 @@ int main(int argc, char *argv[]) {
 	MemoryUtils::getMemoryUsage();
 	std::string outputFilename = Options::getOptions().getOutputFile();
 
-	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
 	long partitions = MPIEstimateSizeOptions::getOptions().getSamplePartitions();

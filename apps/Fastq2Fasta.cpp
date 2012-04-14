@@ -78,7 +78,7 @@ typedef OptionsBaseTemplate< _Fastq2FastaOptions > Fastq2FastaOptions;
 int main(int argc, char *argv[]) {
 	Fastq2FastaOptions::parseOpts(argc, argv);
 
-	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 	long splitSizeBase = Fastq2FastaOptions::getOptions().getSplitSizeMegaBase() * 1000000;
 
 	ReadSet reads;

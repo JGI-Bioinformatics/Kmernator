@@ -291,6 +291,9 @@ public:
 	bool isNew(const ReadSet::Pair &pair) {
 		return isNew(pair.read1,pair.read2);
 	}
+	bool isPairedRead(const ReadSet::Pair &pair) {
+		return (_reads.isValidRead(pair.read1) & _reads.isValidRead(pair.read2));
+	} 
 
 	bool pickIfNew(ReadSetSizeType readIdx1, ReadSetSizeType readIdx2 = ReadSet::MAX_READ_IDX) {
 		if (isNew(readIdx1, readIdx2)) {
@@ -342,15 +345,17 @@ public:
 	}
 	bool isPassingPair(const ReadSet::Pair &pair, ScoreType minimumScore, SequenceLengthType minimumLength, bool bothPass) {
 		bool passed = true;
-		if (bothPass)
-			passed = (isPassingRead(pair.read1, minimumScore, minimumLength) & isPassingRead(pair.read2, minimumScore, minimumLength));
+		bool r1 = isPassingRead(pair.read1, minimumScore, minimumLength);
+		bool r2 = isPassingRead(pair.read2, minimumScore, minimumLength);
+		if (isPairedRead(pair) && bothPass)
+			passed = r1 & r2;
 		else
-			passed = (isPassingRead(pair.read1, minimumScore, minimumLength) | isPassingRead(pair.read2, minimumScore, minimumLength));
+			passed = r1 | r2;
 		LOG_DEBUG(3, "isPassingPair(" << pair.read1 << " / " << pair.read2 << ", " << minimumScore << ", " << minimumLength << ", " << bothPass << "): " << passed);
 		return passed;
 	}
 	bool isPairAvailable(const ReadSet::Pair &pair, bool bothPass) {
-		if (bothPass)
+		if (isPairedRead(pair) && bothPass)
 			return (isPassingRead(pair.read1) & _trims[pair.read1].isAvailable & isPassingRead(pair.read2) & _trims[pair.read2].isAvailable);
 		else
 			return ((isPassingRead(pair.read1) & _trims[pair.read1].isAvailable) | (isPassingRead(pair.read2) & _trims[pair.read2].isAvailable));

@@ -63,7 +63,7 @@ typedef OptionsBaseTemplate< _FixPair > FixPair;
 int main(int argc, char *argv[]) {
 	FixPair::parseOpts(argc, argv);
 
-	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 	std::string outputFilename = Options::getOptions().getOutputFile();
 	if (outputFilename.empty())
 		LOG_THROW("Invalid: Please specify an --ouput-file");
