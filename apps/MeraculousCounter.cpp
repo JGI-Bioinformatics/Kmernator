@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
 	ReadSet reads;
 
 	try {
-		OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+		OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
 		// TODO save memory! read file and build spectrum in 100MB chunks

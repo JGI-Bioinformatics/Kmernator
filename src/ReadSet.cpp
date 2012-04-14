@@ -161,12 +161,14 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFileMmap(string fastaFilePath
 
 void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank, int size) {
 
+	assert(files == Options::getOptions().getInputFiles());
 	int fileCount = files.size();
 	ReadSet myReads[ fileCount ];
 	SequenceStreamParserPtr parsers[ fileCount ];
 	int numThreads = std::min(omp_get_max_threads(), MAX_FILE_PARALLELISM);
 	LOG_DEBUG(2, "reading " << fileCount << " file(s) using " << numThreads << " files at a time");
 
+	OptionsBaseInterface::FileListType reorder;
 	long filesSize = files.size();
 #pragma omp parallel for schedule(dynamic) num_threads(numThreads)
 	for (long i = 0; i < filesSize; i++) {
@@ -198,6 +200,7 @@ void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank
 			append(myReads[i]);
 			myReads[i].clear();
 			incrementFile(parsers[i]);
+			reorder.push_back( files[i] );
 		}
 	}
 	// Then add any unpaired files
@@ -206,8 +209,11 @@ void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank
 			append(myReads[i]);
 			myReads[i].clear();
 			incrementFile(parsers[i]);
+			reorder.push_back( files[i] );
 		}
 	}
+	LOG_DEBUG_OPTIONAL(1, Log::isMaster(), "Reordered input files to scan paired files first: " << Log::toString<Options::FileListType>(reorder) );
+	files = reorder;
 
 	// Let the kernel know how these pages will be used
 	if (Options::getOptions().getMmapInput() == 0)

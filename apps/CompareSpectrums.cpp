@@ -136,8 +136,8 @@ int main(int argc, char *argv[]) {
 
 
 	KmerSizer::set(KmerOptions::getOptions().getKmerSize());
-	OptionsBaseInterface::FileListType fileList1 = Options::getOptions().getReferenceFiles();
-	OptionsBaseInterface::FileListType fileList2 = Options::getOptions().getInputFiles();
+	OptionsBaseInterface::FileListType &fileList1 = Options::getOptions().getReferenceFiles();
+	OptionsBaseInterface::FileListType &fileList2 = Options::getOptions().getInputFiles();
 
 	LOG_VERBOSE(1, "Reading 1st file set:");
 	readSet1.appendAllFiles(fileList1);

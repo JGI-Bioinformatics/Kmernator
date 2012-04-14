@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
 	ReadSet reads;
 
 	try {
-		OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
+		OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
 		reads.appendAllFiles(inputs, world.rank(), world.size());

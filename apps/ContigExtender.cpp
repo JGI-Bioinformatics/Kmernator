@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
 
 	ContigExtenderOptions::parseOpts(argc, argv);
 
-	OptionsBaseInterface::FileListType inputFiles = Options::getOptions().getInputFiles();
+	OptionsBaseInterface::FileListType &inputFiles = Options::getOptions().getInputFiles();
 	OptionsBaseInterface::FileListType contigFiles;
 	contigFiles.push_back(ContigExtenderBaseOptions::getOptions().getContigFile());
 

@@ -248,7 +248,7 @@ int main(int argc, char *argv[]) {
 
 		timing1 = MPI_Wtime();
 
-		OptionsBaseInterface::FileListType inputFiles =
+		OptionsBaseInterface::FileListType &inputFiles =
 				Options::getOptions().getInputFiles();
 		std::string contigFile =
 				ContigExtenderBaseOptions::getOptions().getContigFile();
