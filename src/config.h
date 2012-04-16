@@ -32,6 +32,11 @@
 #ifndef _KOMER_CONFIG_H
 #define _KOMER_CONFIG_H
 
+#define _VERSION_  \
+#include "../VERSION"
+
+const char *VERSION = "_VERSION_";
+
 #include <vector>
 
 #include <boost/cstdint.hpp>
