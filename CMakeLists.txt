@@ -39,7 +39,7 @@ if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
                     COMMENT "Retrieving git version")
                     
   add_custom_target(REPLACE_GIT_VERSION ALL 
-                    COMMAND ${CMAKE_SOURCE_DIR}/make_version.pl ${CMAKE_CURRENT_BINARY_DIR}/git-version  > ${CMAKE_SOURCE_DIR}/version.h
+                    COMMAND ${CMAKE_SOURCE_DIR}/make_version.pl ${CMAKE_SOURCE_DIR}/version.h ${CMAKE_CURRENT_BINARY_DIR}/git-version 
                     COMMENT "re-building version.h")
 
 endif()

@@ -1,5 +1,9 @@
 #!/usr/bin/perl
+my $out = shift;
 my $ver = <>;
 chomp $ver;
-print "#define VERSION \"$ver\"\n";
-
+my $exists = `grep $ver $out`;
+if ($exists !~ /$ver/) {
+    open(my $fh, ">$out") || die;
+    print $fh "#define VERSION \"$ver\"\n";
+}
