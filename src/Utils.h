@@ -709,7 +709,7 @@ public:
 			_exitStatus = pclose(_pipe);
 			_pipe = NULL;
 			if (_exitStatus != 0) {
-				LOG_WARN(1, "OPipestream::close() '" << _cmd << "' closed with an error: " << _exitStatus << "." << getStdErr());
+				LOG_DEBUG(3, "OPipestream::close() '" << _cmd << "' closed with an error: " << _exitStatus << "." << getStdErr());
 			}
 		} catch(...) {
 			// ignoring this pipe closure error.
