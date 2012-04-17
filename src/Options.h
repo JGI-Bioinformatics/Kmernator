@@ -402,7 +402,7 @@ public:
 			}
 
 			if (getVerbose() > 0)
-				LOG_VERBOSE(1, "Starting on " << OptionsBaseInterface::getHostname());
+				LOG_VERBOSE(1, "Starting on " << OptionsBaseInterface::getHostname() << " version: " << VERSION);
 
 			bool print = Log::printOptions();
 			std::ostream *output = NULL;

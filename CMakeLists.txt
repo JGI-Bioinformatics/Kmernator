@@ -31,6 +31,19 @@ project( Kmernator )
 cmake_minimum_required(VERSION 2.6)
 enable_testing()
 
+if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
+
+  add_custom_target(GET_GIT_VERSION ALL
+                    COMMAND git describe --tags > ${CMAKE_CURRENT_BINARY_DIR}/git-version
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                    COMMENT "Retrieving git version")
+                    
+  add_custom_target(REPLACE_GIT_VERSION ALL 
+                    COMMAND ${CMAKE_SOURCE_DIR}/make_version.pl ${CMAKE_CURRENT_BINARY_DIR}/git-version  > ${CMAKE_SOURCE_DIR}/version.h
+                    COMMENT "re-building version.h")
+
+endif()
+
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
 
@@ -102,16 +115,6 @@ else()
   include_directories( ${CMAKE_CURRENT_BINARY_DIR}/boost-cmake )
   link_directories( ${CMAKE_CURRENT_BINARY_DIR}/lib )
 endif()
-
-
-if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
-
-add_custom_target(GIT_VERSION ALL git describe --tags --long > ${CMAKE_SOURCE_DIR}/VERSION
-               WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-               COMMENT "Getting git version for build")
-
-endif( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
-
 
 include_directories( src )
 add_subdirectory( src )

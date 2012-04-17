@@ -33,7 +33,7 @@
 #ifndef _KMERNATOR_CONFIG_H
 #define _KMERNATOR_CONFIG_H
 
-#define VERSION "$Id$"
+#include "../version.h"
 
 #include <vector>
 
