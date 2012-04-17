@@ -29,13 +29,10 @@
 // PURPOSE.
 //
 
-#ifndef _KOMER_CONFIG_H
-#define _KOMER_CONFIG_H
+#ifndef _KMERNATOR_CONFIG_H
+#define _KMERNATOR_CONFIG_H
 
-#define _VERSION_  \
-#include "../VERSION"
-
-const char *VERSION = "_VERSION_";
+#define VERSION "$Id$"
 
 #include <vector>
 
@@ -161,4 +158,4 @@ typedef std::vector< MmapSource > MmapSourceVector;
 
 };
 
-#endif
+#endif // _KMERNATOR_CONFIG_H
