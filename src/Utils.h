@@ -187,7 +187,7 @@ public:
 		std::string filePath;
 	public:
 		OStreamPtr() {
-			assert(!isFileStream() && !isStringStream());
+			assert(empty());
 		}
 		OStreamPtr(std::string _filePath, bool append) : filePath(_filePath) {
 			std::ios_base::openmode mode = std::ios_base::out;
@@ -220,6 +220,7 @@ public:
 				OStreamPtr osp(getFilePath(), false);
 				assert(osp.isFileStream());
 				*osp << *ss;
+				osp.close();
 			}
 			reset();
 		}
@@ -227,9 +228,10 @@ public:
 			of.reset();
 			ss.reset();
 			filePath.clear();
+			assert(empty());
 		}
 		~OStreamPtr() {
-			reset();
+			reset(); // do not close(), as this violates behavior when in a container
 		}
 
 		bool isFileStream() const {
@@ -237,6 +239,9 @@ public:
 		}
 		bool isStringStream() const {
 			return of.get() == NULL && ss.get() != NULL;
+		}
+		bool empty() const {
+			return !(isFileStream() | isStringStream());
 		}
 		std::ostream &operator*() {
 			if (isFileStream())

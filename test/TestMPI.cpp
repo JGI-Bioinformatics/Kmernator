@@ -98,8 +98,8 @@ int main(int argc, char **argv)
 
 	A2ABufferBase a2a(world, sizeof(TextMessage));
 
-	RecvTextMessageBuffer *recv[numThreads];
-	SendTextMessageBuffer *send[numThreads];
+	//RecvTextMessageBuffer *recv[numThreads];
+	//SendTextMessageBuffer *send[numThreads];
 
 #pragma omp parallel num_threads(stdNumThreads)
 	{
@@ -126,7 +126,7 @@ int main(int argc, char **argv)
 
 #pragma omp parallel num_threads(stdNumThreads)
 	{
-		int threadId = omp_get_thread_num();
+		//int threadId = omp_get_thread_num();
 		for(int i = 0; i < msgPerMb * mb / stdNumThreads / world.size(); i++) {
 			for(int w=0; w < world.size() ; w++) {
 				//send[threadId]->bufferMessage(w, threadId, msgSize)->set(spam, msgSize);

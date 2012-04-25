@@ -884,6 +884,7 @@ public:
 			} else {
 				assert(it->second.isStringStream());
 				contents = it->second.getFinalString();
+				assert(it->second.empty()); // File must be closed / in a string already
 			}
 
 			long long int mySize = contents.length();
@@ -951,6 +952,7 @@ public:
 				LOG_DEBUG_OPTIONAL(1, true, "Could not find myFilePath " << myFilePath << " (" << key << ") in DistributedOfstreamMap");
 			} else {
 				myFilePath = getFilePath(key);
+				assert(it->second.empty()); // File must be closed already
 			}
 			mergeFiles(_world, myFilePath, fullPath, true);
 		}
