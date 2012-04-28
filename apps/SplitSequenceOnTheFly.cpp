@@ -32,7 +32,9 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+ #include <sys/wait.h>
 
+#include <boost/shared_ptr.hpp>
 #include <boost/iostreams/device/file_descriptor.hpp>
 #include <boost/iostreams/stream.hpp>
 #include <fstream>
@@ -54,78 +56,253 @@ public:
 	typedef OptionsBaseInterface::StringListType StringListType;
 
 	static int &getDefaultNumFiles() {
-		static int dummy = 0;
+		static int dummy = 1;
 		return dummy;
 	}
 	static int &getDefaultFileNum() {
 		static int dummy2 = 0;
 		return dummy2;
 	}
-	static int getNumFiles() {
-		return getVarMap()["num-files"].as<int> ();
+	int &getNumFiles() {
+		return numFiles;
 	}
-	static int getFileNum() {
-		return getVarMap()["file-num"].as<int> ();
+	int &getFileNum() {
+		return fileNum;
 	}
+	std::string &getSplitFile() {
+		return splitFile;
+	}
+	int &getFifoFile() {
+		return fifoFile;
+	}
+	std::string &getForkCommand() {
+		return forkCommand;
+	}
+	_SSOptions() : splitFile(), pipeCommand(), forkCommand(), mergeList(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), fifoFile(0) {}
 
-	static std::string _replaceWithKeys(std::string input) {
+	std::string _replaceWithKeys(std::string input) {
 		size_t pos;
+		char buf[16];
 		while ((pos = input.find("{FileNum}")) != std::string::npos) {
-			LOG_DEBUG_OPTIONAL(1, true, "Replacing {FileNum} in " << input);
-			input.replace(pos, 9, boost::lexical_cast<std::string>(getFileNum()));
+			sprintf(buf, "%06d", getFileNum());
+			std::string buf2(buf);
+			LOG_DEBUG_OPTIONAL(2, true, "Replacing {FileNum} (" << buf2 << ") in " << input);
+			input.replace(pos, 9, buf2);
 		}
 		while ((pos = input.find("{NumFiles}")) != std::string::npos) {
-			LOG_DEBUG_OPTIONAL(1, true, "Replacing {NumFiles} in " << input);
-			input.replace(pos, 10, boost::lexical_cast<std::string>(getNumFiles()));
+			sprintf(buf, "%06d", getNumFiles());
+			std::string buf2(buf);
+			LOG_DEBUG_OPTIONAL(2, true, "Replacing {NumFiles}  (" << buf2 << ") in " << input);
+			input.replace(pos, 10, buf2);
 		}
-		LOG_DEBUG_OPTIONAL(1, true, "final string " << input);
+		LOG_DEBUG_OPTIONAL(2, true, "final string " << input);
 		return input;
 	}
-	static std::string getPipeCommand() {
-		std::string pipeCmd = getVarMap().count("pipe-command") ? getVarMap()["pipe-command"].as<std::string>() : std::string();
-		return _replaceWithKeys(pipeCmd);
-	}
-	static StringListType getMergeList() {
-		StringListType input = getVarMap().count("merge") ? getVarMap()["merge"].as<StringListType>() : StringListType();
+	StringListType _replaceWithKeys(StringListType inputs) {
 		StringListType output;
-		for(unsigned int i = 0; i < input.size(); i++) {
-			output.push_back( _replaceWithKeys(input[i]));
+		for(unsigned int i = 0; i < inputs.size(); i++) {
+			output.push_back( _replaceWithKeys(inputs[i]));
 		}
 		return output;
+	}
+	std::string &getPipeCommand() {
+		return pipeCommand;
+	}
+	StringListType &getMergeList() {
+		return mergeList;
 	}
 
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
 		Options::getOptions().getVerbose() = 0;
+		Options::getOptions().getDebug() = 0;
 		Options::getOptions().getMmapInput() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		GeneralOptions::_setOptions(desc, p);
 		p.add("input-file", -1);
 		po::options_description opts("Split Sequence Options");
 		opts.add_options()
-						("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
-						("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to ouput (0-(N-1))")
-						("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
-						("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
-						;
+																("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
+																("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to output (0-(N-1))")
+																("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
+																("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
+																("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
+																("output-fifo", po::value<int>()->default_value(fifoFile), "if set, --ouput-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
+																("fork-command", po::value<std::string>(), "a optional command to fork between opening output files and wait to finish before starting any merges")
+																;
 
 		desc.add(opts);
-		GeneralOptions::_setOptions(desc, p);
 
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		// set options specific to this program
 		bool ret = GeneralOptions::_parseOptions(vm);
+		setOpt<int>("num-files", getNumFiles());
+		setOpt<int>("file-num", getFileNum());
+		setOpt<string>("split-file", getSplitFile());
+		setOpt<string>("pipe-command", getPipeCommand());
+		setOpt<string>("fork-command", getForkCommand());
+		setOpt<int>("output-fifo", getFifoFile());
+		setOpt2("merge", getMergeList());
+
+		getPipeCommand() = _replaceWithKeys(getPipeCommand());
+		getForkCommand() = _replaceWithKeys(getForkCommand());
+		getMergeList() = _replaceWithKeys(getMergeList());
+		getSplitFile() = _replaceWithKeys(getSplitFile());
+		GeneralOptions::getOptions().getOutputFile() = _replaceWithKeys(GeneralOptions::getOptions().getOutputFile());
+		GeneralOptions::getOptions().getInputFiles() = _replaceWithKeys(GeneralOptions::getOptions().getInputFiles());
+
 		if (Options::getOptions().getInputFiles().empty() || getNumFiles() == 0 || getFileNum() >= getNumFiles()) {
 			ret = false;
-			LOG_ERROR(1, "Please specify num-files, file-num and at least one input file.\nnum-files=" << getNumFiles() << "\nfile-num=" << getFileNum());
+			std::stringstream ss;
+			ss <<"Please specify num-files, file-num and at least one input file.\nnum-files=" << getNumFiles() << "\nfile-num=" << getFileNum();
+			setOptionsErrorMsg(ss.str());
+		}
+		if ((!getPipeCommand().empty()) && (!getSplitFile().empty())) {
+			ret = false;
+			setOptionsErrorMsg("You can not specify both --pipe-command and --split-file!");
+		}
+		if (Options::getOptions().getOutputFile().empty() && !getSplitFile().empty()) {
+			ret = false;
+			setOptionsErrorMsg("If you specify --split-file, you must also specify --output-file.");
 		}
 		return ret;
 	}
+private:
+	std::string splitFile, pipeCommand, forkCommand;
+	StringListType mergeList;
+	int numFiles, fileNum, fifoFile;
 };
 typedef OptionsBaseTemplate< _SSOptions > SSOptions;
 
+void outputRegularFiles(OptionsBaseInterface::FileListType inputs, std::ostream &output1) {
+
+	FormatOutput outputFormat = FormatOutput::getDefault();
+	for (unsigned int i = 0 ; i < inputs.size(); i++) {
+		ReadFileReader reader(inputs[i], "");
+		reader.seekToPartition( SSOptions::getOptions().getFileNum(), SSOptions::getOptions().getNumFiles() );
+		std::string name, bases, quals;
+		while (reader.nextRead(name, bases, quals)) {
+			output1 << outputFormat.toString(name, bases, quals);
+		}
+	}
+
+}
+typedef boost::shared_ptr< Kmernator::MmapSource > MmapPtr;
+typedef  boost::shared_ptr< ReadFileReader > RFRPtr;
+
+void outputSplitFiles(OptionsBaseInterface::FileListType inputs, string outputFile1, string outputFile2) {
+
+	int numInputs = inputs.size();
+	std::vector< MmapPtr > mmaps;
+	mmaps.reserve(numInputs);
+	std::vector< RFRPtr > readers1, readers2;
+	readers1.reserve(numInputs);
+	readers2.reserve(numInputs);
+
+	for(int i=0; i < numInputs; i++) {
+		mmaps.push_back( MmapPtr(new Kmernator::MmapSource(inputs[i], FileUtils::getFileSize(inputs[i]))) );
+		readers1.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
+		readers2.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
+
+		readers1[i]->seekToPartition( SSOptions::getOptions().getFileNum(), SSOptions::getOptions().getNumFiles() );
+		readers2[i]->seekToPartition( SSOptions::getOptions().getFileNum(), SSOptions::getOptions().getNumFiles() );
+		//readers2[i]->setPos(readers1[i]->getPos());
+		//readers2[i]->setLastPos(readers1[i]->getLastPos());
+
+		madvise(const_cast<char*>(mmaps[i]->data()), mmaps[i]->size(), MADV_DONTNEED);
+		madvise(const_cast<char*>(mmaps[i]->data()+readers1[i]->getPos()), readers1[i]->getLastPos() - readers1[i]->getPos(), MADV_SEQUENTIAL);
+	}
+
+
+	FormatOutput outputFormat = FormatOutput::getDefault();
+	omp_set_dynamic(0);
+	omp_set_num_threads(2);
+	unsigned long numReads1 = 0, numReads2 = 0;
+
+    #pragma omp parallel num_threads(2)
+	{
+		if (omp_get_num_threads() != 2)
+			LOG_THROW("Invalid number of threads! " << omp_get_num_threads());
+
+		if (omp_get_thread_num() == 0) {
+			std::ofstream output1(outputFile1.c_str());
+			std::string name, bases, quals;
+			for(int i=0; i < numInputs; i++) {
+				while (readers1[i]->nextRead(name, bases, quals)) {
+					if ((numReads1 & 0x01) == 0) {
+						output1 << outputFormat.toString(name, bases, quals);
+
+					}
+					numReads1++;
+					LOG_DEBUG_OPTIONAL(2, (numReads1 & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read1 " << numReads1/2);
+				}
+				LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read1. " << numReads1 << " " << readers1[i]->getPos());
+			}
+
+			output1.close();
+			LOG_DEBUG_OPTIONAL(1, true, "Finished reading and writing split files for read1. " << numReads1);
+
+		} else {
+			std::ofstream output2(outputFile2.c_str());
+			std::string name, bases, quals;
+			for(int i=0; i < numInputs; i++) {
+				while (readers2[i]->nextRead(name, bases, quals)) {
+					if ((numReads2 & 0x01) == 1) {
+						output2 << outputFormat.toString(name, bases, quals);
+					}
+					numReads2++;
+					LOG_DEBUG_OPTIONAL(2, (numReads2 & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read2 " << numReads2/2);
+				}
+				LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read2. " << numReads2 << " " << readers2[i]->getPos());
+			}
+
+			output2.close();
+			LOG_DEBUG_OPTIONAL(1, true, "Finished reading and writing split files for read2. " << numReads2);
+
+		}
+
+		LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads1 << " " << numReads2);
+		#pragma omp barrier
+	}
+
+
+
+	if (numReads1 != numReads2) {
+		LOG_THROW("Invalid number of paired reads! " << numReads1/2 << " vs " << numReads2/2);
+	}
+	LOG_DEBUG_OPTIONAL(1, true, "Finished outputSplitFiles");
+
+}
+
+int forkCommand() {
+	std::string forkCommand = SSOptions::getOptions().getForkCommand();
+	if (forkCommand.empty())
+		return 0;
+
+	LOG_DEBUG_OPTIONAL(1, true, "Starting " << forkCommand);
+
+	int child = fork();
+	if (child < 0)
+		LOG_THROW("Could not fork child process");
+
+	if (child == 0) {
+		// child
+		int ret = system(forkCommand.c_str());
+		if (ret != 0)
+			LOG_ERROR(1, "Failed to execute: " << forkCommand);
+		exit(ret);
+	} else {
+		// parent
+		LOG_DEBUG_OPTIONAL(1, true, "forkPid: " << child);
+		return child;
+	}
+}
+
 int main(int argc, char *argv[]) {
+
+	int exitStatus = 0;
 
 #ifdef ENABLE_MPI
 	MPI_Init(&argc, &argv);
@@ -136,29 +313,92 @@ int main(int argc, char *argv[]) {
 	Logger::setWorld(&world);
 #endif
 	SSOptions::parseOpts(argc, argv);
-
-	OPipestream *ops = NULL;
-	std::string pipeCommand = SSOptions::getOptions().getPipeCommand();
-	if (!pipeCommand.empty()) {
-		ops = new OPipestream(pipeCommand);
-	}
-
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 
-	ostream &output = (ops == NULL ? std::cout : *ops);
-	for (unsigned int i = 0 ; i < inputs.size(); i++) {
-		ReadFileReader reader(inputs[i], "");
-		reader.seekToPartition( SSOptions::getOptions().getFileNum(), SSOptions::getOptions().getNumFiles() );
-		std::string name, bases, quals;
-		while (reader.nextRead(name, bases, quals)) {
-			Read read(name, bases, quals);
-			read.write(output);
+	std::string outputFile = Options::getOptions().getOutputFile();
+	std::string splitFile = SSOptions::getOptions().getSplitFile();
+
+	OPipestream *ops = NULL;
+	ostream *out1 = &std::cout;
+	ofstream *out1f = NULL;
+	int forkPid = 0;
+
+	try {
+
+		if (SSOptions::getOptions().getFifoFile()) {
+
+			if (!outputFile.empty()) {
+				LOG_DEBUG_OPTIONAL(1, true, "making fifo files");
+				unlink(outputFile.c_str());
+				mkfifo(outputFile.c_str(), 0700);
+			}
+			if (!splitFile.empty()) {
+				unlink(splitFile.c_str());
+				mkfifo(splitFile.c_str(), 0700);
+			}
+
+			forkPid = forkCommand();
+
+		}
+
+		if (!splitFile.empty()) {
+
+			outputSplitFiles(inputs, outputFile, splitFile);
+
+		} else {
+			std::string pipeCommand = SSOptions::getOptions().getPipeCommand();
+			if (!pipeCommand.empty()) {
+				ops = new OPipestream(pipeCommand);
+			}
+
+			if (!outputFile.empty()) {
+				out1 = out1f = new std::ofstream(outputFile.c_str());
+			}
+
+			outputRegularFiles(inputs, (ops == NULL ? *out1 : *ops));
+
+			if (ops != NULL) {
+				delete ops;
+			}
+			if (out1f != NULL) {
+				out1f->close();
+			}
+
+		}
+	} catch (...) {
+		if (SSOptions::getOptions().getFifoFile()) {
+			if (!outputFile.empty())
+				unlink(outputFile.c_str());
+			if (!splitFile.empty())
+				unlink(splitFile.c_str());
+		}
+		LOG_THROW("Found a problem...");
+	}
+
+	if (! SSOptions::getOptions().getFifoFile()) {
+		forkPid = forkCommand();
+	}
+
+	if (forkPid != 0) {
+		LOG_DEBUG_OPTIONAL(1, true, "Waiting for forkCommand to finish: " << forkPid);
+		int status;
+		waitpid(forkPid, &status, 0);
+		if (status != 0) {
+			LOG_ERROR(1, "forkCommand errored: " << status);
+			exitStatus += status;
 		}
 	}
 
-	if (ops != NULL) {
-		delete ops;
+	if (SSOptions::getOptions().getFifoFile()) {
+		if (!outputFile.empty()) {
+			LOG_DEBUG_OPTIONAL(1, true, "unlinking fifo files");
+			unlink(outputFile.c_str());
+		}
+		if (!splitFile.empty())
+			unlink(splitFile.c_str());
 	}
+
+
 
 #ifdef ENABLE_MPI
 	niceBarrier(world);
@@ -181,4 +421,5 @@ int main(int argc, char *argv[]) {
 	MPI_Finalize();
 #endif
 
+	return exitStatus;
 }
