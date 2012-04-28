@@ -124,10 +124,10 @@ public:
 			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " was not specified.");
 		}
 	};
-	void setOpt2(std::string key, FileListType &val, bool print = Log::printOptions()) {
+	void setOpt2(std::string key, StringListType &val, bool print = Log::printOptions()) {
 		po::variables_map &vm = getVarMap();
 		if (vm.count(key.c_str())) {
-			val = vm[key.c_str()].as<FileListType>();
+			val = vm[key.c_str()].as<StringListType>();
 			if (print) {
 				LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), key << " is: " << toString(val) );
 			}
