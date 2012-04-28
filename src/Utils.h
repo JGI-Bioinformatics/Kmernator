@@ -78,6 +78,13 @@ class FormatOutput
 public:
 	enum FormatType {FASTQ, FASTA, FASTQ_UNMASKED, FASTA_UNMASKED};
 
+	FormatOutput(const FormatOutput &copy) {
+		*this = copy;
+	}
+	FormatOutput &operator=(const FormatOutput copy) {
+		_type = copy._type;
+		return *this;
+	}
 	static const FormatOutput Fastq() { static FormatOutput singleton = FormatOutput(FASTQ); return singleton; }
 	static const FormatOutput Fasta() { static FormatOutput singleton = FormatOutput(FASTA); return singleton; }
 	static const FormatOutput FastqUnmasked() { static FormatOutput singleton = FormatOutput(FASTQ_UNMASKED); return singleton; }
@@ -113,6 +120,17 @@ public:
 		}
 		return ret;
 	}
+	std::string toString(std::string &name, std::string &fasta, std::string &qual) {
+		std::stringstream ss;
+		switch(_type) {
+		case 0:
+		case 2: ss << "@" << name << "\n" << fasta << "\n+\n" << qual << "\n"; break;
+		case 1:
+		case 3: ss << ">" << name << "\n" << fasta << "\n"; break;
+		}
+		return ss.str();
+	}
+
 private:
 	FormatType _type;
 	FormatOutput(int type) {
@@ -570,13 +588,13 @@ public:
 		return oss.str();
 	}
 
-	static std::string commonName(const std::string &readName) {
+	static std::string commonName(const std::string readName) {
 		return readName.substr(0, readName.length() - 1);
 	}
 
 	// returns 0 for unpaired reads, 1 or 2 if the read is paired.
 	// supports the following three patterns: xxx/1 xxx/2, xxx/A xxx/B, or xxx/F xxx/R
-	static int readNum(const std::string &readName) {
+	static int readNum(const std::string readName) {
 		int retVal = 0;
 		int len = readName.length();
 		if (len < 2)
@@ -599,11 +617,11 @@ public:
 		return retVal;
 	}
 
-	static bool isPairedRead(const std::string &readName) {
+	static bool isPairedRead(const std::string readName) {
 		return readNum(readName) != 0;
 	}
 
-	static bool isPair(const std::string &readNameA, const std::string readNameB) {
+	static bool isPair(const std::string readNameA, const std::string readNameB) {
 		std::string commonA = commonName(readNameA);
 		std::string commonB = commonName(readNameB);
 		if (commonA == commonB) {
