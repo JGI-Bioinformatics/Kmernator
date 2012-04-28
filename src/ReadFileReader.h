@@ -100,10 +100,11 @@ public:
 		_parser = SequenceStreamParserPtr(new FastaStreamParser(_iss));
 	}
 
-	ReadFileReader(MmapSource &mmap) {
+	ReadFileReader(MmapSource &mmap) : _streamType(2) {
 		setReader(mmap);
 	}
-	ReadFileReader(MmapSource &mmap1, MmapSource &mmap2) {
+
+	ReadFileReader(MmapSource &mmap1, MmapSource &mmap2) : _streamType(2) {
 		setReader(mmap1,mmap2);
 	}
 
@@ -114,6 +115,7 @@ public:
 		case(2) : break;
 		}
 	}
+
 	void openFastaFile(string fastaFilePath) {
 
 		_ifs.open(_path.c_str());
@@ -289,8 +291,17 @@ public:
 		return blockSize;
 	}
 
+	void setPos(unsigned long pos) {
+		_parser->setPos(pos);
+	}
 	inline unsigned long getPos() {
 		return _parser->getPos();
+	}
+	inline unsigned long getLastPos() {
+		return _parser->getLastPos();
+	}
+	void setLastPos(unsigned long pos) {
+		_parser->setLastPos(pos);
 	}
 
 	bool seekToNextRecord(unsigned long minimumPos) {
@@ -324,9 +335,6 @@ public:
 		LOG_DEBUG(2, "ReadFileReader(" << _path <<")::seekToPartition(" << rank << ", " << size << ") " << firstPos << ", reading until " << lastPos);
 	}
 
-	void setLastPos(unsigned long lastPos) {
-		_parser->setLastPos(lastPos);
-	}
 	bool eof() const {
 		return _parser->endOfStream();
 	}
@@ -520,6 +528,9 @@ public:
 		}
 		void setPos(unsigned long newPos) const {
 			_pos = newPos;
+		}
+		unsigned long getLastPos() const {
+			return _lastPos;
 		}
 		bool isPastPartition() const {
 			return _pos >= _lastPos;
