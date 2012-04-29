@@ -78,9 +78,7 @@ class FormatOutput
 public:
 	enum FormatType {FASTQ, FASTA, FASTQ_UNMASKED, FASTA_UNMASKED};
 
-	FormatOutput(const FormatOutput &copy) {
-		*this = copy;
-	}
+	FormatOutput(const FormatOutput &copy) : _type(copy._type) {}
 	FormatOutput &operator=(const FormatOutput copy) {
 		_type = copy._type;
 		return *this;
