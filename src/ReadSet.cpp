@@ -430,7 +430,7 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 	// first scan the reads adding in sequential pairs which
 	// were flagged during addRead()
 	long sequentialPairs = 0;
-	for(ReadSetSizeType spIdx = readIdx; spIdx < size - 1; spIdx++) {
+	for(ReadSetSizeType spIdx = readIdx; spIdx < size; spIdx++) {
 		Read &read = _reads[spIdx];
 		if (_isSequentialPair(read)) {
 			assert(spIdx > 0);
