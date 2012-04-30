@@ -535,7 +535,7 @@ public:
 	// screen matches for those that pass over the edge of the contig
 	// or, if paired, are full match and have pair with no alignment
 	ReadSet screenAlignmentsForOverhang(const Read &contig, ReadSet &matches, bool isPaired) {
-		LOG_DEBUG(3, "screenAlignmentsForOverhang() on " << contig.toString());
+		LOG_DEBUG(3, "screenAlignmentsForOverhang() on " << contig.toString() << " with " << matches.getSize() << " prospective matches");
 		ReadSet screenedMatches;
 		SequenceLengthType minOverlap = MatcherInterfaceOptions::getOptions().getMinOverlap();
 		KmerAlign kalign(contig);

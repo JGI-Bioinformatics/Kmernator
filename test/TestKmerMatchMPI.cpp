@@ -86,12 +86,20 @@ bool testMatchesSelf(mpi::communicator &world, ReadSet &q, ReadSet &t) {
 	//std::cout << matcher.getKmerSpectrum().solid.toString() << std::endl;
 	MatcherInterface::MatchReadResults results = matcher.match(q);
 	passed &= results.size() == q.getSize();
+	if (!passed) {
+		LOG_WARN(1, "result size not the same as query size!" << results.size() << " vs " << q.getSize());
+	}
 	for(ReadSet::ReadSetSizeType idx = 0; idx < q.getSize(); idx++) {
 		ReadSet &rs = results[idx];
 		Read &r = q.getRead(idx);
 		//std::cout << passed << "\t" << rs.getSize() << "\t" << r.getName();
 		if (!containsRead( rs, r )) {
 			//std::cout << "\tmissing self match!";
+			stringstream ss;
+			for(ReadSet::ReadSetSizeType j = 0; j < rs.getSize(); j++)
+				ss << rs.getRead(j).getName() << ", ";
+			std::string s =ss.str();
+			LOG_WARN(1, "readset " << idx << " did not contain read: " << r.toString() << " results: " << rs.getSize() << " : " << s);
 			passed = false;
 		}
 		//std::cout << std::endl;
@@ -143,7 +151,6 @@ int main(int argc, char **argv)
 	greads.appendAnyFile("10.fastq", "", world.rank(), world.size());
 	greads.identifyPairs();
 	setGlobalReadSetOffsets(world, greads);
-
 	reads2.appendAnyFile("1000.fastq");
 	reads2.identifyPairs();
 	greads2.appendAnyFile("1000.fastq", "", world.rank(), world.size());
@@ -155,6 +162,8 @@ int main(int argc, char **argv)
 
 	MatcherInterfaceOptions::getOptions().setIncludeMate(true);
 	passed &= testMatchesSelf(world, greads, greads);
+	return passed ? 0 : -1;
+
 	passed &= testMatchesSelf(world, greads2, greads2);
 
 	MatcherInterfaceOptions::getOptions().setIncludeMate(false);

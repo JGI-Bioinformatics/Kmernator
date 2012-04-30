@@ -162,7 +162,7 @@ public:
 	static Alignment getAlignment( KS &targetKS, const Read &target, const Read &query) {
 		assert(targetKS.hasSolids);
 		Alignment bestAlignment;
-		LOG_DEBUG(4, "getAlignment(): " << query.getName());
+		LOG_DEBUG(4, "getAlignment(): tgt: " << target.getName() << " query: " << query.getName());
 		KmerWeights kmers(query.getTwoBitSequence(), query.getLength(), true);
 		for(unsigned int j = 0; j < kmers.size(); j++) {
 			KS::SolidElementType element = targetKS.getIfExistsSolid( kmers[j] );
