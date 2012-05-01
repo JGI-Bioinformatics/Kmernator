@@ -106,17 +106,27 @@ bool testMatchesSelf(mpi::communicator &world, ReadSet &q, ReadSet &t) {
 
 		KmerAlign testAlign(r);
 		bool pairMatched = false;
+		int pairNum = 0;
+		std::string commonName;
+		Alignment lastAln;
 		for(ReadSet::ReadSetSizeType j = 0 ; j <rs.getSize(); j++) {
-			if (j % 2 == 0)
-				pairMatched = false;
 			Read query = rs.getRead(j);
+			std::string thisCommonName = SequenceRecordParser::commonName(query.getName());
+			if (isPair && (commonName.empty() || commonName.compare(thisCommonName) != 0)) {
+				if ((!commonName.empty()) && (!pairMatched)) {
+					LOG_WARN(1, "neither pair matched or only one pair! " << lastAln.toString() << " of " << r.toString() << " to " << commonName << " " << rs.getRead(j-1).toString() << " now on " << thisCommonName);
+				}
+				commonName = thisCommonName;
+				pairNum = 0;
+				pairMatched = false;
+			}
 			Alignment aln = testAlign.getAlignment(query);
 			if ( aln.getOverlap() >= KmerSizer::getSequenceLength() ) {
 				pairMatched = true;
 			}
 			if (isPair) {
-				if (j % 2 == 1 && !pairMatched) {
-					LOG_WARN(1, "neither pair matched! " << aln.toString() << " of " << r.toString() << " to " << query.toString());
+				if (pairNum != 0 && !pairMatched) {
+					LOG_WARN(1, "neither pair matched! " << aln.toString() << " of " << r.toString() << " to " << query.toString() << " or " << rs.getRead(j-1).toString() << " with " << lastAln.toString());
 					passed = false;
 				}
 			} else {
@@ -126,6 +136,8 @@ bool testMatchesSelf(mpi::communicator &world, ReadSet &q, ReadSet &t) {
 				}
 				pairMatched = false;
 			}
+			lastAln = aln;
+			pairNum++;
 		}
 	}
 	if (!passed)
@@ -162,8 +174,6 @@ int main(int argc, char **argv)
 
 	MatcherInterfaceOptions::getOptions().setIncludeMate(true);
 	passed &= testMatchesSelf(world, greads, greads);
-	return passed ? 0 : -1;
-
 	passed &= testMatchesSelf(world, greads2, greads2);
 
 	MatcherInterfaceOptions::getOptions().setIncludeMate(false);
