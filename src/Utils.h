@@ -40,8 +40,10 @@
 #include <cstring>
 #include <cmath>
 #include <memory>
+#include <csignal>
 
 #include <sys/types.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <libgen.h>
@@ -1097,6 +1099,79 @@ public:
 		assert( ids.size() == std::min(existingSize, sampleSize));
 		return ids;
 	}
+};
+
+class Cleanup {
+public:
+	typedef std::vector< std::string > FileList;
+	static Cleanup &getInstance() {
+		static Cleanup cleanup;
+		_setSignals();
+		return cleanup;
+	}
+	static void cleanup(int param = 0) {
+		if (param != 0)
+			LOG_WARN(1, "Caught signal: " << param);
+		LOG_DEBUG_OPTIONAL(4, true, "Entered Cleanup::cleanup()");
+		getInstance()._clean();
+	}
+	~Cleanup() {
+		// only allow parent process that first called Cleanup() to cleanup (if fork() was ever called)
+		if (myPid == getpid()) {
+			_clean();
+		}
+	}
+	static std::string makeTempDir(std::string dir = "", std::string prefix = "") {
+		if (dir.empty())
+			dir = Options::getOptions().getTmpDir();
+		std::string tempDir = dir + UniqueName::generateUniqueName("/.tmp-" + prefix);
+		if (mkdir(tempDir.c_str(), 0700) != 0)
+			LOG_THROW("Could not mkdir: " << tempDir);
+		getInstance().tempDirs.push_back(tempDir);
+		return tempDir;
+	}
+
+	static void addTemp(std::string tempFile) {
+		getInstance().tempFiles.push_back(tempFile);
+	}
+
+
+protected:
+	static void _setSignals() {
+		_setSignal(SIGABRT);
+		_setSignal(SIGSEGV);
+		_setSignal(SIGINT);
+		_setSignal(SIGTERM);
+		_setSignal(SIGHUP);
+	}
+	static void _setSignal(int sig) {
+		void (*prev_fn)(int);
+		prev_fn = signal(sig, Cleanup::cleanup);
+		if (prev_fn == SIG_IGN) signal(sig, SIG_IGN); // no change if it was ignoring
+	}
+	void _clean() {
+		for(int i = 0; i < (int) tempFiles.size(); i++) {
+			LOG_DEBUG_OPTIONAL(2, true, "unlinking: " << tempFiles[i]);
+			unlink(tempFiles[i].c_str());
+		}
+		tempFiles.clear();
+		for(int i = 0; i < (int) tempDirs.size(); i++) {
+			std::string cmd("rm -r " + tempDirs[i]);
+			LOG_DEBUG_OPTIONAL(1, true, "executing: " << cmd);
+			if (system(cmd.c_str()) != 0)
+				LOG_WARN(1, "Could not clean " << tempDirs[i] << " '" << cmd << "'");
+		}
+		tempDirs.clear();
+	}
+
+	Cleanup() : tempFiles(), tempDirs(), myPid(0) {
+		myPid = getpid();
+	}
+
+private:
+	FileList tempFiles;
+	FileList tempDirs;
+	pid_t myPid;
 };
 
 #endif
