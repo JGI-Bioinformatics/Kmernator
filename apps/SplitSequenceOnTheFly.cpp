@@ -48,6 +48,7 @@
 #ifdef ENABLE_MPI
 #include "DistributedFunctions.h"
 #endif
+ #include <unistd.h>
 
 using namespace std;
 
@@ -75,14 +76,33 @@ public:
 	int &getFifoFile() {
 		return fifoFile;
 	}
-	std::string &getForkCommand() {
+	StringListType &getForkCommand() {
 		return forkCommand;
 	}
-	_SSOptions() : splitFile(), pipeCommand(), forkCommand(), mergeList(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), fifoFile(0) {}
+	std::string &getPipeCommand() {
+		return pipeCommand;
+	}
+	StringListType &getMergeList() {
+		return mergeList;
+	}
+	StringListType &getExtraFifo() {
+		return extraFifo;
+	}
+
+	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), fifoFile(0) {}
 
 	std::string _replaceWithKeys(std::string input) {
 		size_t pos;
 		char buf[16];
+		while ((pos = input.find("{Uniq}")) != std::string::npos) {
+			sprintf(buf, "%06d", getFileNum());
+			std::string buf2 = std::string(buf) + "of";
+			sprintf(buf, "%06d", getNumFiles());
+			buf2 += std::string(buf);
+			LOG_DEBUG_OPTIONAL(2, true, "Replacing {Uniq} (" << buf2 << ") in " << input);
+			input.replace(pos, 6, buf2);
+		}
+
 		while ((pos = input.find("{FileNum}")) != std::string::npos) {
 			sprintf(buf, "%06d", getFileNum());
 			std::string buf2(buf);
@@ -105,12 +125,6 @@ public:
 		}
 		return output;
 	}
-	std::string &getPipeCommand() {
-		return pipeCommand;
-	}
-	StringListType &getMergeList() {
-		return mergeList;
-	}
 
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
@@ -119,20 +133,21 @@ public:
 		Options::getOptions().getMmapInput() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		GeneralOptions::_setOptions(desc, p);
-		p.add("input-file", -1);
 		po::options_description opts("Split Sequence Options");
 		opts.add_options()
-																("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
-																("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to output (0-(N-1))")
-																("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
-																("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
-																("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
-																("output-fifo", po::value<int>()->default_value(fifoFile), "if set, --ouput-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
-																("fork-command", po::value<std::string>(), "a optional command to fork between opening output files and wait to finish before starting any merges")
-																;
+						("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
+						("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to output (0-(N-1))")
+						("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
+						("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
+						("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
+						("output-fifo", po::value<int>()->default_value(fifoFile), "if set, --output-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
+						("extra-fifo", po::value<StringListType>(), "optional additional fifo file(s) (to potentially use with --fork-command)")
+						("fork-command", po::value<StringListType>(), "optional command(s) to fork between opening output files and wait to finish before starting any merges")
+						;
 
 		desc.add(opts);
+		GeneralOptions::_setOptions(desc, p);
+		p.add("input-file", -1);
 
 	}
 	bool _parseOptions(po::variables_map &vm) {
@@ -142,12 +157,15 @@ public:
 		setOpt<int>("file-num", getFileNum());
 		setOpt<string>("split-file", getSplitFile());
 		setOpt<string>("pipe-command", getPipeCommand());
-		setOpt<string>("fork-command", getForkCommand());
 		setOpt<int>("output-fifo", getFifoFile());
 		setOpt2("merge", getMergeList());
+		setOpt2("fork-command", getForkCommand());
+		setOpt2("extra-fifo", getExtraFifo());
+
 
 		getPipeCommand() = _replaceWithKeys(getPipeCommand());
 		getForkCommand() = _replaceWithKeys(getForkCommand());
+		getExtraFifo() = _replaceWithKeys(getExtraFifo());
 		getMergeList() = _replaceWithKeys(getMergeList());
 		getSplitFile() = _replaceWithKeys(getSplitFile());
 		GeneralOptions::getOptions().getOutputFile() = _replaceWithKeys(GeneralOptions::getOptions().getOutputFile());
@@ -170,11 +188,12 @@ public:
 		return ret;
 	}
 private:
-	std::string splitFile, pipeCommand, forkCommand;
-	StringListType mergeList;
+	std::string splitFile, pipeCommand;
+	StringListType mergeList, forkCommand, extraFifo;
 	int numFiles, fileNum, fifoFile;
 };
 typedef OptionsBaseTemplate< _SSOptions > SSOptions;
+typedef OptionsBaseInterface::StringListType StringListType;
 
 void outputRegularFiles(OptionsBaseInterface::FileListType inputs, std::ostream &output1) {
 
@@ -276,28 +295,32 @@ void outputSplitFiles(OptionsBaseInterface::FileListType inputs, string outputFi
 
 }
 
-int forkCommand() {
-	std::string forkCommand = SSOptions::getOptions().getForkCommand();
+std::vector< int > forkCommand() {
+	std::vector< int > forks;
+	StringListType forkCommand = SSOptions::getOptions().getForkCommand();
 	if (forkCommand.empty())
-		return 0;
+		return forks;
 
-	LOG_DEBUG_OPTIONAL(1, true, "Starting " << forkCommand);
+	for(int i = 0; i < (int) forkCommand.size(); i++) {
+		LOG_DEBUG_OPTIONAL(1, true, "Starting " << forkCommand[i]);
 
-	int child = fork();
-	if (child < 0)
-		LOG_THROW("Could not fork child process");
+		int child = fork();
+		if (child < 0)
+			LOG_THROW("Could not fork child process");
 
-	if (child == 0) {
-		// child
-		int ret = system(forkCommand.c_str());
-		if (ret != 0)
-			LOG_ERROR(1, "Failed to execute: " << forkCommand);
-		exit(ret);
-	} else {
-		// parent
-		LOG_DEBUG_OPTIONAL(1, true, "forkPid: " << child);
-		return child;
+		if (child == 0) {
+			// child
+			int ret = system(forkCommand[i].c_str());
+			if (ret != 0)
+				LOG_ERROR(1, "Failed to execute: " << forkCommand[i]);
+			exit(ret);
+		} else {
+			// parent
+			LOG_DEBUG_OPTIONAL(1, true, "forkPid: " << child);
+			forks.push_back( child );
+		}
 	}
+	return forks;
 }
 
 int main(int argc, char *argv[]) {
@@ -321,23 +344,36 @@ int main(int argc, char *argv[]) {
 	OPipestream *ops = NULL;
 	ostream *out1 = &std::cout;
 	ofstream *out1f = NULL;
-	int forkPid = 0;
+	std::vector< int > forkPids;
+	StringListType extraFifos = SSOptions::getOptions().getExtraFifo();
 
 	try {
+
+		if (!extraFifos.empty()) {
+			for(int i = 0; i < (int) extraFifos.size(); i++) {
+				LOG_DEBUG_OPTIONAL(1, true, "making extra fifo: " << extraFifos[i]);
+				unlink(extraFifos[i].c_str());
+				mkfifo(extraFifos[i].c_str(), 0700);
+				Cleanup::addTemp(extraFifos[i]);
+			}
+		}
 
 		if (SSOptions::getOptions().getFifoFile()) {
 
 			if (!outputFile.empty()) {
-				LOG_DEBUG_OPTIONAL(1, true, "making fifo files");
+				LOG_DEBUG_OPTIONAL(1, true, "making output fifo: " << outputFile);
 				unlink(outputFile.c_str());
 				mkfifo(outputFile.c_str(), 0700);
+				Cleanup::addTemp(outputFile);
 			}
 			if (!splitFile.empty()) {
+				LOG_DEBUG_OPTIONAL(1, true, "making split fifo: " << splitFile);
 				unlink(splitFile.c_str());
 				mkfifo(splitFile.c_str(), 0700);
+				Cleanup::addTemp(splitFile);
 			}
 
-			forkPid = forkCommand();
+			forkPids = forkCommand();
 
 		}
 
@@ -365,40 +401,29 @@ int main(int argc, char *argv[]) {
 			}
 
 		}
-	} catch (...) {
-		if (SSOptions::getOptions().getFifoFile()) {
-			if (!outputFile.empty())
-				unlink(outputFile.c_str());
-			if (!splitFile.empty())
-				unlink(splitFile.c_str());
+
+		if (! SSOptions::getOptions().getFifoFile()) {
+			forkPids = forkCommand();
 		}
+
+		if (!forkPids.empty()) {
+			for(int i = 0; i < (int) forkPids.size(); i++) {
+				LOG_DEBUG_OPTIONAL(1, true, "Waiting for forkCommand to finish: " << forkPids[i]);
+				int status;
+				waitpid(forkPids[i], &status, 0);
+				if (status != 0) {
+					LOG_ERROR(1, "forkCommand errored: " << status);
+					exitStatus += status;
+				}
+			}
+		}
+
+	} catch (...) {
+		Cleanup::cleanup();
 		LOG_THROW("Found a problem...");
 	}
 
-	if (! SSOptions::getOptions().getFifoFile()) {
-		forkPid = forkCommand();
-	}
-
-	if (forkPid != 0) {
-		LOG_DEBUG_OPTIONAL(1, true, "Waiting for forkCommand to finish: " << forkPid);
-		int status;
-		waitpid(forkPid, &status, 0);
-		if (status != 0) {
-			LOG_ERROR(1, "forkCommand errored: " << status);
-			exitStatus += status;
-		}
-	}
-
-	if (SSOptions::getOptions().getFifoFile()) {
-		if (!outputFile.empty()) {
-			LOG_DEBUG_OPTIONAL(1, true, "unlinking fifo files");
-			unlink(outputFile.c_str());
-		}
-		if (!splitFile.empty())
-			unlink(splitFile.c_str());
-	}
-
-
+	Cleanup::cleanup();
 
 #ifdef ENABLE_MPI
 	niceBarrier(world);
