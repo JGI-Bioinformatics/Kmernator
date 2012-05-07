@@ -281,7 +281,7 @@ public:
 	}
 
 };
-KM TNF::stdMap;
+KM TNF::stdMap(512);
 long TNF::stdSize;
 
 typedef std::vector<TNF> TNFS;
