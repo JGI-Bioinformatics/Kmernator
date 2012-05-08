@@ -489,8 +489,6 @@ int main(int argc, char *argv[]) {
 		minVec.resize( size );
 		float clusterThreshold = TnfDistanceBaseOptions::getOptions().getClusterThreshold();
 
-
-#pragma omp parallel for schedule(dynamic)
 		for(long i = 0; i < size; i++) {
 			clusterNames[i].push_back( reads.getRead(i).getName() );
 			DVector &vect = distMatrix[i];
@@ -588,6 +586,7 @@ int main(int argc, char *argv[]) {
 			if (!clusterNames[i].empty())
 				os << endl;
 		}
+		clusterNames.clear();
 
 	}
 
