@@ -318,6 +318,7 @@ std::vector< int > forkCommand() {
 			// parent
 			LOG_DEBUG_OPTIONAL(1, true, "forkPid: " << child);
 			forks.push_back( child );
+			Cleanup::trackChild( child );
 		}
 	}
 	return forks;
