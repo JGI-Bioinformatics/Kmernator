@@ -230,9 +230,10 @@ void finishLongContigs(long maxContigLength, ReadSet &changedContigs, ReadSet &f
 	ReadSet keepContigs;
 	for(long i = 0; i < (long) changedContigs.getSize(); i++) {
 		const Read &read = changedContigs.getRead(i);
-		if ((long) read.getLength() >= maxContigLength)
+		if ((long) read.getLength() >= maxContigLength) {
+			LOG_VERBOSE_OPTIONAL(1, true, read.getName() << " (" << read.getLength() << ") has exceeded maxContiglength, terminating extension");
 			finalContigs.append(read);
-		else
+		} else
 			keepContigs.append(read);
 	}
 	changedContigs.swap(keepContigs);
@@ -397,6 +398,8 @@ int main(int argc, char *argv[]) {
 
 		}
 
+		matcher.reset(); // release the matcher interface
+
 		if (world.rank() == 0 && !Log::isDebug(1)) {
 			if (ContigExtenderBaseOptions::getOptions().getContigFile().compare(
 					contigFile) != 0) {
@@ -418,11 +421,11 @@ int main(int argc, char *argv[]) {
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 
-		MPI_Finalize();
-
 	} catch (...) {
 		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
 	}
+
+	MPI_Finalize();
 
 	return 0;
 }
