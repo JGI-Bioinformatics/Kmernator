@@ -1113,12 +1113,12 @@ public:
 		if (param != 0)
 			LOG_WARN(1, "Caught signal: " << param);
 		LOG_DEBUG_OPTIONAL(4, true, "Entered Cleanup::cleanup()");
-		getInstance()._clean();
+		getInstance()._clean(param);
 	}
 	~Cleanup() {
 		// only allow parent process that first called Cleanup() to cleanup (if fork() was ever called)
 		if (myPid == getpid()) {
-			_clean();
+			_clean(0);
 		}
 	}
 	static std::string makeTempDir(std::string dir = "", std::string prefix = "") {
@@ -1135,6 +1135,9 @@ public:
 		getInstance().tempFiles.push_back(tempFile);
 	}
 
+	static void trackChild(pid_t pid) {
+		getInstance().children.push_back(pid);
+	}
 
 protected:
 	static void _setSignals() {
@@ -1149,7 +1152,13 @@ protected:
 		prev_fn = signal(sig, Cleanup::cleanup);
 		if (prev_fn == SIG_IGN) signal(sig, SIG_IGN); // no change if it was ignoring
 	}
-	void _clean() {
+	void _clean(int param) {
+		if (param != 0) {
+			// kill children with same signal
+			for(int i = 0; i < (int) children.size(); i++) {
+				kill(children[i], param);
+			}
+		}
 		for(int i = 0; i < (int) tempFiles.size(); i++) {
 			LOG_DEBUG_OPTIONAL(2, true, "unlinking: " << tempFiles[i]);
 			unlink(tempFiles[i].c_str());
@@ -1162,6 +1171,8 @@ protected:
 				LOG_WARN(1, "Could not clean " << tempDirs[i] << " '" << cmd << "'");
 		}
 		tempDirs.clear();
+		if (param != 0)
+			LOG_THROW("Caught signal " << param << " terminating");
 	}
 
 	Cleanup() : tempFiles(), tempDirs(), myPid(0) {
@@ -1172,6 +1183,7 @@ private:
 	FileList tempFiles;
 	FileList tempDirs;
 	pid_t myPid;
+	std::vector< pid_t > children;
 };
 
 #endif
