@@ -57,8 +57,8 @@ public:
 	KmerMatch(mpi::communicator &world, const ReadSet &target)
 	: MatcherInterface(world, target), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {
 		assert(target.isGlobal());
-		_spectrum._buildKmerSpectrumMPI(target, true);
-		_spectrum.optimize();
+		_spectrum._buildKmerSpectrumMPI(target, false);
+		_spectrum.optimize(true);
 	}
 	MatchResults matchLocalImpl(std::string queryFile) {
 		ReadSetStream query(queryFile);;
@@ -88,13 +88,23 @@ public:
 					continue;
 				}
 
-				KS::SolidElementType element = _spectrum.getIfExistsSolid( kmers[j] );
+				KS::WeakElementType element = _spectrum.getIfExistsWeak( kmers[j] );
 				if (element.isValid()) {
 					TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
 					for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
 						ReadSet::ReadSetSizeType globalReadIdx = it->readId;
 						LOG_DEBUG(5, "KmerMatch::matchLocal: localRead " << contigIdx << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
 						matchResults[contigIdx].insert( globalReadIdx );
+					}
+				} else {
+					KS::SingletonElementType element = _spectrum.getIfExistsSingleton( kmers[j] );
+					if (element.isValid()) {
+						TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
+						for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
+							ReadSet::ReadSetSizeType globalReadIdx = it->readId;
+							LOG_DEBUG(5, "KmerMatch::matchLocal: localRead " << contigIdx << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
+							matchResults[contigIdx].insert( globalReadIdx );
+						}
 					}
 				}
 			}
