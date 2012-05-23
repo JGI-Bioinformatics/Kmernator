@@ -138,13 +138,17 @@ public:
 		return *this;
 	}
 	static inline bool isMaster() {
+#ifdef _USE_OPENMP
+		if ( omp_get_thread_num() != 0 )
+			return false;
+#endif
 		if (_world == NULL)
 			return true;
 		else
 #ifdef  _USE_MPI
 			return ((mpi::communicator*)_world)->rank() == 0;
 #else
-		return true;
+		    return true;
 #endif
 	}
 	inline bool isActive(unsigned int level = 1) const {
