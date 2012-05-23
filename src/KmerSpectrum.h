@@ -71,21 +71,32 @@ using namespace boost::accumulators;
 class _KmerSpectrumOptions;
 class _KmerSpectrumOptions : public OptionsBaseInterface {
 public:
-	_KmerSpectrumOptions() : kmerSubsample(1) {
-	}
-	virtual ~_KmerSpectrumOptions() {}
-
-	long &getKmerSubsample() {
-		return kmerSubsample;
+	_KmerSpectrumOptions() : minKmerQuality(0.10), minDepth(2), kmersPerBucket(64),
+		saveKmerMmap(0), loadKmerMmap(),
+		buildPartitions(0), kmerSubsample(1) {
 	}
 
 	void _resetDefaults() {
-		// *::_resetDefaults();
+		KmerBaseOptions::getOptions().getKmerSize() = 21;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// *::_setOptions(desc,p);
-		po::options_description opts("Kmer Spectrum Options");
+
+		po::options_description opts("Kmer Spectrum Building Options");
+
 		opts.add_options()
+
+				("min-kmer-quality", po::value<double>()->default_value(minKmerQuality), "minimum quality-adjusted kmer probability (0-1)")
+
+				("min-depth", po::value<unsigned int>()->default_value(minDepth), "minimum depth for a solid kmer")
+
+				("kmers-per-bucket", po::value<unsigned int>()->default_value(kmersPerBucket), "number of kmers to target per hash-bucket.  Lesser will use more memory, larger will be slower")
+
+				("save-kmer-mmap", po::value<unsigned int>()->default_value(saveKmerMmap), "If set to 1, creates a memory map of the kmer spectrum for later use")
+
+				("load-kmer-mmap", po::value<std::string>(), "Instead of generating kmer spectrum, load an existing one (read-only) named by this option")
+
+				("build-partitions", po::value<unsigned int>()->default_value(buildPartitions), "If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.")
 
 				("kmer-subsample", po::value<long>()->default_value(kmerSubsample),"The 1 / kmer-subsample fraction of kmers to track. 1 to not sample")
 
@@ -96,11 +107,70 @@ public:
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 
+		// set kmer quality
+		setOpt<double>("min-kmer-quality", getMinKmerQuality());
+
+		// set minimum depth
+		setOpt<unsigned int>("min-depth", getMinDepth());
+
+		setOpt<unsigned int>("kmers-per-bucket", getKmersPerBucket());
+
+		setOpt<unsigned int>("save-kmer-mmap", getSaveKmerMmap());
+
+		setOpt<std::string>("load-kmer-mmap", getLoadKmerMmap());
+
+		// set buildPartitions
+		setOpt<unsigned int>("build-partitions", getBuildPartitions());
+
+		// set the minimum weight that will be used to track kmers
+		// based on the given options
+		TrackingData::setMinimumWeight( getMinKmerQuality() );
+		TrackingData::setMinimumDepth( getMinDepth() );
+
 		setOpt<long> ("kmer-subsample", kmerSubsample);
 
 		return ret;
 	}
+	double &getMinKmerQuality()
+	{
+		return minKmerQuality;
+	}
+	unsigned int &getMinDepth()
+	{
+		return minDepth;
+	}
+	unsigned int &getKmersPerBucket() {
+		return kmersPerBucket;
+	}
+	unsigned int &getSaveKmerMmap()
+	{
+		return saveKmerMmap;
+	}
+	std::string &getLoadKmerMmap()
+	{
+		return loadKmerMmap;
+	}
+	unsigned int &getBuildPartitions()
+	{
+		return buildPartitions;
+	}
+	long &getKmerSubsample() {
+		return kmerSubsample;
+	}
+
+	// make this final, so preserving the singleton state
 private:
+	~_KmerSpectrumOptions() {
+	}
+	friend class OptionsBaseTemplate<_KmerSpectrumOptions> ;
+
+private:
+	double minKmerQuality;
+	unsigned int minDepth;
+	unsigned int kmersPerBucket;
+	unsigned int saveKmerMmap;
+	std::string loadKmerMmap;
+	unsigned int buildPartitions;
 	long kmerSubsample;
 };
 typedef OptionsBaseTemplate< _KmerSpectrumOptions > KmerSpectrumOptions;
@@ -233,7 +303,7 @@ public:
 			savedMmaps.push_back(solid.store(mmapFilename + "-solid"));
 		}
 		savedMmaps.push_back(weak.store(mmapFilename));
-		if (KmerOptions::getOptions().getMinDepth() <= 1) {
+		if (KmerSpectrumOptions::getOptions().getMinDepth() <= 1) {
 			LOG_VERBOSE(1, "Saving singleton kmer spectrum");
 			savedMmaps.push_back(singleton.store(mmapFilename + "-singleton"));
 		}
@@ -289,7 +359,7 @@ public:
 		singletonKmers = 0;
 	}
 
-	static unsigned long estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = KmerOptions::getOptions().getKmersPerBucket()) {
+	static unsigned long estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = KmerSpectrumOptions::getOptions().getKmersPerBucket()) {
 		unsigned long baseCount = store.getBaseCount();
 		if (baseCount == 0 || store.getSize() == 0)
 			return 128;
@@ -1501,7 +1571,7 @@ public:
 	}
 
 	unsigned long resetSingletons() {
-		if (KmerOptions::getOptions().getMinDepth() <= 1) {
+		if (KmerSpectrumOptions::getOptions().getMinDepth() <= 1) {
 			return 0;
 		}
 		unsigned long singletonCount = singleton.size();
@@ -1527,16 +1597,16 @@ public:
 			buildKmerSpectrum(store, isSolid);
 
 			// purge
-			purgeMinDepth(KmerOptions::getOptions().getMinDepth());
+			purgeMinDepth(KmerSpectrumOptions::getOptions().getMinDepth());
 
-			if (KmerOptions::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
+			if (KmerSpectrumOptions::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
 				mmaps = storeMmap(mmapFileNamePrefix);
 			}
 			return mmaps;
 		}
 
 		assert(numParts > 1);
-		if (KmerOptions::getOptions().getSaveKmerMmap() == 0) {
+		if (KmerSpectrumOptions::getOptions().getSaveKmerMmap() == 0) {
 			LOG_WARN(1, "Can not honor --save-kmer-mmap=0 option, as spectrum is building in parts. Temporary mmaps will be made at " << mmapFileNamePrefix);
 		}
 		mmaps.resize(numParts*2);
@@ -1549,12 +1619,12 @@ public:
 			buildKmerSpectrum(store, isSolid, partIdx, numParts);
 
 			// purge
-			purgeMinDepth(KmerOptions::getOptions().getMinDepth());
+			purgeMinDepth(KmerSpectrumOptions::getOptions().getMinDepth());
 
 			std::string mmapFilename = mmapFileNamePrefix + boost::lexical_cast<std::string>(partIdx) + "-tmpKmer";
 			mmaps[partIdx] = weak.store(mmapFilename);
 			unlink(mmapFilename.c_str());
-			if (KmerOptions::getOptions().getMinDepth() <= 1) {
+			if (KmerSpectrumOptions::getOptions().getMinDepth() <= 1) {
 				mmaps[partIdx + numParts] = singleton.store(mmapFilename);
 				unlink(mmapFilename.c_str());
 			} else
@@ -1566,7 +1636,7 @@ public:
 		}
 
 		// first free up memory
-		if (KmerOptions::getOptions().getMinDepth() <= 1) {
+		if (KmerSpectrumOptions::getOptions().getMinDepth() <= 1) {
 			LOG_DEBUG(2, "Clearing memory from singletons\n"  << MemoryUtils::getMemoryUsage());
 			singleton.clear();
 		}
@@ -1587,12 +1657,12 @@ public:
 			}
 		}
 		weak.swap( const_cast<WeakMapType&>(constWeak) );
-		if (KmerOptions::getOptions().getMinDepth() <= 1)
+		if (KmerSpectrumOptions::getOptions().getMinDepth() <= 1)
 			singleton.swap( const_cast<SingletonMapType&>( constSingleton) );
 
 		LOG_VERBOSE(2, "Finished merging partial spectrums\n" << MemoryUtils::getMemoryUsage());
 
-		if (KmerOptions::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
+		if (KmerSpectrumOptions::getOptions().getSaveKmerMmap() > 0 && !mmapFileNamePrefix.empty() ) {
 			mmaps = storeMmap(mmapFileNamePrefix);
 		}
 
@@ -1846,7 +1916,7 @@ public:
 		if (hasSolids) {
 			LOG_THROW("KmerSpectrum::purgeVariants(): Unsupported when hasSolids is set"); // TODO unsupported
 		}
-		double minDepth = KmerOptions::getOptions().getMinDepth();
+		double minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
 		int numThreads = omp_get_max_threads();
 		this->_preVariants(variantSigmas, minDepth);
 		LOG_DEBUG(1, "Purging with " << numThreads << " threads");
@@ -1894,8 +1964,8 @@ public:
 		LOG_DEBUG(3, "Finished processing variants: " << purgedKmers << " waiting for _postVariants");
 		purgedKmers = this->_postVariants(purgedKmers);
 
-		LOG_DEBUG(1, "Purging to min depth: " << KmerOptions::getOptions().getMinDepth());
-		this->purgeMinDepth(KmerOptions::getOptions().getMinDepth());
+		LOG_DEBUG(1, "Purging to min depth: " << KmerSpectrumOptions::getOptions().getMinDepth());
+		this->purgeMinDepth(KmerSpectrumOptions::getOptions().getMinDepth());
 
 		return purgedKmers;
 	}

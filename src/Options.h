@@ -253,23 +253,29 @@ protected:
 
 class _MySpecificOptions : public OptionsBaseInterface {
 public:
-	_MySpecificOptions() {
+	_MySpecificOptions() : myOption(1234) {
 	}
 	virtual ~_MySpecificOptions() {}
 	void _resetDefaults() {
-		// *::_resetDefaults();
+		// Other *::_resetDefaults();
+	}
+	int &getMyOption() {
+		return myOption;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		// *::_setOptions(desc,p);
 		po::options_description opts("My Specific Options");
-		opts.add_options()("my-option", po::value<int>()->default_value(0), "my option");
+		opts.add_options()("my-option", po::value<int>()->default_value(myOption), "my option");
 		desc.add(opts);
+		// Other *::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		// ret &= *::_parseOptions(vm);
+		setOpt<int>("my-option", myOption);
+		// Other ret &= *::_parseOptions(vm);
 		return ret;
 	}
+private:
+	int myOption;
 };
 typedef OptionsBaseTemplate< _MySpecificOptions > MySpecificOptions;
 
@@ -299,7 +305,6 @@ private:
 
 private:
 	int          maxThreads;
-	FileListType referenceFiles;
 	FileListType inputFiles;
 	FileListType inputFilePrefixes;
 	std::string  outputFile;
@@ -334,26 +339,30 @@ public:
 
 				("debug", po::value<unsigned int>()->default_value(getDebug()), "level of debug verbosity (0+)")
 
+				("log-file", po::value<std::string>()->default_value(logFile), "If set all INFO and DEBUG messages will be logged here (default stderr)")
+
+				("gathered-logs", po::value<unsigned int>()->default_value(gatheredLogs), "If set and MPI is enabled, VERBOSE1, VERBOSE2 and DEBUG1 logs will be gathered to the master before being output.")
+
+
 #ifdef _USE_OPENMP
 				("threads", po::value<int>()->default_value(maxThreads), "maximum number of threads")
 #endif
-				("reference-file", po::value<FileListType>(), "set reference file(s)")
 
 				("input-file", po::value<FileListType>(), "input file(s)")
 
-				("output-file", po::value<std::string>(), "output file pattern")
+				("output-file", po::value<std::string>(), "output file (sometimes a pattern prefix)")
 
 				("format-output", po::value<unsigned int>()->default_value(formatOutput), "0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
 
-				("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory), "if set, all temporary output files will first be stored in memory (faster for MPI applications)")
+				("separate-outputs", po::value<unsigned int>()->default_value(separateOutputs), "If set, each input (plus consensus) will generate a new outputfile.  If set to 0, all input files will be merged into one output file.")
 
-				("log-file", po::value<std::string>()->default_value(logFile), "If set all INFO and DEBUG messages will be logged here (default stderr)")
+				("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory), "if set, all temporary output files will first be stored in memory (faster for MPI applications)")
 
 				("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to utilize")
 
 				("min-read-length", po::value<unsigned int>()->default_value(minReadLength), "minimum (trimmed) read length of selected reads.  0: no minimum, 1: full read length")
 
-				("min-quality-score", po::value<unsigned int>()->default_value(minQuality), "minimum quality score over entire kmer")
+				("min-quality-score", po::value<unsigned int>()->default_value(minQuality), "minimum quality score below which will be evaluated as Q=0 (i.e. 'N', prob = 0.0)")
 
 				("depth-range", po::value<unsigned int>()->default_value(depthRange), "if > min-depth, then output will be created in cycles of files ranging from min-depth to depth-range")
 
@@ -369,11 +378,7 @@ public:
 
 				("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap), "If set, a GC Heat map will be output (requires --output)")
 
-				("gathered-logs", po::value<unsigned int>()->default_value(gatheredLogs), "If set and MPI is enabled, VERBOSE1, VERBOSE2 and DEBUG1 logs will be gathered to the master before being output.")
-
 				("batch-size", po::value<unsigned int>()->default_value(batchSize), "default size of batches (reads, kmers, MPI, etc)")
-
-				("separate-outputs", po::value<unsigned int>()->default_value(separateOutputs), "If set, each input (plus consensus) will generate a new outputfile.  If set to 0, all input files will be merged into one output file.")
 
 				;
 
@@ -405,10 +410,7 @@ public:
 				LOG_VERBOSE(1, "Starting on " << OptionsBaseInterface::getHostname() << " version: " << VERSION);
 
 			bool print = Log::printOptions();
-			std::ostream *output = NULL;
 			if (print) {
-				output = Log::Verbose("Options Set").getOstreamPtr();
-				// print out the options that were not set until vebosity & log files were set
 				_setVerbosityAndLogs(true);
 			}
 
@@ -419,34 +421,7 @@ public:
 #endif
 			validateOMPThreads();
 
-			if (vm.count("reference-file")) {
-				if (print)
-					Log::Verbose() << "Reference files are: ";
-				FileListType & referenceFiles = getReferenceFiles()
-								= vm["reference-file"].as<FileListType> ();
-				if (print) {
-					for (FileListType::iterator it = referenceFiles.begin(); it
-					!= referenceFiles.end(); it++)
-						*output << *it << ", ";
-					*output << std::endl;
-				}
-			} else if (print) {
-				Log::Verbose() << "reference was not set." << std::endl;
-			}
-			if (vm.count("input-file")) {
-				if (print) {
-					Log::Verbose() << "Input files are: ";
-				}
-				FileListType inputs = getInputFiles() = vm["input-file"].as<FileListType> ();
-				if (print) {
-					for (FileListType::iterator it = inputs.begin(); it
-					!= inputs.end(); it++)
-						*output << *it << ", ";
-					*output << std::endl;
-				}
-			} else  {
-				LOG_WARN(1, "There were no input files specified!");
-			}
+			setOpt2("input-file", getInputFiles());
 
 			setOpt<std::string>("output-file", getOutputFile(), print);
 
@@ -633,13 +608,6 @@ public:
 	{
 		return periodicSingletonPurge;
 	}
-
-
-	FileListType &getReferenceFiles()
-	{
-		return referenceFiles;
-	}
-
 
 	unsigned int &getSeparateOutputs()
 	{

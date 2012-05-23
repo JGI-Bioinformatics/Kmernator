@@ -69,14 +69,15 @@ public:
 	}
 	void _resetDefaults() {
 		MPIOptions::_resetDefaults();
-		KmerOptions::_resetDefaults();
+		KmerBaseOptions::_resetDefaults();
+		KmerSpectrumOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 		KmerSpectrumOptions::_resetDefaults();
 		// assign defaults
 		GeneralOptions::getOptions().getMmapInput() = 0;
 		GeneralOptions::getOptions().getVerbose() = 1;
-		KmerOptions::getOptions().getMinDepth() = 1;
-		KmerOptions::getOptions().getSaveKmerMmap() = 0;
+		KmerSpectrumOptions::getOptions().getMinDepth() = 1;
+		KmerSpectrumOptions::getOptions().getSaveKmerMmap() = 0;
 		KmerSpectrumOptions::getOptions().getKmerSubsample() = 1000;
 	}
 
@@ -99,13 +100,14 @@ public:
 
 		MPIOptions::_setOptions(desc, p);
 		GeneralOptions::_setOptions(desc, p);
-		KmerOptions::_setOptions(desc, p);
+		KmerBaseOptions::_setOptions(desc, p);
+		KmerSpectrumOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
-		ret &= KmerOptions::_parseOptions(vm);
+		ret &= KmerBaseOptions::_parseOptions(vm);
 		ret &= KmerSpectrumOptions::_parseOptions(vm);
 
 		setOpt<long> ("sample-partitions", samplePartitions);
@@ -160,7 +162,7 @@ int main(int argc, char *argv[]) {
 		totalReads += totalCounts[0];
 		totalBases += totalCounts[2];
 
-		if (KmerOptions::getOptions().getKmerSize() > 0) {
+		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 
 			if (numBuckets == 0) {
 

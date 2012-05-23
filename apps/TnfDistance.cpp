@@ -66,6 +66,12 @@ public:
 		return getVarMap()["cluster-threshold-distance"].as<double>();
 	}
 
+	FileListType &getReferenceFiles()
+	{
+		return referenceFiles;
+	}
+
+
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
 		GeneralOptions::getOptions().getVerbose() = 0;
@@ -75,6 +81,8 @@ public:
 		po::options_description opts("Tetra Nucleotide Distance Options");
 
 		opts.add_options()
+
+				("reference-file", po::value<FileListType>(), "set reference file(s)")
 
 				("inter-distance-file", po::value<string>()->default_value(""), "output inter-distance LT matrix to this filename")
 
@@ -91,8 +99,16 @@ public:
 		GeneralOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
-		return GeneralOptions::_parseOptions(vm);
+		bool ret = true;
+
+		setOpt2("reference-file", referenceFiles);
+
+		ret |= GeneralOptions::_parseOptions(vm);
+		return ret;
 	}
+private:
+	FileListType referenceFiles;
+
 };
 typedef OptionsBaseTemplate< _TnfDistanceBaseOptions > TnfDistanceBaseOptions;
 
@@ -412,7 +428,7 @@ int main(int argc, char *argv[]) {
 	if (!Options::getOptions().getOutputFile().empty()) {
 		out = &om.getOfstream("");
 	}
-	OptionsBaseInterface::FileListType referenceInputs = Options::getOptions().getReferenceFiles();
+	OptionsBaseInterface::FileListType referenceInputs = TnfDistanceBaseOptions::getOptions().getReferenceFiles();
 	if (!referenceInputs.empty()) {
 		// compare distances from reference to each read in the input
 		refs.appendAllFiles(referenceInputs);

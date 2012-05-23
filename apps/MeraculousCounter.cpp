@@ -23,21 +23,23 @@ public:
 		MeraculousOptions::_resetDefaults();
 		MPIOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
-		KmerOptions::_resetDefaults();
+		KmerBaseOptions::_resetDefaults();
+		KmerSpectrumOptions::_resetDefaults();
 
 		GeneralOptions::getOptions().getMmapInput() = 0;
 		GeneralOptions::getOptions().getVerbose() = 2;
 		GeneralOptions::getOptions().getMinQuality() = 2;
 
-		KmerOptions::getOptions().getMinKmerQuality() = 0;
-		KmerOptions::getOptions().getSaveKmerMmap() = 0;
+		KmerSpectrumOptions::getOptions().getMinKmerQuality() = 0;
+		KmerSpectrumOptions::getOptions().getSaveKmerMmap() = 0;
 	}
 	// use to set the description of all options
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 
 		MeraculousOptions::_setOptions(desc, p);
 		MPIOptions::_setOptions(desc,p);
-		KmerOptions::_setOptions(desc,p);
+		KmerBaseOptions::_setOptions(desc,p);
+		KmerSpectrumOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc, p);
 
 	}
@@ -47,8 +49,9 @@ public:
 		ret &= GeneralOptions::_parseOptions(vm);
 		ret &= MeraculousOptions::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
-		ret &= KmerOptions::_parseOptions(vm);
-		if (KmerOptions::getOptions().getKmerSize() == 0) {
+		ret &= KmerBaseOptions::_parseOptions(vm);
+		ret &= KmerSpectrumOptions::_parseOptions(vm);
+		if (KmerBaseOptions::getOptions().getKmerSize() == 0) {
 			setOptionsErrorMsg("The Kmer size can not be 0");
 		}
 		if (GeneralOptions::getOptions().getInputFiles().empty()) {
@@ -94,7 +97,7 @@ int main(int argc, char *argv[]) {
 		}
 		std::string outputFilenameBase = outputFilename + ".mercount.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength());
 		spectrum.dumpCounts(outputFilenameBase);
-		outputFilenameBase = outputFilename + ".mergraph.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength()) + ".D" + boost::lexical_cast<std::string>(KmerOptions::getOptions().getMinDepth());
+		outputFilenameBase = outputFilename + ".mergraph.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength()) + ".D" + boost::lexical_cast<std::string>(KmerSpectrumOptions::getOptions().getMinDepth());
 		spectrum.dumpGraphs(outputFilenameBase);
 	} catch (...) {
 		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());

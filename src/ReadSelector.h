@@ -756,7 +756,7 @@ public:
 
 	virtual void scoreAndTrimReads(ScoreType minimumKmerScore) {
 		_trims.resize(_reads.getSize());
-		bool useKmers = KmerOptions::getOptions().getKmerSize() != 0;
+		bool useKmers = KmerBaseOptions::getOptions().getKmerSize() != 0;
 
 		long readsSize = _reads.getSize();
 #pragma omp parallel for schedule(dynamic)

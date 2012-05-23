@@ -59,9 +59,15 @@ public:
 	static bool getPerRead() { return getVarMap()["per-read"].as<unsigned int>() != 0; }
 
 	void _resetDefaults() {
-		KmerOptions::_resetDefaults();
+		KmerBaseOptions::_resetDefaults();
+		KmerSpectrumOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 	}
+	FileListType &getReferenceFiles()
+	{
+		return referenceFiles;
+	}
+
 
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
@@ -72,21 +78,29 @@ public:
 		po::options_description opts("CompareSpectrum options");
 
 		opts.add_options()
-						 ("circular-reference", po::value<unsigned int>()->default_value(0), "reference file should be treated as circular")
+					 ("reference-file", po::value<FileListType>(), "set reference file(s)")
 
-						 ("per-read", po::value<unsigned int>()->default_value(0), "if set, each read in readset1 will be compared to the entire readset2 separately");
+					 ("circular-reference", po::value<unsigned int>()->default_value(0), "reference file should be treated as circular")
+
+					 ("per-read", po::value<unsigned int>()->default_value(0), "if set, each read in readset1 will be compared to the entire readset2 separately");
 
 
 		desc.add(opts);
-		KmerOptions::_setOptions(desc,p);
+		KmerBaseOptions::_setOptions(desc,p);
+		KmerSpectrumOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
+		setOpt2("reference-file", referenceFiles);
+
 		ret &= GeneralOptions::_parseOptions(vm);
-		ret &= KmerOptions::_parseOptions(vm);
+		ret &= KmerBaseOptions::_parseOptions(vm);
+		ret &= KmerSpectrumOptions::_parseOptions(vm);
 		return ret;
 	}
+private:
+	FileListType referenceFiles;
 
 };
 
@@ -135,8 +149,8 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	KmerSizer::set(KmerOptions::getOptions().getKmerSize());
-	OptionsBaseInterface::FileListType &fileList1 = Options::getOptions().getReferenceFiles();
+	KmerSizer::set(KmerBaseOptions::getOptions().getKmerSize());
+	OptionsBaseInterface::FileListType &fileList1 = CS_Options::getOptions().getReferenceFiles();
 	OptionsBaseInterface::FileListType &fileList2 = Options::getOptions().getInputFiles();
 
 	LOG_VERBOSE(1, "Reading 1st file set:");

@@ -559,15 +559,15 @@ public:
 		world.barrier();
 
 		// purge low counts
-		if (KmerOptions::getOptions().getMinDepth() > 1) {
+		if (KmerSpectrumOptions::getOptions().getMinDepth() > 1) {
 			LOG_VERBOSE(2, "Clearing memory from singletons: " << this->singleton.size() );
 			LOG_DEBUG(2, MemoryUtils::getMemoryUsage());
 			this->singleton.clear();
 		}
-		if (KmerOptions::getOptions().getMinDepth() > 2) {
-			LOG_VERBOSE(2, "Purging low count kmers (< " << KmerOptions::getOptions().getMinDepth() << ")");
+		if (KmerSpectrumOptions::getOptions().getMinDepth() > 2) {
+			LOG_VERBOSE(2, "Purging low count kmers (< " << KmerSpectrumOptions::getOptions().getMinDepth() << ")");
 			LOG_DEBUG(2, MemoryUtils::getMemoryUsage());
-			this->purgeMinDepth(KmerOptions::getOptions().getMinDepth());
+			this->purgeMinDepth(KmerSpectrumOptions::getOptions().getMinDepth());
 		}
 		LOG_DEBUG(3, this->weak.toString());
 
@@ -597,7 +597,7 @@ public:
 		}
 		ourSpectrum.push_back(this->writeKmerMap(this->weak, mmapFilename));
 
-		if (KmerOptions::getOptions().getMinDepth() <= 1 && this->hasSingletons) {
+		if (KmerSpectrumOptions::getOptions().getMinDepth() <= 1 && this->hasSingletons) {
 			ourSpectrum.push_back(this->writeKmerMap(this->singleton, mmapFilename + "-singleton"));
 		}
 
@@ -1254,7 +1254,7 @@ done when empty cycle is received
 	}
 	void scoreAndTrimReads(ScoreType minimumKmerScore, int correctionAttempts = 0) {
 		this->_trims.resize(this->_reads.getSize());
-		bool useKmers = KmerOptions::getOptions().getKmerSize() != 0;
+		bool useKmers = KmerBaseOptions::getOptions().getKmerSize() != 0;
 
 		int numThreads = omp_get_max_threads();
 		int rank = _world.rank();

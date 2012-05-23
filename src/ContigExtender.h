@@ -206,7 +206,7 @@ public:
 		return newName;
 	}
 	static void getMinMaxKmerSize(const ReadSet &reads, SequenceLengthType &minKmerSize, SequenceLengthType &maxKmerSize, SequenceLengthType &kmerStep, SequenceLengthType maxSteps = 6) {
-		minKmerSize = KmerOptions::getOptions().getKmerSize();
+		minKmerSize = KmerBaseOptions::getOptions().getKmerSize();
 		SequenceLengthType maxLen = std::min((SequenceLengthType) reads.getMaxSequenceLength(), (SequenceLengthType) (reads.getBaseCount() / reads.getSize()));
 		maxKmerSize = std::min((SequenceLengthType) (maxLen*0.95), maxLen - 1);
 		maxKmerSize = std::max(minKmerSize, maxKmerSize);

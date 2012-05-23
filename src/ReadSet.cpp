@@ -161,7 +161,8 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFileMmap(string fastaFilePath
 
 void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank, int size) {
 
-	assert(files == Options::getOptions().getInputFiles() || files == Options::getOptions().getReferenceFiles());
+	// TODO fix this assertion
+	// assert(files == Options::getOptions().getInputFiles() || files == Options::getOptions().getReferenceFiles());
 	int fileCount = files.size();
 	ReadSet myReads[ fileCount ];
 	SequenceStreamParserPtr parsers[ fileCount ];

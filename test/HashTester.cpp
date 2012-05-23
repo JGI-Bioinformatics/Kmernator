@@ -49,18 +49,21 @@ typedef KmerSpectrum<DataType, DataType> KS;
 class _HashTesterOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
-		KmerOptions::_resetDefaults();
+		KmerBaseOptions::_resetDefaults();
+		KmerSpectrumOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("kmer-size", 1);
 		p.add("input-file", -1);
-		KmerOptions::_setOptions(desc,p);
+		KmerBaseOptions::_setOptions(desc,p);
+		KmerSpectrumOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		ret &= KmerOptions::_parseOptions(vm);
+		ret &= KmerBaseOptions::_parseOptions(vm);
+		ret &= KmerSpectrumOptions::_parseOptions(vm);
 		ret &= GeneralOptions::_parseOptions(vm);
 		return ret;
 	}
@@ -84,7 +87,7 @@ int main(int argc, char *argv[]) {
 
 	KS spectrumSolid(0), spectrumNormal(0), spectrumParts(0);
 
-	if (KmerOptions::getOptions().getKmerSize() > 0) {
+	if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 
 		long numBuckets = 64*64;
 		cerr << "targeting " << numBuckets << " buckets for reads " << endl;
@@ -118,7 +121,7 @@ int main(int argc, char *argv[]) {
 		TrackingData::resetGlobalCounters();
 		cerr << "building normal spectrum in parts" << endl << MemoryUtils::getMemoryUsage() << endl;
 		spectrumParts = KS(numBuckets);
-		Kmernator::MmapFileVector mmaps = spectrumParts.buildKmerSpectrumInParts(reads, KmerOptions::getOptions().getBuildPartitions());
+		Kmernator::MmapFileVector mmaps = spectrumParts.buildKmerSpectrumInParts(reads, KmerSpectrumOptions::getOptions().getBuildPartitions());
 		cerr << MemoryUtils::getMemoryUsage() << endl;
 		for(Kmer::IndexType i = 0; i < spectrumParts.weak.getNumBuckets(); i++) {
 			cerr << i << ": " << spectrumParts.weak.getBucket(i).size() << endl;

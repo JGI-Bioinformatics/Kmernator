@@ -42,19 +42,21 @@ public:
 		FilterKnownOdditiesOptions::_resetDefaults();
 		DuplicateFragmentFilterOptions::_resetDefaults();
 
-		KmerOptions::getOptions().getSaveKmerMmap() = 0;
+		KmerSpectrumOptions::getOptions().getSaveKmerMmap() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		FilterReadsBaseOptions::_setOptions(desc, p);
 		GeneralOptions::_setOptions(desc, p);
-		KmerOptions::_setOptions(desc, p);
+		KmerBaseOptions::_setOptions(desc, p);
+		KmerSpectrumOptions::_setOptions(desc, p);
 		FilterKnownOdditiesOptions::_setOptions(desc, p);
 		DuplicateFragmentFilterOptions::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		ret &= GeneralOptions::_parseOptions(vm);
-		ret &= KmerOptions::_parseOptions(vm);
+		ret &= KmerBaseOptions::_parseOptions(vm);
+		ret &= KmerSpectrumOptions::_parseOptions(vm);
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
 
@@ -108,9 +110,9 @@ int main(int argc, char *argv[]) {
 		KS spectrum(0);
 
 		Kmernator::MmapFileVector spectrumMmaps;
-		if (KmerOptions::getOptions().getKmerSize() > 0 && !KmerOptions::getOptions().getLoadKmerMmap().empty()) {
-			spectrum.restoreMmap(KmerOptions::getOptions().getLoadKmerMmap());
-		} else if (KmerOptions::getOptions().getKmerSize() > 0) {
+		if (KmerBaseOptions::getOptions().getKmerSize() > 0 && !KmerSpectrumOptions::getOptions().getLoadKmerMmap().empty()) {
+			spectrum.restoreMmap(KmerSpectrumOptions::getOptions().getLoadKmerMmap());
+		} else if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 
 			long numBuckets = KS::estimateWeakKmerBucketSize(reads);
 			LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
@@ -118,7 +120,7 @@ int main(int argc, char *argv[]) {
 			spectrum = KS(numBuckets);
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-			spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, KmerOptions::getOptions().getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
+			spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, KmerSpectrumOptions::getOptions().getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");
 			spectrum.optimize();
 			spectrum.trackSpectrum(true);
 			std::string sizeHistoryFile = FilterReadsBaseOptions::getOptions().getSizeHistoryFile();
@@ -141,7 +143,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		if (KmerOptions::getOptions().getKmerSize() > 0) {
+		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			if (Options::getOptions().getGCHeatMap() && ! outputFilename.empty()) {
@@ -151,7 +153,7 @@ int main(int argc, char *argv[]) {
 				spectrum.printGC(ofmap.getOfstream(""));
 			}
 
-			if (KmerOptions::getOptions().getMinDepth() > 1) {
+			if (KmerSpectrumOptions::getOptions().getMinDepth() > 1) {
 				LOG_DEBUG(1, "Clearing singletons from memory");
 				spectrum.singleton.clear();
 				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
@@ -161,7 +163,7 @@ int main(int argc, char *argv[]) {
 		}
 
 
-		unsigned int minDepth = KmerOptions::getOptions().getMinDepth();
+		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
 		unsigned int depthRange = Options::getOptions().getDepthRange();
 		unsigned int depthStep = 2;
 		if (depthRange < minDepth) {
@@ -172,7 +174,7 @@ int main(int argc, char *argv[]) {
 
 			for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
 				std::string pickOutputFilename = outputFilename;
-				if (KmerOptions::getOptions().getKmerSize() > 0) {
+				if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 					pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
 					LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
 				} else {

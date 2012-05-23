@@ -78,7 +78,8 @@ public:
 		return sizeHistoryFile;
 	}
 	void _resetDefaults() {
-		KmerOptions::_resetDefaults();
+		KmerBaseOptions::_resetDefaults();
+		KmerSpectrumOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
@@ -183,7 +184,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 		for (unsigned int depth = maxDepth; depth >= minDepth; depth /= 2) {
 
 			float tmpMinDepth = std::max(minDepth, depth);
-			if (KmerOptions::getOptions().getKmerSize() == 0) {
+			if (KmerBaseOptions::getOptions().getKmerSize() == 0) {
 				tmpMinDepth = 0;
 				depth = 0;
 			}

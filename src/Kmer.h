@@ -95,6 +95,7 @@ public:
 	static void set(SequenceLengthType sequenceLength) {
 		KmerSizer & singleton = getSingleton();
 		singleton._set(sequenceLength);
+		LOG_DEBUG_OPTIONAL(2, Logger::isMaster(), "Set Kmer Size: " << sequenceLength);
 	}
 
 	static inline SequenceLengthType getSequenceLength() {
@@ -112,7 +113,8 @@ public:
 // this is the ONLY options class that is okay to extend, as there are no member variables
 class _KmerBaseOptions : public OptionsBaseInterface {
 public:
-	_KmerBaseOptions(int _kmerSize = 0) : defaultkmerSize(_kmerSize) {}
+	_KmerBaseOptions(SequenceLengthType defaultKmerSize = KmerSizer::getSequenceLength()) : kmerSize(defaultKmerSize) {
+	}
 	~_KmerBaseOptions() {}
 	void _resetOptions() {
 	}
@@ -123,7 +125,7 @@ public:
 
 		opts.add_options()
 
-						("kmer-size", po::value<unsigned int>()->default_value(defaultkmerSize), "kmer size.  A size of 0 will skip k-mer calculations");
+						("kmer-size", po::value<SequenceLengthType>()->default_value(kmerSize), "kmer size.  A size of 0 will skip k-mer calculations");
 
 		desc.add(opts);
 	}
@@ -134,120 +136,20 @@ public:
 			LOG_WARN(1, "There was no kmer size specified!");
 			ret = false;
 		}
-		// set the defaults for classes
-		KmerSizer::set(getKmerSize());
+		setOpt("kmer-size", kmerSize);
+		KmerSizer::set(kmerSize);
 
 		return ret;
 	}
-	unsigned int getKmerSize()
+	SequenceLengthType &getKmerSize()
 	{
-		return getVarMap()["kmer-size"].as<unsigned int>();
+		return kmerSize;
 	}
 private:
-	unsigned int defaultkmerSize;
+	SequenceLengthType kmerSize;
 
 };
 typedef OptionsBaseTemplate< _KmerBaseOptions > KmerBaseOptions;
-
-class _KmerOptions: public _KmerBaseOptions {
-public:
-	_KmerOptions() :
-		_KmerBaseOptions(21), minKmerQuality(0.10), minDepth(2), kmersPerBucket(64),
-		saveKmerMmap(0), loadKmerMmap(),
-		buildPartitions(0) {
-	}
-	void _resetOptions() {
-		_KmerBaseOptions::_resetOptions();
-	}
-	void _setOptions(po::options_description &desc,
-			po::positional_options_description &p) {
-
-		_KmerBaseOptions::_setOptions(desc,p);
-
-		po::options_description opts("Kmer Building Options");
-
-		opts.add_options()
-
-						("min-kmer-quality", po::value<double>()->default_value(minKmerQuality), "minimum quality-adjusted kmer probability (0-1)")
-
-						("min-depth", po::value<unsigned int>()->default_value(minDepth), "minimum depth for a solid kmer")
-
-						("kmers-per-bucket", po::value<unsigned int>()->default_value(kmersPerBucket), "number of kmers to target per hash-bucket.  Lesser will use more memory, larger will be slower")
-
-						("save-kmer-mmap", po::value<unsigned int>()->default_value(saveKmerMmap), "If set to 1, creates a memory map of the kmer spectrum for later use")
-
-						("load-kmer-mmap", po::value<std::string>(), "Instead of generating kmer spectrum, load an existing one (read-only) named by this option")
-
-						("build-partitions", po::value<unsigned int>()->default_value(buildPartitions), "If set, kmer spectrum will be computed in stages and then combined in mmaped files on disk.");
-
-		desc.add(opts);
-	}
-	bool _parseOptions(po::variables_map &vm) {
-		bool ret = _KmerBaseOptions::_parseOptions(vm);
-
-		// set kmer quality
-		setOpt<double>("min-kmer-quality", getMinKmerQuality());
-
-		// set minimum depth
-		setOpt<unsigned int>("min-depth", getMinDepth());
-
-		setOpt<unsigned int>("kmers-per-bucket", getKmersPerBucket());
-
-		setOpt<unsigned int>("save-kmer-mmap", getSaveKmerMmap());
-
-		setOpt<std::string>("load-kmer-mmap", getLoadKmerMmap());
-
-		// set buildPartitions
-		setOpt<unsigned int>("build-partitions", getBuildPartitions());
-
-		// set the minimum weight that will be used to track kmers
-		// based on the given options
-		TrackingData::setMinimumWeight( getMinKmerQuality() );
-		TrackingData::setMinimumDepth( getMinDepth() );
-
-		return ret;
-	}
-	double &getMinKmerQuality()
-	{
-		return minKmerQuality;
-	}
-	unsigned int &getMinDepth()
-	{
-		return minDepth;
-	}
-	unsigned int &getKmersPerBucket() {
-		return kmersPerBucket;
-	}
-	unsigned int &getSaveKmerMmap()
-	{
-		return saveKmerMmap;
-	}
-	std::string &getLoadKmerMmap()
-	{
-		return loadKmerMmap;
-	}
-	unsigned int &getBuildPartitions()
-	{
-		return buildPartitions;
-	}
-
-
-	// make this final, so preserving the singleton state
-private:
-	~_KmerOptions() {
-	}
-	friend class OptionsBaseTemplate<_KmerOptions> ;
-
-private:
-	double minKmerQuality;
-	unsigned int minDepth;
-	unsigned int kmersPerBucket;
-	unsigned int saveKmerMmap;
-	std::string loadKmerMmap;
-	unsigned int buildPartitions;
-
-};
-typedef OptionsBaseTemplate< _KmerOptions > KmerOptions;
 
 
 #define TEMP_KMER(name)  TwoBitEncoding _stack_##name[KmerSizer::getByteSize()]; Kmer &name = (Kmer &)(_stack_##name);

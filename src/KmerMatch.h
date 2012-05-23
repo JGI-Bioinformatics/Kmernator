@@ -17,18 +17,16 @@
 #include "MatcherInterface.h"
 #include "KmerAlign.h"
 
-class _KmerMatchOptions  : public _KmerBaseOptions {
+class _KmerMatchOptions  : public OptionsBaseInterface {
 public:
-	_KmerMatchOptions() : _KmerBaseOptions(), maxPositionsFromEdge(500) {}
+	_KmerMatchOptions() : maxPositionsFromEdge(500) {}
 	~_KmerMatchOptions() {}
 	int &getMatchMaxPositionsFromEdge() {
 		return maxPositionsFromEdge;
 	}
 	void _resetDefaults() {
-		_KmerBaseOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		_KmerBaseOptions::_setOptions(desc,p);
 		po::options_description opts("Kmer-Match Options");
 		opts.add_options()
 
@@ -39,7 +37,7 @@ public:
 
 	}
 	bool _parseOptions(po::variables_map &vm) {
-		bool ret = _KmerBaseOptions::_parseOptions(vm);
+		bool ret = true;
 		setOpt<int>("match-max-positions-from-edge", maxPositionsFromEdge);
 		return ret;
 	}

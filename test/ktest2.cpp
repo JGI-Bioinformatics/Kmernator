@@ -54,12 +54,14 @@ typedef KmerSpectrum<TrackingData, TrackingDataWithAllReads> KS;
 class _Ktest2Options : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
-		KmerOptions::_resetDefaults();
+		KmerBaseOptions::_resetDefaults();
+		KmerSpectrumOptions::_resetDefaults();
 		FilterKnownOdditiesOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		KmerOptions::_setOptions(desc,p);
+		KmerBaseOptions::_setOptions(desc,p);
+		KmerSpectrumOptions::_setOptions(desc,p);
 		FilterKnownOdditiesOptions::_setOptions(desc,p);
 		GeneralOptions::_setOptions(desc, p);
 		p.add("kmer-size", 1);
@@ -67,7 +69,8 @@ public:
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		ret &= KmerOptions::_parseOptions(vm);
+		ret &= KmerBaseOptions::_parseOptions(vm);
+		ret &= KmerSpectrumOptions::_parseOptions(vm);
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 		ret &= GeneralOptions::_parseOptions(vm);
 		return ret;
@@ -84,7 +87,6 @@ int main(int argc, char *argv[]) {
 	MemoryUtils::getMemoryUsage();
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	OptionsBaseInterface::FileListType &references = Options::getOptions().getReferenceFiles();
 	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 
 	TrackingDataWithAllReads test;
@@ -95,8 +97,6 @@ int main(int argc, char *argv[]) {
 	test2.valueAt(0).track(0.98, true, 2, 3);
 
 	cerr << MemoryUtils::getMemoryUsage() << endl;
-	cerr << "Reading Reference Files" << endl;
-	refReads.appendAllFiles(references);
 	cerr << "loaded " << refReads.getSize() << " Reads, "
 			<< refReads.getBaseCount() << " Bases " << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;

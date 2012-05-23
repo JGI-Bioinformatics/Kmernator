@@ -44,11 +44,24 @@ void testKmerMatch() {
 
 class _KmerMatchTestOptions : public OptionsBaseInterface {
 public:
-	void _resetDefaults() {}
+	void _resetDefaults() {
+		KmerBaseOptions::_resetDefaults();
+		KmerSpectrumOptions::_resetDefaults();
+		GeneralOptions::_resetDefaults();
+		MatcherInterfaceOptions::_resetDefaults();
+
+		KmerBaseOptions::getOptions().getKmerSize() = 21;
+		KmerSpectrumOptions::getOptions().getMinKmerQuality() = 0;
+		GeneralOptions::getOptions().getMinQuality() = 2;
+		MatcherInterfaceOptions::getOptions().getMaxReadMatches() = 10000;
+		MatcherInterfaceOptions::getOptions().getMinOverlap() = KmerSizer::getSequenceLength();
+	}
 	void _setOptions(po::options_description &desc,
 			po::positional_options_description &p) {
 		GeneralOptions::getOptions()._setOptions(desc,p);
 		MatcherInterfaceOptions::_setOptions(desc,p);
+		KmerBaseOptions::_setOptions(desc,p);
+		KmerSpectrumOptions::_setOptions(desc,p);
 		KmerMatchOptions::_setOptions(desc,p);
 		KmerAlignOptions::_setOptions(desc,p);
 		MPIOptions::_setOptions(desc,p);
@@ -57,6 +70,8 @@ public:
 		bool ret = true;
 		ret &= GeneralOptions::getOptions()._parseOptions(vm);
 		ret &= MatcherInterfaceOptions::_parseOptions(vm);
+		ret &= KmerBaseOptions::_parseOptions(vm);
+		ret &= KmerSpectrumOptions::_parseOptions(vm);
 		ret &= KmerMatchOptions::_parseOptions(vm);
 		ret &= KmerAlignOptions::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
@@ -151,11 +166,6 @@ int main(int argc, char **argv)
 	mpi::communicator world = initializeWorldAndOptions< KmerMatchTestOptions >(argc, argv);
 
 	TrackingData::setMinimumWeight(0.0);
-	KmerOptions::getOptions().getMinKmerQuality() = 0;
-	GeneralOptions::getOptions().getMinQuality() = 2;
-	KmerSizer::set(21);
-	MatcherInterfaceOptions::getOptions().getMaxReadMatches() = 10000;
-	MatcherInterfaceOptions::getOptions().getMinOverlap() = KmerSizer::getSequenceLength();
 
 	ReadSet reads, reads2, greads, greads2;
 	reads.appendAnyFile("10.fastq");

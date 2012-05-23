@@ -69,6 +69,7 @@ public:
 		MatcherInterfaceOptions::_resetDefaults();
 		VmatchOptions::_resetDefaults();
 		KmerMatchOptions::_resetDefaults();
+		KmerSpectrumOptions::_resetDefaults();
 		MPIOptions::_resetDefaults();
 		FilterKnownOdditiesOptions::_resetDefaults();
 
@@ -96,6 +97,7 @@ public:
 
 		MatcherInterfaceOptions::_setOptions(desc,p);
 		KmerMatchOptions::_setOptions(desc,p);
+		KmerSpectrumOptions::_setOptions(desc,p);
 		VmatchOptions::_setOptions(desc,p);
 		ContigExtenderBaseOptions::_setOptions(desc,p);
 		Cap3Options::_setOptions(desc,p);
@@ -110,6 +112,7 @@ public:
 		ret &= GeneralOptions::_parseOptions(vm);
 		ret &= MatcherInterfaceOptions::_parseOptions(vm);
 		ret &= KmerMatchOptions::_parseOptions(vm);
+		ret &= KmerSpectrumOptions::_parseOptions(vm);
 		ret &= VmatchOptions::_parseOptions(vm);
 		ret &= ContigExtenderBaseOptions::_parseOptions(vm);
 		ret &= Cap3Options::_parseOptions(vm);
