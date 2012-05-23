@@ -504,9 +504,14 @@ public:
 		recordPtr = ++nextPtr;
 		return buffer;
 	}
-	static std::string &trimName(std::string &nameLine) {
+
+	// returns true if the read is to be kept, based on the name and comment
+	static bool trimName(std::string &nameLine) {
+
 		if (nameLine.length() == 0)
-			return nameLine;
+			return false;
+
+		bool isGood = true;
 
 		char &marker = nameLine[0];
 		if (marker != '>' && marker != '@') {
@@ -519,19 +524,31 @@ public:
 		// trim at first whitespace
 		size_t pos = nameLine.find_first_of(" \t\r\n");
 		if (pos != std::string::npos) {
+			// detect Illumina 1.8 naming scheme in comment '[12]:[YN]:.*'
+			// and rewrite to: name/1 or name/2 to detect pairs
+			if (pos > 2 && nameLine.length() >= pos + 5 && nameLine[pos-2] != '/' && nameLine[pos] == ' ' // nameLine has a comment and no pair
+			    && nameLine[pos+2] == ':' && nameLine[pos+4] == ':' && (nameLine[pos+1] == '1' || nameLine[pos+1] == '2') && (nameLine[pos+3] == 'Y' || nameLine[pos+3] == 'N')) {
+				nameLine[pos] = '/';
+				if (nameLine[pos+3] == 'Y')
+					isGood = false;
+				pos += 2;
+			}
 			nameLine.erase(pos);
 		}
-		return nameLine;
+		return isGood;
 	}
-	static void parse(Kmernator::RecordPtr record, Kmernator::RecordPtr lastRecord,
+
+	// returns true if the read is to be kept, based on the name and comment
+	static bool parse(Kmernator::RecordPtr record, Kmernator::RecordPtr lastRecord,
 			std::string &name, std::string &bases, std::string &quals,
 			Kmernator::RecordPtr qualRecord = NULL, Kmernator::RecordPtr lastQualRecord = NULL,
 			char fastqStartChar = Kmernator::FASTQ_START_CHAR_ILLUMINA) {
 		std::string buf;
+		bool isGood = true;
 		if (*record == '@') {
 			// FASTQ
 			nextLine(name,  record);
-			trimName(name);
+			isGood = trimName(name);
 			nextLine(bases, record);
 			nextLine(buf,   record);
 			nextLine(quals, record);
@@ -541,7 +558,7 @@ public:
 		} else if (*record == '>') {
 			// FASTA
 			nextLine(name, record);
-			trimName(name);
+			isGood = trimName(name);
 
 			// TODO FIXME HACK!
 			if (lastRecord == NULL) // only read one line if no last record is given
@@ -570,7 +587,9 @@ public:
 		} else {
 			LOG_THROW( "Do not know how to parse this file!" );
 		}
+		return isGood;
 	}
+
 	static std::string convertQualIntsToChars(const std::string &qualInts, char fastqStartChar) {
 		std::istringstream ss(qualInts);
 		std::ostringstream oss;

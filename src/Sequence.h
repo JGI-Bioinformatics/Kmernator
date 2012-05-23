@@ -114,7 +114,7 @@ protected:
 	DataPtr _data;
 	// TODO can _flags be embedded into _data -- save in memory alignment padding
 	// -- move flags into ReadSet? as second parallel vector?
-	char _flags;
+	mutable char _flags; // let _flags be modified for discard() on a constant
 
 	static const char MMAPED       = 0x80;
 	static const char MARKUPS1     = 0x40;
@@ -248,7 +248,7 @@ public:
 	void setSequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	void setSequence(RecordPtr mmapRecordStart, const BaseLocationVectorType &markups, RecordPtr mmapQualRecordStart = NULL);
 
-	inline void discard()        {  setFlag(DISCARDED); }
+	inline void discard() const  { _flags |= DISCARDED; } // This operation is permitted even on a constant
 	inline void unDiscard()      { unsetFlag(DISCARDED);}
 	inline void markPaired()     { setFlag(PAIRED);     }
 

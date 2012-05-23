@@ -651,7 +651,9 @@ void Sequence::readMmaped(std::string &name, std::string &bases, std::string &qu
 		qualRecord = getQualRecord();
 		lastQualRecord = NULL;
 	}
-	SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord, FASTQ_START_CHAR);
+	bool isGood = SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord, FASTQ_START_CHAR);
+	if (!isGood)
+		this->discard();
 }
 Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
 	std::string name, bases, quals;

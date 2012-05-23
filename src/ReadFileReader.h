@@ -29,6 +29,17 @@
 // PURPOSE.
 //
 
+
+// added support for new Illumina 1.8 fasta/q file header & comment format
+// @EAS139:136:FC706VJ:2:2104:15343:197393 1:Y:18:ATCACG
+// 1: member of a pair
+// Y: read fails filter
+// control bits (0 is no control, even is something else)
+// ATCACG barcode
+// virtually translate to
+// @EAS139:136:FC706VJ:2:2104:15343:197393/1 Y:18:ATCACG
+// (and set the read discard flag if filtered 'Y')
+
 #ifndef _READ_FILE_READER_H
 #define _READ_FILE_READER_H
 #include <cstring>
@@ -214,6 +225,10 @@ public:
 		try {
 			assert(recordStart == _parser->getStreamRecordPtr());
 			RecordPtr endPtr = _parser->readRecord();
+			while (_parser->isDiscardFiltered() && endPtr != NULL && (!_parser->getName().empty()) && (!_parser->isGood()) ) {
+				LOG_DEBUG_OPTIONAL(2, true, "nextRead(): Skipping failed-filter read: " << _parser->getName());
+				endPtr = _parser->readRecord();
+			}
 			if (endPtr == NULL || _parser->getName().empty()) {
 				_parser->resetBuffers();
 				recordStart = NULL;
@@ -245,6 +260,11 @@ public:
 		try {
 			_parser->readRecord();
 			name = _parser->getName();
+			while (_parser->isDiscardFiltered() && (!name.empty()) && (!_parser->isGood())) {
+				LOG_DEBUG_OPTIONAL(2, true, "nextRead(,,): Skipping failed-filter read: " << _parser->getName());
+				_parser->readRecord();
+				name = _parser->getName();
+			}
 			if (name.empty())
 				return false;
 
@@ -347,6 +367,7 @@ public:
 		unsigned long _line;
 		mutable unsigned long _pos;
 		unsigned long _lastPos;
+		bool _discardFiltered;
 
 	protected:
 		char _marker;
@@ -358,6 +379,7 @@ public:
 		mutable std::vector<string> _qualsBuffer;
 		mutable std::vector<string> _lineBuffer;
 		mutable std::vector<bool>   _isMultiline;
+		mutable std::vector<bool>   _isGood;
 
 	public:
 		// returns a termination pointer (the start of next record or lastByte+1 at end)
@@ -397,14 +419,14 @@ public:
 		}
 
 		SequenceStreamParser(istream &stream, char marker) :
-			_stream(&stream), _line(0), _pos(0), _lastPos(-1), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
+			_stream(&stream), _line(0), _pos(0), _lastPos(-1), _discardFiltered(true), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
 			if (!_stream->good() || _stream->fail())
 				LOG_THROW("SequenceStreamParser(" << _stream << ", " << marker << ") has an invalid stream!");
 			LOG_DEBUG(4, "SequenceStreamParser(istream, " << marker << ")");
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::MmapSource &mmap, char marker) :
-			_stream(NULL), _line(0), _pos(0), _lastPos(-1), _marker(marker), _mmap( mmap ), _lastPtr(NULL), _freeStream(false) {
+			_stream(NULL), _line(0), _pos(0), _lastPos(-1), _discardFiltered(true), _marker(marker), _mmap( mmap ), _lastPtr(NULL), _freeStream(false) {
 			if (!_mmap.is_open() || !_mmap.size()>0 || _mmap.data() == NULL)
 				LOG_THROW("SequenceStreamParser(" << _mmap << ", " << marker << ") has an invalid memory map!");
 
@@ -415,7 +437,7 @@ public:
 			setBuffers();
 		}
 		SequenceStreamParser(ReadFileReader::FilteredIStream &stream, char marker) :
-			_line(0), _pos(0), _lastPos(-1), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
+			_line(0), _pos(0), _lastPos(-1), _discardFiltered(true), _marker(marker), _mmap(), _lastPtr(NULL), _freeStream(false) {
 			_stream = (istream *) &stream;
 			if (!_stream->good() || _stream->fail())
 				LOG_THROW("SequenceStreamParser(FilteredIStream " << _stream << ", " << marker << ") has an invalid stream!");
@@ -429,6 +451,7 @@ public:
 			_qualsBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
 			_lineBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
 			_isMultiline.assign(OMP_MAX_THREADS_DEFAULT, false);
+			_isGood.assign(OMP_MAX_THREADS_DEFAULT, false);
 		}
 
 		void resetBuffers() const {
@@ -437,6 +460,8 @@ public:
 			_basesBuffer[threadNum].clear();
 			_qualsBuffer[threadNum].clear();
 			_lineBuffer[threadNum].clear();
+			_isMultiline[threadNum] = false;
+			_isGood[threadNum] = false;
 		}
 
 		virtual ~SequenceStreamParser() {
@@ -492,6 +517,18 @@ public:
 			int threadNum = omp_get_thread_num();
 			return _isMultiline[threadNum];
 		}
+		bool isGood() const {
+			int threadNum = omp_get_thread_num();
+			return _isGood[threadNum];
+		}
+		void setIsGood(bool isGood) const {
+			int threadNum = omp_get_thread_num();
+			_isGood[threadNum] = isGood;
+		}
+		inline bool &isDiscardFiltered() {
+			return _discardFiltered;
+		}
+
 
 		virtual string &readName() {
 			std::string &name = getName();
@@ -515,7 +552,8 @@ public:
 				LOG_THROW("Missing name marker '" << _marker << "'" << " in '" << name << "' at " << getPos() << " after " << count << " attempts to find the marker");
 
 			// remove marker and any extra comments or fields
-			SequenceRecordParser::trimName( name );
+			bool isGood = SequenceRecordParser::trimName( name );
+			setIsGood(isGood);
 
 			return name;
 		}
@@ -700,7 +738,8 @@ public:
 			}
 			std::string &name = _nameBuffer[threadNum];
 			nextLine(name, recordPtr);
-			SequenceRecordParser::trimName( name );  // name
+			bool isGood = SequenceRecordParser::trimName( name );  // name
+			setIsGood(isGood);
 
 			nextLine(_basesBuffer[threadNum], recordPtr); // fasta
 			nextLine(_lineBuffer[threadNum], recordPtr);  // qual name
@@ -776,7 +815,8 @@ public:
 			}
 			std::string &name = _nameBuffer[threadNum];
 			nextLine(name, recordPtr);  // name
-			SequenceRecordParser::trimName(name);
+			bool isGood = SequenceRecordParser::trimName(name);
+			setIsGood(isGood);
 
 			_basesBuffer[threadNum].clear();
 			_isMultiline[threadNum] = false;
