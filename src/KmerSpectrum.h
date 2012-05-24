@@ -73,7 +73,8 @@ class _KmerSpectrumOptions : public OptionsBaseInterface {
 public:
 	_KmerSpectrumOptions() : minKmerQuality(0.10), minDepth(2), kmersPerBucket(64),
 		saveKmerMmap(0), loadKmerMmap(),
-		buildPartitions(0), kmerSubsample(1) {
+		buildPartitions(0), kmerSubsample(1),
+		variantSigmas(-1.0), periodicSingletonPurge(0), gcHeatMap(1) {
 	}
 
 	void _resetDefaults() {
@@ -103,6 +104,21 @@ public:
 				;
 
 		desc.add(opts);
+
+		po::options_description experimental("Experimental Kmer Spectrum Options");
+		experimental.add_options()
+				// Experimental KmerSpectrum Options
+
+				("variant-sigmas", po::value<double>()->default_value(variantSigmas), "Detect and purge kmer-variants if >= variant-sigmas * Poisson-stdDev (2.0-3.0 suggested).  disabled if < 0.0")
+
+				("periodic-singleton-purge", po::value<unsigned int>()->default_value(periodicSingletonPurge), "Purge singleton memory structure every # of reads")
+
+				("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap), "If set, a GC Heat map will be output (requires --output)")
+
+				;
+
+		desc.add(experimental);
+
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
@@ -128,6 +144,11 @@ public:
 		TrackingData::setMinimumDepth( getMinDepth() );
 
 		setOpt<long> ("kmer-subsample", kmerSubsample);
+
+		setOpt<double>("variant-sigmas", getVariantSigmas());
+		setOpt<unsigned int>("periodic-singleton-purge", getPeriodicSingletonPurge());
+		setOpt<unsigned int>("gc-heat-map", getGCHeatMap());
+
 
 		return ret;
 	}
@@ -157,6 +178,19 @@ public:
 	long &getKmerSubsample() {
 		return kmerSubsample;
 	}
+	double &getVariantSigmas()
+	{
+		return variantSigmas;
+	}
+	unsigned int &getPeriodicSingletonPurge()
+	{
+		return periodicSingletonPurge;
+	}
+	unsigned int &getGCHeatMap()
+	{
+		return gcHeatMap;
+	}
+
 
 	// make this final, so preserving the singleton state
 private:
@@ -172,6 +206,9 @@ private:
 	std::string loadKmerMmap;
 	unsigned int buildPartitions;
 	long kmerSubsample;
+	double       variantSigmas;
+	unsigned int periodicSingletonPurge;
+	unsigned int gcHeatMap;
 };
 typedef OptionsBaseTemplate< _KmerSpectrumOptions > KmerSpectrumOptions;
 
@@ -1825,7 +1862,7 @@ public:
 			singleton.reset(false);
 		}
 
-		long purgeEvery = Options::getOptions().getPeriodicSingletonPurge();
+		long purgeEvery = KmerSpectrumOptions::getOptions().getPeriodicSingletonPurge();
 		long purgeCount = 0;
 		long batch = Options::getOptions().getBatchSize();
 
@@ -1907,7 +1944,7 @@ public:
 		maxDepth = (-b + sqrt(b*b - 4*a*c)) / (2.0*a);
 		return maxDepth;
 	}
-	long purgeVariants(double variantSigmas = Options::getOptions().getVariantSigmas(), short editDistance = 2) {
+	long purgeVariants(double variantSigmas = KmerSpectrumOptions::getOptions().getVariantSigmas(), short editDistance = 2) {
 		if (variantSigmas < 0.0)
 			return 0;
 		long purgedKmers = 0;

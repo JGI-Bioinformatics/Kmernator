@@ -17,17 +17,18 @@
 
 class _ContigExtenderBaseOptions : public OptionsBaseInterface {
 public:
-	static std::string getContigFile () {
-		return getVarMap()["contig-file"].as<std::string> ();
+	_ContigExtenderBaseOptions() : minimumConsensus(85), minimumCoverage(4.8), maximumDeltaRatio(0.33) {}
+	std::string &getContigFile () {
+		return contigFile;
 	}
-	static double getMinimumConsensus() {
-		return getVarMap()["minimum-consensus"].as<double>() / 100;
+	double getMinimumConsensus() {
+		return minimumConsensus / 100;
 	}
-	static double getMinimumCoverage() {
-		return getVarMap()["minimum-coverage"].as<double>();
+	double getMinimumCoverage() {
+		return minimumCoverage;
 	}
-	static double getMaximumDeltaRatio() {
-		return getVarMap()["maximum-delta-ratio"].as<double>();
+	double &getMaximumDeltaRatio() {
+		return maximumDeltaRatio;
 	}
 	void _resetDefaults() {
 	}
@@ -37,13 +38,14 @@ public:
 		po::options_description opts("Contig Extension Options");
 		opts.add_options()
 
-				("minimum-consensus", po::value<double>()->default_value(85), "minimum percent consensus to call the next base")
+				("minimum-consensus", po::value<double>()->default_value(minimumConsensus), "minimum percent consensus to call the next base")
 
-				("minimum-coverage", po::value<double>()->default_value(4.8), "minimum (probability-weighted) coverage to continue calling the next base")
+				("minimum-coverage", po::value<double>()->default_value(minimumCoverage), "minimum (probability-weighted) coverage to continue calling the next base")
 
-				("maximum-delta-ratio", po::value<double>()->default_value(0.33), "maximum allowable change in coverage between adjacent kmers")
+				("maximum-delta-ratio", po::value<double>()->default_value(maximumDeltaRatio), "maximum allowable change in coverage between adjacent kmers")
 
-				("contig-file", po::value<std::string>(), "filename of input contigs.fa");
+				("contig-file", po::value<std::string>()->default_value(contigFile), "filename of input contigs.fa");
+
 
 		desc.add(opts);
 
@@ -52,10 +54,14 @@ public:
 
 		bool ret = true;
 
+		setOpt<double>("minimum-consensus", minimumConsensus);
+		setOpt<double>("minimum-coverage", minimumCoverage);
+		setOpt<double>("maximum-delta-ratio", maximumDeltaRatio);
+		setOpt<std::string>("contig-file", contigFile);
+
 		if (getContigFile().empty()) {
 			LOG_ERROR(1, "you must specify the --contig-file");
-		} else {
-			LOG_VERBOSE(1, "contig-file: " << getContigFile());
+			ret = false;
 		}
 		if (Options::getOptions().getInputFiles().empty()) {
 			LOG_ERROR(1, "you must specify one or more input files");
@@ -63,6 +69,11 @@ public:
 		}
 		return ret;
 	}
+private:
+	std::string contigFile;
+	double minimumConsensus;
+	double minimumCoverage;
+	double maximumDeltaRatio;
 };
 typedef OptionsBaseTemplate< _ContigExtenderBaseOptions > ContigExtenderBaseOptions;
 

@@ -48,6 +48,7 @@
 #include "KmerSpectrum.h"
 #include "Options.h"
 #include "Log.h"
+#include "ReadSelector.h"
 
 class _FilterKnownOdditiesOptions : public OptionsBaseInterface {
 public:
@@ -576,7 +577,7 @@ public:
 		}
 
 		SequenceLengthType &minReadPos = recorder.minReadPos;
-		minReadPos = Options::getOptions().getMinReadLength();
+		minReadPos = ReadSelectorOptions::getOptions().getMinReadLength();
 		if (minReadPos != 0 && minReadPos != MAX_SEQUENCE_LENGTH) {
 			minReadPos -= 1;
 		}

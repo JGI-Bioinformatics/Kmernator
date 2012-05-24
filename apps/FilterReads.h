@@ -78,8 +78,12 @@ public:
 		return sizeHistoryFile;
 	}
 	void _resetDefaults() {
+		GeneralOptions::_resetDefaults();
 		KmerBaseOptions::_resetDefaults();
 		KmerSpectrumOptions::_resetDefaults();
+		ReadSelectorOptions::_resetDefaults();
+		FilterKnownOdditiesOptions::_resetDefaults();
+		DuplicateFragmentFilterOptions::_resetDefaults();
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
@@ -99,10 +103,23 @@ public:
 				("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile), "if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)");
 
 		desc.add(opts);
+		GeneralOptions::_setOptions(desc, p);
+		KmerBaseOptions::_setOptions(desc, p);
+		KmerSpectrumOptions::_setOptions(desc, p);
+		ReadSelectorOptions::_setOptions(desc, p);
+		FilterKnownOdditiesOptions::_setOptions(desc,p);
+		DuplicateFragmentFilterOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions( po::variables_map &vm) {
 
 		bool ret = true;
+
+		ret &= GeneralOptions::_parseOptions(vm);
+		ret &= KmerBaseOptions::_parseOptions(vm);
+		ret &= KmerSpectrumOptions::_parseOptions(vm);
+		ret &= ReadSelectorOptions::_parseOptions(vm);
+		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
+		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
 
 		setOpt<int>("max-kmer-output-depth", maxKmerDepth);
 		setOpt<int>("partition-by-depth", partitionByDepth);
@@ -139,7 +156,7 @@ template<typename _ReadSelector>
 long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector, std::string outputFilename)
 {
 	typedef typename _ReadSelector::OFM OFM;
-	LOG_VERBOSE_OPTIONAL(1, true, "selectReads with minDepth " << minDepth << ", minLength " << Options::getOptions().getMinReadLength() << ": " << reads.getSize() << " reads");
+	LOG_VERBOSE_OPTIONAL(1, true, "selectReads with minDepth " << minDepth << ", minLength " << ReadSelectorOptions::getOptions().getMinReadLength() << ": " << reads.getSize() << " reads");
 	LOG_DEBUG_OPTIONAL(1, true, MemoryUtils::getMemoryUsage());
 
 	long oldPicked = 0;
@@ -154,10 +171,10 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			LOG_VERBOSE_OPTIONAL(2, true, "Picking depth " << depth << " layer of reads");
 			if (reads.hasPairs())
 				picked += selector.pickBestCoveringSubsetPairs(depth,
-						minDepth, Options::getOptions().getMinReadLength(), FilterReadsBaseOptions::getOptions().getBothPairs());
+						minDepth, ReadSelectorOptions::getOptions().getMinReadLength(), FilterReadsBaseOptions::getOptions().getBothPairs());
 			else
 				picked += selector.pickBestCoveringSubsetReads(depth,
-						minDepth, Options::getOptions().getMinReadLength());
+						minDepth, ReadSelectorOptions::getOptions().getMinReadLength());
 			LOG_DEBUG_OPTIONAL(1, true, MemoryUtils::getMemoryUsage());
 		}
 
@@ -177,7 +194,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			maxDepth = minDepth;
 		}
 		// record potentially modified options
-		int oldMinReadLength = GeneralOptions::getOptions().getMinReadLength();
+		int oldMinReadLength = ReadSelectorOptions::getOptions().getMinReadLength();
 		int oldMinPassingInPair = FilterReadsBaseOptions::getOptions().getMinPassingInPair();
 		bool hasRemainderTrim = false;
 
@@ -200,11 +217,11 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			if (reads.hasPairs()) {
 				LOG_DEBUG(3, "getBothPairs: " << FilterReadsBaseOptions::getOptions().getBothPairs() << " " << FilterReadsBaseOptions::getOptions().getMinPassingInPair());
 				picked = selector.pickAllPassingPairs(tmpMinDepth,
-						Options::getOptions().getMinReadLength(),
+						ReadSelectorOptions::getOptions().getMinReadLength(),
 						FilterReadsBaseOptions::getOptions().getBothPairs());
 			} else {
 				picked = selector.pickAllPassingReads(tmpMinDepth,
-						Options::getOptions().getMinReadLength());
+						ReadSelectorOptions::getOptions().getMinReadLength());
 			}
 			LOG_VERBOSE(2, "At or above coverage: " << tmpMinDepth << " Picked " << picked
 					<< " / " << reads.getSize() << " reads");
@@ -221,11 +238,11 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 					&& isPartitioned
 					&& FilterReadsBaseOptions::getOptions().getRemainderTrim() > 0
 					&& (FilterReadsBaseOptions::getOptions().getMinPassingInPair() != 1
-						|| ((int) GeneralOptions::getOptions().getMinReadLength()) != FilterReadsBaseOptions::getOptions().getRemainderTrim()
+						|| ((int) ReadSelectorOptions::getOptions().getMinReadLength()) != FilterReadsBaseOptions::getOptions().getRemainderTrim()
 						)) {
 					// modify options
 					FilterReadsBaseOptions::getOptions().getMinPassingInPair() = 1;
-					GeneralOptions::getOptions().getMinReadLength() = FilterReadsBaseOptions::getOptions().getRemainderTrim();
+					ReadSelectorOptions::getOptions().getMinReadLength() = FilterReadsBaseOptions::getOptions().getRemainderTrim();
 					hasRemainderTrim=true;
 					depth *= 2;
 				} else {
@@ -235,7 +252,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 		}
 		if (hasRemainderTrim) {
 			// reset modified options
-			GeneralOptions::getOptions().getMinReadLength() = oldMinReadLength;
+			ReadSelectorOptions::getOptions().getMinReadLength() = oldMinReadLength;
 			FilterReadsBaseOptions::getOptions().getMinPassingInPair() = oldMinPassingInPair;
 		}
 	}

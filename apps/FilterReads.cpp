@@ -38,27 +38,14 @@ class _FilterReadsOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
 		FilterReadsBaseOptions::_resetDefaults();
-		GeneralOptions::_resetDefaults();
-		FilterKnownOdditiesOptions::_resetDefaults();
-		DuplicateFragmentFilterOptions::_resetDefaults();
 
 		KmerSpectrumOptions::getOptions().getSaveKmerMmap() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		FilterReadsBaseOptions::_setOptions(desc, p);
-		GeneralOptions::_setOptions(desc, p);
-		KmerBaseOptions::_setOptions(desc, p);
-		KmerSpectrumOptions::_setOptions(desc, p);
-		FilterKnownOdditiesOptions::_setOptions(desc, p);
-		DuplicateFragmentFilterOptions::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		ret &= GeneralOptions::_parseOptions(vm);
-		ret &= KmerBaseOptions::_parseOptions(vm);
-		ret &= KmerSpectrumOptions::_parseOptions(vm);
-		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
-		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
 
 		ret &= FilterReadsBaseOptions::_parseOptions(vm);
 		return ret;
@@ -135,7 +122,7 @@ int main(int argc, char *argv[]) {
 			if (Log::isVerbose(1))
 				spectrum.printHistograms(Log::Verbose("Kmer Histogram"));
 
-			if (Options::getOptions().getVariantSigmas() > 0.0) {
+			if (KmerSpectrumOptions::getOptions().getVariantSigmas() > 0.0) {
 				spectrum.purgeVariants();
 				if (Log::isVerbose(1)) {
 					spectrum.printHistograms(Log::Verbose("Variant-Removed Kmer Histogram"));
@@ -146,7 +133,7 @@ int main(int argc, char *argv[]) {
 		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-			if (Options::getOptions().getGCHeatMap() && ! outputFilename.empty()) {
+			if (KmerSpectrumOptions::getOptions().getGCHeatMap() && ! outputFilename.empty()) {
 				LOG_VERBOSE(1, "Creating GC Heat Map ");
 				LOG_DEBUG(1,  MemoryUtils::getMemoryUsage());
 				OfstreamMap ofmap(outputFilename + "-GC", ".txt");
@@ -164,7 +151,7 @@ int main(int argc, char *argv[]) {
 
 
 		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
-		unsigned int depthRange = Options::getOptions().getDepthRange();
+		unsigned int depthRange = ReadSelectorOptions::getOptions().getDepthRange();
 		unsigned int depthStep = 2;
 		if (depthRange < minDepth) {
 			depthRange = minDepth;
@@ -178,7 +165,7 @@ int main(int argc, char *argv[]) {
 					pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
 					LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
 				} else {
-					LOG_VERBOSE(1, "Trimming reads that pass Artifact Filter with length: " << Options::getOptions().getMinReadLength());
+					LOG_VERBOSE(1, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
 				}
 
 				RS selector(reads, spectrum.weak);

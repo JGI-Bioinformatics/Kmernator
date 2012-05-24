@@ -49,6 +49,63 @@
 #include "Utils.h"
 #include "Log.h"
 
+class _ReadSelectorOptions : public OptionsBaseInterface {
+public:
+	_ReadSelectorOptions() : minReadLength(25), depthRange(2), bimodalSigmas(-1.0){
+	}
+	virtual ~_ReadSelectorOptions() {}
+	void _resetDefaults() {
+		// Other *::_resetDefaults();
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		po::options_description opts("Read Selector Options");
+		opts.add_options()
+				// output read selection
+				("min-read-length", po::value<unsigned int>()->default_value(minReadLength), "minimum (trimmed) read length of selected reads.  0: no minimum, 1: full read length")
+
+				("depth-range", po::value<unsigned int>()->default_value(depthRange), "if > min-depth, then output will be created in cycles of files ranging from min-depth to depth-range")
+
+				("bimodal-sigmas", po::value<double>()->default_value(bimodalSigmas), "(experimental) Detect bimodal kmer-signatures across reads and trim at transition point if the two means are separated by bimodal-sigmas * stdDev (2.0 to 3.0 suggested).  disabled if < 0.0")
+;
+
+		desc.add(opts);
+		// Other *::_setOptions(desc,p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		setOpt<unsigned int>("depth-range", getDepthRange());
+
+		// set read length
+		setOpt<unsigned int>("min-read-length", getMinReadLength());
+		if (getMinReadLength() == 1) {
+			getMinReadLength() = MAX_SEQUENCE_LENGTH;
+		}
+		setOpt<double>("bimodal-sigmas", getBimodalSigmas());
+
+		// Other ret &= *::_parseOptions(vm);
+		return ret;
+	}
+
+	unsigned int &getDepthRange()
+	{
+		return depthRange;
+	}
+	unsigned int &getMinReadLength()
+	{
+		return minReadLength;
+	}
+	double &getBimodalSigmas()
+	{
+		return bimodalSigmas;
+	}
+
+private:
+	unsigned int minReadLength, depthRange;
+	double       bimodalSigmas;
+};
+typedef OptionsBaseTemplate< _ReadSelectorOptions > ReadSelectorOptions;
+
+
 template<typename M>
 class ReadSelector {
 public:
@@ -135,7 +192,7 @@ public:
 		_needDuplicateCheck(false),
 		_lastSortedPick(0)
 	{
-		_bimodalSigmas = Options::getOptions().getBimodalSigmas();
+		_bimodalSigmas = ReadSelectorOptions::getOptions().getBimodalSigmas();
 		// Let the kernel know how these pages will be used
 		if (Options::getOptions().getMmapInput() != 0)
 			ReadSet::madviseMmapsNormal();
@@ -446,7 +503,7 @@ public:
 		setNeedDuplicateCheck();
 	}
 
-	ReadSetSizeType pickBestCoveringSubsetPairs(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = Options::getOptions().getMinReadLength(), bool bothPass = false) {
+	ReadSetSizeType pickBestCoveringSubsetPairs(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = ReadSelectorOptions::getOptions().getMinReadLength(), bool bothPass = false) {
 		_initPickBestCoveringSubset();
 		ReadSetSizeType picked = 0;
 
@@ -574,7 +631,7 @@ public:
 		return picked;
 	}
 
-	ReadSetSizeType pickBestCoveringSubsetReads(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = Options::getOptions().getMinReadLength()) {
+	ReadSetSizeType pickBestCoveringSubsetReads(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = ReadSelectorOptions::getOptions().getMinReadLength()) {
 		_initPickBestCoveringSubset();
 		ReadSetSizeType picked = 0;
 

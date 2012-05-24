@@ -42,11 +42,6 @@ public:
 	void _resetDefaults() {
 		FilterReadsBaseOptions::_resetDefaults();
 		MPIOptions::_resetDefaults();
-		GeneralOptions::_resetDefaults();
-		KmerBaseOptions::_resetDefaults();
-		KmerSpectrumOptions::_resetDefaults();
-		FilterKnownOdditiesOptions::_resetDefaults();
-		DuplicateFragmentFilterOptions::_resetDefaults();
 
 		// assign defaults
 		GeneralOptions::getOptions().getMmapInput() = 0;
@@ -55,21 +50,11 @@ public:
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		FilterReadsBaseOptions::_setOptions(desc, p);
-		GeneralOptions::_setOptions(desc, p);
 		MPIOptions::_setOptions(desc,p);
-		KmerBaseOptions::_setOptions(desc,p);
-		KmerSpectrumOptions::_setOptions(desc,p);
-		FilterKnownOdditiesOptions::_setOptions(desc,p);
-		DuplicateFragmentFilterOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		ret &= GeneralOptions::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
-		ret &= KmerBaseOptions::_parseOptions(vm);
-		ret &= KmerSpectrumOptions::_parseOptions(vm);
-		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
-		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
 
 		ret &= FilterReadsBaseOptions::_parseOptions(vm);
 
@@ -189,7 +174,7 @@ int main(int argc, char *argv[]) {
 		}
 		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 
-			if (Options::getOptions().getVariantSigmas() > 0.0) {
+			if (KmerSpectrumOptions::getOptions().getVariantSigmas() > 0.0) {
 				long purgedVariants = spectrum.purgeVariants();
 				long totalPurgedVariants = all_reduce(world, purgedVariants, std::plus<long>());
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << totalPurgedVariants << " kmer variants");
@@ -217,7 +202,7 @@ int main(int argc, char *argv[]) {
 
 
 		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
-		unsigned int depthRange = Options::getOptions().getDepthRange();
+		unsigned int depthRange = ReadSelectorOptions::getOptions().getDepthRange();
 		unsigned int depthStep = 2;
 		if (depthRange < minDepth) {
 			depthRange = minDepth;
@@ -230,7 +215,7 @@ int main(int argc, char *argv[]) {
 					pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
 					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << thisDepth);
 				} else {
-					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << Options::getOptions().getMinReadLength());
+					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
 				}
 				RS selector(world, reads, spectrum.weak);
 				selector.scoreAndTrimReads(minDepth);

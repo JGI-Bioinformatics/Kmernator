@@ -284,11 +284,7 @@ class _GeneralOptions : public OptionsBaseInterface {
 public:
 	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"),
 	formatOutput(0), buildOutputInMemory(false),
-	minQuality(3), depthRange(2), minReadLength(25), bimodalSigmas(-1.0),
-	variantSigmas(-1.0), ignoreQual(0),
-	periodicSingletonPurge(0),
-
-	mmapInput(1), gcHeatMap(1), gatheredLogs(1),
+	minQuality(3),  ignoreQual(0), mmapInput(1), gatheredLogs(1),
 	batchSize(100000), separateOutputs(1)
 	{
 		char *tmpPath;
@@ -314,14 +310,8 @@ private:
 	unsigned int formatOutput;
 	bool         buildOutputInMemory;
 	unsigned int minQuality;
-	unsigned int depthRange;
-	unsigned int minReadLength;
-	double       bimodalSigmas;
-	double       variantSigmas;
 	unsigned int ignoreQual;
-	unsigned int periodicSingletonPurge;
 	unsigned int mmapInput;
-	unsigned int gcHeatMap;
 	unsigned int gatheredLogs;
 	unsigned int batchSize;
 	unsigned int separateOutputs;
@@ -333,8 +323,11 @@ public:
 
 		po::options_description general("General Options");
 
-		general.add_options()("help", "produce help message")
+		po::options_description logOpts("Logging and Messages");
+		logOpts.add_options()
+				("help", "produce help message")
 
+		// logging & messages
 				("verbose", po::value<unsigned int>()->default_value(getVerbose()), "level of verbosity (0+)")
 
 				("debug", po::value<unsigned int>()->default_value(getDebug()), "level of debug verbosity (0+)")
@@ -343,13 +336,36 @@ public:
 
 				("gathered-logs", po::value<unsigned int>()->default_value(gatheredLogs), "If set and MPI is enabled, VERBOSE1, VERBOSE2 and DEBUG1 logs will be gathered to the master before being output.")
 
+				;
 
+		general.add(logOpts);
+
+		po::options_description miscOpts("Misc General");
+		miscOpts.add_options()
 #ifdef _USE_OPENMP
 				("threads", po::value<int>()->default_value(maxThreads), "maximum number of threads")
 #endif
+				// Misc General Options
+				("batch-size", po::value<unsigned int>()->default_value(batchSize), "default size of batches (reads, kmers, MPI, etc)")
+				;
+		general.add(miscOpts);
 
+		po::options_description readOpts("Reading and Input Files");
+		readOpts.add_options()
+		// reading / input files
 				("input-file", po::value<FileListType>(), "input file(s)")
 
+				("mmap-input", po::value<unsigned int>()->default_value(mmapInput), "If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
+
+				("ignore-quality", po::value<unsigned int>()->default_value(ignoreQual), "ignore the quality score, to save memory or if they are untrusted")
+
+				("min-quality-score", po::value<unsigned int>()->default_value(minQuality), "minimum quality score below which will be evaluated as Q=0 (i.e. 'N', prob = 0.0)")
+				;
+		general.add(readOpts);
+
+		po::options_description writeOpts("Writing and Output Files");
+		writeOpts.add_options()
+		// writing / output files
 				("output-file", po::value<std::string>(), "output file (sometimes a pattern prefix)")
 
 				("format-output", po::value<unsigned int>()->default_value(formatOutput), "0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
@@ -359,28 +375,8 @@ public:
 				("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory), "if set, all temporary output files will first be stored in memory (faster for MPI applications)")
 
 				("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to utilize")
-
-				("min-read-length", po::value<unsigned int>()->default_value(minReadLength), "minimum (trimmed) read length of selected reads.  0: no minimum, 1: full read length")
-
-				("min-quality-score", po::value<unsigned int>()->default_value(minQuality), "minimum quality score below which will be evaluated as Q=0 (i.e. 'N', prob = 0.0)")
-
-				("depth-range", po::value<unsigned int>()->default_value(depthRange), "if > min-depth, then output will be created in cycles of files ranging from min-depth to depth-range")
-
-				("bimodal-sigmas", po::value<double>()->default_value(bimodalSigmas), "Detect bimodal kmer-signatures across reads and trim at transition point if the two means are separated by bimodal-sigmas * stdDev (2.0 to 3.0 suggested).  disabled if < 0.0")
-
-				("variant-sigmas", po::value<double>()->default_value(variantSigmas), "Detect and purge kmer-variants if >= variant-sigmas * Poisson-stdDev (2.0-3.0 suggested).  disabled if < 0.0")
-
-				("ignore-quality", po::value<unsigned int>()->default_value(ignoreQual), "ignore the quality score, to save memory or if they are untrusted")
-
-				("periodic-singleton-purge", po::value<unsigned int>()->default_value(periodicSingletonPurge), "Purge singleton memory structure every # of reads")
-
-				("mmap-input", po::value<unsigned int>()->default_value(mmapInput), "If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
-
-				("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap), "If set, a GC Heat map will be output (requires --output)")
-
-				("batch-size", po::value<unsigned int>()->default_value(batchSize), "default size of batches (reads, kmers, MPI, etc)")
-
 				;
+		general.add(writeOpts);
 
 		desc.add(general);
 	}
@@ -433,18 +429,6 @@ public:
 
 			// set minimum quality score
 			setOpt<unsigned int>("min-quality-score", getMinQuality(), print);
-
-			setOpt<unsigned int>("depth-range", getDepthRange(), print);
-
-			// set read length
-			setOpt<unsigned int>("min-read-length", getMinReadLength(), print);
-			if (getMinReadLength() == 1) {
-				getMinReadLength() = MAX_SEQUENCE_LENGTH;
-			}
-
-			setOpt<double>("bimodal-sigmas", getBimodalSigmas(), print);
-			setOpt<double>("variant-sigmas", getVariantSigmas(), print);
-
 			// TODO move to BimodalOptions
 			//			if (getBimodalSigmas() >= 0 && (getMinReadLength() < getKmerSize() + 2)) {
 			//				if(Logger::isMaster())
@@ -454,15 +438,8 @@ public:
 			// set the ignore quality value
 			setOpt<unsigned int>("ignore-quality", getIgnoreQual(), print);
 
-			// set periodic singleton purge value
-			setOpt<unsigned int>("periodic-singleton-purge", getPeriodicSingletonPurge(), print);
-
-
-
 			// set mmapInput
 			setOpt<unsigned int>("mmap-input", getMmapInput() , print);
-
-			setOpt<unsigned int>("gc-heat-map", getGCHeatMap(), print);
 
 			setOpt<unsigned int>("gathered-logs", getGatheredLogs(), print);
 
@@ -523,19 +500,9 @@ public:
 		return batchSize;
 	}
 
-	double &getBimodalSigmas()
-	{
-		return bimodalSigmas;
-	}
-
 	bool &getBuildOutputInMemory()
 	{
 		return buildOutputInMemory;
-	}
-
-	unsigned int &getDepthRange()
-	{
-		return depthRange;
 	}
 
 	unsigned int &getFormatOutput()
@@ -546,11 +513,6 @@ public:
 	unsigned int &getGatheredLogs()
 	{
 		return gatheredLogs;
-	}
-
-	unsigned int &getGCHeatMap()
-	{
-		return gcHeatMap;
 	}
 
 	unsigned int &getIgnoreQual()
@@ -589,11 +551,6 @@ public:
 		return minQuality;
 	}
 
-	unsigned int &getMinReadLength()
-	{
-		return minReadLength;
-	}
-
 	unsigned int &getMmapInput()
 	{
 		return mmapInput;
@@ -604,10 +561,6 @@ public:
 		return outputFile;
 	}
 
-	unsigned int &getPeriodicSingletonPurge()
-	{
-		return periodicSingletonPurge;
-	}
 
 	unsigned int &getSeparateOutputs()
 	{
@@ -619,12 +572,6 @@ public:
 	{
 		return tmpDir;
 	}
-
-	double &getVariantSigmas()
-	{
-		return variantSigmas;
-	}
-
 
 };
 
