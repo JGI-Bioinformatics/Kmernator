@@ -59,17 +59,24 @@ class Logger
 	std::string _attribute;
 	unsigned int _level;
 	mutable int _thisLevel;
-	static void *_world;
-	static bool _debugGather;
 
-	inline std::string getRank() const {
-#ifdef _USE_MPI
-		if (_world != NULL)
-			return " R" + boost::lexical_cast<std::string>( ((mpi::communicator*)_world)->rank() );
-		else
-#endif
-			return std::string();
+	static bool &_debugGather() {
+		static bool _debugGather = false;
+		return _debugGather;
 	}
+	static void **_getWorld() {
+		static void * _world = NULL;
+		return &_world;
+	}
+	static int &_getWorldRank() {
+		static int _rank = -1;
+		return _rank;
+	}
+	static std::string &getRank() {
+		static std::string _rankHeader;
+		return _rankHeader;
+	}
+
 	inline std::string getThread() const {
 #ifdef _USE_OPENMP
 		return " T" + boost::lexical_cast<std::string>( omp_get_thread_num() );
@@ -95,17 +102,21 @@ public:
 		*this = copy;
 	}
 	static void setWorld(void *_w, bool debugGather = false) {
-		_world = _w;
-		_debugGather = debugGather;
+		*_getWorld() = _w;
+		_debugGather() = debugGather;
+#ifdef _USE_MPI
+		_getWorldRank() = (*((mpi::communicator**)_getWorld()))->rank();
+		getRank() = " R" + boost::lexical_cast<std::string>(_getWorldRank());
+#endif
 	}
 #ifdef _USE_MPI
 	std::string gatherMessages(std::string msg) {
-		if (_world != NULL ) {
-			mpi::communicator &w = *((mpi::communicator*) _world);
+		if (*_getWorld() != NULL ) {
+			mpi::communicator &w = *(*((mpi::communicator**) _getWorld()));
 			std::string out[w.size()];
 			if (!msg.empty()) {
 				msg = getStamp("M") + msg + "\n";
-				if (_debugGather)
+				if (_debugGather())
 					*_os << "--DEBUG-GATHER--" << msg << std::endl;
 			}
 
@@ -120,7 +131,7 @@ public:
 			for(int i = 0 ; i < w.size(); i++)
 				ss << out[i];
 			msg = ss.str();
-			if (!msg.empty() && w.rank() == 0)
+			if (!msg.empty() && _getWorldRank() == 0)
 				return "\tMPI Gathered Log Entries:\n" + msg;
 			else
 				return std::string();
@@ -142,11 +153,11 @@ public:
 		if ( omp_get_thread_num() != 0 )
 			return false;
 #endif
-		if (_world == NULL)
+		if (*_getWorld() == NULL)
 			return true;
 		else
 #ifdef  _USE_MPI
-			return ((mpi::communicator*)_world)->rank() == 0;
+			return _getWorldRank() == 0;
 #else
 		    return true;
 #endif
