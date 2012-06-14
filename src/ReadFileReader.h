@@ -540,6 +540,7 @@ public:
 				LOG_DEBUG(5, "SequenceStreamParser::readName() found nothing on the last line: " << name << " looking for '" << _marker << "' at " << getPos());
 				if (isPastPartition() || endOfStream()) {
 					name.clear();
+					setIsGood(false);
 					return name;
 				}
 				nextLine( name );
@@ -548,7 +549,11 @@ public:
 			}
 			LOG_DEBUG(5, "SequenceStreamParser::readName() found " << name << " at " << getPos());
 
-			if (name.length() == 0 || name[0] != _marker)
+			if (name.length() == 0) {
+				setIsGood(false);
+				return name;
+			}
+			if (name.length() != 0 && name[0] != _marker)
 				LOG_THROW("Missing name marker '" << _marker << "'" << " in '" << name << "' at " << getPos() << " after " << count << " attempts to find the marker");
 
 			// remove marker and any extra comments or fields
