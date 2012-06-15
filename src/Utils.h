@@ -41,6 +41,7 @@
 #include <cmath>
 #include <memory>
 #include <csignal>
+#include <sys/wait.h>
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -1120,22 +1121,25 @@ public:
 	}
 };
 
+
 class Cleanup {
 public:
 	typedef std::vector< std::string > FileList;
+	typedef std::set< pid_t > PidList;
+
 	static Cleanup &getInstance() {
 		static Cleanup cleanup;
-		_setSignals();
 		return cleanup;
 	}
 	static void cleanup(int param = 0) {
 		if (param != 0)
-			LOG_WARN(1, "Caught signal: " << param);
+			LOG_WARN(1, "Cleanup::cleanup(): Caught signal: " << param);
 		LOG_DEBUG_OPTIONAL(4, true, "Entered Cleanup::cleanup()");
 		getInstance()._clean(param);
 	}
 	~Cleanup() {
 		// only allow parent process that first called Cleanup() to cleanup (if fork() was ever called)
+		_unsetSignals();
 		if (myPid == getpid()) {
 			_clean(0);
 		}
@@ -1155,55 +1159,217 @@ public:
 	}
 
 	static void trackChild(pid_t pid) {
-		getInstance().children.push_back(pid);
+		getInstance().children.insert(pid);
+		LOG_DEBUG_OPTIONAL(2, true, "Tracking child pid: " << pid);
+	}
+	static void releaseChild(pid_t pid) {
+		PidList &children = getInstance().children;
+		PidList::iterator it = children.find(pid);
+		if (it != children.end()) {
+			LOG_DEBUG_OPTIONAL(2, true, "Released child pid: " << *it);
+			children.erase(*it);
+		}
 	}
 
 protected:
-	static void _setSignals() {
-		_setSignal(SIGABRT);
-		_setSignal(SIGSEGV);
-		_setSignal(SIGINT);
-		_setSignal(SIGTERM);
-		_setSignal(SIGHUP);
-	}
-	static void _setSignal(int sig) {
-		void (*prev_fn)(int);
-		prev_fn = signal(sig, Cleanup::cleanup);
-		if (prev_fn == SIG_IGN) signal(sig, SIG_IGN); // no change if it was ignoring
-	}
-	void _clean(int param) {
-		if (param != 0) {
-			// kill children with same signal
-			for(int i = 0; i < (int) children.size(); i++) {
-				kill(children[i], param);
+	typedef std::vector< struct sigaction > SigHandlers;
+	static SigHandlers _initHandlers() {
+		int numSignals = 16;
+		SigHandlers sh;
+		sh.resize(numSignals);
+		for(int sig = 0; sig < numSignals ; sig++) {
+			struct sigaction &oact = sh[sig];
+			bzero(&oact, sizeof(oact));
+			sigaction(sig, NULL, &oact);
+			if ( oact.sa_handler != SIG_ERR && oact.sa_handler != SIG_IGN && oact.sa_handler != NULL ) {
+			      LOG_DEBUG_OPTIONAL(1, true, "set fall through signal handler for " << sig << " to " << oact.sa_handler );
 			}
 		}
+		return sh;
+	}
+	static SigHandlers &getSigHandlers() {
+		static SigHandlers _sh = _initHandlers();
+		return _sh;
+	}
+	static struct sigaction &getSigHandle(int sig) {
+		return getSigHandlers()[sig];
+	}
+	static void _setSignals() {
+		_setSignal(SIGHUP, Cleanup::cleanup);
+		_setSignal(SIGINT, Cleanup::cleanup);
+		_setSignal(SIGQUIT, Cleanup::cleanup);
+		_setSignal(SIGABRT, Cleanup::cleanup);
+		_setSignal(SIGUSR1, Cleanup::cleanup);
+		_setSignal(SIGSEGV, Cleanup::cleanup);
+		_setSignal(SIGUSR2, Cleanup::cleanup);
+		_setSignal(SIGPIPE, Cleanup::cleanup);
+		_setSignal(SIGTERM, Cleanup::cleanup);
+	}
+	static void _unsetSignals() {
+		LOG_DEBUG_OPTIONAL(2, true, "Unsetting cleanup signal handlers");
+		_setSignal(SIGHUP, getSigHandle(SIGHUP).sa_handler, false);
+		_setSignal(SIGINT, getSigHandle(SIGINT).sa_handler, false);
+		_setSignal(SIGQUIT, getSigHandle(SIGQUIT).sa_handler, false);
+		_setSignal(SIGABRT, getSigHandle(SIGABRT).sa_handler, false);
+		_setSignal(SIGUSR1, getSigHandle(SIGUSR1).sa_handler, false);
+		_setSignal(SIGSEGV, getSigHandle(SIGSEGV).sa_handler, false);
+		_setSignal(SIGUSR2, getSigHandle(SIGUSR2).sa_handler, false);
+		_setSignal(SIGPIPE, getSigHandle(SIGPIPE).sa_handler, false);
+		_setSignal(SIGTERM, getSigHandle(SIGTERM).sa_handler, false);
+	}
+	static void _setSignal(int sig, sighandler_t handler, bool keepOld = true) {
+		//void (*prev_fn)(int);
+		//sighandler_t prev_fn;
+		//prev_fn = signal(sig, handler);
+		//if (prev_fn == SIG_IGN) signal(sig, SIG_IGN); // no change if it was ignoring
+		struct sigaction act;
+		bzero(&act, sizeof(act));
+		act.sa_handler = handler;
+		act.sa_flags = SA_NOCLDSTOP | SA_RESTART;
+		sigaction(sig, &act, keepOld ? &getSigHandle(sig) : NULL);
+	}
+	void _clean(int param) {
+		// save this signals next action, and reset the rest.
+		struct sigaction &oact = getSigHandle(param);
+		_unsetSignals();
+
+		std::stringstream ss;
+		if (param != 0) {
+			// kill children with same signal
+			if (!children.empty())
+				ss << "\tTERMinating: ";
+			for(PidList::iterator it = children.begin(); it != children.end(); it++) {
+				kill(*it, SIGTERM);
+				ss << *it << " , ";
+			}
+		}
+		children.clear();
+
+		if (!tempFiles.empty())
+			ss << "\tUnlinked: ";
 		for(int i = 0; i < (int) tempFiles.size(); i++) {
-			LOG_DEBUG_OPTIONAL(2, true, "unlinking: " << tempFiles[i]);
+			ss << tempFiles[i] << " , ";
 			unlink(tempFiles[i].c_str());
 		}
 		tempFiles.clear();
+
+		if (!tempDirs.empty())
+			ss << "rm -rf : ";
 		for(int i = 0; i < (int) tempDirs.size(); i++) {
 			std::string cmd("rm -r " + tempDirs[i]);
-			LOG_DEBUG_OPTIONAL(1, true, "executing: " << cmd);
+			ss << tempDirs[i] << " , ";
 			if (system(cmd.c_str()) != 0)
 				LOG_WARN(1, "Could not clean " << tempDirs[i] << " '" << cmd << "'");
 		}
 		tempDirs.clear();
-		if (param != 0)
-			LOG_THROW("Caught signal " << param << " terminating");
+
+		std::string mesg = ss.str();
+		if (param != 0) {
+			LOG_ERROR(1, "Cleaned up after signal: " << param << "... " << mesg);
+			if ( oact.sa_handler != SIG_ERR && oact.sa_handler != SIG_IGN && oact.sa_handler != NULL ) {
+				LOG_DEBUG_OPTIONAL(1, true, "Now running default signal handler" );
+				(oact.sa_handler)( param );
+			}
+		} else {
+			LOG_DEBUG_OPTIONAL(2, true, "Cleanup: " << mesg);
+		}
+
+		int waitCount = 0;
+		bool childrenLive = true;
+		while (waitCount++ < 3 && childrenLive) {
+			childrenLive = false;
+			int status = 0;
+			for(PidList::iterator it = children.begin(); it != children.end(); it++) {
+				int wpid = waitpid(*it, &status, WNOHANG);
+				if (wpid == 0 || !WIFEXITED(status)) {
+					childrenLive = true;
+				}
+			}
+			sleep(1);
+		}
+		if (childrenLive) {
+			int status = 0;
+			for(PidList::iterator it = children.begin(); it != children.end(); it++) {
+				int wpid = waitpid(*it, &status, WNOHANG);
+				if (wpid == 0 || !WIFEXITED(status)) {
+					LOG_WARN(1, "KILLing: " << *it);
+					kill(*it, SIGKILL);
+				}
+			}
+		}
+		if (param != 0) {
+			LOG_THROW("Terminating because of signal " << param);
+		}
 	}
 
 	Cleanup() : tempFiles(), tempDirs(), myPid(0) {
 		myPid = getpid();
+		_setSignals();
 	}
 
 private:
 	FileList tempFiles;
 	FileList tempDirs;
 	pid_t myPid;
-	std::vector< pid_t > children;
+	PidList children;
 };
+
+class Fork {
+public:
+	static pid_t forkCommand(std::string command) {
+		std::string dir = Options::getOptions().getTmpDir();
+		std::string temp = dir + UniqueName::generateUniqueName("/.tmpScript-");
+		int child = fork();
+		if (child < 0) {
+			LOG_THROW("Could not fork a child process");
+		} else if (child == 0) {
+			// child
+			std::fstream cmdFile(temp.c_str(), std::ios_base::out);
+			cmdFile << "#!/bin/bash" << std::endl << command << std::endl << "exit $?" << std::endl;
+			cmdFile.close();
+			chmod(temp.c_str(), 0700);
+			if (setpgrp() != 0)
+				LOG_WARN(1, "Child could not set a new process group");
+			execv(temp.c_str(), NULL);
+			std::cerr << "ERROR, you should never get here!" << std::endl;
+			exit(1);
+		} else {
+			// parent
+			child = 0 - child;
+			Cleanup::addTemp(temp);
+			Cleanup::trackChild(child);
+			LOG_DEBUG_OPTIONAL(1, true, "Executing '" << command << "' in pid " << child << " through script: " << temp);
+			return child;
+		}
+	}
+	static int wait(pid_t pid) {
+		bool exited = false;
+		int status = 0;
+		int wpid = 0;
+		int exitStatus = -1;
+
+		while (!exited) {
+			wpid = waitpid(pid, &status, WNOHANG);
+			if (wpid != 0 && WIFEXITED(status)) {
+				exitStatus = WEXITSTATUS(status);
+				exited = true;
+				LOG_DEBUG_OPTIONAL(1, true, "waitpid(" << pid << ") returned: " << wpid << ", " << exitStatus);
+			} else if (wpid < 0) {
+				LOG_DEBUG_OPTIONAL(1, true, "waitpid(" << pid << ") returned: " << wpid);
+				exitStatus = 1;
+				exited = true;
+			} else {
+				LOG_DEBUG_OPTIONAL(2, true, "Waiting for pid: " << pid);
+				sleep(1);
+			}
+		}
+		Cleanup::releaseChild(pid);
+		LOG_DEBUG_OPTIONAL(1, wpid != 0, "waitpid(" << pid << ") returned: " << exitStatus << " for " << wpid);
+		return exitStatus;
+	}
+};
+
+
 
 #endif
 
