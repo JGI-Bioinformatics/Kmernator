@@ -32,11 +32,11 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
- #include <sys/wait.h>
 
 #include <boost/shared_ptr.hpp>
 #include <boost/iostreams/device/file_descriptor.hpp>
 #include <boost/iostreams/stream.hpp>
+#include <boost/algorithm/string.hpp>
 #include <fstream>
 
 #include "config.h"
@@ -304,21 +304,46 @@ std::vector< int > forkCommand() {
 	for(int i = 0; i < (int) forkCommand.size(); i++) {
 		LOG_DEBUG_OPTIONAL(1, true, "Starting " << forkCommand[i]);
 
+		int child = Fork::forkCommand(forkCommand[i]);
+		forks.push_back(child);
+
+		if (0) {
 		int child = fork();
 		if (child < 0)
 			LOG_THROW("Could not fork child process");
 
 		if (child == 0) {
 			// child
+			if (0) {
+			std::vector<std::string> forkCommandArgs;
+			boost::split(forkCommandArgs, forkCommand[i], boost::is_any_of("\t "));
+			char *forkArgs[forkCommandArgs.size()];
+			forkArgs[forkCommandArgs.size()-1] = NULL;
+			for(int j = 0 ; j < (int) forkCommandArgs.size(); j++)
+				forkArgs[j] = strdup(forkCommandArgs[j].c_str());
+
+			std::stringstream ss;
+			ss << "Executing ( " << getpid() << ") : " << forkArgs[0] << " ";
+			for (int j=1; j < (int) forkCommandArgs.size(); j++)
+				ss << forkArgs[j] << "\t";
+			ss << std::endl;
+			std::string msg = ss.str();
+			std::cerr << msg;
+			execvp(forkArgs[0], forkArgs);
+			std::cerr << "Should not get here!" << std::endl;
+			exit(1);
+			} else {
 			int ret = system(forkCommand[i].c_str());
 			if (ret != 0)
 				LOG_ERROR(1, "Failed to execute: " << forkCommand[i]);
 			exit(ret);
+			}
 		} else {
 			// parent
 			LOG_DEBUG_OPTIONAL(1, true, "forkPid: " << child);
 			forks.push_back( child );
 			Cleanup::trackChild( child );
+		}
 		}
 	}
 	return forks;
@@ -392,13 +417,16 @@ int main(int argc, char *argv[]) {
 				out1 = out1f = new std::ofstream(outputFile.c_str());
 			}
 
+			assert(out1 != NULL || ops != NULL);
 			outputRegularFiles(inputs, (ops == NULL ? *out1 : *ops));
 
 			if (ops != NULL) {
 				delete ops;
+				ops = NULL;
 			}
 			if (out1f != NULL) {
 				out1f->close();
+				out1f = NULL;
 			}
 
 		}
@@ -410,17 +438,27 @@ int main(int argc, char *argv[]) {
 		if (!forkPids.empty()) {
 			for(int i = 0; i < (int) forkPids.size(); i++) {
 				LOG_DEBUG_OPTIONAL(1, true, "Waiting for forkCommand to finish: " << forkPids[i]);
-				int status;
-				waitpid(forkPids[i], &status, 0);
+				int status = Fork::wait(forkPids[i]);
 				if (status != 0) {
-					LOG_ERROR(1, "forkCommand errored: " << status);
 					exitStatus += status;
+					LOG_THROW("Child process " << forkPids[i] << " errored.  Aborting");
 				}
 			}
 		}
 
 	} catch (...) {
+		LOG_WARN(1, "Cleaning up after exception");
+		if (ops != NULL) {
+			delete ops;
+		}
+		if (out1f != NULL) {
+			out1f->close();
+		}
 		Cleanup::cleanup();
+		sleep(1); // attempt to let other processes get the signal
+#ifdef ENABLE_MPI
+		MPI_Abort(world, 1);
+#endif
 		LOG_THROW("Found a problem...");
 	}
 
