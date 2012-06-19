@@ -1325,8 +1325,12 @@ public:
 		} else if (child == 0) {
 			// child
 			std::fstream cmdFile(temp.c_str(), std::ios_base::out);
+			if (!(cmdFile.is_open() && cmdFile.good()))
+				LOG_THROW("Could not open " << temp << " for writing!");
 			cmdFile << "#!/bin/bash" << std::endl << command << std::endl << "exit $?" << std::endl;
 			cmdFile.close();
+			if (cmdFile.fail())
+				LOG_THROW("Could not close " << temp << " for writing!");
 			chmod(temp.c_str(), 0700);
 			if (setpgrp() != 0)
 				LOG_WARN(1, "Child could not set a new process group");
