@@ -1,15 +1,23 @@
-# Invoke with Rscript EstimateSize.R input.file [ maxErrorRate(0.25 default)]
+# Invoke with Rscript EstimateSize.R input.file [ maxErrorRate(0.5 default)]
+#   do *not* trust any estimate with a predicted error rate that high
+#   unless the data is *really* bad
+#
 
+# read the input file
 args <- commandArgs(TRUE)
 file <- args[1]
 
+# set the maximum error rate for the model
 maxErrorRate <- 0.50
 if (length(args) == 2) {
   maxErrorRate <- args[2]
 }
 
+# read in the data
 inputData <- read.table(file, header = TRUE, sep="\t")
 
+# define the asymptotic function model and its gradient
+# uniqueKmers = fun3(rawKmers, errorRate, genomeSize)
 fun3 <- function(x, ax, bx) {
   val <- ax * x + bx - bx * (( ax + bx - 1) / bx ) ^ x
   cx <- (( bx + ax - 1) / bx)
@@ -22,10 +30,12 @@ fun3 <- function(x, ax, bx) {
   val
 }
 
+# function to compare results to model function
 predictedAsymptote <- function(rawKmerCount, errorRate, genomeSize) {
   errorRate * rawKmerCount + genomeSize
 }
 
+# Run the NLS fit for a data set
 fitModel <- function(rawKmers, uniqueKmers) { 
 
   d <- data.frame(rawKmers=rawKmers, uniqueKmers=uniqueKmers)
@@ -42,9 +52,12 @@ fitModel <- function(rawKmers, uniqueKmers) {
 
 }
 
+# get the best fit with all the data
 inputRawKmers <- inputData[1]
 inputUniqueKmers <- inputData[3]
 bestFit <- fitModel(inputRawKmers, inputUniqueKmers)
+
+# track every estimate with incremental data sets
 start <- 20
 errorRates <- vector(length=start-1)
 genomeSizes <- vector(length=start-1)
@@ -67,6 +80,7 @@ for(i in start:dim(inputRawKmers)[1]) {
   }  
 }
 
+# plot the data to a PNG file
 pl <- data.frame(RawKmers=inputRawKmers, EstimatedErrorRate=errorRates)
 pl2 <- data.frame(RawKmers=inputRawKmers, EstimatedGenomeSize=genomeSizes)
 pl3 <- data.frame(RawKmers=inputRawKmers, UniqueKmers=inputUniqueKmers)
@@ -83,5 +97,7 @@ l<- paste("y =",  round(bestFit['genomeSize']), "+", bestFit['errorRate'], "* x"
 legend("topleft", col=c("black","red","green"),lty=1,legend=c("DataPoints",l,"Estimated Genomic Kmers"))
 points(pl2, col='green')
 
+
+# return the parameters for the best fit last
 bestFit
 
