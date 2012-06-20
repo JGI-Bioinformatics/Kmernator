@@ -239,3 +239,6 @@ target_link_libraries(        RandomlySample
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
+add_executable( pipebuf pipebuf )
+set_source_files_properties( pipebuf PROPERTIES COMPILE_FLAGS "-s -Wall -O6 -fexpensive-optimizations -fomit-frame-pointer -D_GNU_SOURCE=1" )
+
