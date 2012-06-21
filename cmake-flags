@@ -17,7 +17,7 @@ module load cmake
 module swap PrgEnv-pgi PrgEnv-gnu
 module remove xt-shmem
 module load iobuf
-cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC`  -DMPI_INCLUDE_PATH="-I." -DMPI_LIBRARY="libc.a"  -DMPI_LINK_FLAGS=" "   -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g"
+cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC`  -DMPI_INCLUDE_PATH="-I." -DMPI_LIBRARY="libc.a"  -DMPI_LINK_FLAGS=" "   -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g" -DCMAKE_C_FLAGS="-dynamic -O3 -Wall -g"
 
 
 # for NERSC hopper.nersc.gov: gcc compilers and MPICH2 xt-mpt, threaded MPI
@@ -37,13 +37,13 @@ module unload pgi
 module unload openmpi
 module load gcc
 module load openmpi-gnu
-cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -Wall -g"
+cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -Wall -g" -DCMAKE_C_FLAGS="-O3 -Wall -g"
 
 # for static build -- BROKEN if MPI support is requested!
-$CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static"
+$CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static" -DCMAKE_C_FLAGS="-O3 -g -Wall -static"
 
 # for debug
-$CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O0 -g -Wall -DDEBUG"
+$CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O0 -g -Wall -DDEBUG" -DCMAKE_C_FLAGS="-O0 -g -Wall -DDEBUG"
 
 # for profile
 $CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -pg -Wall"

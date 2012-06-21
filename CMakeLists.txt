@@ -119,6 +119,9 @@ endif()
 include_directories( src )
 add_subdirectory( src )
 
+include_directories( samtools-0.1.18 )
+add_subdirectory( samtools-0.1.18 )
+
 add_subdirectory( test )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 

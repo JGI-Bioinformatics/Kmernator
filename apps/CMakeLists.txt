@@ -242,3 +242,7 @@ target_link_libraries(        RandomlySample
 add_executable( pipebuf pipebuf )
 set_source_files_properties( pipebuf PROPERTIES COMPILE_FLAGS "-s -Wall -O6 -fexpensive-optimizations -fomit-frame-pointer -D_GNU_SOURCE=1" )
 
+add_executable( FilterAndSortSam FilterAndSortSam )
+set_source_files_properties(FilterAndSortSam
+                        PROPERTIES COMPILE_FLAGS " ${CMAKE_C_FLAGS}")
+target_link_libraries( FilterAndSortSam z libbam) #bam sam bgzf bam_sort kstring bam_aux bam_import bam_index bam_md razf faidx)
