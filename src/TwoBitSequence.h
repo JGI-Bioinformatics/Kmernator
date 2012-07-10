@@ -38,9 +38,18 @@
 #include <cstdio>
 #include <iostream>
 
-#include <boost/intrusive_ptr.hpp>
-
 #include "config.h"
+
+namespace TwoBitSequenceBase {
+class _TwoBitEncodingPtr;
+};
+
+namespace boost {
+void intrusive_ptr_add_ref(TwoBitSequenceBase::_TwoBitEncodingPtr* r);
+void intrusive_ptr_release(TwoBitSequenceBase::_TwoBitEncodingPtr* r);
+};
+
+#include <boost/intrusive_ptr.hpp>
 
 namespace TwoBitSequenceBase {
 
@@ -92,15 +101,10 @@ public:
 	}
 };
 
-
 typedef boost::intrusive_ptr< _TwoBitEncodingPtr > TwoBitEncodingPtr;
 
-}
+};
 
-namespace boost {
-void intrusive_ptr_add_ref(TwoBitSequenceBase::_TwoBitEncodingPtr* r);
-void intrusive_ptr_release(TwoBitSequenceBase::_TwoBitEncodingPtr* r);
-}
 
 using namespace TwoBitSequenceBase;
 

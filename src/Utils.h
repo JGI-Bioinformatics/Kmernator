@@ -738,7 +738,7 @@ public:
 	explicit OPipestream() : _pipe(NULL), _exitStatus(0) {}
 	explicit OPipestream( const std::string command, bool interceptStderr = false)
 	: StdErrInterceptor(interceptStderr),
-	  base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "w" ) ) ), _cmd(command+getErrIntercept()), _exitStatus(0) {
+	  base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "w" ) ), boost::iostreams::never_close_handle), _cmd(command+getErrIntercept()), _exitStatus(0) {
 		assert(_pipe != NULL);
 		assert(fileno(_pipe) >= 0);
 		assert(is_open());
@@ -776,7 +776,7 @@ public:
 	explicit IPipestream() : StdErrInterceptor(), _pipe(NULL), _exitStatus(0) {}
 	explicit IPipestream( const std::string command, bool interceptStderr = false )
 	: StdErrInterceptor( interceptStderr ),
-	  base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "r" ) ) ),
+	  base( fileno( _pipe = popen( (command+getErrIntercept()).c_str(), "r" ) ), boost::iostreams::never_close_handle ),
 	  _cmd(command+getErrIntercept()) , _exitStatus(0) {
 
 		assert(_pipe != NULL);
