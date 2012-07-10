@@ -49,9 +49,7 @@ target_link_libraries( CompareSpectrums
                               Kmer
                               ReadSet
                               Log
-                              boost_program_options-mt-static 
-                              boost_iostreams-mt-static
-                              boost_thread-mt-static
+                              ${KMERNATOR_BOOST_LIBS}
                               )
 
 

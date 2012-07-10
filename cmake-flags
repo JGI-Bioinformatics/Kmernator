@@ -37,7 +37,7 @@ module unload pgi
 module unload openmpi
 module load gcc
 module load openmpi-gnu
-cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -Wall -g" -DCMAKE_C_FLAGS="-O3 -Wall -g"
+cmake $Kmernator -DCMAKE_C_COMPILER=`which mpicc`  -DCMAKE_CXX_COMPILER=`which mpic++`  -DCMAKE_CXX_FLAGS="-O3 -Wall -g" -DCMAKE_C_FLAGS="-O3 -Wall -g"
 
 # for static build -- BROKEN if MPI support is requested!
 $CMAKE $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall -static" -DCMAKE_C_FLAGS="-O3 -g -Wall -static"
