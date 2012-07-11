@@ -4,8 +4,8 @@
 FRP=../apps/MeraculousCounter
 
 TMPDIR=${TMPDIR:=/tmp}
-TMP=$(mktemp $TMPDIR/test$$)
-if [ ! -f $TMP ]
+TMP=$(mktemp $TMPDIR/testXXXXXX)
+if [ ! -f "$TMP" ]
 then
   exit 1
 fi

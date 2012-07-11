@@ -77,10 +77,11 @@ if (DISABLE_MPI)
   set(KMERNATOR_MPI_CXX_FLAGS = "-DDISABLE_MPI")
 else()
   if ( MPI_FOUND )
-    set(KMERNATOR_MPI_CXX_FLAGS "${MPI_COMPILE_FLAGS} -DENABLE_MPI")
+    set(KMERNATOR_MPI_CXX_FLAGS "${KMERNATOR_MPI_CXX_FLAGS} ${MPI_COMPILE_FLAGS} -DENABLE_MPI")
+    set(KMERNATOR_MPI_LINK_FLAGS "${KMERNATOR_MPI_LINK_FLAGS} ${MPI_LINK_FLAGS}")
     include_directories(${MPI_INCLUDE_PATH})
     link_directories(${MPI_LINK_PATH})
-    set(KMERNATOR_P_LIBS ${KMERNATOR_P_LIBS} boost_mpi.a boost_serialization.a)
+    set(KMERNATOR_P_LIBS ${KMERNATOR_P_LIBS} boost_mpi boost_serialization ${MPI_LIBRARIES})
   else()
       set(DISABLE_MPI)
       set(KMERNATOR_MPI_CXX_FLAGS = "-DDISABLE_MPI")
@@ -90,15 +91,19 @@ endif()
 set(Boost_DEBUG 1)
 set(Boost_USE_STATIC_LIBS   ON)
 set(Boost_USE_MULTITHREADED ON)
-find_package ( Boost 1.41.0 COMPONENTS mpi program_options iostreams thread test serialization system)
+find_package ( Boost 1.41.0 COMPONENTS mpi program_options iostreams thread serialization system)
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
   include_directories(${BOOST_ROOT}/libs)
   link_directories(${Boost_LIBRARY_DIRS})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive")
 else()
-  set(BOOST_INSTALL_VER 1_50_0)
-  set(BOOST_DOWNLOAD_URL http://sourceforge.net/projects/boost/files/boost/1.50.0/boost_1_50_0.tar.bz2)
+  set(BOOST_MAJOR_VER 1)
+  set(BOOST_MINOR_VER 50)
+  set(BOOST_MINOR_SUBVER 0)
+  set(BOOST_INSTALL_VER ${BOOST_MAJOR_VER}_${BOOST_MINOR_VER}_${BOOST_MINOR_SUBVER})
+  set(BOOST_FULL_VERSION ${BOOST_MAJOR_VER}.${BOOST_MINOR_VER}.${BOOST_MINOR_SUBVER})
+  set(BOOST_DOWNLOAD_URL http://sourceforge.net/projects/boost/files/boost/${BOOST_FULL_VERSION}/boost_${BOOST_INSTALL_VER}.tar.bz2)
   set(BOOST_ROOT ${CMAKE_CURRENT_BINARY_DIR}/boost_${BOOST_INSTALL_VER})
   if(NOT EXISTS ${BOOST_ROOT})
     set(BOOST_LIBRARY_LIST iostreams,program_options,thread,test,system)
@@ -106,39 +111,73 @@ else()
       set(BOOST_LIBRARY_LIST mpi,serialization,${BOOST_LIBRARY_LIST})
     endif()
 
-    message("Retrieving Boost from repository: ${BOOST_INSTALL_VER}")
-    execute_process(COMMAND wget -O ${BOOST_ROOT}.tar.bz2 ${BOOST_DOWNLOAD_URL})
-    execute_process(COMMAND tar -xvjf ${BOOST_ROOT}.tar.bz2 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-    if(NOT DISABLE_MPI)
-      file(APPEND ${BOOST_ROOT}/tools/build/v2/user-config.jam "using mpi ;")
+    set(BOOST_TBZ2 ${CMAKE_SOURCE_DIR}/opt/boost_${BOOST_INSTALL_VER}.tar.bz2)
+    if(NOT EXISTS ${BOOST_TBZ2})
+      message("Retrieving Boost from repository: ${BOOST_INSTALL_VER}")
+      file(DOWNLOAD ${BOOST_DOWNLOAD_URL} ${BOOST_TBZ2})
     endif()
-    execute_process(COMMAND ./bootstrap.sh --with-libraries=${BOOST_LIBRARY_LIST} WORKING_DIRECTORY ${BOOST_ROOT})
-    execute_process(COMMAND ./b2 WORKING_DIRECTORY ${BOOST_ROOT}) 
+    message("Unpaking Boost: ${BOOST_INSTALL_VER}")
+    execute_process(COMMAND tar -xvjf ${BOOST_TBZ2} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+    if(NOT DISABLE_MPI)
+      if(NOT BOOST_MPI_USER_CONFIG)
+        file(APPEND ${BOOST_ROOT}/tools/build/v2/user-config.jam "using mpi ;\n")
+      else()
+        file(APPEND ${BOOST_ROOT}/tools/build/v2/user-config.jam "${BOOST_MPI_USER_CONFIG}\n")
+      endif()
+    endif()
+    file(APPEND ${BOOST_ROOT}/tools/build/v2/user-config.jam "using gcc : : ${CMAKE_CXX_COMPILER} ;\n")
   endif()
+
+  find_package ( Boost ${BOOST_FULL_VERSION} COMPONENTS mpi program_options iostreams thread serialization system)
+  if(NOT Boost_FOUND)
+    execute_process(COMMAND ./bootstrap.sh --with-libraries=${BOOST_LIBRARY_LIST} WORKING_DIRECTORY ${BOOST_ROOT})
+    execute_process(COMMAND ./b2 --debug-configuration variant=release link=static threading=multi runtime-link=static WORKING_DIRECTORY ${BOOST_ROOT}) 
+  endif()
+
+  find_package ( Boost ${BOOST_FULL_VERSION} COMPONENTS mpi program_options iostreams thread serialization system)
+  if(NOT Boost_FOUND)
+    message(FATAL_ERROR "Could not properly build boost.  Please check the log and fix your options.  Look to cmake-flags for some hints")
+  endif()
+
   message("Using local copy of boost: ${BOOST_ROOT}")
   include_directories( ${BOOST_ROOT} )
   link_directories( ${BOOST_ROOT}/stage/lib )
 
 endif()
 
-#add_custom_target( boost_subset ALL)
-set(KMERNATOR_BOOST_LIBS         boost_program_options.a
-                                 boost_iostreams.a
-                                 boost_thread.a
-				 boost_system.a
+set(KMERNATOR_BOOST_LIBS         boost_program_options
+                                 boost_iostreams
+                                 boost_thread
+				 boost_system
                                  )
-set(KMERNATOR_BOOST_TEST_LIBS    boost_test_exec_monitor.a
-                                 boost_unit_test_framework.a
+set(KMERNATOR_BOOST_TEST_LIBS    boost_test_exec_monitor
+                                 boost_unit_test_framework
                                  )
-#add_dependencies( boost_subset ${KMERNATOR_BOOST_LIBS} ${KMERNATOR_BOOST_TEST_LIBS})
   
+set(SAMTOOLS_VERSION 0.1.18)
+set(SAMTOOLS_DIR ${CMAKE_CURRENT_BINARY_DIR}/samtools-${SAMTOOLS_VERSION})
+if(NOT EXISTS ${SAMTOOLS_DIR})
+  set(SAMTOOLS_TBZ2 ${CMAKE_SOURCE_DIR}/opt/samtools-${SAMTOOLS_VERSION}.tar.bz2)
+  if(NOT EXISTS ${SAMTOOLS_TBZ2})
+    set(SAMTOOLS_DOWNLOAD_URL http://sourceforge.net/projects/samtools/files/samtools/${SAMTOOLS_VERSION}/samtools-${SAMTOOLS_VERSION}.tar.bz2)
+    message("Retrieving samtools from repository: ${SAMTOOLS_DOWNLOAD_URL}")
+    file(DOWNLOAD ${SAMTOOLS_DOWNLOAD_URL} ${SAMTOOLS_TBZ2})
+  endif()
+  message("Unpacking samtools: ${SAMTOOLS_VERSION}")
+  execute_process(COMMAND tar -xvjf ${SAMTOOLS_TBZ2} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  file(COPY ${CMAKE_SOURCE_DIR}/samtools_CMakeLists.txt DESTINATION ${SAMTOOLS_DIR})
+  file(RENAME ${SAMTOOLS_DIR}/samtools_CMakeLists.txt ${SAMTOOLS_DIR}/CMakeLists.txt)
+endif()
+
+include_directories( ${SAMTOOLS_DIR} )
+add_subdirectory( ${SAMTOOLS_DIR} binary_dir )
+
 include_directories( src )
 add_subdirectory( src )
-
-include_directories( samtools-0.1.18 )
-add_subdirectory( samtools-0.1.18 )
 
 add_subdirectory( test )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 add_subdirectory( apps )
+

@@ -52,6 +52,18 @@ target_link_libraries( CompareSpectrums
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
+set_source_files_properties( ContigExtender
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
+                             )
+add_executable( ContigExtender ContigExtender )
+target_link_libraries( ContigExtender 
+                              Sequence
+                              Kmer
+                              ReadSet
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              )
+
 
 set_source_files_properties( FilterReads
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
@@ -72,7 +84,7 @@ set_source_files_properties( FilterReads-P
                              )
 add_executable( FilterReads-P FilterReads-P )
 set_target_properties( FilterReads-P
-                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
                        )
 target_link_libraries( FilterReads-P 
                               Sequence
@@ -88,7 +100,7 @@ set_source_files_properties( EstimateSize-P
                              )
 add_executable( EstimateSize-P EstimateSize-P )
 set_target_properties( EstimateSize-P
-                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
                        )
 target_link_libraries( EstimateSize-P 
                               Sequence
@@ -101,28 +113,13 @@ target_link_libraries( EstimateSize-P
 
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/apps/EstimateSize.R apps/ )
 
-endif()
-
-set_source_files_properties( ContigExtender
-                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
-                             )
-add_executable( ContigExtender ContigExtender )
-target_link_libraries( ContigExtender 
-                              Sequence
-                              Kmer
-                              ReadSet
-                              Log
-                              ${KMERNATOR_BOOST_LIBS}
-                              )
-
-if( MPI_FOUND )
 
 set_source_files_properties( DistributedNucleatingAssembler
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
 add_executable( DistributedNucleatingAssembler DistributedNucleatingAssembler )
 set_target_properties( DistributedNucleatingAssembler
-                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
                        )
 target_link_libraries( DistributedNucleatingAssembler 
                               Sequence
@@ -133,16 +130,12 @@ target_link_libraries( DistributedNucleatingAssembler
                               ${KMERNATOR_P_LIBS}
                               )
 
-endif()
-
-if( MPI_FOUND )
-
 set_source_files_properties( MeraculousCounter
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
 add_executable( MeraculousCounter MeraculousCounter )
 set_target_properties( MeraculousCounter
-                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_LINK_FLAGS}"
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
                        )
 target_link_libraries( MeraculousCounter 
                               Sequence
@@ -203,10 +196,14 @@ target_link_libraries(        FixPair
 
 
 add_executable( SplitSequenceOnTheFly SplitSequenceOnTheFly )
+
 if( MPI_FOUND )
 set_source_files_properties( SplitSequenceOnTheFly
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
+set_target_properties( SplitSequenceOnTheFly
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
+                       )
 
 target_link_libraries(        SplitSequenceOnTheFly
                               Sequence
@@ -242,5 +239,6 @@ set_source_files_properties( pipebuf PROPERTIES COMPILE_FLAGS "-s -Wall -O6 -fex
 
 add_executable( FilterAndSortSam FilterAndSortSam )
 set_source_files_properties(FilterAndSortSam
-                        PROPERTIES COMPILE_FLAGS " ${CMAKE_C_FLAGS}")
-target_link_libraries( FilterAndSortSam z libbam) #bam sam bgzf bam_sort kstring bam_aux bam_import bam_index bam_md razf faidx)
+                        PROPERTIES COMPILE_FLAGS " ${CMAKE_C_FLAGS} ")
+target_link_libraries( FilterAndSortSam libbam z)
+
