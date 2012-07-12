@@ -8,25 +8,27 @@ cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall" -DCMAKE_C_FLAGS="-O3 -g -Wall"
 # for build without MPI (if mpic++ exists and you do not want it for some reason)
 cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall" -DCMAKE_C_FLAGS="-O3 -g -Wall" -DDISABLE_MPI
 
-# for build with non-standard g++, say if gcc-4.6.2 and g++-4.6.2 exists.
+# for build with non-standard g++, say if gcc-4.6.2 and both g++-4.6.2 exist in the PATH
 ver=4.6.2
 libdir=$(dirname $(g++-${ver} --print-file-name=libstdc++.so))
 cmake $Kmernator -DCMAKE_CXX_COMPILER=`which g++-${ver}` -DCMAKE_C_COMPILER=`which gcc-${ver}` -DCMAKE_CXX_FLAGS="-O3 -g -Wall  -Wl,-rpath,${libdir}" -DCMAKE_C_FLAGS="-O3 -g -Wall  -Wl,-rpath,${libdir}"
 
-# for NERSC hopper to use the cc and CC compiler wrappers:
+# for NERSC hopper to use the cc and CC GNU compiler wrappers, tricking CMake and Boost to recognize the native MPI compiler:
 module load cmake
 module swap PrgEnv-pgi PrgEnv-gnu
 module remove xt-shmem
 module remove iobuf
-cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DCMAKE_CXX_FLAGS="-O3 -Wall -g" -DCMAKE_C_FLAGS="-O3 -Wall -g"  -DMPI_INCLUDE_PATH="-I$MPICH_DIR/include" -DMPI_LIBRARY="$MPICH_DIR/lib/libmpich_gnu.a" -DMPI_LINK_FLAGS=" " -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>mpich_gnu ;"
+cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DCMAKE_CXX_FLAGS="-O3 -Wall -funroll-loops -ffast-math" -DCMAKE_C_FLAGS="-O3 -Wall -funroll-loops -ffast-math"  -DMPI_COMPILER=`which CC` -DMPI_LIBRARY="mpich_gnu" -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>mpich_gnu ;"
 
 ### OLD
+#cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DCMAKE_CXX_FLAGS="-O3 -Wall -funroll-loops -ffast-math" -DCMAKE_C_FLAGS="-O3 -Wall -funroll-loops -ffast-math"  -DMPI_INCLUDE_PATH="-I$MPICH_DIR/include" -DMPI_LIBRARY="$MPICH_DIR/lib/libmpich_gnu.a" -DMPI_LINK_FLAGS=" " -DMPI_LIBRARIES=" " -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>mpich_gnu ;"
+#cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DCMAKE_CXX_FLAGS="-O3 -Wall -g" -DCMAKE_C_FLAGS="-O3 -Wall -g"  -DMPI_INCLUDE_PATH="-I$MPICH_DIR/include" -DMPI_LIBRARY="$MPICH_DIR/lib/libmpich_gnu.a" -DMPI_LINK_FLAGS=" " -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>mpich_gnu ;"
 #cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DCMAKE_CXX_FLAGS="-O3 -Wall -g" -DCMAKE_C_FLAGS="-O3 -Wall -g"  -DMPI_INCLUDE_PATH="-I$MPICH_DIR/include" -DMPI_LIBRARY="$MPICH_DIR/lib/libmpich_gnu.a" -DMPI_LINK_FLAGS=" " -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>mpich_gnu <find-static-library>mpichcxx_gnu ;
 #using gcc : : : <compileflags>-I$MPICH_DIR/include <linkflags>-L$MPICH_DIR/lib ;
 #"
 #cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC`  -DMPI_INCLUDE_PATH="-I." -DMPI_LIBRARY="libc.a"  -DMPI_LINK_FLAGS=" "   -DCMAKE_CXX_FLAGS="-dynamic -O3 -Wall -g" -DCMAKE_C_FLAGS="-dynamic -O3 -Wall -g"
-
-
+#
+# Very OLD Hopper build:
 # for NERSC hopper.nersc.gov: gcc compilers and MPICH2 xt-mpt, threaded MPI
 #module load cmake
 #module swap PrgEnv-pgi PrgEnv-gnu 
@@ -44,7 +46,7 @@ module unload pgi
 module unload openmpi
 module load gcc
 module load openmpi-gnu
-cmake $Kmernator -DCMAKE_C_COMPILER=`which gcc`  -DCMAKE_CXX_COMPILER=`which g++`  -DCMAKE_CXX_FLAGS="-O3 -Wall -g" -DCMAKE_C_FLAGS="-O3 -Wall -g"
+cmake $Kmernator -DCMAKE_C_COMPILER=`which gcc`  -DCMAKE_CXX_COMPILER=`which g++`  -DCMAKE_CXX_FLAGS="-O3 -Wall -ffast-math" -DCMAKE_C_FLAGS="-O3 -Wall -ffast-math"
 
 # for debug
 cmake $Kmernator -DCMAKE_CXX_FLAGS="-O0 -g -Wall -DDEBUG" -DCMAKE_C_FLAGS="-O0 -g -Wall -DDEBUG"
