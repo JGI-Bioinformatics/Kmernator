@@ -320,7 +320,7 @@ public:
 		_world = NULL;
 #endif
 	}
-	~OfstreamMap() {
+	virtual ~OfstreamMap() {
 		LOG_DEBUG_OPTIONAL(2, true, "~OfstreamMap():");
 		this->clear();
 	}

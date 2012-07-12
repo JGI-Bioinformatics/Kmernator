@@ -58,6 +58,7 @@ public:
 		_spectrum._buildKmerSpectrumMPI(target, false);
 		_spectrum.optimize(true);
 	}
+	virtual ~KmerMatch() {}
 	MatchResults matchLocalImpl(std::string queryFile) {
 		ReadSetStream query(queryFile);;
 		return _matchLocal(query);
