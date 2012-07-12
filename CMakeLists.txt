@@ -51,13 +51,13 @@ endif()
    
 add_custom_target(REPLACE_VERSION_H ALL
                   COMMAND ${CMAKE_SOURCE_DIR}/make_version.pl ${CMAKE_SOURCE_DIR}/version.h ${CMAKE_CURRENT_BINARY_DIR}/git-version 
-                  DEPENDS GET_GIT_VERSION 
                   COMMENT "re-building version.h")
+add_dependencies(REPLACE_VERSION_H GET_GIT_VERSION)
 
 add_custom_target(PRINT_VERSION ALL
                   COMMAND cat ${CMAKE_CURRENT_BINARY_DIR}/git-version
-                  DEPENDS GET_GIT_VERSION
                   )
+add_dependencies(PRINT_VERSION GET_GIT_VERSION)
                     
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
