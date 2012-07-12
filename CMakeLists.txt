@@ -28,15 +28,18 @@
 #
 
 project( Kmernator )
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8)
 enable_testing()
 
+set(KMERNATOR_VERSION 0.0.1beta)
 if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
 
-  add_custom_target(GET_GIT_VERSION ALL
-                    COMMAND git describe --tags > ${CMAKE_CURRENT_BINARY_DIR}/git-version
-                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                    COMMENT "Retrieving git version")
+  execute_process(COMMAND git describe --tags
+                  OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/git-version
+                  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                  )
+ 
+  file(READ ${CMAKE_CURRENT_BINARY_DIR}/git-version KMERNATOR_VERSION)
                     
   add_custom_target(REPLACE_GIT_VERSION ALL 
                     COMMAND ${CMAKE_SOURCE_DIR}/make_version.pl ${CMAKE_SOURCE_DIR}/version.h ${CMAKE_CURRENT_BINARY_DIR}/git-version 
@@ -88,7 +91,6 @@ else()
   endif()
 endif()
 
-set(Boost_DEBUG 1)
 set(Boost_USE_STATIC_LIBS   ON)
 set(Boost_USE_MULTITHREADED ON)
 find_package ( Boost 1.41.0 COMPONENTS mpi program_options iostreams thread serialization system)
@@ -114,10 +116,21 @@ else()
     set(BOOST_TBZ2 ${CMAKE_SOURCE_DIR}/opt/boost_${BOOST_INSTALL_VER}.tar.bz2)
     if(NOT EXISTS ${BOOST_TBZ2})
       message("Retrieving Boost from repository: ${BOOST_INSTALL_VER}")
-      file(DOWNLOAD ${BOOST_DOWNLOAD_URL} ${BOOST_TBZ2})
+      file(DOWNLOAD ${BOOST_DOWNLOAD_URL} ${BOOST_TBZ2} STATUS DL_STATUS LOG DL_LOG)
+      list(GET STATUS_DL 0 STATUS_DL0)
+      if((NOT EXISTS ${BOOST_TBZ2}) OR (NOT STATUS_DL0 EQUAL 0))
+        execute_process(COMMAND wget -O ${BOOST_TBZ2} ${BOOST_DOWNLOAD_URL} RESULT_VARIABLE DL_STATUS0)
+        if((NOT EXISTS ${BOOST_TBZ2}) OR (NOT DL_STATUS0 EQUAL 0))
+          message(FATAL_ERROR "Could not download boost from ${BOOST_DOWNLOAD_URL} (${DL_STATUS0}) : ${DL_LOG}")
+        endif()
+      endif()
     endif()
-    message("Unpaking Boost: ${BOOST_INSTALL_VER}")
-    execute_process(COMMAND tar -xvjf ${BOOST_TBZ2} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    message("Unpacking Boost: ${BOOST_INSTALL_VER}")
+    execute_process(COMMAND tar -xjf ${BOOST_TBZ2} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                    RESULT_VARIABLE SUCCESS)
+    if(NOT SUCCESS EQUAL 0)
+      message(FATAL_ERROR "Could not unpack boost")
+    endif()
 
     if(NOT DISABLE_MPI)
       if(NOT BOOST_MPI_USER_CONFIG)
@@ -132,7 +145,7 @@ else()
   find_package ( Boost ${BOOST_FULL_VERSION} COMPONENTS mpi program_options iostreams thread serialization system)
   if(NOT Boost_FOUND)
     execute_process(COMMAND ./bootstrap.sh --with-libraries=${BOOST_LIBRARY_LIST} WORKING_DIRECTORY ${BOOST_ROOT})
-    execute_process(COMMAND ./b2 --debug-configuration variant=release link=static threading=multi runtime-link=static WORKING_DIRECTORY ${BOOST_ROOT}) 
+    execute_process(COMMAND ./b2 variant=release link=static threading=multi runtime-link=static WORKING_DIRECTORY ${BOOST_ROOT}) 
   endif()
 
   message("Using local copy of boost: ${BOOST_ROOT}")
@@ -157,10 +170,20 @@ if(NOT EXISTS ${SAMTOOLS_DIR})
   if(NOT EXISTS ${SAMTOOLS_TBZ2})
     set(SAMTOOLS_DOWNLOAD_URL http://sourceforge.net/projects/samtools/files/samtools/${SAMTOOLS_VERSION}/samtools-${SAMTOOLS_VERSION}.tar.bz2)
     message("Retrieving samtools from repository: ${SAMTOOLS_DOWNLOAD_URL}")
-    file(DOWNLOAD ${SAMTOOLS_DOWNLOAD_URL} ${SAMTOOLS_TBZ2})
+    file(DOWNLOAD ${SAMTOOLS_DOWNLOAD_URL} ${SAMTOOLS_TBZ2} STATUS DL_STATUS LOG DL_LOG)
+    list(GET STATUS_DL 0 STATUS_DL0)
+    if((NOT EXISTS ${SAMTOOLS_TBZ2}) OR (NOT STATUS_DL0 EQUAL 0))
+      execute_process(COMMAND wget -O ${SAMTOOLS_TBZ2} ${SAMTOOLS_DOWNLOAD_URL} RESULT_VARIABLE DL_STATUS0)
+      if((NOT EXISTS ${SAMTOOLS_TBZ2}) OR (NOT DL_STATUS0 EQUAL 0))
+        message(FATAL_ERROR "Could not download boost from ${SAMTOOLS_DOWNLOAD_URL}: ${DL_LOG}")
+      endif()
+    endif()
   endif()
   message("Unpacking samtools: ${SAMTOOLS_VERSION}")
-  execute_process(COMMAND tar -xvjf ${SAMTOOLS_TBZ2} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  execute_process(COMMAND tar -xjf ${SAMTOOLS_TBZ2} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} RESULT_VARIABLE SUCCESS)
+  if(NOT SUCCESS EQUAL 0)
+    message(FATAL_ERROR "Could not unpack samtools")
+  endif()
   file(COPY ${CMAKE_SOURCE_DIR}/samtools_CMakeLists.txt DESTINATION ${SAMTOOLS_DIR})
   file(RENAME ${SAMTOOLS_DIR}/samtools_CMakeLists.txt ${SAMTOOLS_DIR}/CMakeLists.txt)
 endif()
@@ -176,3 +199,4 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 add_subdirectory( apps )
 
+message("Building Kmernator version ${KMERNATOR_VERSION}")
