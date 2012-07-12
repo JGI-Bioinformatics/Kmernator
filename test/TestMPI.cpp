@@ -90,6 +90,9 @@ int main(int argc, char **argv)
 
 	printf("Hello World from Node %d, mpi support %d\n", world.rank(), provided);
 
+	if (provided < MPI_THREAD_FUNNELED)
+		omp_set_num_threads(1);
+
 	int numThreads = omp_get_max_threads();
 	int stdNumThreads = numThreads;
 	if (!MPIMessageBufferBase::isThreadSafe())
