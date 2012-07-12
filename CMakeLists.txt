@@ -31,22 +31,34 @@ project( Kmernator )
 cmake_minimum_required(VERSION 2.8)
 enable_testing()
 
-set(KMERNATOR_VERSION 0.0.1beta)
+set(KMERNATOR_DEFAULT_VERSION 0.0.1beta)
+
 if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
 
-  execute_process(COMMAND git describe --tags
-                  OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/git-version
-                  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                  )
- 
-  file(READ ${CMAKE_CURRENT_BINARY_DIR}/git-version KMERNATOR_VERSION)
+  add_custom_target(GET_GIT_VERSION ALL
+                    COMMAND git describe --tags > ${CMAKE_CURRENT_BINARY_DIR}/git-version
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                    COMMENT "Retrieving git version")
                     
-  add_custom_target(REPLACE_GIT_VERSION ALL 
-                    COMMAND ${CMAKE_SOURCE_DIR}/make_version.pl ${CMAKE_SOURCE_DIR}/version.h ${CMAKE_CURRENT_BINARY_DIR}/git-version 
-                    COMMENT "re-building version.h")
+else()
 
+  add_custom_target(GET_GIT_VERSION ALL
+                    COMMAND echo ${KMERNATOR_DEFAULT_VERSION} > ${CMAKE_CURRENT_BINARY_DIR}/git-version
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                    COMMENT "Set version to ${KMERNATOR_DEFAULT_VERSION}")
+                    
 endif()
+   
+add_custom_target(REPLACE_VERSION_H ALL
+                  COMMAND ${CMAKE_SOURCE_DIR}/make_version.pl ${CMAKE_SOURCE_DIR}/version.h ${CMAKE_CURRENT_BINARY_DIR}/git-version 
+                  DEPENDS GET_GIT_VERSION 
+                  COMMENT "re-building version.h")
 
+add_custom_target(PRINT_VERSION ALL
+                  COMMAND cat ${CMAKE_CURRENT_BINARY_DIR}/git-version
+                  DEPENDS GET_GIT_VERSION
+                  )
+                    
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
 
@@ -125,7 +137,7 @@ else()
         endif()
       endif()
     endif()
-    message("Unpacking Boost: ${BOOST_INSTALL_VER}")
+    message("Unpacking Boost locally: ${BOOST_INSTALL_VER}")
     execute_process(COMMAND tar -xjf ${BOOST_TBZ2} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
                     RESULT_VARIABLE SUCCESS)
     if(NOT SUCCESS EQUAL 0)
@@ -140,10 +152,7 @@ else()
       endif()
     endif()
     file(APPEND ${BOOST_ROOT}/tools/build/v2/user-config.jam "using gcc : : ${CMAKE_CXX_COMPILER} ;\n")
-  endif()
 
-  find_package ( Boost ${BOOST_FULL_VERSION} COMPONENTS mpi program_options iostreams thread serialization system)
-  if(NOT Boost_FOUND)
     execute_process(COMMAND ./bootstrap.sh --with-libraries=${BOOST_LIBRARY_LIST} WORKING_DIRECTORY ${BOOST_ROOT})
     execute_process(COMMAND ./b2 variant=release link=static threading=multi runtime-link=static WORKING_DIRECTORY ${BOOST_ROOT}) 
   endif()
@@ -157,7 +166,7 @@ endif()
 set(KMERNATOR_BOOST_LIBS         boost_program_options
                                  boost_iostreams
                                  boost_thread
-				 boost_system
+                                 boost_system
                                  )
 set(KMERNATOR_BOOST_TEST_LIBS    boost_test_exec_monitor
                                  boost_unit_test_framework
@@ -195,8 +204,6 @@ include_directories( src )
 add_subdirectory( src )
 
 add_subdirectory( test )
-execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
 
 add_subdirectory( apps )
 
-message("Building Kmernator version ${KMERNATOR_VERSION}")

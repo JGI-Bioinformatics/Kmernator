@@ -29,8 +29,6 @@
 # PURPOSE.
 #
 
-cmake_minimum_required(VERSION 2.6)
-
 # compiler flags
 IF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
   SET(CXX_FLAGS $ENV{CXX_FLAGS})
@@ -58,10 +56,12 @@ set_source_files_properties( Kmer
 set_source_files_properties( Log
                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
                           )
+                          
                            
 add_library( TwoBitSequence TwoBitSequence )
 add_library( Sequence Sequence TwoBitSequence )
 add_library( Kmer Kmer TwoBitSequence)
 add_library( ReadSet ReadSet )
 add_library( Log Log )
+add_dependencies( Log REPLACE_VERSION_H)
 
