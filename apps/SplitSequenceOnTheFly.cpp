@@ -73,6 +73,9 @@ public:
 	std::string &getSplitFile() {
 		return splitFile;
 	}
+	int &getEvenChunks() {
+		return evenChunks;
+	}
 	int &getFifoFile() {
 		return fifoFile;
 	}
@@ -89,7 +92,7 @@ public:
 		return extraFifo;
 	}
 
-	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), fifoFile(0) {}
+	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), evenChunks(1), fifoFile(0) {}
 
 	std::string _replaceWithKeys(std::string input) {
 		size_t pos;
@@ -137,6 +140,7 @@ public:
 		opts.add_options()
 						("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
 						("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to output (0-(N-1))")
+						("even-chunks", po::value<int>()->default_value(evenChunks), "if > 1 then the output of each partition will be spread out across the file (recommend 10 if the ordering is less important than predictable runtime of forked commands)")
 						("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
 						("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
 						("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
@@ -155,6 +159,7 @@ public:
 		bool ret = GeneralOptions::_parseOptions(vm);
 		setOpt<int>("num-files", getNumFiles());
 		setOpt<int>("file-num", getFileNum());
+		setOpt<int>("even-chunks", getEvenChunks());
 		setOpt<string>("split-file", getSplitFile());
 		setOpt<string>("pipe-command", getPipeCommand());
 		setOpt<int>("output-fifo", getFifoFile());
@@ -190,7 +195,7 @@ public:
 private:
 	std::string splitFile, pipeCommand;
 	StringListType mergeList, forkCommand, extraFifo;
-	int numFiles, fileNum, fifoFile;
+	int numFiles, fileNum, evenChunks, fifoFile;
 };
 typedef OptionsBaseTemplate< _SSOptions > SSOptions;
 typedef OptionsBaseInterface::StringListType StringListType;
@@ -198,12 +203,15 @@ typedef OptionsBaseInterface::StringListType StringListType;
 void outputRegularFiles(OptionsBaseInterface::FileListType inputs, std::ostream &output1) {
 
 	FormatOutput outputFormat = FormatOutput::getDefault();
+	int chunks = SSOptions::getOptions().getEvenChunks();
 	for (unsigned int i = 0 ; i < inputs.size(); i++) {
 		ReadFileReader reader(inputs[i], "");
-		reader.seekToPartition( SSOptions::getOptions().getFileNum(), SSOptions::getOptions().getNumFiles() );
-		std::string name, bases, quals;
-		while (reader.nextRead(name, bases, quals)) {
-			output1 << outputFormat.toString(name, bases, quals);
+		for(int j = 0 ; j < chunks; j++) {
+			reader.seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
+			std::string name, bases, quals, comment;
+			while (reader.nextRead(name, bases, quals, comment)) {
+				output1 << outputFormat.toString(name, bases, quals, comment);
+			}
 		}
 	}
 
@@ -219,19 +227,12 @@ void outputSplitFiles(OptionsBaseInterface::FileListType inputs, string outputFi
 	std::vector< RFRPtr > readers1, readers2;
 	readers1.reserve(numInputs);
 	readers2.reserve(numInputs);
+	int chunks = SSOptions::getOptions().getEvenChunks();
 
 	for(int i=0; i < numInputs; i++) {
 		mmaps.push_back( MmapPtr(new Kmernator::MmapSource(inputs[i], FileUtils::getFileSize(inputs[i]))) );
 		readers1.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
 		readers2.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
-
-		readers1[i]->seekToPartition( SSOptions::getOptions().getFileNum(), SSOptions::getOptions().getNumFiles() );
-		readers2[i]->seekToPartition( SSOptions::getOptions().getFileNum(), SSOptions::getOptions().getNumFiles() );
-		//readers2[i]->setPos(readers1[i]->getPos());
-		//readers2[i]->setLastPos(readers1[i]->getLastPos());
-
-		madvise(const_cast<char*>(mmaps[i]->data()), mmaps[i]->size(), MADV_DONTNEED);
-		madvise(const_cast<char*>(mmaps[i]->data()+readers1[i]->getPos()), readers1[i]->getLastPos() - readers1[i]->getPos(), MADV_SEQUENTIAL);
 	}
 
 
@@ -239,6 +240,9 @@ void outputSplitFiles(OptionsBaseInterface::FileListType inputs, string outputFi
 	omp_set_dynamic(0);
 	omp_set_num_threads(2);
 	unsigned long numReads1 = 0, numReads2 = 0;
+	#pragma omp single
+	for(int i=0; i < numInputs; i++)
+		madvise(const_cast<char*>(mmaps[i]->data()), mmaps[i]->size(), MADV_DONTNEED);
 
     #pragma omp parallel num_threads(2)
 	{
@@ -247,15 +251,22 @@ void outputSplitFiles(OptionsBaseInterface::FileListType inputs, string outputFi
 
 		if (omp_get_thread_num() == 0) {
 			std::ofstream output1(outputFile1.c_str());
-			std::string name, bases, quals;
+			std::string name, bases, quals, comment;
 			for(int i=0; i < numInputs; i++) {
-				while (readers1[i]->nextRead(name, bases, quals)) {
-					if ((numReads1 & 0x01) == 0) {
-						output1 << outputFormat.toString(name, bases, quals);
+				for(int j = 0 ; j < chunks; j++) {
+					readers1[i]->seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
+					//readers2[i]->seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
 
+					madvise(const_cast<char*>(mmaps[i]->data()+readers1[i]->getPos()), readers1[i]->getLastPos() - readers1[i]->getPos(), MADV_SEQUENTIAL);
+
+					while (readers1[i]->nextRead(name, bases, quals, comment)) {
+						if ((numReads1 & 0x01) == 0) {
+							output1 << outputFormat.toString(name, bases, quals, comment);
+
+						}
+						numReads1++;
+						LOG_DEBUG_OPTIONAL(2, (numReads1 & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read1 " << numReads1/2);
 					}
-					numReads1++;
-					LOG_DEBUG_OPTIONAL(2, (numReads1 & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read1 " << numReads1/2);
 				}
 				LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read1. " << numReads1 << " " << readers1[i]->getPos());
 			}
@@ -265,14 +276,21 @@ void outputSplitFiles(OptionsBaseInterface::FileListType inputs, string outputFi
 
 		} else {
 			std::ofstream output2(outputFile2.c_str());
-			std::string name, bases, quals;
+			std::string name, bases, quals, comment;
 			for(int i=0; i < numInputs; i++) {
-				while (readers2[i]->nextRead(name, bases, quals)) {
-					if ((numReads2 & 0x01) == 1) {
-						output2 << outputFormat.toString(name, bases, quals);
+				for(int j = 0 ; j < chunks; j++) {
+					//readers1[i]->seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
+					readers2[i]->seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
+
+					madvise(const_cast<char*>(mmaps[i]->data()+readers2[i]->getPos()), readers2[i]->getLastPos() - readers2[i]->getPos(), MADV_SEQUENTIAL);
+
+					while (readers2[i]->nextRead(name, bases, quals, comment)) {
+						if ((numReads2 & 0x01) == 1) {
+							output2 << outputFormat.toString(name, bases, quals, comment);
+						}
+						numReads2++;
+						LOG_DEBUG_OPTIONAL(2, (numReads2 & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read2 " << numReads2/2);
 					}
-					numReads2++;
-					LOG_DEBUG_OPTIONAL(2, (numReads2 & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read2 " << numReads2/2);
 				}
 				LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read2. " << numReads2 << " " << readers2[i]->getPos());
 			}
