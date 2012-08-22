@@ -87,32 +87,32 @@ KSORT_INIT(sort2, bam1_p, bam1_lt2)
 
 static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam_header_t *h, int is_stdout)
 {
-        char *name, mode[3];
-        int i;
-        bamFile fp;
+	char *name, mode[3];
+	int i;
+	bamFile fp;
 	fprintf(stderr, "Sorting %d reads\n", k);
-        ks_mergesort(sort2, k, buf, 0);
-        name = (char*)calloc(strlen(prefix) + 30, 1);
-        if (n >= 0) {
-                sprintf(name, "%s.%.4d.tmpsort", prefix, n);
-                strcpy(mode, "w1");
-        } else {
-                sprintf(name, "%s", prefix);
-                strcpy(mode, "w");
-        }
-        fp = is_stdout? bam_dopen(fileno(stdout), mode) : bam_open(name, mode);
-        if (fp == 0) {
-                fprintf(stderr, "[sort_blocks] fail to create file %s.\n", name);
-                free(name);
-                // FIXME: possible memory leak
-                return;
-        }
+	ks_mergesort(sort2, k, buf, 0);
+	name = (char*)calloc(strlen(prefix) + 30, 1);
+	if (n >= 0) {
+		sprintf(name, "%s.%.4d.tmpsort", prefix, n);
+		strcpy(mode, "w1");
+	} else {
+		sprintf(name, "%s", prefix);
+		strcpy(mode, "w");
+	}
+	fp = is_stdout? bam_dopen(fileno(stdout), mode) : bam_open(name, mode);
+	if (fp == 0) {
+		fprintf(stderr, "[sort_blocks] fail to create file %s.\n", name);
+		free(name);
+		// FIXME: possible memory leak
+		return;
+	}
 	fprintf(stderr, "Writing %d sorted reads to %s\n", k, name);
-        free(name);
-        bam_header_write(fp, h);
-        for (i = 0; i < k; ++i)
-                bam_write1_core(fp, &buf[i]->core, buf[i]->data_len, buf[i]->data);
-        bam_close(fp);
+	free(name);
+	bam_header_write(fp, h);
+	for (i = 0; i < k; ++i)
+		bam_write1_core(fp, &buf[i]->core, buf[i]->data_len, buf[i]->data);
+	bam_close(fp);
 }
 
 int main(int argc, char *argv[]) {
@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
 	int bytesRead;
 	bam1_t **bamBuf;
 	bam_header_t *header = 0;
-	size_t mem = 0, max_mem = 1024*1024*1024; // 1GB
+	size_t mem = 0, max_mem = 512*1024*1024; // 512MB
 	int numSortedFiles = 0, bamBufOffset = 0;
 	unsigned long mapped = 0, unmapped = 0;
 
@@ -161,7 +161,7 @@ int main(int argc, char *argv[]) {
 		free(cmd); cmd = 0;
 	}
 
-	bamBuf = (bam1_t**)calloc(max_mem / BAM_CORE_SIZE, sizeof(bam1_t*));
+	bamBuf = (bam1_t**)calloc((max_mem / BAM_CORE_SIZE) + 1, sizeof(bam1_t*));
 	for (;;) {
 		//while ((r = samread(in, b)) >= 0) {
 		if(bamBuf[bamBufOffset] == 0)
@@ -188,6 +188,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	fprintf(stderr, "Finished reading SAM, finalizing sort\n");
 	if (numSortedFiles == 0) {
 		sort_blocks(-1, bamBufOffset, bamBuf, outBam, header, 0);
 	} else { // then merge
