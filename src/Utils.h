@@ -121,6 +121,7 @@ public:
 		}
 		return ret;
 	}
+
 	std::string toString(std::string &name, std::string &fasta, std::string &qual) {
 		std::stringstream ss;
 		switch(_type) {
@@ -128,6 +129,19 @@ public:
 		case 2: ss << "@" << name << "\n" << fasta << "\n+\n" << qual << "\n"; break;
 		case 1:
 		case 3: ss << ">" << name << "\n" << fasta << "\n"; break;
+		}
+		return ss.str();
+	}
+	std::string toString(std::string &name, std::string &fasta, std::string &qual, std::string &comment) {
+		std::stringstream ss;
+		std::string nameAndComment = name;
+		if (!comment.empty())
+			nameAndComment += " " + comment;
+		switch(_type) {
+		case 0:
+		case 2: ss << "@" << nameAndComment << "\n" << fasta << "\n+\n" << qual << "\n"; break;
+		case 1:
+		case 3: ss << ">" << nameAndComment << "\n" << fasta << "\n"; break;
 		}
 		return ss.str();
 	}
@@ -507,7 +521,7 @@ public:
 	}
 
 	// returns true if the read is to be kept, based on the name and comment
-	static bool trimName(std::string &nameLine) {
+	static bool trimName(std::string &nameLine, std::string &comment) {
 
 		if (nameLine.length() == 0)
 			return false;
@@ -525,23 +539,30 @@ public:
 		// trim at first whitespace
 		size_t pos = nameLine.find_first_of(" \t\r\n");
 		if (pos != std::string::npos) {
-			// detect Illumina 1.8 naming scheme in comment '[12]:[YN]:.*'
-			// and rewrite to: name/1 or name/2 to detect pairs
-			if (pos > 2 && nameLine.length() >= pos + 5 && nameLine[pos-2] != '/' && nameLine[pos] == ' ' // nameLine has a comment and no pair
-			    && nameLine[pos+2] == ':' && nameLine[pos+4] == ':' && (nameLine[pos+1] == '1' || nameLine[pos+1] == '2') && (nameLine[pos+3] == 'Y' || nameLine[pos+3] == 'N')) {
-				nameLine[pos] = '/';
-				if (nameLine[pos+3] == 'Y')
-					isGood = false;
-				pos += 2;
-			}
+			if (nameLine.length() >= pos + 2) {
+				comment = nameLine.substr(pos+1);
+				// detect Illumina 1.8 naming scheme in comment '[12]:[YN]:.*'
+				if (isCommentCasava18(comment) && (pos <= 2 || nameLine[pos-2] != '/')) {
+					if (!GlobalOptions::isCommentStored()) {
+						// rewrite "name [12]:Y:..." to: "name/[12]" to detect pairs in old format, as comment is not preserved this run...
+						nameLine[pos] = '/';
+						pos += 2;
+					}
+					if (nameLine[pos+3] == 'Y')
+						isGood = false;
+				}
+			} else
+				comment.clear();
 			nameLine.erase(pos);
+		} else {
+			comment.clear();
 		}
 		return isGood;
 	}
 
 	// returns true if the read is to be kept, based on the name and comment
 	static bool parse(Kmernator::RecordPtr record, Kmernator::RecordPtr lastRecord,
-			std::string &name, std::string &bases, std::string &quals,
+			std::string &name, std::string &bases, std::string &quals, std::string &comment,
 			Kmernator::RecordPtr qualRecord = NULL, Kmernator::RecordPtr lastQualRecord = NULL,
 			char fastqStartChar = Kmernator::FASTQ_START_CHAR_ILLUMINA) {
 		std::string buf;
@@ -549,7 +570,7 @@ public:
 		if (*record == '@') {
 			// FASTQ
 			nextLine(name,  record);
-			isGood = trimName(name);
+			isGood = trimName(name, comment);
 			nextLine(bases, record);
 			nextLine(buf,   record);
 			nextLine(quals, record);
@@ -559,7 +580,7 @@ public:
 		} else if (*record == '>') {
 			// FASTA
 			nextLine(name, record);
-			isGood = trimName(name);
+			isGood = trimName(name, comment);
 
 			// TODO FIXME HACK!
 			if (lastRecord == NULL) // only read one line if no last record is given
@@ -570,7 +591,7 @@ public:
 			}
 			if (qualRecord != NULL) {
 				nextLine(buf, qualRecord);
-				trimName(buf);
+				trimName(buf, comment);
 				if (buf != name) {
 					LOG_THROW( "fasta and qual do not match names!" );
 				}
@@ -609,12 +630,29 @@ public:
 	}
 
 	static std::string commonName(const std::string readName) {
-		return readName.substr(0, readName.length() - 1);
+		if (readName.length() <= 2)
+			return readName;
+		else if (readName[readName.length()-2] == '/')
+			return readName.substr(0, readName.length() - 1);
+		else
+			return readName;
+	}
+
+	static bool isCommentCasava18(const std::string comment) {
+		if (comment.empty() || comment.length() < 6)
+			return false;
+		else if ( (':' == comment[1] && ':' == comment[3] && ':' == comment[5]) && (comment[0] == '1' || comment[0] == '2') && (comment[2] == 'Y' || comment[2] == 'Y'))
+			return true;
+		else
+			return false;
 	}
 
 	// returns 0 for unpaired reads, 1 or 2 if the read is paired.
 	// supports the following three patterns: xxx/1 xxx/2, xxx/A xxx/B, or xxx/F xxx/R
-	static int readNum(const std::string readName) {
+	static int readNum(const std::string readName, const std::string comment = "") {
+		if (isCommentCasava18(comment)) {
+			return comment[0] == '2' ? 2 : 1;
+		}
 		int retVal = 0;
 		int len = readName.length();
 		if (len < 2)
@@ -637,16 +675,16 @@ public:
 		return retVal;
 	}
 
-	static bool isPairedRead(const std::string readName) {
-		return readNum(readName) != 0;
+	static bool isPairedRead(const std::string readName, const std::string comment = "") {
+		return readNum(readName, comment) != 0;
 	}
 
-	static bool isPair(const std::string readNameA, const std::string readNameB) {
+	static bool isPair(const std::string readNameA, const std::string readNameB, const std::string commentA = "", const std::string commentB = "") {
 		std::string commonA = commonName(readNameA);
 		std::string commonB = commonName(readNameB);
-		if (commonA == commonB) {
-			int readNumA = readNum(readNameA);
-			int readNumB = readNum(readNameB);
+		if (commonA.compare(commonB) == 0) {
+			int readNumA = readNum(readNameA, commentA);
+			int readNumB = readNum(readNameB, commentB);
 			if (readNumA != 0 && readNumB != 0 && readNumA != readNumB) {
 				return true;
 			} else {

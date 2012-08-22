@@ -121,13 +121,15 @@ void testFastaWithQualFile(string f, string q) {
 }
 
 #define TEST_TRIM_NAME_PARSER(_target,_test) \
-		target = _target; test = _test; \
-		SequenceRecordParser::trimName(test); \
-		BOOST_CHECK_EQUAL(target,test);
+		{ std::string target = _target, test = _test; \
+		  std::string comment; \
+		  SequenceRecordParser::trimName(test, comment); \
+		  BOOST_CHECK_EQUAL(target,test); \
+		}
 
 void testParser()
 {
-	std::string target, test;
+
 
 	TEST_TRIM_NAME_PARSER("asdf1234",    ">asdf1234");
 	TEST_TRIM_NAME_PARSER("asdf1234/1",  ">asdf1234/1");
@@ -147,6 +149,18 @@ void testParser()
 	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1\tblah=blah2\n");
 	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1  blah=blah2\n");
 
+	bool oldOpt = GlobalOptions::isCommentStored();
+	GlobalOptions::isCommentStored() = false;
+
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234 1:Y:0:A\n");
+	TEST_TRIM_NAME_PARSER("asdf1234/2",  "@asdf1234 2:Y:0:A\n");
+
+	GlobalOptions::isCommentStored() = true;
+
+	TEST_TRIM_NAME_PARSER("asdf1234",  "@asdf1234 1:Y:0:A\n");
+	TEST_TRIM_NAME_PARSER("asdf1234",  "@asdf1234 2:Y:0:A\n");
+
+	GlobalOptions::isCommentStored() = oldOpt;
 }
 
 void testConsensus(string filename)
@@ -204,9 +218,9 @@ void testKmerMap(SequenceLengthType size) {
 	int oldSize = KmerSizer::getSequenceLength();
 	KmerSizer::set(size);
 
-	Read readA("A", A, ""), readAq("Aq", A, std::string("h",A.length()));
-	Read readB("B", B, ""), readBq("Bq", B, std::string("h",B.length()));
-	Read readC("C", C, ""), readCq("Cq", C, std::string("h",C.length()));
+	Read readA("A", A, "", ""), readAq("Aq", A, std::string("h",A.length()), "");
+	Read readB("B", B, "", ""), readBq("Bq", B, std::string("h",B.length()), "");
+	Read readC("C", C, "", ""), readCq("Cq", C, std::string("h",C.length()), "");
 
 	KmerWeightedExtensions weights;
 	weights = KmerReadUtils::buildWeightedKmers(readA);

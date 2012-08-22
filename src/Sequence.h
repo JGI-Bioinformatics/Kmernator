@@ -132,6 +132,7 @@ protected:
 	// 0x10 - hasQuals
 	// 0x08 - mmaped quals
 	// 0x04 - isDiscarded
+	// 0x02 - isPreallocated
 	// 0x01 - hasFastaQual
 
 	// if mmaped, _data consists of:
@@ -282,7 +283,7 @@ public:
 	inline TwoBitEncoding *getTwoBitSequence() { return _getTwoBitSequence(); }
 	inline const TwoBitEncoding *getTwoBitSequence() const { return _getTwoBitSequence(); }
 
-	void readMmaped(std::string &name, std::string &bases, std::string &quals) const;
+	void readMmaped(std::string &name, std::string &bases, std::string &quals, std::string &comment) const;
 	SequencePtr readMmaped(bool usePreAllocation = false) const;
 
 };
@@ -366,17 +367,21 @@ private:
 private:
 
 	/*
-	 _data is inherited and now contains a composite of 4 fields:
+	 _data is inherited and now contains a composite of 4 or 5 fields:
 	 +0                    : the sequence as NCBI 2NA (2 bits per base ACGT)
 	 += (length +3)/4      :  non-ACGT bases: count followed by array of markups
 	 += getMarkupLength()  : qualities as 1 byte per base, 0 = N 1..255 Phred Quality Score.
 	 += length             : null terminated name.
+	   if isCommentStored == true
+	   + strlen(getName()) : null terminated comment
 	 */
 
 	char * _getQual();
 	const char * _getQual() const;
 	char * _getName();
 	const char * _getName() const;
+	char * _getComment();
+	const char * _getComment() const;
 	SequenceLengthType _qualLength() const;
 
 	virtual const void *_getEnd() const;
@@ -391,7 +396,7 @@ public:
 	Read(const Read &copy) {
 		*this = copy;
 	}
-	Read(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false);
+	Read(std::string name, std::string fasta, std::string qualBytes, std::string comment, bool usePreAllocation = false);
 	Read(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	Read(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart = NULL);
 	virtual ~Read() {}
@@ -399,7 +404,10 @@ public:
 	Read &operator=(const Read &other);
 	Read clone(bool usePreAllocation = false) const;
 
-	void setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false);
+	void setRead(std::string name, std::string fasta, std::string qualBytes, std::string comment, bool usePreAllocation = false);
+	void setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false) {
+		setRead(name, fasta, qualBytes, std::string(), usePreAllocation);
+	}
 	void setRead(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	void setRead(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart);
 
@@ -408,6 +416,20 @@ public:
 
 	std::string getName() const;
 	void setName(const std::string name);
+
+	std::string getComment() const;
+	void setComment(const std::string comment);
+
+	std::string getNameAndComment() const {
+		std::string comment;
+		if (GlobalOptions::isCommentStored()) {
+			comment = getComment();
+		}
+		if (comment.empty())
+			return getName();
+		else
+			return getName() + " " + comment;
+	}
 
 	std::string getQuals(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH,
 			bool forPrinting = false, bool unmasked = false) const;

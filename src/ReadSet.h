@@ -128,7 +128,7 @@ protected:
 	PartitioningData<ReadSetSizeType> _filePartitions;
 	ReadIdxVector _globalOffsets;
 	PairedIndexType _pairs;
-	std::string previousReadName; // for fast pairing
+	std::string previousReadName, previousReadComment; // for fast pairing
 
 private:
 	void addRead(const Read &read);
@@ -433,10 +433,10 @@ public:
 		return hasPairs;
 	}
 
-	static bool isPairedRead(const std::string &readName);
+	static bool isPairedRead(const std::string readName, const std::string readComment = "");
 	static bool isPair(const Read &readA, const Read &readB);
-	static bool isPair(const std::string &readNameA, const Read &readB);
-	static bool isPair(const std::string &readNameA, const std::string &readNameB);
+	static bool isPair(const std::string readNameA, const std::string readComment, const Read &readB);
+	static bool isPair(const std::string readNameA, const std::string readNameB, const std::string commentA, const std::string commentB);
 
 	// may return either as MAX_READ_IDX
 	inline Pair &getPair(ReadSetSizeType pairIndex) {
@@ -468,7 +468,7 @@ public:
 	ReadSetSizeType getCentroidRead() const;
 	ReadSetSizeType getCentroidRead(const ProbabilityBases &probs) const;
 	Read getConsensusRead(unsigned char minQual = Options::getOptions().getMinQuality()) const;
-	static Read getConsensusRead(const ProbabilityBases &probs, std::string name);
+	static Read getConsensusRead(const ProbabilityBases &probs, std::string name, std::string comment = "");
 
 	inline std::ostream &write(std::ostream &os, ReadSetSizeType readIdx,
 			SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {
@@ -544,10 +544,10 @@ public:
 	ReadSetStream(std::string filename) : reader(filename, true) {}
 	
 	bool readNext() {
-		std::string name, seq, quals;
-		bool ret = reader.nextRead(name, seq, quals);
+		std::string name, seq, quals, comment;
+		bool ret = reader.nextRead(name, seq, quals,comment);
 		if (ret)
-			currentRead = Read(name,seq,quals);
+			currentRead = Read(name,seq,quals,comment);
 		else
 			currentRead = Read();
 		return ret;

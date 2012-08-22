@@ -211,6 +211,9 @@ public:
 	const string &getLastName() const {
 		return _parser->getName();
 	}
+	const string &getLastComment() const {
+		return _parser->getComment();
+	}
 	const string &getLastBases() const {
 		return _parser->getBases();
 	}
@@ -246,17 +249,18 @@ public:
 			LOG_THROW("ReadFileReader::nextRead(RecordPtr): " << error.str());
 		}
 	}
-	bool nextRead(RecordPtr &recordStart, string &name, string &bases, string &quals, bool &isMultiline) {
+	bool nextRead(RecordPtr &recordStart, string &name, string &bases, string &quals, string &comment, bool &isMultiline) {
 		bool passed = nextRead(recordStart);
 		if (passed) {
 			name = getLastName();
+			comment = getLastComment();
 			bases = getLastBases();
 			quals = getLastQuals();
 			isMultiline = getLastMultiline();
 		}
 		return passed;
 	}
-	bool nextRead(string &name, string &bases, string &quals) {
+	bool nextRead(string &name, string &bases, string &quals, string &comment) {
 		try {
 			_parser->readRecord();
 			name = _parser->getName();
@@ -268,6 +272,7 @@ public:
 			if (name.empty())
 				return false;
 
+			comment = _parser->getComment();
 			bases = _parser->getBases();
 			std::transform(bases.begin(), bases.end(), bases.begin(), ::toupper);
 
@@ -375,6 +380,7 @@ public:
 		ReadFileReader::RecordPtr _lastPtr;
 		bool _freeStream;
 		mutable std::vector<string> _nameBuffer;
+		mutable std::vector<string> _commentBuffer;
 		mutable std::vector<string> _basesBuffer;
 		mutable std::vector<string> _qualsBuffer;
 		mutable std::vector<string> _lineBuffer;
@@ -385,10 +391,11 @@ public:
 		// returns a termination pointer (the start of next record or lastByte+1 at end)
 		virtual RecordPtr readRecord(RecordPtr recordPtr) const = 0;
 		virtual RecordPtr readRecord() = 0;
-		RecordPtr readRecord(RecordPtr recordPtr, string &name, string &bases, string &quals) const {
+		RecordPtr readRecord(RecordPtr recordPtr, string &name, string &bases, string &quals, string &comment) const {
 			RecordPtr end = readRecord(recordPtr);
 			if (end != NULL) {
 				name = getName();
+				comment = getComment();
 				bases = getBases();
 				quals = getQuals();
 			} else {
@@ -447,6 +454,7 @@ public:
 		}
 		void setBuffers() {
 			_nameBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
+			_commentBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
 			_basesBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
 			_qualsBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
 			_lineBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
@@ -457,6 +465,7 @@ public:
 		void resetBuffers() const {
 			int threadNum = omp_get_thread_num();
 			_nameBuffer[threadNum].clear();
+			_commentBuffer[threadNum].clear();
 			_basesBuffer[threadNum].clear();
 			_qualsBuffer[threadNum].clear();
 			_lineBuffer[threadNum].clear();
@@ -505,6 +514,10 @@ public:
 			int threadNum = omp_get_thread_num();
 			return _nameBuffer[threadNum];
 		}
+		string &getComment() const {
+			int threadNum = omp_get_thread_num();
+			return _commentBuffer[threadNum];
+		}
 		string &getBases() const {
 			int threadNum = omp_get_thread_num();
 			return _basesBuffer[threadNum];
@@ -532,7 +545,9 @@ public:
 
 		virtual string &readName() {
 			std::string &name = getName();
+			std::string &comment = getComment();
 			nextLine( name );
+			comment.clear();
 
 			int count = 0;
 			while (name.length() == 0 || name[0] != _marker) // skip empty lines at end of stream
@@ -557,7 +572,7 @@ public:
 				LOG_THROW("Missing name marker '" << _marker << "'" << " in '" << name << "' at " << getPos() << " after " << count << " attempts to find the marker");
 
 			// remove marker and any extra comments or fields
-			bool isGood = SequenceRecordParser::trimName( name );
+			bool isGood = SequenceRecordParser::trimName( name, comment );
 			setIsGood(isGood);
 
 			return name;
@@ -670,6 +685,7 @@ public:
 				} else {
 					LOG_DEBUG(3, "Checking pairing against " << name1);
 				}
+				string comment1 = getComment();
 
 				unsigned long here2 = tellg();
 				string name2;
@@ -678,6 +694,7 @@ public:
 					LOG_DEBUG(3, "Found endofstream 1 record in leaving at eof to preserve pair " << name1);
 					return false;
 				}
+				string comment2 = getComment();
 
 				string name3;
 				readRecord();
@@ -686,11 +703,12 @@ public:
 					LOG_DEBUG(3, "Found endofstream two records in, rewinding to initial boundary " << here1 << " : " << name1 << " & " << name2);
 					return true;
 				}
+				string comment3 = getComment();
 
-				if (SequenceRecordParser::isPair(name1,name2)) {
+				if (SequenceRecordParser::isPair(name1, name2, comment1, comment2)) {
 					seekg(here1);
 					LOG_DEBUG(3, "Found natural pair at boundary, rewinding to " << here1);
-				} else if (SequenceRecordParser::isPair(name2, name3)) {
+				} else if (SequenceRecordParser::isPair(name2, name3, comment2, comment3)) {
 					seekg(here2);
 					LOG_DEBUG(3, "Found split pair at boundary, incrementing one record to " << here2);
 				} else {
@@ -742,8 +760,9 @@ public:
 				LOG_THROW("Detected invalid line marker: at " << getPos() << ": " << *recordPtr);
 			}
 			std::string &name = _nameBuffer[threadNum];
+			std::string &comment = _commentBuffer[threadNum];
 			nextLine(name, recordPtr);
-			bool isGood = SequenceRecordParser::trimName( name );  // name
+			bool isGood = SequenceRecordParser::trimName( name, comment );  // name
 			setIsGood(isGood);
 
 			nextLine(_basesBuffer[threadNum], recordPtr); // fasta
@@ -819,8 +838,9 @@ public:
 				LOG_THROW("FastaStreamParser::readRecord(): Could not FastaStreamParser::readRecord()");
 			}
 			std::string &name = _nameBuffer[threadNum];
+			std::string &comment = _commentBuffer[threadNum];
 			nextLine(name, recordPtr);  // name
-			bool isGood = SequenceRecordParser::trimName(name);
+			bool isGood = SequenceRecordParser::trimName(name, comment);
 			setIsGood(isGood);
 
 			_basesBuffer[threadNum].clear();

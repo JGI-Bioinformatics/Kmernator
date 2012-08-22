@@ -47,6 +47,14 @@ namespace po = boost::program_options;
 
 #define PASSES_LENGTH(length, readLength, minimumLength) ((minimumLength == MAX_SEQUENCE_LENGTH) ? (length == readLength) : (length >= minimumLength))
 
+class GlobalOptions {
+public:
+	static inline bool &isCommentStored() {
+		static bool _isCommentStored = false;
+		return _isCommentStored;
+	}
+};
+
 // The base class that returns the single, static set of options
 class OptionsInstance {
 public:
@@ -283,7 +291,7 @@ typedef OptionsBaseTemplate< _MySpecificOptions > MySpecificOptions;
 class _GeneralOptions : public OptionsBaseInterface {
 public:
 	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"),
-	formatOutput(0), buildOutputInMemory(false),
+	formatOutput(0), keepReadComment(GlobalOptions::isCommentStored()), buildOutputInMemory(false),
 	minQuality(3),  ignoreQual(0), mmapInput(1), gatheredLogs(1),
 	batchSize(100000), separateOutputs(1)
 	{
@@ -308,6 +316,7 @@ private:
 	OStreamPtr   logFileStream;
 	std::string  tmpDir;
 	unsigned int formatOutput;
+	bool         keepReadComment;
 	bool         buildOutputInMemory;
 	unsigned int minQuality;
 	unsigned int ignoreQual;
@@ -370,6 +379,8 @@ public:
 
 				("format-output", po::value<unsigned int>()->default_value(formatOutput), "0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
 
+				("keep-read-comment", po::value<bool>()->default_value(keepReadComment), "If set, per-read comment will be preserved")
+
 				("separate-outputs", po::value<unsigned int>()->default_value(separateOutputs), "If set, each input (plus consensus) will generate a new outputfile.  If set to 0, all input files will be merged into one output file.")
 
 				("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory), "if set, all temporary output files will first be stored in memory (faster for MPI applications)")
@@ -424,6 +435,9 @@ public:
 			setOpt<std::string>("temp-dir", getTmpDir(), print);
 
 			setOpt<unsigned int>("format-output", getFormatOutput(), print);
+
+			setOpt<bool>("keep-read-comment", getKeepReadComment(), print);
+			GlobalOptions::isCommentStored() = getKeepReadComment();
 
 			setOpt<bool>("build-output-in-memory", getBuildOutputInMemory(), print);
 
@@ -508,6 +522,11 @@ public:
 	unsigned int &getFormatOutput()
 	{
 		return formatOutput;
+	}
+
+	bool &getKeepReadComment()
+	{
+		return keepReadComment;
 	}
 
 	unsigned int &getGatheredLogs()
