@@ -641,7 +641,7 @@ public:
 	static bool isCommentCasava18(const std::string comment) {
 		if (comment.empty() || comment.length() < 6)
 			return false;
-		else if ( (':' == comment[1] && ':' == comment[3] && ':' == comment[5]) && (comment[0] == '1' || comment[0] == '2') && (comment[2] == 'Y' || comment[2] == 'Y'))
+		else if ( (':' == comment[1] && ':' == comment[3] && ':' == comment[5]) && (comment[0] == '1' || comment[0] == '2') && (comment[2] == 'Y' || comment[2] == 'N'))
 			return true;
 		else
 			return false;
@@ -649,7 +649,7 @@ public:
 
 	// returns 0 for unpaired reads, 1 or 2 if the read is paired.
 	// supports the following three patterns: xxx/1 xxx/2, xxx/A xxx/B, or xxx/F xxx/R
-	static int readNum(const std::string readName, const std::string comment = "") {
+	static int readNum(const std::string readName, const std::string comment) {
 		if (isCommentCasava18(comment)) {
 			return comment[0] == '2' ? 2 : 1;
 		}
@@ -675,11 +675,11 @@ public:
 		return retVal;
 	}
 
-	static bool isPairedRead(const std::string readName, const std::string comment = "") {
+	static bool isPairedRead(const std::string readName, const std::string comment) {
 		return readNum(readName, comment) != 0;
 	}
 
-	static bool isPair(const std::string readNameA, const std::string readNameB, const std::string commentA = "", const std::string commentB = "") {
+	static bool isPair(const std::string readNameA, const std::string readNameB, const std::string commentA, const std::string commentB) {
 		std::string commonA = commonName(readNameA);
 		std::string commonB = commonName(readNameB);
 		if (commonA.compare(commonB) == 0) {

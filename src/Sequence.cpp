@@ -986,7 +986,7 @@ string Read::toFastq(SequenceLengthType trimOffset, SequenceLengthType trimLengt
 		fasta = getFastaNoMarkup(trimOffset, trimLength);
 	else
 		fasta = getFasta(trimOffset, trimLength);
-	return string('@' + getName() + (label.length() > 0 ? " " + label : "")
+	return string('@' + getNameAndComment() + (label.length() > 0 ? " " + label : "")
 			+ "\n" + fasta + "\n+\n"
 			+ getQuals(trimOffset, trimLength, true, unmasked) + "\n");
 }
@@ -996,11 +996,11 @@ string Read::toFasta(SequenceLengthType trimOffset, SequenceLengthType trimLengt
 		fasta = getFastaNoMarkup(trimOffset, trimLength);
 	else
 		fasta = getFasta(trimOffset, trimLength);
-	return string('>' + getName() + (label.length() > 0 ? " " + label : "")
+	return string('>' + getNameAndComment() + (label.length() > 0 ? " " + label : "")
 			+ "\n" + fasta + "\n");
 }
 string Read::toQual(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label) const {
-	return string('>' + getName() + (label.length() > 0 ? " " + label : "")
+	return string('>' + getNameAndComment() + (label.length() > 0 ? " " + label : "")
 			+ "\n" + getFormattedQuals(trimOffset, trimLength) + "\n");
 }
 
@@ -1020,7 +1020,7 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset, SequenceLengthType
 }
 
 std::string Read::toString() const {
-	return getName() + "\t" + getFasta() + "\t" + getQuals(0, MAX_SEQUENCE_LENGTH, true, true) + "\t" + (isDiscarded()? " discarded" : "");
+	return getNameAndComment() + "\t" + getFasta() + "\t" + getQuals(0, MAX_SEQUENCE_LENGTH, true, true) + "\t" + (isDiscarded()? " discarded" : "");
 }
 
 

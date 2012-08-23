@@ -402,17 +402,27 @@ bool ReadSet::isPair(const Read &readA, const Read &readB) {
 
 Read ReadSet::fakePair(const Read &unPaired) {
 	std::string name = unPaired.getName();
-	int readNum = SequenceRecordParser::readNum(name);
+	std::string comment = unPaired.getComment();
+	int readNum = SequenceRecordParser::readNum(name, comment);
 	std::string newName = SequenceRecordParser::commonName(name);
-	std::string comment;
-	if (readNum == 1) {
-		newName += '2';
-		comment = "2:Y:";
-	} else if (readNum == 2) {
-		newName += '1';
-		comment = "1:Y:";
-	} else if (readNum == 0)
-		LOG_THROW( "ReadSet::fakePair(): Can not fake pair reads that were not paired end to start with: " << name);
+	if (SequenceRecordParser::isCommentCasava18(comment)) {
+		if (readNum == 1)
+			comment[0] = '2';
+		else if (readNum == 2)
+			comment[0] = '1';
+		else
+			LOG_THROW( "ReadSet::fakePair(): Can not fake pair reads that were not paired end to start with: " << name << " " << comment);
+	} else {
+		if (newName[newName.length()-1] != '/')
+			newName += '/';
+
+		if (readNum == 1) {
+			newName += '2';
+		} else if (readNum == 2) {
+			newName += '1';
+		} else if (readNum == 0)
+			LOG_THROW( "ReadSet::fakePair(): Can not fake pair reads that were not paired end to start with: " << name);
+	}
 	return Read(newName, "N", "A", comment + ":fakePair", true);
 }
 
@@ -484,7 +494,8 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 		}
 
 		string name = read.getName();
-		readNum = SequenceRecordParser::readNum(name);
+		string comment = read.getComment();
+		readNum = SequenceRecordParser::readNum(name, comment);
 		common =  SequenceRecordParser::commonName(name);
 
 		unmatchedIt = unmatchedNames.find(common);
