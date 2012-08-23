@@ -276,7 +276,31 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 	Sequence::clearCaches();
 	testZeroReads();
 
+
+
+	{
 	Sequence::clearCaches();
+	bool oldOpt = GlobalOptions::isCommentStored();
+	GeneralOptions::getOptions().getMmapInput() = 0;
+	testFastQFile("10.fastq");
+	testFastQFile("10-cs18.fastq");
+	testFastQFile("10-cs18.1.fastq", false);
+	testFastQFile("10-cs18.2.fastq", false);
+	testSplitFastQFile("10-cs18.1.fastq","10-cs18.2.fastq");
+	testSplitFastQFile("10-cs18.2.fastq","10-cs18.1.fastq");
+	GlobalOptions::isCommentStored() = !oldOpt;
+	testFastQFile("10.fastq");
+	testFastQFile("10-cs18.fastq");
+	testFastQFile("10-cs18.1.fastq", false);
+	testFastQFile("10-cs18.2.fastq", false);
+	testSplitFastQFile("10-cs18.1.fastq","10-cs18.2.fastq");
+	testSplitFastQFile("10-cs18.2.fastq","10-cs18.1.fastq");
+	GlobalOptions::isCommentStored() = oldOpt;
+	}
+
+	{
+	Sequence::clearCaches();
+	GeneralOptions::getOptions().getMmapInput() = 1;
 	bool oldOpt = GlobalOptions::isCommentStored();
 	testFastQFile("10.fastq");
 	testFastQFile("10-cs18.fastq");
@@ -292,6 +316,7 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 	testSplitFastQFile("10-cs18.1.fastq","10-cs18.2.fastq");
 	testSplitFastQFile("10-cs18.2.fastq","10-cs18.1.fastq");
 	GlobalOptions::isCommentStored() = oldOpt;
+	}
 
 	Sequence::clearCaches();
 	testFastaWithQualFile("10.fasta","10.qual");

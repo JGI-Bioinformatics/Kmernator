@@ -826,7 +826,10 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes, s
 		qualBytes.clear();
 	}
 
-	Sequence::setSequence(fasta, qualBytes.length() + (name.length() + 1), usePreAllocation);
+	int extraLength = name.length() + 1;
+	if (GlobalOptions::isCommentStored())
+		extraLength += comment.length() + 1;
+	Sequence::setSequence(fasta, qualBytes.length() + extraLength, usePreAllocation);
 
 	if (qualBytes.empty()) {
 		unsetFlag(HASQUALS);

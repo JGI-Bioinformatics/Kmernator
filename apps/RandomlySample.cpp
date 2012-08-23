@@ -222,7 +222,7 @@ long pickBySeeks(ReadFileReader &rfr, unsigned long numSamples, unsigned long mi
 		LOG_DEBUG(2, "Reading first two records to determine inherent pairing");
 		std::string name1, name2, bases1, bases2, quals1, quals2, comment1, comment2;
 		rfr.nextRead(name1, bases1, quals1, comment1);
-		rfr.nextRead(name2, bases2, quals2, comment1);
+		rfr.nextRead(name2, bases2, quals2, comment2);
 
 		bool isFilePaired= ReadSet::isPair(name1, name2, comment1, comment2);
 		LOG_DEBUG(1, "Reading first two records to determine inherent pairing: " << isFilePaired << " " << name1 << " " << name2);
