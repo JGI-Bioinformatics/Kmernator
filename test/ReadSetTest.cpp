@@ -62,21 +62,55 @@ static string getFileContents(string filename) {
 	return contents;
 }
 
-void testFastQFile(string filename) {
+void testFastQFile(string filename, bool paired = true) {
 	string fileContents = getFileContents(filename);
 
 	ReadSet store;
 	store.appendAnyFile(filename);
 	store.identifyPairs();
 
-	BOOST_CHECK_EQUAL(store.getSize() / 2, store.getPairSize());
+	BOOST_CHECK_EQUAL(store.getSize() / (paired?2:1), store.getPairSize());
 
 	string fastq;
 	for (unsigned int i = 0; i < store.getSize(); i++) {
 		fastq += store.getRead(i).toFastq();
 	}
 
-	BOOST_CHECK_EQUAL(fileContents, fastq);
+	if (GlobalOptions::isCommentStored())
+		BOOST_CHECK_EQUAL(fileContents, fastq);
+
+	for (unsigned int i = 0; paired && i < store.getPairSize(); i++) {
+		ReadSet::Pair &pair = store.getPair(i);
+		BOOST_CHECK(store.isValidRead(pair.read1) == true);
+		BOOST_CHECK(store.isValidRead(pair.read2) == true);
+	}
+}
+
+void testSplitFastQFile(string filename1, string filename2) {
+	string fileContents1 = getFileContents(filename1);
+	string fileContents2 = getFileContents(filename2);
+
+	ReadSet store;
+	store.appendAnyFile(filename1);
+	store.appendAnyFile(filename2);
+	store.identifyPairs();
+
+	BOOST_CHECK(store.getSize() > 0);
+	BOOST_CHECK_EQUAL(store.getSize() / 2, store.getPairSize());
+
+	string fastq1;
+	for (unsigned int i = 0; i < store.getSize() / 2; i++) {
+		fastq1 += store.getRead(i).toFastq();
+	}
+	string fastq2;
+	for (unsigned int i = store.getSize() / 2; i < store.getSize(); i++) {
+		fastq2 += store.getRead(i).toFastq();
+	}
+
+	if (GlobalOptions::isCommentStored()) {
+		BOOST_CHECK_EQUAL(fileContents1, fastq1);
+		BOOST_CHECK_EQUAL(fileContents2, fastq2);
+	}
 
 	for (unsigned int i = 0; i < store.getPairSize(); i++) {
 		ReadSet::Pair &pair = store.getPair(i);
@@ -121,13 +155,15 @@ void testFastaWithQualFile(string f, string q) {
 }
 
 #define TEST_TRIM_NAME_PARSER(_target,_test) \
-		target = _target; test = _test; \
-		SequenceRecordParser::trimName(test); \
-		BOOST_CHECK_EQUAL(target,test);
+		{ std::string target = _target, test = _test; \
+		  std::string comment; \
+		  SequenceRecordParser::trimName(test, comment); \
+		  BOOST_CHECK_EQUAL(target,test); \
+		}
 
 void testParser()
 {
-	std::string target, test;
+
 
 	TEST_TRIM_NAME_PARSER("asdf1234",    ">asdf1234");
 	TEST_TRIM_NAME_PARSER("asdf1234/1",  ">asdf1234/1");
@@ -147,6 +183,18 @@ void testParser()
 	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1\tblah=blah2\n");
 	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234/1  blah=blah2\n");
 
+	bool oldOpt = GlobalOptions::isCommentStored();
+	GlobalOptions::isCommentStored() = false;
+
+	TEST_TRIM_NAME_PARSER("asdf1234/1",  "@asdf1234 1:Y:0:A\n");
+	TEST_TRIM_NAME_PARSER("asdf1234/2",  "@asdf1234 2:Y:0:A\n");
+
+	GlobalOptions::isCommentStored() = true;
+
+	TEST_TRIM_NAME_PARSER("asdf1234",  "@asdf1234 1:Y:0:A\n");
+	TEST_TRIM_NAME_PARSER("asdf1234",  "@asdf1234 2:Y:0:A\n");
+
+	GlobalOptions::isCommentStored() = oldOpt;
 }
 
 void testConsensus(string filename)
@@ -204,9 +252,9 @@ void testKmerMap(SequenceLengthType size) {
 	int oldSize = KmerSizer::getSequenceLength();
 	KmerSizer::set(size);
 
-	Read readA("A", A, ""), readAq("Aq", A, std::string("h",A.length()));
-	Read readB("B", B, ""), readBq("Bq", B, std::string("h",B.length()));
-	Read readC("C", C, ""), readCq("Cq", C, std::string("h",C.length()));
+	Read readA("A", A, "", ""), readAq("Aq", A, std::string("h",A.length()), "");
+	Read readB("B", B, "", ""), readBq("Bq", B, std::string("h",B.length()), "");
+	Read readC("C", C, "", ""), readCq("Cq", C, std::string("h",C.length()), "");
 
 	KmerWeightedExtensions weights;
 	weights = KmerReadUtils::buildWeightedKmers(readA);
@@ -229,7 +277,21 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 	testZeroReads();
 
 	Sequence::clearCaches();
+	bool oldOpt = GlobalOptions::isCommentStored();
 	testFastQFile("10.fastq");
+	testFastQFile("10-cs18.fastq");
+	testFastQFile("10-cs18.1.fastq", false);
+	testFastQFile("10-cs18.2.fastq", false);
+	testSplitFastQFile("10-cs18.1.fastq","10-cs18.2.fastq");
+	testSplitFastQFile("10-cs18.2.fastq","10-cs18.1.fastq");
+	GlobalOptions::isCommentStored() = !oldOpt;
+	testFastQFile("10.fastq");
+	testFastQFile("10-cs18.fastq");
+	testFastQFile("10-cs18.1.fastq", false);
+	testFastQFile("10-cs18.2.fastq", false);
+	testSplitFastQFile("10-cs18.1.fastq","10-cs18.2.fastq");
+	testSplitFastQFile("10-cs18.2.fastq","10-cs18.1.fastq");
+	GlobalOptions::isCommentStored() = oldOpt;
 
 	Sequence::clearCaches();
 	testFastaWithQualFile("10.fasta","10.qual");

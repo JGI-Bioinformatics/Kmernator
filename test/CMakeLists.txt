@@ -160,7 +160,10 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/testKmerMatchMPI.sh test/
 
 endif()
 
-execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/10.fastq )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10-cs18.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10-cs18.1.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10-cs18.2.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fasta test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus1.fastq test/ )

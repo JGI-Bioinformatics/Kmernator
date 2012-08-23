@@ -159,6 +159,8 @@ Positions selectRandom(unsigned long numSamples, unsigned long limit, unsigned l
 long pickByBlock(ReadFileReader &rfr, long numSamples) {
 	bool byPair = (RSOptions::getOptions().getByPair() == 1);
 	long numBlocks = std::min((long) 100, numSamples / 5);
+	if (numBlocks < 1)
+		numBlocks = 1;
 	long numPicksPerBlock = (numSamples / numBlocks);
 	long count = 0;
 
@@ -217,12 +219,12 @@ long pickBySeeks(ReadFileReader &rfr, unsigned long numSamples, unsigned long mi
 	bool byPair = (RSOptions::getOptions().getByPair() == 1);
 
 	if (rfr.seekToNextRecord(0, true)) {
-		LOG_DEBUG(1, "Reading first two records to determine inherent pairing");
-		std::string name1, name2, bases1, bases2, quals1, quals2;
-		rfr.nextRead(name1, bases1, quals1);
-		rfr.nextRead(name2, bases2, quals2);
+		LOG_DEBUG(2, "Reading first two records to determine inherent pairing");
+		std::string name1, name2, bases1, bases2, quals1, quals2, comment1, comment2;
+		rfr.nextRead(name1, bases1, quals1, comment1);
+		rfr.nextRead(name2, bases2, quals2, comment1);
 
-		bool isFilePaired= ReadSet::isPair(name1,name2);
+		bool isFilePaired= ReadSet::isPair(name1, name2, comment1, comment2);
 		LOG_DEBUG(1, "Reading first two records to determine inherent pairing: " << isFilePaired << " " << name1 << " " << name2);
 		byPair &= isFilePaired;
 	}	
@@ -251,13 +253,13 @@ long pickBySeeks(ReadFileReader &rfr, unsigned long numSamples, unsigned long mi
 		if (rfr.eof())
 			break;
 		lastPos = myPos;
-		std::string name, bases, quals;
-		rfr.nextRead(name, bases, quals);
-		Read read(name, bases, quals);
+		std::string name, bases, quals, comment;
+		rfr.nextRead(name, bases, quals, comment);
+		Read read(name, bases, quals, comment);
 		read.write(output);
 		if (byPair) {
-			rfr.nextRead(name, bases, quals);
-			Read read2(name, bases, quals);
+			rfr.nextRead(name, bases, quals, comment);
+			Read read2(name, bases, quals, comment);
 			read2.write(output);
 		}
 		count++;

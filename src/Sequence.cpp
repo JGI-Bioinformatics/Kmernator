@@ -357,8 +357,8 @@ string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset, SequenceLengthT
 		return string("");
 
 	if (isMmaped()) {
-		string name, bases, quals;
-		readMmaped(name, bases, quals);
+		string name, bases, quals, comment;
+		readMmaped(name, bases, quals, comment);
 		SequenceLengthType len = bases.length();
 		assert(trimOffset <= len);
 		if (trimLength < len - trimOffset)
@@ -643,7 +643,7 @@ BaseLocationVectorType Sequence::getMarkups() const {
 	return markups;
 }
 
-void Sequence::readMmaped(std::string &name, std::string &bases, std::string &quals) const {
+void Sequence::readMmaped(std::string &name, std::string &bases, std::string &quals, std::string &comment) const {
 	assert(isMmaped());
 	// TODO fix hack on NULL lastPtr.  Presently only works for single-lined fastas
 	RecordPtr record(getRecord()), lastRecord(NULL), qualRecord(NULL), lastQualRecord(NULL);
@@ -651,13 +651,13 @@ void Sequence::readMmaped(std::string &name, std::string &bases, std::string &qu
 		qualRecord = getQualRecord();
 		lastQualRecord = NULL;
 	}
-	bool isGood = SequenceRecordParser::parse(record, lastRecord, name, bases, quals, qualRecord, lastQualRecord, FASTQ_START_CHAR);
+	bool isGood = SequenceRecordParser::parse(record, lastRecord, name, bases, quals, comment, qualRecord, lastQualRecord, FASTQ_START_CHAR);
 	if (!isGood)
 		this->discard();
 }
 Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
-	std::string name, bases, quals;
-	readMmaped(name, bases, quals);
+	std::string name, bases, quals, comment;
+	readMmaped(name, bases, quals, comment);
 	return SequencePtr(new Sequence(bases, usePreAllocation));
 }
 
@@ -692,8 +692,8 @@ void Read::setMinQualityScore(unsigned char minQualityScore, char startChar) {
 
 // Read constructors and operators
 
-Read::Read(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation) {
-	setRead(name, fasta, qualBytes, usePreAllocation);
+Read::Read(std::string name, std::string fasta, std::string qualBytes, std::string comment, bool usePreAllocation) {
+	setRead(name, fasta, qualBytes, comment, usePreAllocation);
 }
 Read::Read(Sequence::RecordPtr mmapRecordStart, Sequence::RecordPtr mmapQualRecordStart) {
 	setRead(mmapRecordStart, mmapQualRecordStart);
@@ -708,16 +708,16 @@ Read &Read::operator=(const Read &other) {
 	return *this;
 }
 Read Read::clone(bool usePreAllocation) const {
-	return Read(getName(), getFasta(), getQuals(), usePreAllocation);
+	return Read(getName(), getFasta(), getQuals(), getComment(), usePreAllocation);
 }
 
 
 Read::ReadPtr Read::readMmaped(bool usePreAllocation) const {
 	BaseLocationVectorType markups = _getMarkups();
-	std::string name, bases, quals;
-	Sequence::readMmaped(name, bases, quals);
+	std::string name, bases, quals, comment;
+	Sequence::readMmaped(name, bases, quals, comment);
 	TwoBitSequence::applyMarkup(bases, markups);
-	return ReadPtr(new Read(name, bases, quals, usePreAllocation));
+	return ReadPtr(new Read(name, bases, quals, comment, usePreAllocation));
 }
 
 bool Read::recordHasQuals() const {
@@ -793,12 +793,29 @@ char * Read::_getName() {
 	return const_cast<char*> (constThis()._getName());
 }
 
-const void *Read::_getEnd() const {
-	assert(!isMmaped());
-	return (const void *) (_getName() + strlen(_getName())+1);
+const char * Read::_getComment() const {
+	const char *name = _getName();
+	int len = strlen(name);
+	if (GlobalOptions::isCommentStored()) {
+		return name + len+1;
+	} else {
+		return name + len; // null termination
+	}
+}
+char * Read::_getComment() {
+	return const_cast<char *> (constThis()._getComment());
 }
 
-void Read::setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation) {
+const void *Read::_getEnd() const {
+	assert(!isMmaped());
+	if (GlobalOptions::isCommentStored()) {
+		return (const void *) (_getComment() + strlen(_getComment())+1);
+	} else {
+		return (const void *) (_getName() + strlen(_getName())+1);
+	}
+}
+
+void Read::setRead(std::string name, std::string fasta, std::string qualBytes, std::string comment, bool usePreAllocation) {
 	assert(!isMmaped());
 	if (fasta.length() != qualBytes.length())
 		LOG_THROW(
@@ -818,6 +835,10 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes, b
 		memcpy(_getQual(), qualBytes.c_str(), qualBytes.length());
 	}
 	strcpy(_getName(), name.c_str());
+
+	if (GlobalOptions::isCommentStored())
+		strcpy(_getComment(), comment.c_str());
+
 }
 void Read::setRead(Sequence::RecordPtr mmapRecordStart, Sequence::RecordPtr mmapQualRecordStart) {
 	setSequence(mmapRecordStart, 0, mmapQualRecordStart);
@@ -853,6 +874,7 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
 	}
 	fasta.replace(offset, length, length, mask);
 
+
 	if (isMmaped()) {
 		RecordPtr record = getRecord();
 		RecordPtr qualRecord = NULL;
@@ -865,9 +887,10 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
 	} else {
 		string name  = getName();
 		string qual  = getQuals();
+		string comment = getComment();
 
 		reset();
-		setRead(name, fasta, qual);
+		setRead(name, fasta, qual, comment);
 	}
 }
 
@@ -875,16 +898,32 @@ string Read::getName() const {
 	if ( !isValid() ) {
 		return string("");
 	} else if (isMmaped()) {
-		string name, bases, quals;
-		Sequence::readMmaped(name, bases, quals);
+		string name, bases, quals, comment;
+		Sequence::readMmaped(name, bases, quals, comment);
 		return name;
 	} else {
 		return string(_getName());
 	}
 }
 
-void Read::setName(const std::string name) {
-	setRead(name, getFasta(), getQuals());
+void Read::setName(const std::string name) { // inefficient!
+	setRead(name, getFasta(), getQuals(), getComment());
+}
+
+string Read::getComment() const {
+	if ( !isValid() ) {
+		return string("");
+	} else if (isMmaped()) {
+		string name, bases, quals, comment;
+		Sequence::readMmaped(name, bases, quals, comment);
+		return comment;
+	} else {
+		return string(_getComment());
+	}
+}
+
+void Read::setComment(const std::string comment) { // inefficient!
+	setRead(getName(), getFasta(), getQuals(), comment);
 }
 
 string Read::getQuals(SequenceLengthType trimOffset, SequenceLengthType trimLength, bool forPrinting, bool unmasked) const {
@@ -893,8 +932,8 @@ string Read::getQuals(SequenceLengthType trimOffset, SequenceLengthType trimLeng
 		return string(1, FASTQ_START_CHAR+1);
 	}
 	if (isMmaped()) {
-		string name, bases, quals;
-		Sequence::readMmaped(name, bases, quals);
+		string name, bases, quals, comment;
+		Sequence::readMmaped(name, bases, quals, comment);
 		SequenceLengthType len = bases.length();
 		assert(trimOffset <= len);
 		if (trimLength > len - trimOffset)
@@ -947,7 +986,7 @@ string Read::toFastq(SequenceLengthType trimOffset, SequenceLengthType trimLengt
 		fasta = getFastaNoMarkup(trimOffset, trimLength);
 	else
 		fasta = getFasta(trimOffset, trimLength);
-	return string('@' + getName() + (label.length() > 0 ? " " + label : "")
+	return string('@' + getNameAndComment() + (label.length() > 0 ? " " + label : "")
 			+ "\n" + fasta + "\n+\n"
 			+ getQuals(trimOffset, trimLength, true, unmasked) + "\n");
 }
@@ -957,11 +996,11 @@ string Read::toFasta(SequenceLengthType trimOffset, SequenceLengthType trimLengt
 		fasta = getFastaNoMarkup(trimOffset, trimLength);
 	else
 		fasta = getFasta(trimOffset, trimLength);
-	return string('>' + getName() + (label.length() > 0 ? " " + label : "")
+	return string('>' + getNameAndComment() + (label.length() > 0 ? " " + label : "")
 			+ "\n" + fasta + "\n");
 }
 string Read::toQual(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label) const {
-	return string('>' + getName() + (label.length() > 0 ? " " + label : "")
+	return string('>' + getNameAndComment() + (label.length() > 0 ? " " + label : "")
 			+ "\n" + getFormattedQuals(trimOffset, trimLength) + "\n");
 }
 
@@ -981,7 +1020,7 @@ string Read::getFormattedQuals(SequenceLengthType trimOffset, SequenceLengthType
 }
 
 std::string Read::toString() const {
-	return getName() + "\t" + getFasta() + "\t" + getQuals(0, MAX_SEQUENCE_LENGTH, true, true) + "\t" + (isDiscarded()? " discarded" : "");
+	return getNameAndComment() + "\t" + getFasta() + "\t" + getQuals(0, MAX_SEQUENCE_LENGTH, true, true) + "\t" + (isDiscarded()? " discarded" : "");
 }
 
 

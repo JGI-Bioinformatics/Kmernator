@@ -182,7 +182,7 @@ public:
 
 			std::string newName = getNewName(read.getName(), leftTotal, rightTotal);
 			LOG_DEBUG_OPTIONAL(1, true, "ContigExtender::extendContigs(): Extended " << newName << " : " << read.getName() << " left +" << leftTotal << " right +" << rightTotal << " to " << fasta.length());
-			Read newContig(newName, fasta, std::string(fasta.length(), Read::REF_QUAL));
+			Read newContig(newName, fasta, std::string(fasta.length(), Read::REF_QUAL), "");
 			newContigs.append(newContig);
 		}
 

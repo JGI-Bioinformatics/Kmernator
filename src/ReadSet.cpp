@@ -75,21 +75,26 @@ void ReadSet::incrementFile(SequenceStreamParserPtr parser) {
 
 bool ReadSet::_isSequentialPair(const Read &read) {
 	std::string readName = read.getName();
+	std::string comment = read.getComment();
 	LOG_DEBUG(5, "_isSequentialPair(" << readName << ")");
-	if (!isPairedRead(readName)) {
+	if (!isPairedRead(readName, comment)) {
 		previousReadName.clear();
+		previousReadComment.clear();
 		return false;
 	}
 	if (!previousReadName.empty()) {
-		if (isPair(previousReadName, read)) {
+		if (isPair(previousReadName, previousReadComment, read)) {
 			previousReadName.clear();
+			previousReadComment.clear();
 			return true;
 		} else {
-			previousReadName = read.getName();
+			previousReadName = readName;
+			previousReadComment = comment;
 			return false;
 		}
 	} else {
-		previousReadName = read.getName();
+		previousReadName = readName;
+		previousReadComment= comment;
 		return false;
 	}
 }
@@ -97,11 +102,12 @@ bool ReadSet::_isSequentialPair(const Read &read) {
 void ReadSet::circularize(long extraLength) {
 	for(ReadSetSizeType idx = 0 ; idx < getSize() ; idx++) {
 		Read &read = getRead(idx);
-		std::string name, fasta, quals;
+		std::string name, fasta, quals, comment;
 		name = read.getName();
+		comment = read.getComment();
 		fasta = read.getFasta();
 		quals = read.getQuals(0, MAX_SEQUENCE_LENGTH, false, true);
-		read = Read(name, fasta + fasta.substr(0, extraLength), quals + quals.substr(0,extraLength));
+		read = Read(name, fasta + fasta.substr(0, extraLength), quals + quals.substr(0,extraLength), comment);
 	}
 }
 
@@ -279,7 +285,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadSet::MmapSource &mmap,
 }
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, int rank, int size) {
-	string name, bases, quals;
+	string name, bases, quals, comment;
 	LOG_DEBUG(2, "appendFasta(reader, " << rank << ", " << size << ")");
 	reader.seekToPartition(rank,size);
 	unsigned long firstPos = reader.getPos();
@@ -287,14 +293,13 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 		RecordPtr recordPtr = reader.getStreamRecordPtr();
 		RecordPtr qualPtr = reader.getStreamQualRecordPtr();
 		RecordPtr nextRecordPtr = recordPtr;
-		std::string name, bases, quals;
 		bool isMultiline;
 		LOG_DEBUG(3, "Reading mmap file");
-		while (reader.nextRead(nextRecordPtr, name, bases, quals, isMultiline)) {
+		while (reader.nextRead(nextRecordPtr, name, bases, quals, comment, isMultiline)) {
 
 			if (isMultiline) {
 				// store the read in memory
-				Read read(name,bases,quals);
+				Read read(name,bases,quals,comment);
 				addRead(read, bases.length(), rank);
 			} else {
 				Read read(recordPtr, qualPtr);
@@ -306,8 +311,8 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 		}
 	} else {
 		LOG_DEBUG(3, "Reading file stream");
-		while (reader.nextRead(name, bases, quals)) {
-			Read read(name, bases, quals);
+		while (reader.nextRead(name, bases, quals, comment)) {
+			Read read(name, bases, quals, comment);
 			addRead(read, bases.length(), rank);
 		}
 	}
@@ -382,32 +387,43 @@ const ReadSet::ReadIdxVector ReadSet::getReadIdxVector() const {
 	return readIdxs;
 }
 
-bool ReadSet::isPairedRead(const std::string &readName) {
-	return SequenceRecordParser::isPairedRead(readName);
+bool ReadSet::isPairedRead(const std::string readName, const std::string comment) {
+	return SequenceRecordParser::isPairedRead(readName, comment);
 }
-bool ReadSet::isPair(const std::string &readNameA, const std::string &readNameB) {
-	return SequenceRecordParser::isPair(readNameA, readNameB);
+bool ReadSet::isPair(const std::string readNameA, const std::string readNameB, const std::string commentA, const std::string commentB) {
+	return SequenceRecordParser::isPair(readNameA, readNameB, commentA, commentB);
 }
-bool ReadSet::isPair(const std::string &readNameA, const Read &readB) {
-	std::string readNameB = readB.getName();
-	return isPair(readNameA, readNameB);
+bool ReadSet::isPair(const std::string readNameA, const std::string commentA, const Read &readB) {
+	return isPair(readNameA, readB.getName(), commentA, readB.getComment());
 }
 bool ReadSet::isPair(const Read &readA, const Read &readB) {
-	std::string readNameA = readA.getName();
-	return isPair(readNameA, readB);
+	return isPair(readA.getName(), readB.getName(), readA.getComment(), readB.getComment());
 }
 
 Read ReadSet::fakePair(const Read &unPaired) {
 	std::string name = unPaired.getName();
-	int readNum = SequenceRecordParser::readNum(name);
+	std::string comment = unPaired.getComment();
+	int readNum = SequenceRecordParser::readNum(name, comment);
 	std::string newName = SequenceRecordParser::commonName(name);
-	if (readNum == 1) {
-		newName += '2';
-	} else if (readNum == 2) {
-		newName += '1';
-	} else if (readNum == 0)
-		LOG_THROW( "ReadSet::fakePair(): Can not fake pair reads that were not paired end to start with: " << name);
-	return Read(newName, "N", "A", true);
+	if (SequenceRecordParser::isCommentCasava18(comment)) {
+		if (readNum == 1)
+			comment[0] = '2';
+		else if (readNum == 2)
+			comment[0] = '1';
+		else
+			LOG_THROW( "ReadSet::fakePair(): Can not fake pair reads that were not paired end to start with: " << name << " " << comment);
+	} else {
+		if (newName[newName.length()-1] != '/')
+			newName += '/';
+
+		if (readNum == 1) {
+			newName += '2';
+		} else if (readNum == 2) {
+			newName += '1';
+		} else if (readNum == 0)
+			LOG_THROW( "ReadSet::fakePair(): Can not fake pair reads that were not paired end to start with: " << name);
+	}
+	return Read(newName, "N", "A", comment + ":fakePair", true);
 }
 
 ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
@@ -478,7 +494,8 @@ ReadSet::ReadSetSizeType ReadSet::identifyPairs() {
 		}
 
 		string name = read.getName();
-		readNum = SequenceRecordParser::readNum(name);
+		string comment = read.getComment();
+		readNum = SequenceRecordParser::readNum(name, comment);
 		common =  SequenceRecordParser::commonName(name);
 
 		unmatchedIt = unmatchedNames.find(common);
@@ -583,7 +600,7 @@ Read ReadSet::getConsensusRead(unsigned char minQual) const {
 	}
 	return consensus;
 }
-Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) {
+Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name, std::string comment) {
 	std::string fasta(probs.size(), ' ');
 	std::string qual(probs.size(), ' ');
 	for(size_t i = 0 ; i < probs.size(); i++) {
@@ -591,7 +608,7 @@ Read ReadSet::getConsensusRead(const ProbabilityBases &probs, std::string name) 
 		fasta[i] = base.base;
 		qual[i] = base.qual;
 	}
-	return Read(name, fasta, qual);
+	return Read(name, fasta, qual, comment);
 }
 
 ReadSet ReadSet::randomlySample(ReadSet::ReadSetSizeType maxReads) const {
