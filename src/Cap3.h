@@ -22,7 +22,7 @@ public:
 		return cap3Path;
 	}
 	void _resetDefaults() {
-		Options::getOptions().getMmapInput() = 0;
+		Options::getOptions().getMmapInput() = false;
 	}
 	void _setOptions(po::options_description &desc,
 			po::positional_options_description &p) {
@@ -35,7 +35,7 @@ public:
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		setOpt<std::string>("cap3-path", cap3Path);
+		setOpt("cap3-path", cap3Path);
 		return ret;
 	}
 protected:

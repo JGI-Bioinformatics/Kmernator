@@ -74,7 +74,7 @@ public:
 		GeneralOptions::_resetDefaults();
 		KmerSpectrumOptions::_resetDefaults();
 		// assign defaults
-		GeneralOptions::getOptions().getMmapInput() = 0;
+		GeneralOptions::getOptions().getMmapInput() = false;
 		GeneralOptions::getOptions().getVerbose() = 1;
 		KmerSpectrumOptions::getOptions().getMinDepth() = 1;
 		KmerSpectrumOptions::getOptions().getSaveKmerMmap() = 0;
@@ -110,8 +110,8 @@ public:
 		ret &= KmerBaseOptions::_parseOptions(vm);
 		ret &= KmerSpectrumOptions::_parseOptions(vm);
 
-		setOpt<long> ("sample-partitions", samplePartitions);
-		setOpt<double> ("max-sample-fraction", maxSampleFraction);
+		setOpt("sample-partitions", samplePartitions);
+		setOpt("max-sample-fraction", maxSampleFraction);
 
 		return ret;
 	}

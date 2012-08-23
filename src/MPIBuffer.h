@@ -66,7 +66,7 @@ public:
 		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
-		setOpt<int>("mpi-buffer-size", mpiBufferSize);
+		setOpt("mpi-buffer-size", mpiBufferSize);
 		return true;
 	}
 protected:

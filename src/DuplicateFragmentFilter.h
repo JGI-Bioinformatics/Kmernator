@@ -14,7 +14,7 @@
 
 class _DuplicateFragmentFilterOptions : public OptionsBaseInterface {
 public:
-	_DuplicateFragmentFilterOptions() : deDupMode(1), deDupSingle(0), deDupEditDistance(0), deDupStartOffset(0),
+	_DuplicateFragmentFilterOptions() : deDupMode(1), deDupSingle(false), deDupEditDistance(0), deDupStartOffset(0),
 	deDupLength(16) {}
 	virtual ~_DuplicateFragmentFilterOptions() {}
 
@@ -33,7 +33,7 @@ public:
 		return deDupMode;
 	}
 
-	unsigned int &getDeDupSingle()
+	bool &getDeDupSingle()
 	{
 		return deDupSingle;
 	}
@@ -55,7 +55,7 @@ public:
 		opts.add_options()
 						("dedup-mode", po::value<unsigned int>()->default_value(deDupMode), "if 0, no fragment de-duplication will occur.  if 1, single orientation (AB and BA are separated) will collapse to consensus. if 2, both orientations (AB and BA are the same) will collapse")
 
-						("dedup-single", po::value<unsigned int>()->default_value(deDupSingle), "if 0, no single read de-duplication will occur.  if 1, then single read deduplication will occur")
+						("dedup-single", po::value<bool>()->default_value(deDupSingle), "if not set, no single read de-duplication will occur.  if set, then single read deduplication will occur")
 
 						("dedup-edit-distance", po::value<unsigned int>()->default_value(deDupEditDistance), "if -1, no fragment de-duplication will occur, if 0, only exact match, ...")
 
@@ -70,19 +70,19 @@ public:
 		// GeneralOptions or FilterKnownOdditiesOptions
 		// ret &= *::_parseOptions(vm);
 		// set dedup mode
-		setOpt<unsigned int>("dedup-mode", getDeDupMode());
+		setOpt("dedup-mode", getDeDupMode());
 
 		// set dedup single
-		setOpt<unsigned int>("dedup-single", getDeDupSingle());
+		setOpt("dedup-single", getDeDupSingle());
 
 		// set dedup edit distance
-		setOpt<unsigned int>("dedup-edit-distance", getDeDupEditDistance());
+		setOpt("dedup-edit-distance", getDeDupEditDistance());
 		if (getDeDupEditDistance() > 1) {
 			LOG_ERROR(1, "Unsupported option dedup-edit-distance > 1!" << std::endl << getDesc() << std::endl << "Unsupported option dedup-edit-distance > 1!");
 			ret = false;
 		}
-		setOpt<unsigned int>("dedup-start-offset", getDeDupStartOffset());
-		setOpt<unsigned int>("dedup-length", getDeDupLength());
+		setOpt("dedup-start-offset", getDeDupStartOffset());
+		setOpt("dedup-length", getDeDupLength());
 		if (getDeDupStartOffset() % 4 != 0 || getDeDupLength() % 4 != 0) {
 			LOG_ERROR(1, "Unsupported option dedup-start-offset and dedup-length must both be mulitples of 4!" << std::endl << getDesc() << std::endl << "Unsuppored option dedup-start-offset and dedup-length must both be mulitples of 4!");
 			ret = false;
@@ -91,7 +91,9 @@ public:
 		return ret;
 	}
 protected:
-	unsigned int deDupMode, deDupSingle, deDupEditDistance, deDupStartOffset, deDupLength;
+	unsigned int deDupMode;
+	bool deDupSingle;
+	unsigned int deDupEditDistance, deDupStartOffset, deDupLength;
 
 };
 typedef OptionsBaseTemplate< _DuplicateFragmentFilterOptions > DuplicateFragmentFilterOptions;

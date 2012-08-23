@@ -73,14 +73,14 @@ public:
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		setOpt<unsigned int>("depth-range", getDepthRange());
+		setOpt("depth-range", getDepthRange());
 
 		// set read length
-		setOpt<unsigned int>("min-read-length", getMinReadLength());
+		setOpt("min-read-length", getMinReadLength());
 		if (getMinReadLength() == 1) {
 			getMinReadLength() = MAX_SEQUENCE_LENGTH;
 		}
-		setOpt<double>("bimodal-sigmas", getBimodalSigmas());
+		setOpt("bimodal-sigmas", getBimodalSigmas());
 
 		// Other ret &= *::_parseOptions(vm);
 		return ret;
@@ -194,7 +194,7 @@ public:
 	{
 		_bimodalSigmas = ReadSelectorOptions::getOptions().getBimodalSigmas();
 		// Let the kernel know how these pages will be used
-		if (Options::getOptions().getMmapInput() != 0)
+		if (Options::getOptions().getMmapInput())
 			ReadSet::madviseMmapsNormal();
 
 	}
@@ -876,7 +876,7 @@ public:
 		return os;
 	}
 
-	void writePicks(OFM &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = (Options::getOptions().getSeparateOutputs() == 1), FormatOutput format = FormatOutput::getDefault()) const {
+	void writePicks(OFM &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = Options::getOptions().getSeparateOutputs(), FormatOutput format = FormatOutput::getDefault()) const {
 		_writePicks(ofstreamMap, offset, _picks.size() - offset, byInputFile, format);
 	}
 	void _writePicks(OFM &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, FormatOutput format = FormatOutput::getDefault()) const {
@@ -886,7 +886,7 @@ public:
 			writePick(ofstreamMap, pair.read2, byInputFile, format);
 		}
 	}
-	void writePick(OFM &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = (Options::getOptions().getSeparateOutputs() == 1), FormatOutput format = FormatOutput::getDefault()) const {
+	void writePick(OFM &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = Options::getOptions().getSeparateOutputs(), FormatOutput format = FormatOutput::getDefault()) const {
 		if (readIdx == ReadSet::MAX_READ_IDX)
 			return;
 		const ReadTrimType &trim = _trims[ readIdx ];

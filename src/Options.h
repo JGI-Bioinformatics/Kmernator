@@ -278,7 +278,7 @@ public:
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		setOpt<int>("my-option", myOption);
+		setOpt("my-option", myOption);
 		// Other ret &= *::_parseOptions(vm);
 		return ret;
 	}
@@ -292,8 +292,8 @@ class _GeneralOptions : public OptionsBaseInterface {
 public:
 	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"),
 	formatOutput(0), keepReadComment(GlobalOptions::isCommentStored()), buildOutputInMemory(false),
-	minQuality(3),  ignoreQual(0), mmapInput(1), gatheredLogs(1),
-	batchSize(100000), separateOutputs(1)
+	minQuality(3),  ignoreQual(false), mmapInput(true), gatheredLogs(true),
+	batchSize(100000), separateOutputs(true)
 	{
 		char *tmpPath;
 		tmpPath = getenv ("TMPDIR");
@@ -319,11 +319,11 @@ private:
 	bool         keepReadComment;
 	bool         buildOutputInMemory;
 	unsigned int minQuality;
-	unsigned int ignoreQual;
-	unsigned int mmapInput;
-	unsigned int gatheredLogs;
+	bool ignoreQual;
+	bool mmapInput;
+	bool gatheredLogs;
 	unsigned int batchSize;
-	unsigned int separateOutputs;
+	bool separateOutputs;
 
 public:
 	void _resetOptions() {
@@ -343,7 +343,7 @@ public:
 
 				("log-file", po::value<std::string>()->default_value(logFile), "If set all INFO and DEBUG messages will be logged here (default stderr)")
 
-				("gathered-logs", po::value<unsigned int>()->default_value(gatheredLogs), "If set and MPI is enabled, VERBOSE1, VERBOSE2 and DEBUG1 logs will be gathered to the master before being output.")
+				("gathered-logs", po::value<bool>()->default_value(gatheredLogs), "If set and MPI is enabled, VERBOSE1, VERBOSE2 and DEBUG1 logs will be gathered to the master before being output.")
 
 				;
 
@@ -364,9 +364,9 @@ public:
 		// reading / input files
 				("input-file", po::value<FileListType>(), "input file(s)")
 
-				("mmap-input", po::value<unsigned int>()->default_value(mmapInput), "If set to 0, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
+				("mmap-input", po::value<bool>()->default_value(mmapInput), "If false, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
 
-				("ignore-quality", po::value<unsigned int>()->default_value(ignoreQual), "ignore the quality score, to save memory or if they are untrusted")
+				("ignore-quality", po::value<bool>()->default_value(ignoreQual), "ignore the quality score, to save memory or if they are untrusted")
 
 				("min-quality-score", po::value<unsigned int>()->default_value(minQuality), "minimum quality score below which will be evaluated as Q=0 (i.e. 'N', prob = 0.0)")
 				;
@@ -381,7 +381,7 @@ public:
 
 				("keep-read-comment", po::value<bool>()->default_value(keepReadComment), "If set, per-read comment will be preserved")
 
-				("separate-outputs", po::value<unsigned int>()->default_value(separateOutputs), "If set, each input (plus consensus) will generate a new outputfile.  If set to 0, all input files will be merged into one output file.")
+				("separate-outputs", po::value<bool>()->default_value(separateOutputs), "If set, each input (plus consensus) will generate a new outputfile.  If set false, all input files will be merged into one output file.")
 
 				("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory), "if set, all temporary output files will first be stored in memory (faster for MPI applications)")
 
@@ -392,9 +392,9 @@ public:
 		desc.add(general);
 	}
 	void _setVerbosityAndLogs(bool print) {
-		setOpt<unsigned int>("verbose", getVerbose(), print);
-		setOpt<unsigned int>("debug", getDebug(), print);
-		setOpt<std::string>("log-file", getLogFile(), print);
+		setOpt("verbose", getVerbose(), print);
+		setOpt("debug", getDebug(), print);
+		setOpt("log-file", getLogFile(), print);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
@@ -423,26 +423,26 @@ public:
 
 #ifdef _USE_OPENMP
 
-			setOpt<int>("threads", getMaxThreads(), print);
+			setOpt("threads", getMaxThreads(), print);
 
 #endif
 			validateOMPThreads();
 
 			setOpt2("input-file", getInputFiles());
 
-			setOpt<std::string>("output-file", getOutputFile(), print);
+			setOpt("output-file", getOutputFile(), print);
 
-			setOpt<std::string>("temp-dir", getTmpDir(), print);
+			setOpt("temp-dir", getTmpDir(), print);
 
-			setOpt<unsigned int>("format-output", getFormatOutput(), print);
+			setOpt("format-output", getFormatOutput(), print);
 
-			setOpt<bool>("keep-read-comment", getKeepReadComment(), print);
+			setOpt("keep-read-comment", getKeepReadComment(), print);
 			GlobalOptions::isCommentStored() = getKeepReadComment();
 
-			setOpt<bool>("build-output-in-memory", getBuildOutputInMemory(), print);
+			setOpt("build-output-in-memory", getBuildOutputInMemory(), print);
 
 			// set minimum quality score
-			setOpt<unsigned int>("min-quality-score", getMinQuality(), print);
+			setOpt("min-quality-score", getMinQuality(), print);
 			// TODO move to BimodalOptions
 			//			if (getBimodalSigmas() >= 0 && (getMinReadLength() < getKmerSize() + 2)) {
 			//				if(Logger::isMaster())
@@ -450,16 +450,16 @@ public:
 			//			}
 
 			// set the ignore quality value
-			setOpt<unsigned int>("ignore-quality", getIgnoreQual(), print);
+			setOpt("ignore-quality", getIgnoreQual(), print);
 
 			// set mmapInput
-			setOpt<unsigned int>("mmap-input", getMmapInput() , print);
+			setOpt("mmap-input", getMmapInput() , print);
 
-			setOpt<unsigned int>("gathered-logs", getGatheredLogs(), print);
+			setOpt("gathered-logs", getGatheredLogs(), print);
 
-			setOpt<unsigned int>("batch-size", getBatchSize(), print);
+			setOpt("batch-size", getBatchSize(), print);
 
-			setOpt<unsigned int>("separate-outputs", getSeparateOutputs(), print);
+			setOpt("separate-outputs", getSeparateOutputs(), print);
 
 		} catch (std::exception& e) {
 			LOG_ERROR(1,"Exception processing options" << std::endl << getDesc() << std::endl << e.what() << std::endl << "Exception processing options!" );
@@ -529,12 +529,12 @@ public:
 		return keepReadComment;
 	}
 
-	unsigned int &getGatheredLogs()
+	bool &getGatheredLogs()
 	{
 		return gatheredLogs;
 	}
 
-	unsigned int &getIgnoreQual()
+	bool &getIgnoreQual()
 	{
 		return ignoreQual;
 	}
@@ -570,7 +570,7 @@ public:
 		return minQuality;
 	}
 
-	unsigned int &getMmapInput()
+	bool &getMmapInput()
 	{
 		return mmapInput;
 	}
@@ -581,7 +581,7 @@ public:
 	}
 
 
-	unsigned int &getSeparateOutputs()
+	bool &getSeparateOutputs()
 	{
 		return separateOutputs;
 	}

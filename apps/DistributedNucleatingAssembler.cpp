@@ -78,7 +78,7 @@ public:
 		FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() = 0;
 		// override the default output format!
 		GeneralOptions::getOptions().getFormatOutput() = 3;
-		GeneralOptions::getOptions().getMmapInput() = 0;
+		GeneralOptions::getOptions().getMmapInput() = false;
 		GeneralOptions::getOptions().getVerbose() = 1;
 		GeneralOptions::getOptions().getMaxThreads() = 1;
 	}
@@ -122,8 +122,8 @@ public:
 		ret &= MPIOptions::_parseOptions(vm);
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 
-		setOpt<int>("max-iterations", maxIterations);
-		setOpt<int>("max-contig-length", maxContigLength);
+		setOpt("max-iterations", maxIterations);
+		setOpt("max-contig-length", maxContigLength);
 
 		if (Options::getOptions().getOutputFile().empty()) {
 			LOG_ERROR(1, "You must specify an --output");

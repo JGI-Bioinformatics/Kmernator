@@ -52,9 +52,9 @@
 
 class _FilterKnownOdditiesOptions : public OptionsBaseInterface {
 public:
-	_FilterKnownOdditiesOptions() : skipArtifactFilter(0), artifactFilterMatchLength(24),
+	_FilterKnownOdditiesOptions() : skipArtifactFilter(false), artifactFilterMatchLength(24),
 	artifactFilterEditDistance(2), buildArtifactEditsInFilter(2),
-	maskSimpleRepeats(0), phiXOutput(0), filterOutput(0) {}
+	maskSimpleRepeats(false), phiXOutput(false), filterOutput(false) {}
 	~_FilterKnownOdditiesOptions() {}
 
 	unsigned int &getArtifactFilterEditDistance()
@@ -73,19 +73,19 @@ public:
 	{
 		return buildArtifactEditsInFilter;
 	}
-	unsigned int &getFilterOutput()
+	bool &getFilterOutput()
 	{
 		return filterOutput;
 	}
-	unsigned int &getMaskSimpleRepeats()
+	bool &getMaskSimpleRepeats()
 	{
 		return maskSimpleRepeats;
 	}
-	unsigned int &getPhiXOutput()
+	bool &getPhiXOutput()
 	{
 		return phiXOutput;
 	}
-	unsigned int &getSkipArtifactFilter()
+	bool &getSkipArtifactFilter()
 	{
 		return skipArtifactFilter;
 	}
@@ -99,11 +99,11 @@ public:
 		po::options_description opts("Filter Known Artifacts and Oddities Options");
 		opts.add_options()
 
-	    				("phix-output", po::value<unsigned int>()->default_value(phiXOutput), "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
+	    				("phix-output", po::value<bool>()->default_value(phiXOutput), "if set, artifact filter also screens for PhiX174, and any matching reads will be output into a separate file (requires --output-file set)")
 
-	    				("filter-output", po::value<unsigned int>()->default_value(filterOutput), "if set, artifact filter reads will be output into a separate file. If not set, then affected reads will be trimmed and then output normally.  (requires --output-file set)")
+	    				("filter-output", po::value<bool>()->default_value(filterOutput), "if set, artifact filter reads will be output into a separate file. If not set, then affected reads will be trimmed and then output normally.  (requires --output-file set)")
 
-	    				("skip-artifact-filter", po::value<unsigned int>()->default_value(skipArtifactFilter), "Skip homo-polymer, primer-dimer and duplicated fragment pair filtering")
+	    				("skip-artifact-filter", po::value<bool>()->default_value(skipArtifactFilter), "if set, Skip homo-polymer, primer-dimer and duplicated fragment pair filtering")
 
 	    				("artifact-match-length", po::value<unsigned int>()->default_value(artifactFilterMatchLength), "Kmer match length to known artifact sequences")
 
@@ -111,7 +111,7 @@ public:
 
 	    				("build-artifact-edits-in-filter", po::value<unsigned int>()->default_value(buildArtifactEditsInFilter), "0 - edits will be applied to reads on the fly, 1 - edits will be pre-build in the filter (needs more memory, less overall CPU), 2 - automatic based on size")
 
-	    				("mask-simple-repeats", po::value<unsigned int>()->default_value(maskSimpleRepeats), "if filtering artifacts, also mask simple repeats")
+	    				("mask-simple-repeats", po::value<bool>()->default_value(maskSimpleRepeats), "if set filtering artifacts will also mask simple repeats")
 
 	    				("artifact-reference-file", po::value<FileListType>(), "additional artifact reference file(s)");
 
@@ -121,29 +121,30 @@ public:
 		bool ret = true;
 		// ret &= *::_parseOptions(vm);
 		// set skipArtifactFiltering
-		setOpt<unsigned int>("skip-artifact-filter", skipArtifactFilter);
-		setOpt<unsigned int>("artifact-match-length", artifactFilterMatchLength);
-		setOpt<unsigned int>("artifact-edit-distance", artifactFilterEditDistance);
-		setOpt<unsigned int>("build-artifact-edits-in-filter", buildArtifactEditsInFilter);
+		setOpt("skip-artifact-filter", skipArtifactFilter);
+		setOpt("artifact-match-length", artifactFilterMatchLength);
+		setOpt("artifact-edit-distance", artifactFilterEditDistance);
+		setOpt("build-artifact-edits-in-filter", buildArtifactEditsInFilter);
 
 		// set simple repeat masking
-		setOpt<unsigned int>("mask-simple-repeats", maskSimpleRepeats);
+		setOpt("mask-simple-repeats", maskSimpleRepeats);
 
 		// set phix masking
-		setOpt<unsigned int>("phix-output", phiXOutput);
+		setOpt("phix-output", phiXOutput);
 
 		setOpt2("artifact-reference-file", artifactReferenceFiles);
 
 		// set simple repeat masking
-		setOpt<unsigned int>("filter-output", filterOutput);
+		setOpt("filter-output", filterOutput);
 
 		return ret;
 	}
 
 protected:
-	unsigned int skipArtifactFilter, artifactFilterMatchLength,
-	artifactFilterEditDistance, buildArtifactEditsInFilter,
-	maskSimpleRepeats, phiXOutput, filterOutput;
+	bool skipArtifactFilter;
+	unsigned int artifactFilterMatchLength,
+	artifactFilterEditDistance, buildArtifactEditsInFilter;
+	bool maskSimpleRepeats, phiXOutput, filterOutput;
 	FileListType artifactReferenceFiles;
 };
 typedef OptionsBaseTemplate< _FilterKnownOdditiesOptions > FilterKnownOdditiesOptions;

@@ -281,7 +281,7 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 	{
 	Sequence::clearCaches();
 	bool oldOpt = GlobalOptions::isCommentStored();
-	GeneralOptions::getOptions().getMmapInput() = 0;
+	GeneralOptions::getOptions().getMmapInput() = false;
 	testFastQFile("10.fastq");
 	testFastQFile("10-cs18.fastq");
 	testFastQFile("10-cs18.1.fastq", false);
@@ -300,7 +300,7 @@ BOOST_AUTO_TEST_CASE( ReadSetTest )
 
 	{
 	Sequence::clearCaches();
-	GeneralOptions::getOptions().getMmapInput() = 1;
+	GeneralOptions::getOptions().getMmapInput() = true;
 	bool oldOpt = GlobalOptions::isCommentStored();
 	testFastQFile("10.fastq");
 	testFastQFile("10-cs18.fastq");

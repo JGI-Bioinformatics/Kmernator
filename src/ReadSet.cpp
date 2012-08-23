@@ -131,7 +131,7 @@ ReadSet::MmapSource ReadSet::mmapFile(string filePath) {
 }
 
 ReadSet::SequenceStreamParserPtr ReadSet::appendAnyFile(string filePath, string filePath2, int rank, int size) {
-	if (size == 1 && Options::getOptions().getMmapInput() > 0)
+	if (size == 1 && Options::getOptions().getMmapInput())
 		return appendAnyFileMmap(filePath, filePath2);
 	LOG_DEBUG(2, "appendAnyFile(" << filePath << ", " << filePath2 << ", " << rank << ", " << size << ")");
 	ReadFileReader reader(filePath, filePath2);
@@ -223,7 +223,7 @@ void ReadSet::appendAllFiles(OptionsBaseInterface::FileListType &files, int rank
 	files = reorder;
 
 	// Let the kernel know how these pages will be used
-	if (Options::getOptions().getMmapInput() == 0)
+	if (!Options::getOptions().getMmapInput())
 		madviseMmapsDontNeed();
 	else
 		madviseMmapsNormal();
@@ -289,7 +289,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	LOG_DEBUG(2, "appendFasta(reader, " << rank << ", " << size << ")");
 	reader.seekToPartition(rank,size);
 	unsigned long firstPos = reader.getPos();
-	if (reader.isMmaped() && Options::getOptions().getMmapInput() != 0) {
+	if (reader.isMmaped() && Options::getOptions().getMmapInput()) {
 		RecordPtr recordPtr = reader.getStreamRecordPtr();
 		RecordPtr qualPtr = reader.getStreamQualRecordPtr();
 		RecordPtr nextRecordPtr = recordPtr;

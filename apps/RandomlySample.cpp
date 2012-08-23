@@ -45,31 +45,32 @@ using namespace std;
 
 class _RSOptions : public OptionsBaseInterface {
 public:
-	static int getByPair() {
-		return getVarMap()["by-pair"].as<int> ();
+	_RSOptions() : byPair(true), numSamples(1000), minBytesPerRecord(2000), maxPercentForFseek(15) {}
+	bool &getByPair() {
+		return byPair;
 	}
-	static int getNumSamples() {
-		return getVarMap()["num-samples"].as<int> ();
+	int &getNumSamples() {
+		return numSamples;
 	}
-	static int getMinBytesPerRecord() {
-		return getVarMap()["min-bytes-per-record"].as<int> ();
+	int &getMinBytesPerRecord() {
+		return minBytesPerRecord;
 	}
-	static int getMaxPercentForFseek() {
-		return getVarMap()["max-percent-for-fseek"].as<int> ();
+	int &getMaxPercentForFseek() {
+		return maxPercentForFseek;
 	}
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
 		GeneralOptions::getOptions().getVerbose() = 0;
-		GeneralOptions::getOptions().getMmapInput() = 0;
+		GeneralOptions::getOptions().getMmapInput() = false;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("input-file", -1);
 		po::options_description opts("Randomly Sample Options");
 		opts.add_options()
-								("by-pair", po::value<int>()->default_value(1), "If set, pairs are sampled, if not set, reads are sampled")
-								("num-samples",  po::value<int>()->default_value(1000), "The number of samples to output")
-								("min-bytes-per-record", po::value<int>()->default_value(2000), "The minimum number of bytes between two records (should be >2x greatest record size)")
-								("max-percent-for-fseek", po::value<int>()->default_value(15), "The estimated maximum % of reads to select by fseek instead of blocked reads");
+								("by-pair", po::value<bool>()->default_value(byPair), "If set, pairs are sampled, if not set, reads are sampled")
+								("num-samples",  po::value<int>()->default_value(numSamples), "The number of samples to output")
+								("min-bytes-per-record", po::value<int>()->default_value(minBytesPerRecord), "The minimum number of bytes between two records (should be >2x greatest record size)")
+								("max-percent-for-fseek", po::value<int>()->default_value(maxPercentForFseek), "The estimated maximum % of reads to select by fseek instead of blocked reads");
 		desc.add(opts);
 		GeneralOptions::_setOptions(desc, p);
 	}
@@ -77,12 +78,20 @@ public:
 
 		bool ret = GeneralOptions::_parseOptions(vm);
 
+		setOpt("by-pair", byPair);
+		setOpt("num-samples", numSamples);
+		setOpt("min-bytes-per-record", minBytesPerRecord);
+		setOpt("max-percent-for-fseek", maxPercentForFseek);
+
 		if (Options::getOptions().getInputFiles().empty() || Options::getOptions().getInputFiles().size() > 1) {
 			ret = false;
 			LOG_ERROR(1, "Please specify at a single input file");
 		}
 		return ret;
 	}
+private:
+	bool byPair;
+	int numSamples, minBytesPerRecord, maxPercentForFseek;
 };
 typedef OptionsBaseTemplate< _RSOptions > RSOptions;
 
@@ -157,7 +166,7 @@ Positions selectRandom(unsigned long numSamples, unsigned long limit, unsigned l
 }
 
 long pickByBlock(ReadFileReader &rfr, long numSamples) {
-	bool byPair = (RSOptions::getOptions().getByPair() == 1);
+	bool byPair = RSOptions::getOptions().getByPair();
 	long numBlocks = std::min((long) 100, numSamples / 5);
 	if (numBlocks < 1)
 		numBlocks = 1;
@@ -216,7 +225,7 @@ long pickBySeeks(ReadFileReader &rfr, unsigned long numSamples, unsigned long mi
 		LOG_DEBUG(2, "Picked positions(" << positions.size() << "):" << s);
 	}
 
-	bool byPair = (RSOptions::getOptions().getByPair() == 1);
+	bool byPair = RSOptions::getOptions().getByPair();
 
 	if (rfr.seekToNextRecord(0, true)) {
 		LOG_DEBUG(2, "Reading first two records to determine inherent pairing");

@@ -44,7 +44,7 @@ public:
 		MPIOptions::_resetDefaults();
 
 		// assign defaults
-		GeneralOptions::getOptions().getMmapInput() = 0;
+		GeneralOptions::getOptions().getMmapInput() = false;
 		GeneralOptions::getOptions().getVerbose() = 2;
 		KmerSpectrumOptions::getOptions().getSaveKmerMmap() = 0;
 	}

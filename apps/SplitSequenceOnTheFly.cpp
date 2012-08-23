@@ -76,7 +76,7 @@ public:
 	int &getEvenChunks() {
 		return evenChunks;
 	}
-	int &getFifoFile() {
+	bool &getFifoFile() {
 		return fifoFile;
 	}
 	StringListType &getForkCommand() {
@@ -92,7 +92,7 @@ public:
 		return extraFifo;
 	}
 
-	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), evenChunks(1), fifoFile(0) {}
+	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), evenChunks(1), fifoFile(false) {}
 
 	std::string _replaceWithKeys(std::string input) {
 		size_t pos;
@@ -133,7 +133,7 @@ public:
 		GeneralOptions::_resetDefaults();
 		Options::getOptions().getVerbose() = 0;
 		Options::getOptions().getDebug() = 0;
-		Options::getOptions().getMmapInput() = 0;
+		Options::getOptions().getMmapInput() = false;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		po::options_description opts("Split Sequence Options");
@@ -144,7 +144,7 @@ public:
 						("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
 						("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
 						("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
-						("output-fifo", po::value<int>()->default_value(fifoFile), "if set, --output-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
+						("output-fifo", po::value<bool>()->default_value(fifoFile), "if set, --output-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
 						("extra-fifo", po::value<StringListType>(), "optional additional fifo file(s) (to potentially use with --fork-command)")
 						("fork-command", po::value<StringListType>(), "optional command(s) to fork between opening output files and wait to finish before starting any merges")
 						;
@@ -157,12 +157,12 @@ public:
 	bool _parseOptions(po::variables_map &vm) {
 		// set options specific to this program
 		bool ret = GeneralOptions::_parseOptions(vm);
-		setOpt<int>("num-files", getNumFiles());
-		setOpt<int>("file-num", getFileNum());
-		setOpt<int>("even-chunks", getEvenChunks());
-		setOpt<string>("split-file", getSplitFile());
-		setOpt<string>("pipe-command", getPipeCommand());
-		setOpt<int>("output-fifo", getFifoFile());
+		setOpt("num-files", getNumFiles());
+		setOpt("file-num", getFileNum());
+		setOpt("even-chunks", getEvenChunks());
+		setOpt("split-file", getSplitFile());
+		setOpt("pipe-command", getPipeCommand());
+		setOpt("output-fifo", getFifoFile());
 		setOpt2("merge", getMergeList());
 		setOpt2("fork-command", getForkCommand());
 		setOpt2("extra-fifo", getExtraFifo());
@@ -195,7 +195,8 @@ public:
 private:
 	std::string splitFile, pipeCommand;
 	StringListType mergeList, forkCommand, extraFifo;
-	int numFiles, fileNum, evenChunks, fifoFile;
+	int numFiles, fileNum, evenChunks;
+	bool fifoFile;
 };
 typedef OptionsBaseTemplate< _SSOptions > SSOptions;
 typedef OptionsBaseInterface::StringListType StringListType;

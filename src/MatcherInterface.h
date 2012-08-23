@@ -19,7 +19,7 @@
 
 class _MatcherInterfaceOptions  : public OptionsBaseInterface {
 public:
-	_MatcherInterfaceOptions() : maxReadMatches(450), maxReadDepthMatches(0), includeMate(1), minOverlap(51), minIdentity(0.986), returnOverlapOnly(1) {}
+	_MatcherInterfaceOptions() : maxReadMatches(450), maxReadDepthMatches(0), includeMate(true), minOverlap(51), minIdentity(0.986), returnOverlapOnly(true) {}
 	virtual ~_MatcherInterfaceOptions() {}
 
 	int &getMaxReadMatches() {
@@ -28,8 +28,8 @@ public:
 	int &getMaxReadDepthMatches() {
 		return maxReadDepthMatches;
 	}
-	bool getIncludeMate() {
-		return includeMate == 1;
+	bool &getIncludeMate() {
+		return includeMate;
 	}
 	void setIncludeMate(bool v) {
 		if (v)
@@ -43,8 +43,8 @@ public:
 	float &getMinIdentity() {
 		return minIdentity;
 	}
-	bool getReturnOverlapOnly() {
-		return returnOverlapOnly == 1;
+	bool &getReturnOverlapOnly() {
+		return returnOverlapOnly;
 	}
 
 	// use to set/overrided any defaults on options that are stored persistently
@@ -57,35 +57,35 @@ public:
 
 						("max-read-depth-matches", po::value<int>()->default_value(maxReadDepthMatches), "maximum number of (randomly sampled) reads per query length to return for matching. '0' disables.")
 
-						("include-mate", po::value<int>()->default_value(includeMate), "1 - include mates, 0 - do not")
+						("include-mate", po::value<bool>()->default_value(includeMate), "true - include mates, false - do not")
 
 						("min-match-overlap", po::value<int>()->default_value(minOverlap), "The minimum amount of overlap for a matching read")
 
 						("min-identity-fraction", po::value<float>()->default_value(minIdentity), "The minimum fraction identity for a matching read (to the end)")
 
-						("return-overlap-only", po::value<int>()->default_value(returnOverlapOnly), "If set to 1 only overlapping reads (or unaligned mates) will be returned")
+						("return-overlap-only", po::value<bool>()->default_value(returnOverlapOnly), "If set true, only overlapping reads (or unaligned mates) will be returned")
 
 						;
 		desc.add(opts);
 	}
 	// use to post-process options, returning true if everything is okay
 	bool _parseOptions(po::variables_map &vm) {
-		setOpt<int>("max-read-matches", maxReadMatches);
-		setOpt<int>("max-read-depth-matches", maxReadDepthMatches);\
-		setOpt<int>("include-mate", includeMate);
-		setOpt<int>("min-match-overlap", minOverlap);
-		setOpt<float>("min-identity-fraction", minIdentity);
-		setOpt<int>("return-overlap-only", returnOverlapOnly);
+		setOpt("max-read-matches", maxReadMatches);
+		setOpt("max-read-depth-matches", maxReadDepthMatches);\
+		setOpt("include-mate", includeMate);
+		setOpt("min-match-overlap", minOverlap);
+		setOpt("min-identity-fraction", minIdentity);
+		setOpt("return-overlap-only", returnOverlapOnly);
 
 		return true;
 	}
 protected:
 	int maxReadMatches;
 	int maxReadDepthMatches;
-	int includeMate;
+	bool includeMate;
 	int minOverlap;
 	float minIdentity;
-	int returnOverlapOnly;
+	bool returnOverlapOnly;
 
 };
 typedef OptionsBaseTemplate< _MatcherInterfaceOptions > MatcherInterfaceOptions;

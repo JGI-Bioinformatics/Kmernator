@@ -50,20 +50,22 @@ typedef KmerSpectrum<DataType, DataType> KS;
 
 class _TnfDistanceBaseOptions : public OptionsBaseInterface {
 public:
-	static string getInterFile() {
-		return getVarMap()["inter-distance-file"].as<string> ();
+	_TnfDistanceBaseOptions() : interDistanceFile(), intraDistanceFile(), clusterFile(), intraWindowSize(25000), clusterThresholdDistance(.175), referenceFiles() {}
+	virtual ~_TnfDistanceBaseOptions() {}
+	string &getInterFile() {
+		return interDistanceFile;
 	}
-	static string getIntraFile() {
-		return getVarMap()["intra-distance-file"].as<string> ();
+	string &getIntraFile() {
+		return intraDistanceFile;
 	}
-	static int getIntraWindow() {
-		return getVarMap()["intra-window-size"].as<int> ();
+	string &getClusterFile() {
+		return clusterFile;
 	}
-	static string getClusterFile() {
-		return getVarMap()["cluster-file"].as<string>();
+	int &getIntraWindow() {
+		return intraWindowSize;
 	}
-	static double getClusterThreshold() {
-		return getVarMap()["cluster-threshold-distance"].as<double>();
+	double &getClusterThreshold() {
+		return clusterThresholdDistance;
 	}
 
 	FileListType &getReferenceFiles()
@@ -84,15 +86,15 @@ public:
 
 				("reference-file", po::value<FileListType>(), "set reference file(s)")
 
-				("inter-distance-file", po::value<string>()->default_value(""), "output inter-distance LT matrix to this filename")
+				("inter-distance-file", po::value<string>()->default_value(interDistanceFile), "output inter-distance LT matrix to this filename")
 
-				("intra-distance-file", po::value<string>()->default_value(""), "output intra-distance matrix (one line per read) to this filename")
+				("intra-distance-file", po::value<string>()->default_value(intraDistanceFile), "output intra-distance matrix (one line per read) to this filename")
 
-				("intra-window-size", po::value<int>()->default_value(25000), "size of adjacent intra-distance windows")
+				("intra-window-size", po::value<int>()->default_value(intraWindowSize), "size of adjacent intra-distance windows")
 
-				("cluster-file", po::value<string>()->default_value(""), "cluster output filename")
+				("cluster-file", po::value<string>()->default_value(clusterFile), "cluster output filename")
 
-				("cluster-threshold-distance", po::value<double>()->default_value(0.175), "Euclidean distance threshold for clusters") ;
+				("cluster-threshold-distance", po::value<double>()->default_value(clusterThresholdDistance), "Euclidean distance threshold for clusters") ;
 
 		desc.add(opts);
 
@@ -101,12 +103,20 @@ public:
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 
+		setOpt("inter-distance-file", interDistanceFile);
+		setOpt("intra-distance-file", intraDistanceFile);
+		setOpt("intra-window-size", intraWindowSize);
+		setOpt("cluster-file", clusterFile);
+		setOpt("cluster-threshold-distance", clusterThresholdDistance);
 		setOpt2("reference-file", referenceFiles);
 
 		ret |= GeneralOptions::_parseOptions(vm);
 		return ret;
 	}
 private:
+	string interDistanceFile, intraDistanceFile, clusterFile;
+	int intraWindowSize;
+	double clusterThresholdDistance;
 	FileListType referenceFiles;
 
 };

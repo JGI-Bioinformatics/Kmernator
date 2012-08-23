@@ -54,10 +54,10 @@ public:
 
 		bool ret = true;
 
-		setOpt<double>("minimum-consensus", minimumConsensus);
-		setOpt<double>("minimum-coverage", minimumCoverage);
-		setOpt<double>("maximum-delta-ratio", maximumDeltaRatio);
-		setOpt<std::string>("contig-file", contigFile);
+		setOpt("minimum-consensus", minimumConsensus);
+		setOpt("minimum-coverage", minimumCoverage);
+		setOpt("maximum-delta-ratio", maximumDeltaRatio);
+		setOpt("contig-file", contigFile);
 
 		if (getContigFile().empty()) {
 			LOG_ERROR(1, "you must specify the --contig-file");

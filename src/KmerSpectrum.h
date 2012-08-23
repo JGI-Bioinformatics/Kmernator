@@ -72,9 +72,9 @@ class _KmerSpectrumOptions;
 class _KmerSpectrumOptions : public OptionsBaseInterface {
 public:
 	_KmerSpectrumOptions() : minKmerQuality(0.10), minDepth(2), kmersPerBucket(64),
-		saveKmerMmap(0), loadKmerMmap(),
+		saveKmerMmap(false), loadKmerMmap(),
 		buildPartitions(0), kmerSubsample(1),
-		variantSigmas(-1.0), periodicSingletonPurge(0), gcHeatMap(1) {
+		variantSigmas(-1.0), periodicSingletonPurge(0), gcHeatMap(true) {
 	}
 
 	void _resetDefaults() {
@@ -93,7 +93,7 @@ public:
 
 				("kmers-per-bucket", po::value<unsigned int>()->default_value(kmersPerBucket), "number of kmers to target per hash-bucket.  Lesser will use more memory, larger will be slower")
 
-				("save-kmer-mmap", po::value<unsigned int>()->default_value(saveKmerMmap), "If set to 1, creates a memory map of the kmer spectrum for later use")
+				("save-kmer-mmap", po::value<bool>()->default_value(saveKmerMmap), "If set, creates a memory map of the kmer spectrum for later use")
 
 				("load-kmer-mmap", po::value<std::string>(), "Instead of generating kmer spectrum, load an existing one (read-only) named by this option")
 
@@ -113,7 +113,7 @@ public:
 
 				("periodic-singleton-purge", po::value<unsigned int>()->default_value(periodicSingletonPurge), "Purge singleton memory structure every # of reads")
 
-				("gc-heat-map", po::value<unsigned int>()->default_value(gcHeatMap), "If set, a GC Heat map will be output (requires --output)")
+				("gc-heat-map", po::value<bool>()->default_value(gcHeatMap), "If set, a GC Heat map will be output (requires --output)")
 
 				;
 
@@ -124,30 +124,30 @@ public:
 		bool ret = true;
 
 		// set kmer quality
-		setOpt<double>("min-kmer-quality", getMinKmerQuality());
+		setOpt("min-kmer-quality", getMinKmerQuality());
 
 		// set minimum depth
-		setOpt<unsigned int>("min-depth", getMinDepth());
+		setOpt("min-depth", getMinDepth());
 
-		setOpt<unsigned int>("kmers-per-bucket", getKmersPerBucket());
+		setOpt("kmers-per-bucket", getKmersPerBucket());
 
-		setOpt<unsigned int>("save-kmer-mmap", getSaveKmerMmap());
+		setOpt("save-kmer-mmap", getSaveKmerMmap());
 
-		setOpt<std::string>("load-kmer-mmap", getLoadKmerMmap());
+		setOpt("load-kmer-mmap", getLoadKmerMmap());
 
 		// set buildPartitions
-		setOpt<unsigned int>("build-partitions", getBuildPartitions());
+		setOpt("build-partitions", getBuildPartitions());
 
 		// set the minimum weight that will be used to track kmers
 		// based on the given options
 		TrackingData::setMinimumWeight( getMinKmerQuality() );
 		TrackingData::setMinimumDepth( getMinDepth() );
 
-		setOpt<long> ("kmer-subsample", kmerSubsample);
+		setOpt("kmer-subsample", kmerSubsample);
 
-		setOpt<double>("variant-sigmas", getVariantSigmas());
-		setOpt<unsigned int>("periodic-singleton-purge", getPeriodicSingletonPurge());
-		setOpt<unsigned int>("gc-heat-map", getGCHeatMap());
+		setOpt("variant-sigmas", getVariantSigmas());
+		setOpt("periodic-singleton-purge", getPeriodicSingletonPurge());
+		setOpt("gc-heat-map", getGCHeatMap());
 
 
 		return ret;
@@ -163,7 +163,7 @@ public:
 	unsigned int &getKmersPerBucket() {
 		return kmersPerBucket;
 	}
-	unsigned int &getSaveKmerMmap()
+	bool &getSaveKmerMmap()
 	{
 		return saveKmerMmap;
 	}
@@ -186,7 +186,7 @@ public:
 	{
 		return periodicSingletonPurge;
 	}
-	unsigned int &getGCHeatMap()
+	bool &getGCHeatMap()
 	{
 		return gcHeatMap;
 	}
@@ -202,13 +202,13 @@ private:
 	double minKmerQuality;
 	unsigned int minDepth;
 	unsigned int kmersPerBucket;
-	unsigned int saveKmerMmap;
+	bool saveKmerMmap;
 	std::string loadKmerMmap;
 	unsigned int buildPartitions;
 	long kmerSubsample;
 	double       variantSigmas;
 	unsigned int periodicSingletonPurge;
-	unsigned int gcHeatMap;
+	bool gcHeatMap;
 };
 typedef OptionsBaseTemplate< _KmerSpectrumOptions > KmerSpectrumOptions;
 

@@ -54,18 +54,13 @@ class _CS_Options : public OptionsBaseInterface {
 	// cache of variables (for inline lookup and defaults)
 
 public:
+	_CS_Options() : referenceFiles(), circularReference(false), perRead(false) {}
 	virtual ~_CS_Options() {}
-	static bool getCircularReference() { return  getVarMap()["circular-reference"].as<unsigned int>() != 0; }
-	static bool getPerRead() { return getVarMap()["per-read"].as<unsigned int>() != 0; }
 
 	void _resetDefaults() {
 		KmerBaseOptions::_resetDefaults();
 		KmerSpectrumOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
-	}
-	FileListType &getReferenceFiles()
-	{
-		return referenceFiles;
 	}
 
 
@@ -80,9 +75,9 @@ public:
 		opts.add_options()
 					 ("reference-file", po::value<FileListType>(), "set reference file(s)")
 
-					 ("circular-reference", po::value<unsigned int>()->default_value(0), "reference file should be treated as circular")
+					 ("circular-reference", po::value<bool>()->default_value(circularReference), "if set, reference file should be treated as circular")
 
-					 ("per-read", po::value<unsigned int>()->default_value(0), "if set, each read in readset1 will be compared to the entire readset2 separately");
+					 ("per-read", po::value<bool>()->default_value(perRead), "if set, each read in readset1 will be compared to the entire readset2 separately");
 
 
 		desc.add(opts);
@@ -93,14 +88,28 @@ public:
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		setOpt2("reference-file", referenceFiles);
+		setOpt("circular-reference", circularReference);
+		setOpt("per-read", perRead);
 
 		ret &= GeneralOptions::_parseOptions(vm);
 		ret &= KmerBaseOptions::_parseOptions(vm);
 		ret &= KmerSpectrumOptions::_parseOptions(vm);
 		return ret;
 	}
+	FileListType &getReferenceFiles()
+	{
+		return referenceFiles;
+	}
+	bool &getCircularReference() {
+		return  circularReference;
+	}
+	bool &getPerRead() {
+		return perRead;
+	}
+
 private:
 	FileListType referenceFiles;
+	bool circularReference, perRead;
 
 };
 

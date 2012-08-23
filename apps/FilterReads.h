@@ -121,11 +121,11 @@ public:
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
 
-		setOpt<int>("max-kmer-output-depth", maxKmerDepth);
-		setOpt<int>("partition-by-depth", partitionByDepth);
-		setOpt<int>("min-passing-in-pair", bothPairs);
-		setOpt<int>("remainder-trim", remainderTrim);
-		setOpt<std::string>("size-history-file", sizeHistoryFile);
+		setOpt("max-kmer-output-depth", maxKmerDepth);
+		setOpt("partition-by-depth", partitionByDepth);
+		setOpt("min-passing-in-pair", bothPairs);
+		setOpt("remainder-trim", remainderTrim);
+		setOpt("size-history-file", sizeHistoryFile);
 
 		// verify mutually exclusive options are not set
 		if ( (getMaxKmerDepth() > 0 && getPartitionByDepth() >  0) )

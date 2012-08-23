@@ -42,11 +42,14 @@ using namespace std;
 
 class _Fastq2FastaOptions : public OptionsBaseInterface {
 public:
-	static int getSplitSizeMegaBase() {
-		return getVarMap()["split-size-mbase"].as<int> ();
+	_Fastq2FastaOptions(): splitPairs(false), splitSizeMbase(0) {}
+	virtual ~_Fastq2FastaOptions() {}
+
+	int &getSplitSizeMegaBase() {
+		return splitSizeMbase;
 	}
-	static int getSplitPairs() {
-		return getVarMap()["split-pairs"].as<int>();
+	bool &getSplitPairs() {
+		return splitPairs;
 	}
 	void _resetDefaults() {
 		GeneralOptions::getOptions()._resetDefaults();
@@ -61,17 +64,23 @@ public:
 		po::options_description opts("Fastq to Fasta Options");
 		opts.add_options()
 
-				("split-pairs", po::value<int>()->default_value(0), "if set, pairs will be directed into separate files")
+				("split-pairs", po::value<int>()->default_value(splitPairs), "if set, pairs will be directed into separate files")
 
-				("split-size-mbase", po::value<int>()->default_value(0), "maximum size of output fastas.  requires --output-file");
+				("split-size-mbase", po::value<int>()->default_value(splitSizeMbase), "maximum size of output fastas.  requires --output-file");
 
 		desc.add(opts);
 
 		GeneralOptions::getOptions()._setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
+		setOpt("split-pairs", splitPairs);
+		setOpt("split-size-mbase", splitSizeMbase);
+
 		return GeneralOptions::getOptions()._parseOptions(vm);
 	}
+private:
+	bool splitPairs;
+	int splitSizeMbase;
 };
 typedef OptionsBaseTemplate< _Fastq2FastaOptions > Fastq2FastaOptions;
 

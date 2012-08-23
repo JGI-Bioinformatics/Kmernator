@@ -38,7 +38,7 @@ public:
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		setOpt<int>("match-max-positions-from-edge", maxPositionsFromEdge);
+		setOpt("match-max-positions-from-edge", maxPositionsFromEdge);
 		return ret;
 	}
 protected:

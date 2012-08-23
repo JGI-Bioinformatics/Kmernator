@@ -26,7 +26,7 @@ public:
 		KmerBaseOptions::_resetDefaults();
 		KmerSpectrumOptions::_resetDefaults();
 
-		GeneralOptions::getOptions().getMmapInput() = 0;
+		GeneralOptions::getOptions().getMmapInput() = false;
 		GeneralOptions::getOptions().getVerbose() = 2;
 		GeneralOptions::getOptions().getMinQuality() = 2;
 
