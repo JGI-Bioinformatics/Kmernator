@@ -170,7 +170,7 @@ long pickByBlock(ReadFileReader &rfr, long numSamples) {
 	long numBlocks = std::min((long) 100, numSamples / 5);
 	if (numBlocks < 1)
 		numBlocks = 1;
-	long numPicksPerBlock = ((numSamples+1) / numBlocks);
+	long numPicksPerBlock = ((numSamples+numBlocks-1) / numBlocks);
 	long count = 0;
 
 	LOG_DEBUG(1, "pickByBlock: " << numSamples << " blocks: " << numBlocks << " picksPerBlock: " << numPicksPerBlock);
@@ -191,6 +191,7 @@ long pickByBlock(ReadFileReader &rfr, long numSamples) {
 		if (byPair)
 			reads.identifyPairs();
 		long numRead = byPair ? reads.getPairSize() : reads.getSize();
+                numPicksPerBlock = ( (numSamples+numBlocks-block-1) / (numBlocks - block));
 		long numPicks = std::min(numPicksPerBlock, numSamples);
 		numPicks = std::min(numRead, numPicks);
 		LOG_DEBUG(1, "Read " << numRead << (byPair?" pairs" : " reads") << " selecting " << numPicks << " remaining: " << numSamples);
