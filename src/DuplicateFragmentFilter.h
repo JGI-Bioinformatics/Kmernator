@@ -15,7 +15,7 @@
 class _DuplicateFragmentFilterOptions : public OptionsBaseInterface {
 public:
 	_DuplicateFragmentFilterOptions() : deDupMode(1), deDupSingle(false), deDupEditDistance(0), deDupStartOffset(0),
-	deDupLength(16) {}
+	deDupLength(24) {}
 	virtual ~_DuplicateFragmentFilterOptions() {}
 
 	unsigned int &getDeDupEditDistance()
