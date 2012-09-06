@@ -355,6 +355,10 @@ void Sequence::setMarkups(MarkupElementSizeType markupElementSize, const BaseLoc
 string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset, SequenceLengthType trimLength) const {
 	if ( !isValid() )
 		return string("");
+	else if (isDiscarded() || trimLength <= 1) {
+		// to support printing paired reads where 1 read is trimmed to 0
+		return string(1, 'N');
+	}
 
 	if (isMmaped()) {
 		string name, bases, quals, comment;
@@ -376,7 +380,7 @@ string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset, SequenceLengthT
 string Sequence::getFasta(SequenceLengthType trimOffset, SequenceLengthType trimLength) const {
 	if ( !isValid() )
 		return string("");
-	if (isDiscarded() || trimLength <= 1) {
+	else if (isDiscarded() || trimLength <= 1) {
 		// to support printing paired reads where 1 read is trimmed to 0
 		return string(1, 'N');
 	}

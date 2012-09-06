@@ -461,6 +461,12 @@ public:
 		LOG_WARN(1, "Could not find mate pair for " << localIdx << " pairidx: " << pairIdx << " read: " << getRead(localIdx).getName());
 		return MAX_READ_IDX;
 	}
+	bool isSecondReadOnly() const {
+		bool isSecondReadOnly = true;
+		for (ReadSetSizeType i = 0 ; isSecondReadOnly & (i < _pairs.size()); i++)
+			isSecondReadOnly &= (_pairs[i].read1 == MAX_READ_IDX) & (_pairs[i].read2 != MAX_READ_IDX);
+		return isSecondReadOnly;
+	}
 
 	const ReadIdxVector getReadIdxVector() const;
 

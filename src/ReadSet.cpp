@@ -254,17 +254,22 @@ void ReadSet::append(const ReadSet &reads) {
 		_reads[oldSize + i] = reads._reads[i];
 
 	unsigned long oldPairSize = _pairs.size();
-	unsigned long newPairSize = oldPairSize + reads._pairs.size();
-	_pairs.resize(newPairSize);
+	unsigned long newPairSize = oldPairSize;
+	if (reads.isSecondReadOnly())
+		identifyPairs();
+	else {
+		newPairSize += reads._pairs.size();
+		_pairs.resize(newPairSize);
 
-	long pairsSize = reads._pairs.size();
-#pragma omp parallel for
-	for (long i = 0; i < pairsSize; i++) {
-		const Pair &tmp = reads._pairs[i];
-		_pairs[oldPairSize + i]
+		long pairsSize = reads._pairs.size();
+		#pragma omp parallel for
+		for (long i = 0; i < pairsSize; i++) {
+			const Pair &tmp = reads._pairs[i];
+			_pairs[oldPairSize + i]
 		       = Pair((tmp.read1 == MAX_READ_IDX ? MAX_READ_IDX : tmp.read1
 		    		   + oldSize), (tmp.read2 == MAX_READ_IDX ? MAX_READ_IDX
 		    				   : tmp.read2 + oldSize));
+		}
 	}
 	_baseCount += reads._baseCount;
 	_setMaxSequenceLength(reads.getMaxSequenceLength());
