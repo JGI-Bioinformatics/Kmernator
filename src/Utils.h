@@ -1162,8 +1162,8 @@ public:
 
 class Cleanup {
 public:
-	typedef std::vector< std::string > FileList;
-	typedef std::set< pid_t > PidList;
+	typedef std::set< std::string > FileSet;
+	typedef std::set< pid_t > PidSet;
 
 	static Cleanup &getInstance() {
 		static Cleanup cleanup;
@@ -1188,12 +1188,35 @@ public:
 		std::string tempDir = dir + UniqueName::generateUniqueName("/.tmp-" + prefix);
 		if (mkdir(tempDir.c_str(), 0700) != 0)
 			LOG_THROW("Could not mkdir: " << tempDir);
-		getInstance().tempDirs.push_back(tempDir);
+		getInstance().tempDirs.insert(tempDir);
 		return tempDir;
+	}
+	static void removeTempDir(std::string tempDir) {
+		if (getInstance().tempDirs.find(tempDir) != getInstance().tempDirs.end()){
+			getInstance().tempFiles.erase(tempDir);
+			std::string cmd = std::string("rm -r " + tempDir);
+			if (!getInstance().keepTempDir.empty()) {
+				if (rename(tempDir.c_str(), getInstance().keepTempDir.c_str()) != 0) {
+					LOG_DEBUG_OPTIONAL(1, true, "Could not move " << tempDir << " to " << getInstance().keepTempDir);
+				}
+			}
+			system(cmd.c_str()); // belt & suspenders
+		}
 	}
 
 	static void addTemp(std::string tempFile) {
-		getInstance().tempFiles.push_back(tempFile);
+		getInstance().tempFiles.insert(tempFile);
+	}
+	static void removeTemp(std::string tempFile) {
+		if (getInstance().tempFiles.find(tempFile) != getInstance().tempFiles.end()) {
+			getInstance().tempFiles.erase(tempFile);
+			if (!getInstance().keepTempDir.empty()) {
+				if (rename(tempFile.c_str(), getInstance().keepTempDir.c_str()) != 0) {
+					LOG_DEBUG_OPTIONAL(1, true, "Could not move " << tempFile << " to " << getInstance().keepTempDir);
+				}
+			}
+			unlink(tempFile.c_str()); // belt & suspenders
+		}
 	}
 
 	static void trackChild(pid_t pid) {
@@ -1201,11 +1224,18 @@ public:
 		LOG_DEBUG_OPTIONAL(2, true, "Tracking child pid: " << pid);
 	}
 	static void releaseChild(pid_t pid) {
-		PidList &children = getInstance().children;
-		PidList::iterator it = children.find(pid);
+		PidSet &children = getInstance().children;
+		PidSet::iterator it = children.find(pid);
 		if (it != children.end()) {
 			LOG_DEBUG_OPTIONAL(2, true, "Released child pid: " << *it);
 			children.erase(*it);
+		}
+	}
+	void setKeepTempDir(std::string _keepTempDir) {
+		keepTempDir = _keepTempDir;
+		if (_keepTempDir.empty()) {
+			mkdir(_keepTempDir.c_str(), 0700);
+			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "Copying / preserving all temporary files to: " << _keepTempDir);
 		}
 	}
 
@@ -1270,13 +1300,14 @@ protected:
 		// save this signals next action, and reset the rest.
 		struct sigaction &oact = getSigHandle(param);
 		_unsetSignals();
+		FileSet _copy;
 
 		std::stringstream ss;
 		if (param != 0) {
 			// kill children with same signal
 			if (!children.empty())
 				ss << "\tTERMinating: ";
-			for(PidList::iterator it = children.begin(); it != children.end(); it++) {
+			for(PidSet::iterator it = children.begin(); it != children.end(); it++) {
 				kill(*it, SIGTERM);
 				ss << *it << " , ";
 			}
@@ -1285,19 +1316,19 @@ protected:
 
 		if (!tempFiles.empty())
 			ss << "\tUnlinked: ";
-		for(int i = 0; i < (int) tempFiles.size(); i++) {
-			ss << tempFiles[i] << " , ";
-			unlink(tempFiles[i].c_str());
+		_copy = tempFiles;
+		for(FileSet::iterator it = _copy.begin(); it != _copy.end(); it++) {
+			ss << *it << " , ";
+			removeTemp(*it);
 		}
 		tempFiles.clear();
 
 		if (!tempDirs.empty())
 			ss << "rm -rf : ";
-		for(int i = 0; i < (int) tempDirs.size(); i++) {
-			std::string cmd("rm -r " + tempDirs[i]);
-			ss << tempDirs[i] << " , ";
-			if (system(cmd.c_str()) != 0)
-				LOG_WARN(1, "Could not clean " << tempDirs[i] << " '" << cmd << "'");
+		_copy = tempDirs;
+		for(FileSet::iterator it = _copy.begin(); it != _copy.end(); it++) {
+			ss << *it << " , ";
+			removeTempDir(*it);
 		}
 		tempDirs.clear();
 
@@ -1317,7 +1348,7 @@ protected:
 		while (waitCount++ < 3 && childrenLive) {
 			childrenLive = false;
 			int status = 0;
-			for(PidList::iterator it = children.begin(); it != children.end(); it++) {
+			for(PidSet::iterator it = children.begin(); it != children.end(); it++) {
 				int wpid = waitpid(*it, &status, WNOHANG);
 				if (wpid == 0 || !WIFEXITED(status)) {
 					childrenLive = true;
@@ -1327,7 +1358,7 @@ protected:
 		}
 		if (childrenLive) {
 			int status = 0;
-			for(PidList::iterator it = children.begin(); it != children.end(); it++) {
+			for(PidSet::iterator it = children.begin(); it != children.end(); it++) {
 				int wpid = waitpid(*it, &status, WNOHANG);
 				if (wpid == 0 || !WIFEXITED(status)) {
 					LOG_WARN(1, "KILLing: " << *it);
@@ -1340,16 +1371,18 @@ protected:
 		}
 	}
 
-	Cleanup() : tempFiles(), tempDirs(), myPid(0) {
+	Cleanup() : tempFiles(), tempDirs(), myPid(0), keepTempDir() {
 		myPid = getpid();
 		_setSignals();
+		setKeepTempDir(	GeneralOptions::getOptions().getKeepTempDir() );
 	}
 
 private:
-	FileList tempFiles;
-	FileList tempDirs;
+	FileSet tempFiles;
+	FileSet tempDirs;
 	pid_t myPid;
-	PidList children;
+	PidSet children;
+	std::string keepTempDir;
 };
 
 class Fork {

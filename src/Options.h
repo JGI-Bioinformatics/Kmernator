@@ -290,7 +290,7 @@ typedef OptionsBaseTemplate< _MySpecificOptions > MySpecificOptions;
 
 class _GeneralOptions : public OptionsBaseInterface {
 public:
-	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"),
+	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), keepTempDir(),
 	formatOutput(0), keepReadComment(GlobalOptions::isCommentStored()), buildOutputInMemory(false),
 	minQuality(3),  ignoreQual(false), mmapInput(true), gatheredLogs(true),
 	batchSize(100000), separateOutputs(true)
@@ -315,6 +315,8 @@ private:
 	std::string  logFile;
 	OStreamPtr   logFileStream;
 	std::string  tmpDir;
+	std::string  keepTempDir;
+
 	unsigned int formatOutput;
 	bool         keepReadComment;
 	bool         buildOutputInMemory;
@@ -386,7 +388,11 @@ public:
 				("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory), "if set, all temporary output files will first be stored in memory (faster for MPI applications)")
 
 				("temp-dir", po::value<std::string>()->default_value(tmpDir), "temporary directory to utilize")
+
+				("keep-temp-dir", po::value<std::string>()->default_value(keepTempDir), "if set, all temporary files and directories will be preserved and copied to this directory")
+
 				;
+
 		general.add(writeOpts);
 
 		desc.add(general);
@@ -433,6 +439,8 @@ public:
 			setOpt("output-file", getOutputFile(), print);
 
 			setOpt("temp-dir", getTmpDir(), print);
+
+			setOpt("keep-temp-dir", getKeepTempDir(), print);
 
 			setOpt("format-output", getFormatOutput(), print);
 
@@ -590,6 +598,11 @@ public:
 	std::string &getTmpDir()
 	{
 		return tmpDir;
+	}
+
+	std::string &getKeepTempDir()
+	{
+		return keepTempDir;
 	}
 
 };

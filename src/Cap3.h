@@ -13,6 +13,7 @@
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "KmerSpectrum.h"
+#include "Utils.h"
 
 class _Cap3Options : public OptionsBaseInterface {
 public:
@@ -24,18 +25,20 @@ public:
 	void _resetDefaults() {
 		Options::getOptions().getMmapInput() = false;
 	}
-	void _setOptions(po::options_description &desc,
-			po::positional_options_description &p) {
+	void _setOptions(po::options_description &desc,	po::positional_options_description &p) {
 		po::options_description opts("Cap3 Options");
 
 		opts.add_options()
-				("cap3-path", po::value<std::string>()->default_value(cap3Path), "if set, cap3 will be used to extend contigs");
+				("cap3-path", po::value<std::string>()->default_value(cap3Path), "if set, cap3 will be used to extend contigs")
+
+				;
 
 		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 		setOpt("cap3-path", cap3Path);
+
 		return ret;
 	}
 protected:
@@ -92,18 +95,16 @@ public:
 	}
 	static Read extendContig(const Read &oldContig, const ReadSet &_inputReads) {
 		ReadSet inputReads = _inputReads;
+		int status;
 
 		for(int i = 0; i < repeatContig; i++)
 			inputReads.append(oldContig);
 
 		FormatOutput format = FormatOutput::FastaUnmasked();
-		std::string outputDir = Options::getOptions().getTmpDir() + UniqueName::generateUniqueName("/.cap3-assembly");
-		int status = mkdir(outputDir.c_str(), 0777);
-
-		if (status != 0) {
-			LOG_WARN(1, "Could not mkdir: " << outputDir << " bailing...");
-			return Read();
-		}
+		std::string prefix = "/.cap3-assembly";
+		std::string outputDir = Cleanup::makeTempDir(Options::getOptions().getTmpDir(), prefix);
+		LOG_VERBOSE_OPTIONAL(1, !GeneralOptions::getOptions().getKeepTempDir().empty(), "Saving Cap3 working directory for " << oldContig.getName()
+				<< " to " << GeneralOptions::getOptions().getKeepTempDir() << outputDir.substr(outputDir.find_first_of(prefix)));
 		std::string outputName = outputDir + "/input" + format.getSuffix();
 		{
 			OfstreamMap ofm(outputName, "");
@@ -120,21 +121,14 @@ public:
 				ReadSet newContig;
 				newContig.appendFastaFile(newContigFile);
 				Read bestRead = selectBestContig(newContig, oldContig);
-				clean(outputDir);
+				Cleanup::removeTempDir(outputDir);
 				return bestRead;
 			}
 		}
 		LOG_WARN(1, "Could not assemble " << oldContig.getName() << " with pool of " << _inputReads.getSize() << " reads: " << FileUtils::dumpFile(log));
 
-		clean(outputDir);
+		Cleanup::removeTempDir(outputDir);
 		return Read();
-	}
-	static void clean(std::string fileDir) {
-		std::string cmd;
-		cmd = "/bin/rm -rf " + fileDir;
-		int status = system(cmd.c_str());
-		if (status != 0)
-			LOG_WARN(1, "Could not clean up directory: " + fileDir);
 	}
 };
 
