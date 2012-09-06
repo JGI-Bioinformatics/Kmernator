@@ -1185,7 +1185,9 @@ public:
 	static std::string makeTempDir(std::string dir = "", std::string prefix = "") {
 		if (dir.empty())
 			dir = Options::getOptions().getTmpDir();
-		std::string tempDir = dir + UniqueName::generateUniqueName("/.tmp-" + prefix);
+		if (prefix.empty())
+			prefix = ".tmp-";
+		std::string tempDir = dir + "/" + UniqueName::generateUniqueName(prefix);
 		if (mkdir(tempDir.c_str(), 0700) != 0)
 			LOG_THROW("Could not mkdir: " << tempDir);
 		getInstance().tempDirs.insert(tempDir);
@@ -1193,11 +1195,11 @@ public:
 	}
 	static void removeTempDir(std::string tempDir) {
 		if (getInstance().tempDirs.find(tempDir) != getInstance().tempDirs.end()){
-			getInstance().tempFiles.erase(tempDir);
+			getInstance().tempDirs.erase(tempDir);
 			std::string cmd = std::string("rm -r " + tempDir);
 			if (!getInstance().keepTempDir.empty()) {
 				if (rename(tempDir.c_str(), getInstance().keepTempDir.c_str()) != 0) {
-					LOG_DEBUG_OPTIONAL(1, true, "Could not move " << tempDir << " to " << getInstance().keepTempDir);
+					cmd = std::string("mv " + tempDir + " " + getInstance().keepTempDir);
 				}
 			}
 			system(cmd.c_str()); // belt & suspenders
@@ -1233,7 +1235,7 @@ public:
 	}
 	void setKeepTempDir(std::string _keepTempDir) {
 		keepTempDir = _keepTempDir;
-		if (_keepTempDir.empty()) {
+		if (!_keepTempDir.empty()) {
 			mkdir(_keepTempDir.c_str(), 0700);
 			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "Copying / preserving all temporary files to: " << _keepTempDir);
 		}

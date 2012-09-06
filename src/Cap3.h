@@ -104,7 +104,7 @@ public:
 		std::string prefix = "/.cap3-assembly";
 		std::string outputDir = Cleanup::makeTempDir(Options::getOptions().getTmpDir(), prefix);
 		LOG_VERBOSE_OPTIONAL(1, !GeneralOptions::getOptions().getKeepTempDir().empty(), "Saving Cap3 working directory for " << oldContig.getName()
-				<< " to " << GeneralOptions::getOptions().getKeepTempDir() << outputDir.substr(outputDir.find_first_of(prefix)));
+				<< " to " << GeneralOptions::getOptions().getKeepTempDir() << outputDir.substr(outputDir.find(prefix)));
 		std::string outputName = outputDir + "/input" + format.getSuffix();
 		{
 			OfstreamMap ofm(outputName, "");
