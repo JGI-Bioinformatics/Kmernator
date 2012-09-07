@@ -96,12 +96,16 @@ char TwoBitSequence::uncompressBase(unsigned int v) {
 unsigned char TwoBitSequence::compressBase(char base) {
 	switch (base) {
 	case 'A':
+	case 'a':
 		return 0;
 	case 'C':
+	case 'c':
 		return 1;
 	case 'G':
+	case 'g':
 		return 2;
 	case 'T':
+	case 't':
 		return 3;
 	case '\0':
 		return 254;

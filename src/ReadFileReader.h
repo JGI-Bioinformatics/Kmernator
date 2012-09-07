@@ -71,10 +71,10 @@ private:
 	ifstream _qs;
 	istringstream _iss;
 	Kmernator::FilteredIStream _fis;
-	int _streamType;
+	int _streamType; // 0 - file , 1 - string, 2 - mmap
 
 public:
-	ReadFileReader(): _parser() {}
+	ReadFileReader(): _parser(), _streamType(1) {}
 
 	ReadFileReader(string fastaFilePath, bool autoFindQual) :
 		_parser(), _path(fastaFilePath), _streamType(0) {
@@ -154,16 +154,19 @@ public:
 
 	void setReader(MmapSource &mmap) {
 		assert(mmap.is_open());
+		_streamType = 2;
 		LOG_DEBUG(3, "setReader(mmap):" << (void*)mmap.data());
 		setParser(mmap, *mmap.data());
 	}
 	void setReader(MmapSource &mmap1, MmapSource &mmap2) {
 		assert(mmap1.is_open());
 		assert(mmap2.is_open());
+		_streamType = 2;
 		LOG_DEBUG(3, "setReader(mmap, mmap):" << (void*)mmap1.data() << " " << (void*)mmap2.data());
 		setParser(mmap1,mmap2);
 	}
 	void setParser(istream &fs1) {
+		assert(_streamType == 0);
 		if (fs1.fail() || !fs1.good())
 			LOG_THROW("ReadFileRader::setParser(): istream fail() or !good()");
 		setParser(fs1, fs1.peek());
@@ -181,6 +184,7 @@ public:
 		return _parser;
 	}
 	void setParser(istream &fs1, istream &fs2) {
+		assert(_streamType == 0);
 		if (fs2.fail() || fs2.eof() || !fs2.good() ) {
 			setParser(fs1);
 		} else {
@@ -189,6 +193,7 @@ public:
 		}
 	}
 	void setParser(MmapSource &mmap1, MmapSource &mmap2) {
+		assert(_streamType == 2);
 		_parser = SequenceStreamParserPtr(new FastaQualStreamParser(mmap1, mmap2));
 		LOG_DEBUG(3, "setParser(mmap,mmap) FastaQualStreamParser");
 	}

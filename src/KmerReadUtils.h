@@ -44,12 +44,7 @@ public:
 			return KmerWeightedExtensions();
 
 		SequenceLengthType readLength = read.getLength();
-		bool needMalloc = readLength > MAX_STACK_SIZE;
-		bool _bools[ needMalloc ? 0 : readLength ];
-		bool *bools = _bools;
-		if (needMalloc) {
-			bools = new bool[readLength];
-		}
+		STACK_ALLOC(bool, bools, readLength);
 		std::string fasta = read.getFastaNoMarkup();
 		int kmerLen = KmerSizer::getSequenceLength();
 
@@ -110,9 +105,9 @@ public:
 				debug << i << " " << kmers.valueAt(i).getWeight() << " " << kmers[i].toFasta() << std::endl;
 			}
 		}
-		if (needMalloc) {
-			delete [] bools;
-		}
+
+		STACK_DEALLOC(bools);
+
 		return kmers;
 	}
 };

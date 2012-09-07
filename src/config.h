@@ -88,7 +88,7 @@ const int OMP_MAX_THREADS_DEFAULT = omp_get_max_threads();
 // if more than 128 bytes (512 sequence length) is needed, malloc will be called.
 #define MAX_STACK_SIZE 1024
 #define STACK_ALLOC(_TYPE, _VAR, _LENGTH) \
-	bool _VAR_needMalloc = _LENGTH > MAX_STACK_SIZE; \
+	bool _VAR_needMalloc = (_LENGTH * sizeof(_TYPE)) > MAX_STACK_SIZE; \
 	_TYPE _VAR_buffer[_VAR_needMalloc ? 0 : _LENGTH]; \
 	_TYPE *_VAR = _VAR_buffer; \
 	if (_VAR_needMalloc) _VAR = new _TYPE[_LENGTH];
