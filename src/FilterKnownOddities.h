@@ -366,7 +366,8 @@ public:
 		SequenceLengthType seqLen = read.getLength();
 		TwoBitEncoding *ptr = read.getTwoBitSequence();
 		long bytes = read.getTwoBitEncodingSequenceLength();
-		TwoBitEncoding revcomp[bytes+1];
+		STACK_ALLOC(TwoBitEncoding, revcomp, bytes+1);
+
 		TwoBitEncoding *revPtr = revcomp;
 		SequenceLengthType seqLenByteBoundary = seqLen & ~((SequenceLengthType) 0x03);
 		TwoBitSequence::reverseComplement(ptr, revPtr, seqLenByteBoundary);
@@ -426,6 +427,8 @@ public:
 			ptr++;
 			revPtr++;
 		}
+
+		STACK_DEALLOC(revcomp);
 
 		if (wasPhiX) {
 			value = getPhiXReadIdx();

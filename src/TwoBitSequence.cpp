@@ -327,18 +327,13 @@ SequenceLengthType TwoBitSequence::firstMarkupNorX(const BaseLocationVectorType 
 std::string TwoBitSequence::getFasta(const TwoBitEncoding *in,
 		SequenceLengthType offset, SequenceLengthType length) {
 
-	bool needMalloc = (offset+length) < MAX_STACK_SIZE - 1;
+	STACK_ALLOC(char, buffer, offset+length+1);
 
-	char _buffer[needMalloc ? 0 : offset+length+1];
-	char *buffer = _buffer;
-	if (needMalloc) {
-		buffer = new char[offset+length+1];
-	}
 	uncompressSequence(in, offset+length, buffer);
 
 	std::string str(buffer, offset+length);
-	if (needMalloc)
-		delete [] buffer;
+
+	STACK_DEALLOC(buffer);
 
 	return str.substr(offset, length);
 }

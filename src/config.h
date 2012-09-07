@@ -87,6 +87,13 @@ const int OMP_MAX_THREADS_DEFAULT = omp_get_max_threads();
 // Some processes need memory to make a two bit sequence.
 // if more than 128 bytes (512 sequence length) is needed, malloc will be called.
 #define MAX_STACK_SIZE 1024
+#define STACK_ALLOC(_TYPE, _VAR, _LENGTH) \
+	bool _VAR_needMalloc = _LENGTH > MAX_STACK_SIZE; \
+	_TYPE _VAR_buffer[_VAR_needMalloc ? 0 : _LENGTH]; \
+	_TYPE *_VAR = _VAR_buffer; \
+	if (_VAR_needMalloc) _VAR = new _TYPE[_LENGTH];
+#define STACK_DEALLOC(_VAR) \
+		if (_VAR_needMalloc) delete [] _VAR;
 
 #ifndef MAX_KMER_MAP_BUCKETS
 #define MAX_KMER_MAP_BUCKETS 33554432
