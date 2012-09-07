@@ -1752,7 +1752,7 @@ public:
 			batch = store.getSize() / 10 + 1;
 		}
 		long kmersPerRead = store.getMaxSequenceLength() - KmerSizer::getSequenceLength() + 1;
-		batch = std::min( batch, 128*1024*1024 / kmersPerRead / KmerSizer::getByteSize() / numThreads );
+		batch = std::min( batch, 128*1024*1024 / kmersPerRead / KmerSizer::getByteSize() / numThreads + 1);
 
 		LOG_DEBUG(1, "buildKmerSpectrumParallel(): batchSize: " << batch);
 		long reservation;
