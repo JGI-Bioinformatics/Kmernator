@@ -930,7 +930,7 @@ public:
 			else
 				newCapacity = size;
 
-			newBegin = std::malloc(newCapacity * getElementByteSize());
+			newBegin = std::calloc(newCapacity, getElementByteSize());
 			if (newBegin == NULL) {
 				LOG_ERROR(0, "Attempt to malloc " << newCapacity
 						* getElementByteSize());
