@@ -946,7 +946,7 @@ string Read::getQuals(SequenceLengthType trimOffset, SequenceLengthType trimLeng
 		if (trimLength > len - trimOffset)
 			trimLength = len - trimOffset;
 
-		if (trimLength > 0) {
+		if (trimLength > 1) {
 			if ( (!hasQuals()) || quals[0] == REF_QUAL) {
 				if (forPrinting)
 					return string(trimLength, PRINT_REF_QUAL);
@@ -966,7 +966,7 @@ string Read::getQuals(SequenceLengthType trimOffset, SequenceLengthType trimLeng
 		if (trimLength > len - trimOffset)
 			trimLength = len - trimOffset;
 
-		if (trimLength > 0) {
+		if (trimLength > 1) {
 			qualPtr = _getQual() + trimOffset;
 
 			if ( (!hasQuals()) || *qualPtr == REF_QUAL) {
