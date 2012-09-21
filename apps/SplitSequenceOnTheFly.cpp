@@ -70,11 +70,35 @@ public:
 	int &getFileNum() {
 		return fileNum;
 	}
+	int getFirstDim() {
+		if (secondDim == 0)
+			return numFiles;
+		else
+			return numFiles / secondDim;
+	}
+	int &getSecondDim() {
+		return secondDim;
+	}
+	int getFirst() {
+		if (secondDim == 0)
+			return fileNum;
+		else
+			return fileNum / secondDim;
+	}
+	int getSecond() {
+		if (secondDim == 0)
+			return 0;
+		else
+			return fileNum % secondDim;
+	}
 	std::string &getSplitFile() {
 		return splitFile;
 	}
 	int &getEvenChunks() {
 		return evenChunks;
+	}
+	int &getMinReadLength() {
+		return minReadLength;
 	}
 	bool &getFifoFile() {
 		return fifoFile;
@@ -92,7 +116,7 @@ public:
 		return extraFifo;
 	}
 
-	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), evenChunks(1), fifoFile(false) {}
+	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), secondDim(0), evenChunks(1), minReadLength(0), fifoFile(false) {}
 
 	std::string _replaceWithKeys(std::string input) {
 		size_t pos;
@@ -112,11 +136,43 @@ public:
 			LOG_DEBUG_OPTIONAL(2, true, "Replacing {FileNum} (" << buf2 << ") in " << input);
 			input.replace(pos, 9, buf2);
 		}
+
 		while ((pos = input.find("{NumFiles}")) != std::string::npos) {
 			sprintf(buf, "%06d", getNumFiles());
 			std::string buf2(buf);
 			LOG_DEBUG_OPTIONAL(2, true, "Replacing {NumFiles}  (" << buf2 << ") in " << input);
 			input.replace(pos, 10, buf2);
+		}
+
+		if (secondDim > 0) {
+			while ((pos = input.find("{FirstNum}")) != std::string::npos) {
+				sprintf(buf, "%06d", getFirst());
+				std::string buf2(buf);
+				LOG_DEBUG_OPTIONAL(2, true, "Replacing {FirstNum} (" << buf2 << ") in " << input);
+				input.replace(pos, 10, buf2);
+			}
+			while ((pos = input.find("{SecondNum}")) != std::string::npos) {
+				sprintf(buf, "%06d", getSecond());
+				std::string buf2(buf);
+				LOG_DEBUG_OPTIONAL(2, true, "Replacing {SecondNum} (" << buf2 << ") in " << input);
+				input.replace(pos, 11, buf2);
+			}
+			while ((pos = input.find("{UniqFirst}")) != std::string::npos) {
+				sprintf(buf, "%06d", getFirst());
+				std::string buf2 = std::string(buf) + "of";
+				sprintf(buf, "%06d", getFirstDim());
+				buf2 += std::string(buf);
+				LOG_DEBUG_OPTIONAL(2, true, "Replacing {UniqFirst} (" << buf2 << ") in " << input);
+				input.replace(pos, 11, buf2);
+			}
+			while ((pos = input.find("{UniqSecond}")) != std::string::npos) {
+				sprintf(buf, "%06d", getSecond());
+				std::string buf2 = std::string(buf) + "of";
+				sprintf(buf, "%06d", getSecondDim());
+				buf2 += std::string(buf);
+				LOG_DEBUG_OPTIONAL(2, true, "Replacing {UniqSecond} (" << buf2 << ") in " << input);
+				input.replace(pos, 12, buf2);
+			}
 		}
 		LOG_DEBUG_OPTIONAL(2, true, "final string " << input);
 		return input;
@@ -131,6 +187,8 @@ public:
 
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
+		GeneralOptions::getOptions().getKeepReadComment() = false;
+
 		Options::getOptions().getVerbose() = 0;
 		Options::getOptions().getDebug() = 0;
 		Options::getOptions().getMmapInput() = false;
@@ -140,13 +198,15 @@ public:
 		opts.add_options()
 						("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
 						("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to output (0-(N-1))")
+						("second-dim", po::value<int>()->default_value(secondDim), "if > 0, then ranks will be divided by secondDim, and secondDim iterations of splitting will be performed, broadcasting secondDim chunks (of NumFiles) of the split data to each subrank group.  Use the keywords '{FirstNum}' '{SecondNum}' and '{UniqFirst}' and '{UniqSecond}'")
 						("even-chunks", po::value<int>()->default_value(evenChunks), "if > 1 then the output of each partition will be spread out across the file (recommend 10 if the ordering is less important than predictable runtime of forked commands)")
-						("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
+						("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{Uniq}', '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
 						("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
 						("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
 						("output-fifo", po::value<bool>()->default_value(fifoFile), "if set, --output-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
 						("extra-fifo", po::value<StringListType>(), "optional additional fifo file(s) (to potentially use with --fork-command)")
 						("fork-command", po::value<StringListType>(), "optional command(s) to fork between opening output files and wait to finish before starting any merges")
+						("min-read-length", po::value<int>()->default_value(minReadLength), "minimum read length to output (applies to unpaired only)")
 						;
 
 		desc.add(opts);
@@ -159,7 +219,14 @@ public:
 		bool ret = GeneralOptions::_parseOptions(vm);
 		setOpt("num-files", getNumFiles());
 		setOpt("file-num", getFileNum());
+		setOpt("second-dim", getSecondDim());
+		if (secondDim > 0 && numFiles % secondDim != 0) {
+			std::stringstream ss;
+			ss << "if you use --second-dim, it must be a factor of the number of files: " << numFiles << " which " << secondDim << " is not.";
+			setOptionsErrorMsg(ss.str());
+		}
 		setOpt("even-chunks", getEvenChunks());
+		setOpt("min-read-length", getMinReadLength());
 		setOpt("split-file", getSplitFile());
 		setOpt("pipe-command", getPipeCommand());
 		setOpt("output-fifo", getFifoFile());
@@ -195,32 +262,61 @@ public:
 private:
 	std::string splitFile, pipeCommand;
 	StringListType mergeList, forkCommand, extraFifo;
-	int numFiles, fileNum, evenChunks;
+	int numFiles, fileNum, secondDim, evenChunks, minReadLength;
 	bool fifoFile;
 };
 typedef OptionsBaseTemplate< _SSOptions > SSOptions;
 typedef OptionsBaseInterface::StringListType StringListType;
 
-void outputRegularFiles(OptionsBaseInterface::FileListType inputs, std::ostream &output1) {
+
+template<typename T>
+void outputRegularFiles(OptionsBaseInterface::FileListType inputs, T &output1, int fileNum, int numFiles) {
 
 	FormatOutput outputFormat = FormatOutput::getDefault();
 	int chunks = SSOptions::getOptions().getEvenChunks();
+	int minReadLength = SSOptions::getOptions().getMinReadLength();
+
 	for (unsigned int i = 0 ; i < inputs.size(); i++) {
 		ReadFileReader reader(inputs[i], "");
 		for(int j = 0 ; j < chunks; j++) {
-			reader.seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
+			reader.seekToPartition( fileNum+j*chunks, numFiles*chunks );
 			std::string name, bases, quals, comment;
 			while (reader.nextRead(name, bases, quals, comment)) {
-				output1 << outputFormat.toString(name, bases, quals, comment);
+				if ((int) bases.length() >= minReadLength)
+					output1 << outputFormat.toString(name, bases, quals, comment);
 			}
 		}
 	}
-
 }
+
 typedef boost::shared_ptr< Kmernator::MmapSource > MmapPtr;
 typedef  boost::shared_ptr< ReadFileReader > RFRPtr;
 
-void outputSplitFiles(OptionsBaseInterface::FileListType inputs, string outputFile1, string outputFile2) {
+template<typename T>
+void _writeSplitReads(std::vector<RFRPtr> & readers, unsigned long readNumOfPair, int chunks, int fileNum, int numFiles, std::vector<MmapPtr> & mmaps, unsigned long  & numReads, T & output, FormatOutput & outputFormat, OptionsBaseInterface::FileListType & inputs)
+{
+	std::string name, bases, quals, comment;
+	for(int i=0; i < (int)readers.size(); i++) {
+		for(int j = 0 ; j < chunks; j++) {
+			readers[i]->seekToPartition( fileNum+j*chunks, numFiles*chunks );
+
+			madvise(const_cast<char*>(mmaps[i]->data()+readers[i]->getPos()), readers[i]->getLastPos() - readers[i]->getPos(), MADV_SEQUENTIAL);
+
+			while (readers[i]->nextRead(name, bases, quals, comment)) {
+				if ((numReads & 0x01) == readNumOfPair) {
+					output << outputFormat.toString(name, bases, quals, comment);
+				}
+				numReads++;
+				LOG_DEBUG_OPTIONAL(2, (numReads & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read " << numReads/2);
+			}
+		}
+		LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read. " << numReads << " " << readers[i]->getPos());
+	}
+	LOG_DEBUG_OPTIONAL(1, true, "Finished reading and writing split files for read. " << numReads);
+}
+
+template<typename T>
+void outputSplitFiles(OptionsBaseInterface::FileListType inputs, T &output1, T &output2, int fileNum, int numFiles) {
 
 	int numInputs = inputs.size();
 	std::vector< MmapPtr > mmaps;
@@ -237,6 +333,9 @@ void outputSplitFiles(OptionsBaseInterface::FileListType inputs, string outputFi
 	}
 
 
+	assert(numInputs == (int)readers1.size());
+	assert(numInputs == (int)readers2.size());
+
 	FormatOutput outputFormat = FormatOutput::getDefault();
 	omp_set_dynamic(0);
 	omp_set_num_threads(2);
@@ -245,64 +344,51 @@ void outputSplitFiles(OptionsBaseInterface::FileListType inputs, string outputFi
 	for(int i=0; i < numInputs; i++)
 		madvise(const_cast<char*>(mmaps[i]->data()), mmaps[i]->size(), MADV_DONTNEED);
 
-    #pragma omp parallel num_threads(2)
-	{
-		if (omp_get_num_threads() != 2)
-			LOG_THROW("Invalid number of threads! " << omp_get_num_threads());
+	//int second = SSOptions::getOptions().getSecond();
+	//int first = SSOptions::getOptions().getFirst();
+	int secondDim = SSOptions::getOptions().getSecondDim();
 
-		if (omp_get_thread_num() == 0) {
-			std::ofstream output1(outputFile1.c_str());
-			std::string name, bases, quals, comment;
-			for(int i=0; i < numInputs; i++) {
-				for(int j = 0 ; j < chunks; j++) {
-					readers1[i]->seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
-					//readers2[i]->seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
+	if (secondDim == 0) {
+		#pragma omp parallel num_threads(2)
+		{
+			if (omp_get_num_threads() != 2)
+				LOG_THROW("Invalid number of threads! " << omp_get_num_threads());
 
-					madvise(const_cast<char*>(mmaps[i]->data()+readers1[i]->getPos()), readers1[i]->getLastPos() - readers1[i]->getPos(), MADV_SEQUENTIAL);
+			if (omp_get_thread_num() == 0) {
 
-					while (readers1[i]->nextRead(name, bases, quals, comment)) {
-						if ((numReads1 & 0x01) == 0) {
-							output1 << outputFormat.toString(name, bases, quals, comment);
+				_writeSplitReads(readers1, 0, chunks, fileNum, numFiles, mmaps, numReads1, output1, outputFormat, inputs);
 
-						}
-						numReads1++;
-						LOG_DEBUG_OPTIONAL(2, (numReads1 & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read1 " << numReads1/2);
-					}
-				}
-				LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read1. " << numReads1 << " " << readers1[i]->getPos());
+			} else {
+
+				_writeSplitReads(readers2, 1, chunks, fileNum, numFiles, mmaps, numReads2, output2, outputFormat, inputs);
+
 			}
 
-			output1.close();
-			LOG_DEBUG_OPTIONAL(1, true, "Finished reading and writing split files for read1. " << numReads1);
-
-		} else {
-			std::ofstream output2(outputFile2.c_str());
-			std::string name, bases, quals, comment;
-			for(int i=0; i < numInputs; i++) {
-				for(int j = 0 ; j < chunks; j++) {
-					//readers1[i]->seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
-					readers2[i]->seekToPartition( SSOptions::getOptions().getFileNum()+j*chunks, SSOptions::getOptions().getNumFiles()*chunks );
-
-					madvise(const_cast<char*>(mmaps[i]->data()+readers2[i]->getPos()), readers2[i]->getLastPos() - readers2[i]->getPos(), MADV_SEQUENTIAL);
-
-					while (readers2[i]->nextRead(name, bases, quals, comment)) {
-						if ((numReads2 & 0x01) == 1) {
-							output2 << outputFormat.toString(name, bases, quals, comment);
-						}
-						numReads2++;
-						LOG_DEBUG_OPTIONAL(2, (numReads2 & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read2 " << numReads2/2);
-					}
-				}
-				LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read2. " << numReads2 << " " << readers2[i]->getPos());
-			}
-
-			output2.close();
-			LOG_DEBUG_OPTIONAL(1, true, "Finished reading and writing split files for read2. " << numReads2);
-
+			LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads1 << " " << numReads2);
+			#pragma omp barrier
 		}
 
-		LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads1 << " " << numReads2);
-		#pragma omp barrier
+	} else {
+
+		#pragma omp parallel num_threads(2)
+		{
+			if (omp_get_num_threads() != 2)
+				LOG_THROW("Invalid number of threads! " << omp_get_num_threads());
+
+			if (omp_get_thread_num() == 0) {
+
+				_writeSplitReads(readers1, 0, chunks, fileNum, numFiles, mmaps, numReads1, output1, outputFormat, inputs);
+
+			}
+			if (omp_get_thread_num() == 1) {
+
+				_writeSplitReads(readers2, 1, chunks, fileNum, numFiles, mmaps, numReads2, output2, outputFormat, inputs);
+
+			}
+			LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads1 << " " << numReads2);
+			#pragma omp barrier
+		}
+
 	}
 
 
@@ -389,10 +475,19 @@ int main(int argc, char *argv[]) {
 	OPipestream *ops = NULL;
 	ostream *out1 = &std::cout;
 	ofstream *out1f = NULL;
+	ofstream *out2f = NULL;
 	std::vector< int > forkPids;
 	StringListType extraFifos = SSOptions::getOptions().getExtraFifo();
 
 	try {
+		int fileNum = SSOptions::getOptions().getFileNum();
+		int numFiles = SSOptions::getOptions().getNumFiles();
+
+		int second = SSOptions::getOptions().getSecond();
+		int first = SSOptions::getOptions().getFirst();
+		int secondDim = SSOptions::getOptions().getSecondDim();
+		//int firstDim  = SSOptions::getOptions().getFirstDim();
+
 
 		if (!extraFifos.empty()) {
 			for(int i = 0; i < (int) extraFifos.size(); i++) {
@@ -422,9 +517,21 @@ int main(int argc, char *argv[]) {
 
 		}
 
-		if (!splitFile.empty()) {
+		if (!outputFile.empty()) {
+			out1 = out1f = new std::ofstream(outputFile.c_str());
+		}
 
-			outputSplitFiles(inputs, outputFile, splitFile);
+		if (!splitFile.empty()) {
+			assert(out1f != NULL);
+			out2f = new std::ofstream(splitFile.c_str());
+			if (secondDim > 0) {
+				for(int secondIt = 0 ; secondIt < secondDim ; secondIt++) {
+					LOG_DEBUG_OPTIONAL(1, true, "second: " << secondIt << " mydim:" << first << ", " << second << " : " << secondDim << " part " << first*secondDim + second);
+					outputSplitFiles(inputs, *out1f, *out2f, first*secondDim + secondIt, numFiles);
+				}
+			} else {
+				outputSplitFiles(inputs, *out1f, *out2f, fileNum, numFiles);
+			}
 
 		} else {
 			std::string pipeCommand = SSOptions::getOptions().getPipeCommand();
@@ -437,17 +544,29 @@ int main(int argc, char *argv[]) {
 			}
 
 			assert(out1 != NULL || ops != NULL);
-			outputRegularFiles(inputs, (ops == NULL ? *out1 : *ops));
+			if (secondDim > 0) {
+				for(int secondIt = 0 ; secondIt < secondDim ; secondIt++) {
+					LOG_DEBUG_OPTIONAL(1, true, "second: " << secondIt << " mydim:" << first << ", " << second << " : " << secondDim << " part " << first*secondDim + second);
+					outputRegularFiles(inputs, (ops == NULL ? *out1 : *ops), first*secondDim + secondIt, numFiles);
+				}
+			} else {
+				outputRegularFiles(inputs, (ops == NULL) ? *out1 : *ops, fileNum, numFiles);
+			}
 
 			if (ops != NULL) {
 				delete ops;
 				ops = NULL;
 			}
-			if (out1f != NULL) {
-				out1f->close();
-				out1f = NULL;
-			}
 
+		}
+
+		if (out1f != NULL) {
+			out1f->close();
+			out1f = NULL;
+		}
+		if (out2f != NULL) {
+			out2f->close();
+			out2f = NULL;
 		}
 
 		if (! SSOptions::getOptions().getFifoFile()) {
