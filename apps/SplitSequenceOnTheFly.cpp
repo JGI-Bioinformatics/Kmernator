@@ -48,7 +48,7 @@
 #ifdef ENABLE_MPI
 #include "DistributedFunctions.h"
 #endif
- #include <unistd.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -196,18 +196,18 @@ public:
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		po::options_description opts("Split Sequence Options");
 		opts.add_options()
-						("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
-						("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to output (0-(N-1))")
-						("second-dim", po::value<int>()->default_value(secondDim), "if > 0, then ranks will be divided by secondDim, and secondDim iterations of splitting will be performed, broadcasting secondDim chunks (of NumFiles) of the split data to each subrank group.  Use the keywords '{FirstNum}' '{SecondNum}' and '{UniqFirst}' and '{UniqSecond}'")
-						("even-chunks", po::value<int>()->default_value(evenChunks), "if > 1 then the output of each partition will be spread out across the file (recommend 10 if the ordering is less important than predictable runtime of forked commands)")
-						("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{Uniq}', '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
-						("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
-						("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
-						("output-fifo", po::value<bool>()->default_value(fifoFile), "if set, --output-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
-						("extra-fifo", po::value<StringListType>(), "optional additional fifo file(s) (to potentially use with --fork-command)")
-						("fork-command", po::value<StringListType>(), "optional command(s) to fork between opening output files and wait to finish before starting any merges")
-						("min-read-length", po::value<int>()->default_value(minReadLength), "minimum read length to output (applies to unpaired only)")
-						;
+								("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
+								("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to output (0-(N-1))")
+								("second-dim", po::value<int>()->default_value(secondDim), "if > 0, then ranks will be divided by secondDim, and secondDim iterations of splitting will be performed, broadcasting secondDim chunks (of NumFiles) of the split data to each subrank group.  Use the keywords '{FirstNum}' '{SecondNum}' and '{UniqFirst}' and '{UniqSecond}'")
+								("even-chunks", po::value<int>()->default_value(evenChunks), "if > 1 then the output of each partition will be spread out across the file (recommend 10 if the ordering is less important than predictable runtime of forked commands)")
+								("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{Uniq}', '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
+								("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
+								("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
+								("output-fifo", po::value<bool>()->default_value(fifoFile), "if set, --output-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
+								("extra-fifo", po::value<StringListType>(), "optional additional fifo file(s) (to potentially use with --fork-command)")
+								("fork-command", po::value<StringListType>(), "optional command(s) to fork between opening output files and wait to finish before starting any merges")
+								("min-read-length", po::value<int>()->default_value(minReadLength), "minimum read length to output (applies to unpaired only)")
+								;
 
 		desc.add(opts);
 		GeneralOptions::_setOptions(desc, p);
@@ -307,7 +307,7 @@ void _writeSplitReads(std::vector<RFRPtr> & readers, unsigned long readNumOfPair
 					output << outputFormat.toString(name, bases, quals, comment);
 				}
 				numReads++;
-				LOG_DEBUG_OPTIONAL(2, (numReads & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read " << numReads/2);
+				LOG_DEBUG_OPTIONAL(2, ((numReads & 0x0fff) == 0), "reading and writing split file " << i << " " << inputs[i] << " for read " << numReads/2);
 			}
 		}
 		LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read. " << numReads << " " << readers[i]->getPos());
@@ -316,87 +316,36 @@ void _writeSplitReads(std::vector<RFRPtr> & readers, unsigned long readNumOfPair
 }
 
 template<typename T>
-void outputSplitFiles(OptionsBaseInterface::FileListType inputs, T &output1, T &output2, int fileNum, int numFiles) {
+unsigned long outputSplitFiles(OptionsBaseInterface::FileListType inputs, T &output1, T &output2, int fileNum, int numFiles) {
+	if (omp_get_num_threads() != 2)
+		LOG_THROW("Invalid number of threads! " << omp_get_num_threads());
 
 	int numInputs = inputs.size();
+	std::vector< RFRPtr > readers;
 	std::vector< MmapPtr > mmaps;
 	mmaps.reserve(numInputs);
-	std::vector< RFRPtr > readers1, readers2;
-	readers1.reserve(numInputs);
-	readers2.reserve(numInputs);
+
+	readers.reserve(numInputs);
 	int chunks = SSOptions::getOptions().getEvenChunks();
 
 	for(int i=0; i < numInputs; i++) {
 		mmaps.push_back( MmapPtr(new Kmernator::MmapSource(inputs[i], FileUtils::getFileSize(inputs[i]))) );
-		readers1.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
-		readers2.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
+		readers.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
 	}
 
-
-	assert(numInputs == (int)readers1.size());
-	assert(numInputs == (int)readers2.size());
+	assert(numInputs == (int)readers.size());
 
 	FormatOutput outputFormat = FormatOutput::getDefault();
-	omp_set_dynamic(0);
-	omp_set_num_threads(2);
-	unsigned long numReads1 = 0, numReads2 = 0;
-	#pragma omp single
+	unsigned long numReads = 0;
+
 	for(int i=0; i < numInputs; i++)
 		madvise(const_cast<char*>(mmaps[i]->data()), mmaps[i]->size(), MADV_DONTNEED);
 
-	//int second = SSOptions::getOptions().getSecond();
-	//int first = SSOptions::getOptions().getFirst();
-	int secondDim = SSOptions::getOptions().getSecondDim();
+	_writeSplitReads(readers, omp_get_thread_num(), chunks, fileNum, numFiles, mmaps, numReads, omp_get_thread_num() == 0 ? output1 : output2, outputFormat, inputs);
 
-	if (secondDim == 0) {
-		#pragma omp parallel num_threads(2)
-		{
-			if (omp_get_num_threads() != 2)
-				LOG_THROW("Invalid number of threads! " << omp_get_num_threads());
+	LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads);
 
-			if (omp_get_thread_num() == 0) {
-
-				_writeSplitReads(readers1, 0, chunks, fileNum, numFiles, mmaps, numReads1, output1, outputFormat, inputs);
-
-			} else {
-
-				_writeSplitReads(readers2, 1, chunks, fileNum, numFiles, mmaps, numReads2, output2, outputFormat, inputs);
-
-			}
-
-			LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads1 << " " << numReads2);
-			#pragma omp barrier
-		}
-
-	} else {
-
-		#pragma omp parallel num_threads(2)
-		{
-			if (omp_get_num_threads() != 2)
-				LOG_THROW("Invalid number of threads! " << omp_get_num_threads());
-
-			if (omp_get_thread_num() == 0) {
-
-				_writeSplitReads(readers1, 0, chunks, fileNum, numFiles, mmaps, numReads1, output1, outputFormat, inputs);
-
-			}
-			if (omp_get_thread_num() == 1) {
-
-				_writeSplitReads(readers2, 1, chunks, fileNum, numFiles, mmaps, numReads2, output2, outputFormat, inputs);
-
-			}
-			LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads1 << " " << numReads2);
-			#pragma omp barrier
-		}
-
-	}
-
-
-
-	if (numReads1 != numReads2) {
-		LOG_THROW("Invalid number of paired reads! " << numReads1/2 << " vs " << numReads2/2);
-	}
-	LOG_DEBUG_OPTIONAL(1, true, "Finished outputSplitFiles");
+	return numReads;
 
 }
 
@@ -413,42 +362,42 @@ std::vector< int > forkCommand() {
 		forks.push_back(child);
 
 		if (0) {
-		int child = fork();
-		if (child < 0)
-			LOG_THROW("Could not fork child process");
+			int child = fork();
+			if (child < 0)
+				LOG_THROW("Could not fork child process");
 
-		if (child == 0) {
-			// child
-			if (0) {
-			std::vector<std::string> forkCommandArgs;
-			boost::split(forkCommandArgs, forkCommand[i], boost::is_any_of("\t "));
-			char *forkArgs[forkCommandArgs.size()];
-			forkArgs[forkCommandArgs.size()-1] = NULL;
-			for(int j = 0 ; j < (int) forkCommandArgs.size(); j++)
-				forkArgs[j] = strdup(forkCommandArgs[j].c_str());
+			if (child == 0) {
+				// child
+				if (0) {
+					std::vector<std::string> forkCommandArgs;
+					boost::split(forkCommandArgs, forkCommand[i], boost::is_any_of("\t "));
+					char *forkArgs[forkCommandArgs.size()];
+					forkArgs[forkCommandArgs.size()-1] = NULL;
+					for(int j = 0 ; j < (int) forkCommandArgs.size(); j++)
+						forkArgs[j] = strdup(forkCommandArgs[j].c_str());
 
-			std::stringstream ss;
-			ss << "Executing ( " << getpid() << ") : " << forkArgs[0] << " ";
-			for (int j=1; j < (int) forkCommandArgs.size(); j++)
-				ss << forkArgs[j] << "\t";
-			ss << std::endl;
-			std::string msg = ss.str();
-			std::cerr << msg;
-			execvp(forkArgs[0], forkArgs);
-			std::cerr << "Should not get here!" << std::endl;
-			exit(1);
+					std::stringstream ss;
+					ss << "Executing ( " << getpid() << ") : " << forkArgs[0] << " ";
+					for (int j=1; j < (int) forkCommandArgs.size(); j++)
+						ss << forkArgs[j] << "\t";
+					ss << std::endl;
+					std::string msg = ss.str();
+					std::cerr << msg;
+					execvp(forkArgs[0], forkArgs);
+					std::cerr << "Should not get here!" << std::endl;
+					exit(1);
+				} else {
+					int ret = system(forkCommand[i].c_str());
+					if (ret != 0)
+						LOG_ERROR(1, "Failed to execute: " << forkCommand[i]);
+					exit(ret);
+				}
 			} else {
-			int ret = system(forkCommand[i].c_str());
-			if (ret != 0)
-				LOG_ERROR(1, "Failed to execute: " << forkCommand[i]);
-			exit(ret);
+				// parent
+				LOG_DEBUG_OPTIONAL(1, true, "forkPid: " << child);
+				forks.push_back( child );
+				Cleanup::trackChild( child );
 			}
-		} else {
-			// parent
-			LOG_DEBUG_OPTIONAL(1, true, "forkPid: " << child);
-			forks.push_back( child );
-			Cleanup::trackChild( child );
-		}
 		}
 	}
 	return forks;
@@ -524,15 +473,23 @@ int main(int argc, char *argv[]) {
 		if (!splitFile.empty()) {
 			assert(out1f != NULL);
 			out2f = new std::ofstream(splitFile.c_str());
-			if (secondDim > 0) {
-				for(int secondIt = 0 ; secondIt < secondDim ; secondIt++) {
-					LOG_DEBUG_OPTIONAL(1, true, "second: " << secondIt << " mydim:" << first << ", " << second << " : " << secondDim << " part " << first*secondDim + second);
-					outputSplitFiles(inputs, *out1f, *out2f, first*secondDim + secondIt, numFiles);
+			omp_set_dynamic(0);
+			omp_set_num_threads(2);
+			#pragma omp parallel num_threads(2)
+			{
+				if (secondDim > 0) {
+					for(int secondIt = 0 ; secondIt < secondDim ; secondIt++) {
+						LOG_DEBUG_OPTIONAL(1, true, "second: " << secondIt << " mydim:" << first << ", " << second << " : " << secondDim << " part " << first*secondDim + second);
+						outputSplitFiles(inputs, *out1f, *out2f, first*secondDim + secondIt, numFiles);
+					}
+				} else {
+					outputSplitFiles(inputs, *out1f, *out2f, fileNum, numFiles);
 				}
-			} else {
-				outputSplitFiles(inputs, *out1f, *out2f, fileNum, numFiles);
+				if (omp_get_thread_num() == 0)
+					out1f->close();
+				if (omp_get_thread_num() == 1)
+					out2f->close();
 			}
-
 		} else {
 			std::string pipeCommand = SSOptions::getOptions().getPipeCommand();
 			if (!pipeCommand.empty()) {
@@ -561,11 +518,13 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (out1f != NULL) {
-			out1f->close();
+			if (out1f->good())
+				out1f->close();
 			out1f = NULL;
 		}
 		if (out2f != NULL) {
-			out2f->close();
+			if (out2f->good())
+				out2f->close();
 			out2f = NULL;
 		}
 
