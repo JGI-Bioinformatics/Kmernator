@@ -124,6 +124,18 @@ target_link_libraries( UtilTest
                                    )
 add_test( UtilTest UtilTest )
 
+set_source_files_properties( BgzfStreamTest
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
+                             )
+add_executable( BgzfStreamTest BgzfStreamTest )
+target_link_libraries( BgzfStreamTest
+                                   Log
+                                   ${KMERNATOR_BOOST_LIBS}
+                                   ${KMERNATOR_BOOST_TEST_LIBS}
+                                   z
+                                   )
+add_test( BgzfStreamTest BgzfStreamTest )
+
 if( MPI_FOUND )
 add_executable( TestMPI TestMPI )
 set_source_files_properties( TestMPI
