@@ -37,6 +37,8 @@
 #include <zlib.h>
 
 #include <boost/iostreams/filter/symmetric.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+
 
 
 class bgzf_detail  {
@@ -573,5 +575,33 @@ public:
 	basic_bgzf_decompressor() : base_type(bgzf_detail::DEFAULT_BLOCK_SIZE) {}
 };
 typedef basic_bgzf_decompressor<> bgzf_decompressor;
+
+class bgzf_ostream : public boost::iostreams::filtering_ostream
+{
+public:
+	bgzf_ostream(std::ostream &_os, bool addEOFBlock = true) : dest(_os), comp() {
+		comp.setAddEOFBlock(addEOFBlock);
+		this->push(comp);
+		this->push(dest);
+        }
+	virtual ~bgzf_ostream() {}
+private:
+	std::ostream &dest;
+	bgzf_compressor comp;
+};
+
+class bgzf_istream : public boost::iostreams::filtering_istream
+{
+public:
+	bgzf_istream(std::istream &_is) : dest(_is), decomp() {
+		this->push(decomp);
+		this->push(dest);
+        }
+	virtual ~bgzf_istream() {}
+private:
+	std::istream &dest;
+	bgzf_decompressor decomp;
+};
+
 
 #endif
