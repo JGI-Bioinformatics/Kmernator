@@ -14,7 +14,7 @@
 
 class _DuplicateFragmentFilterOptions : public OptionsBaseInterface {
 public:
-	_DuplicateFragmentFilterOptions() : deDupMode(1), deDupSingle(false), deDupEditDistance(0), deDupStartOffset(0),
+	_DuplicateFragmentFilterOptions() : deDupMode(1), deDupSingle(false), deDupConsensus(true), deDupEditDistance(0), deDupStartOffset(0),
 	deDupLength(24) {}
 	virtual ~_DuplicateFragmentFilterOptions() {}
 
@@ -38,6 +38,10 @@ public:
 		return deDupSingle;
 	}
 
+	bool &getDeDupConsensus() {
+		return deDupConsensus;
+	}
+
 	unsigned int &getDeDupStartOffset()
 	{
 		return deDupStartOffset;
@@ -57,6 +61,8 @@ public:
 
 						("dedup-single", po::value<bool>()->default_value(deDupSingle), "if not set, no single read de-duplication will occur.  if set, then single read deduplication will occur")
 
+						("dedup-consensus", po::value<bool>()->default_value(deDupConsensus), "if set then a single consensus read will be calculated, if not set, a random read will be selected")
+
 						("dedup-edit-distance", po::value<unsigned int>()->default_value(deDupEditDistance), "if -1, no fragment de-duplication will occur, if 0, only exact match, ...")
 
 						("dedup-start-offset", po::value<unsigned int>()->default_value(deDupStartOffset), "de-duplication start offset to find unique fragments, must be multiple of 4")
@@ -75,6 +81,8 @@ public:
 		// set dedup single
 		setOpt("dedup-single", getDeDupSingle());
 
+		setOpt("dedup-consensus", getDeDupConsensus());
+
 		// set dedup edit distance
 		setOpt("dedup-edit-distance", getDeDupEditDistance());
 		if (getDeDupEditDistance() > 1) {
@@ -92,7 +100,7 @@ public:
 	}
 protected:
 	unsigned int deDupMode;
-	bool deDupSingle;
+	bool deDupSingle, deDupConsensus;
 	unsigned int deDupEditDistance, deDupStartOffset, deDupLength;
 
 };
@@ -311,24 +319,33 @@ public:
 
 				ReadSet tmpReadSet1;
 
-				for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+				ReadSetSizeType randomIdx = rpw.size();
+                                if (DuplicateFragmentFilterOptions::getOptions().getDeDupConsensus()) {
+					for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
 
-					ReadSetSizeType readIdx = rpwit->readId;
+						ReadSetSizeType readIdx = rpwit->readId;
 
-					const Read &read1 = reads.getRead(readIdx);
-					tmpReadSet1.append( read1 );
+						const Read &read1 = reads.getRead(readIdx);
+						tmpReadSet1.append( read1 );
+	
+					}
 
-				}
+					Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
 
-				Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
-
-#pragma omp critical (BCUR_newReads)
-				{
-					newReads.append(consensus1);
-				}
+					#pragma omp critical (BCUR_newReads)
+					{
+						newReads.append(consensus1);
+					}
+                                } else {
+                                        randomIdx = LongRand::rand() % tmpReadSet1.getSize();
+					LOG_DEBUG_OPTIONAL(2, true, "Selected " << randomIdx << " out of " << rpw.size() << reads.getRead( reads.getPair((rpw.begin() + randomIdx)->readId).read1 ).getName());
+                                }
 				affectedCount += rpw.size();
 
+				ReadSetSizeType count = 0;
 				for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+					if (count++ == randomIdx)
+						continue;	
 
 					ReadSetSizeType readIdx = rpwit->readId;
 
@@ -362,39 +379,48 @@ public:
 			if (it->value().getCount() >= cutoffThreshold) {
 				RPW rpw = it->value().getEachInstance();
 
-				ReadSet tmpReadSet1;
-				ReadSet tmpReadSet2;
-				ReadSet &threadNewReads = _threadNewReads[omp_get_thread_num()];
+				ReadSetSizeType randomIdx = rpw.size();
 
-				for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+				if (DuplicateFragmentFilterOptions::getOptions().getDeDupConsensus()) {
+					ReadSet tmpReadSet1;
+					ReadSet tmpReadSet2;
+					ReadSet &threadNewReads = _threadNewReads[omp_get_thread_num()];
 
-					// iterator readId is actually the pairIdx built above
-					ReadSetSizeType pairIdx = rpwit->readId;
+					for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+	
+						// iterator readId is actually the pairIdx built above
+						ReadSetSizeType pairIdx = rpwit->readId;
 
-					// correct orientation
-					bool isCorrectOrientation = true;
-					if (pairIdx >= pairSize) {
-						isCorrectOrientation = false;
-						pairIdx = pairIdx - pairSize;
+						// correct orientation
+						bool isCorrectOrientation = true;
+						if (pairIdx >= pairSize) {
+							isCorrectOrientation = false;
+							pairIdx = pairIdx - pairSize;
+						}
+						Pair &pair = reads.getPair(pairIdx);
+						const Read &read1 = reads.getRead(isCorrectOrientation ? pair.read1 : pair.read2);
+						const Read &read2 = reads.getRead(isCorrectOrientation ? pair.read2 : pair.read1);
+	
+						tmpReadSet1.append( read1 );
+						tmpReadSet2.append( read2 );
+	
 					}
-					Pair &pair = reads.getPair(pairIdx);
-					const Read &read1 = reads.getRead(isCorrectOrientation ? pair.read1 : pair.read2);
-					const Read &read2 = reads.getRead(isCorrectOrientation ? pair.read2 : pair.read1);
 
-					tmpReadSet1.append( read1 );
-					tmpReadSet2.append( read2 );
+					Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
+					Read consensus2 = tmpReadSet2.getConsensusRead(minQual);
 
+					threadNewReads.append(consensus1);
+					threadNewReads.append(consensus2);
+				} else {
+					randomIdx = LongRand::rand() % rpw.size();
+					LOG_DEBUG_OPTIONAL(2, true, "Selected " << randomIdx << " out of " << rpw.size() << reads.getRead( reads.getPair((rpw.begin() + randomIdx)->readId).read1 ).getName());
 				}
 
-				Read consensus1 = tmpReadSet1.getConsensusRead(minQual);
-				Read consensus2 = tmpReadSet2.getConsensusRead(minQual);
-
-				threadNewReads.append(consensus1);
-				threadNewReads.append(consensus2);
-
 				affectedCount += 2 * rpw.size();
-
+				ReadSetSizeType count = 0;
 				for(RPWIterator rpwit = rpw.begin(); rpwit != rpw.end(); rpwit++) {
+					if (count++ == randomIdx)
+						continue;
 
 					ReadSetSizeType pairIdx = rpwit->readId;
 

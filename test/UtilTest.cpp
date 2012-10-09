@@ -135,7 +135,7 @@ void testIpipestream()
 }
 
 
-BOOST_AUTO_TEST_CASE( MmapTempfileTest )
+BOOST_AUTO_TEST_CASE( UtilTest )
 {
 	testBimodalPartition();
 	testIpipestream();
