@@ -326,9 +326,9 @@ protected:
 	static void reset(BGZF *fp) {
 		if (fp->uncompressed_block != NULL) free(fp->uncompressed_block);
 		if (fp->compressed_block != NULL) free(fp->compressed_block);
-		if (fp != NULL) free(fp);
 		fp->uncompressed_block = NULL;
 		fp->compressed_block = NULL;
+		if (fp != NULL) free(fp);
 		fp = NULL;
 	}
 
@@ -429,12 +429,15 @@ protected:
 		int compressed_length = 0;
 		while (1) {
 			z_stream zs;
-			zs.zalloc = NULL;
-			zs.zfree = NULL;
+			zs.msg = Z_NULL;
+			zs.opaque = Z_NULL;
+			zs.zalloc = Z_NULL;
+			zs.zfree = Z_NULL;
 			zs.next_in = (Bytef*) fp->uncompressed_block;
 			zs.avail_in = input_length;
 			zs.next_out = (Bytef*)&buffer[BLOCK_HEADER_LENGTH];
 			zs.avail_out = buffer_size - BLOCK_HEADER_LENGTH - BLOCK_FOOTER_LENGTH;
+			zs.data_type = Z_BINARY;
 
 			int status = deflateInit2(&zs, fp->compress_level, Z_DEFLATED,
 					GZIP_WINDOW_BITS, Z_DEFAULT_MEM_LEVEL, Z_DEFAULT_STRATEGY);
@@ -507,8 +510,10 @@ protected:
 
 		z_stream zs;
 		int status;
-		zs.zalloc = NULL;
-		zs.zfree = NULL;
+		zs.msg = Z_NULL;
+		zs.opaque = Z_NULL;
+		zs.zalloc = Z_NULL;
+		zs.zfree = Z_NULL;
 		zs.next_in = (Bytef*) fp->compressed_block + 18;
 		zs.avail_in = block_length - 16;
 		zs.next_out = (Bytef*) fp->uncompressed_block;
