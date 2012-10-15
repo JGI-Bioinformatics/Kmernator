@@ -35,6 +35,7 @@
 #include "mpi.h"
 #include <stdint.h>
 #include <string>
+#include <algorithm>
 
 #include "sam.h"
 #include "bam.h"
@@ -206,7 +207,7 @@ typedef BamStreamUtils::BamCoreVector BamCoreVector;
 
 class SamUtils {
 public:
-	static const int READS_PER_BATCH = 10000;
+	static const int READS_PER_BATCH = 8192;
 	typedef std::vector< int > IntVector;
 	typedef bam1_t *bam1_p;
 	typedef bam1_core_t *bam1_core_p;
@@ -228,24 +229,34 @@ public:
 	class SortByPosition {
 
 	public:
-		inline bool operator()(const bam1_p a, const bam1_p b) {
-			return cmp(a,b) < 0;
+		inline bool operator()(const bam1_p a, const bam1_p b) const {
+			return cmpBam(a,b) < 0;
 		}
-		inline bool operator()(const bam1_core_t &a, const bam1_core_t &b) {
-			return cmp(a,b) < 0;
+		inline bool operator()(const bam1_core_t &a, const bam1_core_t &b) const {
+			return cmpBamCore(a,b) < 0;
 		}
-		inline bool operator()(const bam1_core_p a, const bam1_core_p b) {
-			return cmp(*a, *b) < 0;
+		inline bool operator()(const bam1_core_p a, const bam1_core_p b) const {
+			return cmpBamCore(*a, *b) < 0;
 		}
-		static inline int cmp(const bam1_p a, const bam1_p b)
+		static inline int cmpBam(const bam1_p a, const bam1_p b)
 		{
-			int _cmp = cmp(a->core, b->core);
-			if (_cmp == 0)
-				return strcmp(bam1_qname(a), bam1_qname(b));
-			else
+			int _cmp = cmpBamCore(a->core, b->core);
+			if (_cmp == 0) {
+				if (a->data_len == 0) { // let empty sort first
+					return -1;
+				} else if (b->data_len == 0) {
+					return 1;
+				} else {
+					_cmp = strcmp(bam1_qname(a), bam1_qname(b));
+					if (_cmp == 0)
+						return isMapped(a) ? -1 : (isMapped(b) ? 1 : (isRead1(a) ? -1 : 1));
+					else
+						return _cmp;
+				}
+			} else
 				return _cmp;
 		}
-		static inline int cmp(const bam1_core_t &a, const bam1_core_t &b) {
+		static inline int cmpBamCore(const bam1_core_t &a, const bam1_core_t &b) {
 			uint64_t ax = ((uint64_t)a.tid<<32|(a.pos+1));
 			uint64_t bx = ((uint64_t)b.tid<<32|(b.pos+1));
 			if (ax < bx)
@@ -255,6 +266,7 @@ public:
 			else
 				return 1;
 		}
+
 	};
 
 	static long concatenateOutput(MPI_Comm comm, MPI_File &ourFile, long myLength, std::istream &data) {
@@ -340,9 +352,9 @@ public:
 		long myLength = myBams.tellp();
 		return concatenateOutput(comm, ourFile, myLength, myBams);
 	}
-	static long writeBamVector(MPI_Comm comm, char *ourFileName, BamVector &reads, bam_header_t *header = NULL, bool destroyBam = true) {
+	static long writeBamVector(MPI_Comm comm, std::string ourFileName, BamVector &reads, bam_header_t *header = NULL, bool destroyBam = true) {
 		MPI_File outfh;
-		if (MPI_SUCCESS != MPI_File_open(comm, ourFileName, MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
+		if (MPI_SUCCESS != MPI_File_open(comm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
 			LOG_THROW("Could not open/write: " << ourFileName);
 
 		long val = writeBamVector(comm, outfh,reads, header,destroyBam);
@@ -731,8 +743,8 @@ public:
 				int *displs = NULL;
 				char *buf = NULL;
 				if (rank == root) {
-					counts = (int*) calloc(size, sizeof(int));
-					displs = (int*) calloc(size, sizeof(int));
+					counts = (int*) calloc(size, sizeof(myCount));
+					displs = (int*) calloc(size, sizeof(myCount));
 				}
 
 				if (MPI_SUCCESS != MPI_Gather(&myCount, 1, MPI_INT, counts, 1, MPI_INT, root, comm))
@@ -967,45 +979,111 @@ public:
 		static void copyBamCore(bam1_core_t *dest, const bam1_core_t *src) {
 			memcpy(dest, src, sizeof(bam1_core_t));
 		}
-		static BamCoreVector calculateGlobalMedians(BamVector &sortedReads, MPI_Comm mpicomm) {
+		static BamCoreVector calculateGlobalMedians(BamVector &sortedReads, MPI_Comm mpicomm, int granularity = -1) {
 			LOG_DEBUG_OPTIONAL(2, true, "calculateGlobalMedians(): " << sortedReads.size());
 			int myRank, ourSize;
 			MPI_Comm_rank(mpicomm, &myRank);
 			MPI_Comm_size(mpicomm, &ourSize);
-			int blockSize = (sortedReads.size() + ourSize - 1) / ourSize;
-			// find rank medians of rank-tile break points
-			// store a buffer containing all the percentile ranking cores
-			bam1_core_t *bamCoreBuf = (bam1_core_t*) calloc(ourSize*ourSize, sizeof(bam1_core_t));
-			for (int i = 0 ; i < ourSize; i++) {
-				int idx = std::min((int) (sortedReads.size()-1), blockSize*(i+1));
-				copyBamCore((bamCoreBuf + myRank * ourSize + i), (idx >= 0) ? &(sortedReads[idx]->core) : nullCore());
+			if (granularity == -1)
+				granularity = ourSize*7;
+
+			// find first unmapped read
+			long myUnmapped;
+			if (sortedReads.empty()) {
+				myUnmapped = 0;
+			} else {
+				BamVector::const_iterator it = std::lower_bound(sortedReads.begin(), sortedReads.end(), nullRead(), SortByPosition());
+				myUnmapped = sortedReads.end() - it;
+			}
+
+			long *ourDataSizes = (long*) calloc(ourSize*2, sizeof(myUnmapped));
+
+			ourDataSizes[myRank*2] = sortedReads.size();
+			ourDataSizes[myRank*2+1] = myUnmapped;
+			int myMapped = sortedReads.size() - myUnmapped;
+			LOG_DEBUG_OPTIONAL(2, true, "myTotal: " << ourDataSizes[myRank*2] << " myunmapped: " << ourDataSizes[myRank*2+1] << " myMapped: " << myMapped);
+
+			if (MPI_SUCCESS != MPI_Allgather(MPI_IN_PLACE, 0, MPI_LONG, ourDataSizes, 2, MPI_LONG, mpicomm))
+				LOG_THROW("MPI_Allgather() failed");
+
+			long ourTotalSize = 0, ourTotalUnmapped = 0;
+			for(int i = 0; i < ourSize; i++) {
+				ourTotalSize += ourDataSizes[i*2];
+				ourTotalUnmapped += ourDataSizes[i*2+1];
+			}
+			LOG_DEBUG(2, "ourTotal: " << ourTotalSize << " ourUnmapped: " << ourTotalUnmapped);
+
+			long ourTotalMapped = ourTotalSize - ourTotalUnmapped;
+			int numSamples = 0, mySampleOffset = 0;
+			int *ourGranularity = (int*) calloc(ourSize, sizeof(granularity));
+			for (int i = 0; i < ourSize; i++) {
+				ourGranularity[i] = (( ourDataSizes[i*2] - ourDataSizes[i*2+1] ) * granularity + ourTotalMapped -1 ) / ourTotalMapped;
+				numSamples += ourGranularity[i];
+				if (i < myRank)
+					mySampleOffset = numSamples;
+			}
+			free(ourDataSizes);
+
+			bam1_core_t *bamCoreBuf = (bam1_core_t*) calloc(numSamples, sizeof(bam1_core_t));
+			if (ourGranularity[myRank] > 0) {
+				long blockSize = (myMapped+ ourGranularity[myRank] - 1) / ourGranularity[myRank];
+
+				// find rank medians of rank-tile break points
+				// store a buffer containing all the percentile ranking cores
+
+				for (int i = 0 ; i < ourGranularity[myRank]; i++) {
+					long idx = std::min((long) (myMapped-1), (long)blockSize*(i+1));
+					copyBamCore((bamCoreBuf + mySampleOffset + i), (idx >= 0) ? &(sortedReads[idx]->core) : nullCore());
+
+				}
 			}
 			if (Log::isDebug(2)) {
 				std::stringstream ss;
 				ss << "My partitions: ";
-				for(int i = myRank*ourSize; i < (myRank+1)*ourSize; i++)
+				for(int i = mySampleOffset; i < mySampleOffset + ourGranularity[myRank]; i++)
 					ss << bamCoreBuf[i].tid << "," << bamCoreBuf[i].pos << " ";
+				ss << " unmapped: " << myUnmapped;
 				std::string s = ss.str();
 				LOG_DEBUG_OPTIONAL(2, true, s);
 			}
+			// fix ourGranularity to be bytes sent
 
-			if (MPI_SUCCESS != MPI_Allgather(MPI_IN_PLACE, 0, MPI_BYTE, bamCoreBuf, ourSize * sizeof(bam1_core_t), MPI_BYTE, mpicomm))
+			int totaldispl = 0;
+			int *displ = (int*) calloc(ourSize, sizeof(totaldispl));
+			for(int i = 0; i < ourSize; i++) {
+				ourGranularity[i] *= sizeof(bam1_core_t);
+				displ[i] = totaldispl;
+				totaldispl += ourGranularity[i];
+			}
+
+			if (MPI_SUCCESS != MPI_Allgatherv(MPI_IN_PLACE, 0, MPI_BYTE, bamCoreBuf, ourGranularity, displ, MPI_BYTE, mpicomm))
 				LOG_THROW("MPI_Allgather() failed");
+			free(ourGranularity);
+			free(displ);
 
 			BamCoreVector medians;
 			medians.resize(ourSize);
 
-			bam1_core_t **tmp = (bam1_core_t**) calloc(ourSize*ourSize, sizeof(bam1_core_t*));
-			for(int i = 0; i < ourSize*ourSize; i++) {
+			bam1_core_t **tmp = (bam1_core_t**) calloc(numSamples, sizeof(bam1_core_t*));
+			for(int i = 0; i < numSamples; i++) {
 				*(tmp+i) = bamCoreBuf + i;
 			}
-			std::sort(tmp, tmp+ourSize*ourSize, SortByPosition());
+			std::sort(tmp, tmp+numSamples, SortByPosition());
 
+			int correctedNumSamples = (numSamples * ourTotalSize + ourTotalMapped - 1) / ourTotalMapped;
+			int blockSize = (correctedNumSamples + ourSize - 1 ) / ourSize;
 			for(int i = 0; i < ourSize; i++) {
 				// median is halfway on the sorted subsection
-				int idx = ourSize*(i+1)-1;
-				copyBamCore(&medians[i], *(tmp + idx));
+				int idx = blockSize * (i+1);
+				bam1_core_t *b;
+				if (idx >= numSamples)
+					b = nullCore();
+				else
+					b = *(tmp+idx);
+				LOG_DEBUG_OPTIONAL(2, true, "Chose median for i: " << i << " idx: " << idx << " blocksize: " << blockSize << " numSamples: " << numSamples << " correctedNumSamples: " << correctedNumSamples);
+				copyBamCore(&medians[i], b);
 			}
+
 			free(tmp);
 			free(bamCoreBuf);
 			if (Log::isDebug(2)) {
@@ -1016,6 +1094,7 @@ public:
 				std::string s = ss.str();
 				LOG_DEBUG(2, s);
 			}
+
 			return medians;
 		}
 
@@ -1032,44 +1111,30 @@ public:
 
 			BamCoreVector medians = calculateGlobalMedians(myReads, mpicomm);
 
-			int avgCount = (myReads.size()+ourSize-1) / ourSize;
-
 			// calculate full read counts
 			IntVector sendCounts(ourSize, 0);
-			int r = 0;
-			int i;
 			int totalSendCounts = 0;
-			for(i = 0; i < (int) myReads.size(); ) {
-				if (SortByPosition::cmp(myReads[i]->core, medians[r]) <= 0) {
-					LOG_DEBUG(5, "to " << r << ": " << myReads[i]->core.tid << "," << myReads[i]->core.pos);
-				} else if (myReads[i]->core.tid < 0) {
-					// divy up remainder evenly
-					while(i < (int) myReads.size()) {
-						assert(myReads[i]->core.tid < 0); // sorted file should have all unmapped read(pairs) at the end
-						assert(isUnMapped(myReads[i]));
-						if (sendCounts[r] > (READS_PER_BATCH + ourSize -1) / ourSize + avgCount) {
-							if (r < ourSize-1) {
-								totalSendCounts += sendCounts[r];
-								r++;
-							}
-						}
-						sendCounts[r]++;
-						i++;
-					}
 
-					break;
-				} else if (r < ourSize-1) {
-					totalSendCounts += sendCounts[r];
-					r++;
-					continue;
+			bam1_t *b = bam_init1();
+			BamVector::iterator start = myReads.begin(), it;
+			for(int i = 0 ; i < ourSize; i++) {
+				if (i == ourSize - 1) {
+					sendCounts[i] = myReads.end() - start;
+				} else {
+					if (start != myReads.end()) {
+						memcpy(&(b->core), &medians[i], sizeof(medians[i]));
+						it = std::upper_bound(start, myReads.end(), b, SortByPosition());
+						sendCounts[i] = (it - start);
+					} else {
+						sendCounts[i] = 0;
+					}
 				}
-				sendCounts[r]++;
-				i++;
+				totalSendCounts += sendCounts[i];
+				start = it;
 			}
-			totalSendCounts += sendCounts[r];
-			assert(r <= ourSize);
+			bam_destroy1(b);
+
 			assert(totalSendCounts == (int) myReads.size());
-			assert(i == (int) myReads.size());
 
 			if (Log::isDebug(2)) {
 				std::stringstream ss;
@@ -1110,6 +1175,23 @@ public:
 		std::sort(reads.begin(), reads.end(), SortByPosition());
 	}
 
+	static void dumpBamVector(int debugLevel, BamVector &reads, std::string msg) {
+		if (Log::isDebug(debugLevel)) {
+			std::stringstream ss;
+			ss << msg << std::endl;
+			int count = 0;
+			for(BamVector::iterator it = reads.begin(); it != reads.end(); it++) {
+				if (*it == NULL)
+					ss << "null" << std::endl;
+				else
+					ss << (*it)->core.tid << "," << (*it)->core.pos << " " << (*it)->data << " " << (void*)(*it)->data << std::endl;
+			    if (count++ > 100)
+			    	break;
+			}
+			std::string s = ss.str();
+			LOG_DEBUG_OPTIONAL(debugLevel, true, s);
+		}
+	}
 
 
 	static bam1_core_t *nullCore() {
@@ -1127,6 +1209,14 @@ public:
 			x->mtid=-1;
 			x->mpos=-1;
 			x->isize=0;
+		}
+		return x;
+	}
+	static bam1_t *nullRead() {
+		static bam1_t *x = NULL;
+		if (x == NULL) {
+			x = (bam1_t*) calloc(1, sizeof(bam1_t));
+			memcpy(&x->core, nullCore(), sizeof(bam1_core_t));
 		}
 		return x;
 	}

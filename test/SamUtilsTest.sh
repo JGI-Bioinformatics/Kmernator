@@ -66,6 +66,10 @@ do
   diff -q ${testoutsam2} ${sortedsam}
   diff -q ${testoutsam3} ${sortedorder}
 
+  mpirun -n $i ../apps/BamSort-P ${testoutsorted} ${test}
+  samtools view -h ${testoutsorted} | awk '{print $3" "$4}' > ${testoutsam3}
+  diff -q ${testoutsam3} ${sortedorder}
+
 done
 
 trap cleanup 0
