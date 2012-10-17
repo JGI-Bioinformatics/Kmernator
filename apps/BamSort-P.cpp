@@ -13,19 +13,21 @@
 
 int main(int argc, char **argv)
 {
-	if (argc <= 2) {
-		std::cerr << "Usage: mpirun BamSort-P out.bam [in.[sb]am ...]";
-		exit(1);
-	}
 	if (MPI_SUCCESS != MPI_Init(&argc, &argv))
 		LOG_THROW("MPI_Init() failed: ");
-
-	mpi::communicator world;
-	Logger::setWorld(&world);
 
 	int rank,size;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
+	if (argc <= 2) {
+		if (rank == 0)
+			std::cerr << "Usage: mpirun BamSort-P out.bam [in.[sb]am ...]";
+		MPI_Finalize();
+		exit(1);
+	}
+	mpi::communicator world;
+	Logger::setWorld(&world);
+
 	GeneralOptions::getOptions().getDebug() = 0;
 	BamVector reads;
 	std::string outputBam(argv[1]);
