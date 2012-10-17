@@ -33,11 +33,15 @@
 #include <string.h>
 #include <iostream>
 #include <algorithm>
+#include <deque>
 #include "bgzf.h"
 #include <zlib.h>
 
 #include <boost/iostreams/filter/symmetric.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/categories.hpp>
+#include <boost/shared_ptr.hpp>
+
 
 
 
@@ -117,8 +121,7 @@ public:
 	    bool deflateBlock()
 	    {
 	        assert(compressed_block_length == 0);
-	        int block_length = fp->uncompressed_block_size;
-	        assert(fp->block_offset <= block_length);
+	        assert(fp->block_offset <= fp->uncompressed_block_size);
 	        compressed_block_length = deflate_block(fp, fp->block_offset);
 	        return fp->block_offset == 0;
 	    }
@@ -255,11 +258,10 @@ public:
 		bool readIntoBuffer(const char*& begin_in, const char *end_in) {
 			if (!readHeader(begin_in, end_in))
 				return false;
-			int max_block_length = fp->compressed_block_size;
 			int block_length = getBlockLength();
 			int bytesInputAvailable = end_in - begin_in;
 			int bytesLeftInBuffer = block_length - fp->block_offset;
-			assert(block_length <= max_block_length);
+			assert(block_length <= fp->compressed_block_size);
 
 			int copy_length = std::min(bytesInputAvailable, bytesLeftInBuffer);
 			if (copy_length > 0) {
@@ -584,28 +586,170 @@ typedef basic_bgzf_decompressor<> bgzf_decompressor;
 class bgzf_ostream : public boost::iostreams::filtering_ostream
 {
 public:
-	bgzf_ostream(std::ostream &_os, bool addEOFBlock = true) : dest(_os), comp() {
+	template< typename OUT >
+	bgzf_ostream(OUT &_os, bool addEOFBlock = true) : comp() {
 		comp.setAddEOFBlock(addEOFBlock);
 		this->push(comp);
-		this->push(dest);
+		this->push(_os);
         }
 	virtual ~bgzf_ostream() {}
 private:
-	std::ostream &dest;
 	bgzf_compressor comp;
 };
 
 class bgzf_istream : public boost::iostreams::filtering_istream
 {
 public:
-	bgzf_istream(std::istream &_is) : dest(_is), decomp() {
+	template< typename IN >
+	bgzf_istream(IN &_is) : decomp() {
 		this->push(decomp);
-		this->push(dest);
+		this->push(_is);
         }
 	virtual ~bgzf_istream() {}
 private:
-	std::istream &dest;
 	bgzf_decompressor decomp;
+};
+
+
+class memory_buffer_detail {
+public:
+	static const std::streamsize BUFFER_SIZE = 262144;
+	typedef boost::shared_ptr< char > BufferType;
+
+	memory_buffer_detail() : writeOffset(BUFFER_SIZE), readOffset(0), writeCount(0), readCount(0) {
+		addBuffer();
+	}
+	virtual ~memory_buffer_detail() {
+		clear();
+	}
+	std::streamsize write(const char* s, std::streamsize n) {
+		std::streamsize wrote = 0, remaining = n;
+		while (remaining > 0) {
+			wrote = writeSome(s, remaining);
+			s+=wrote;
+			remaining -= wrote;
+		}
+		return n;
+	}
+	std::streamsize writeSome(const char* s, std::streamsize n) {
+		std::streamsize wrote = std::min(BUFFER_SIZE - writeOffset, n);
+		memcpy(buffers.back().get() + writeOffset, s, wrote);
+		writeOffset += wrote;
+		writeCount += wrote;
+		if (writeOffset == BUFFER_SIZE)
+			addBuffer();
+		return wrote;
+	}
+	std::streamsize read(char *s, std::streamsize n) {
+		std::streamsize totalReadSize = 0, remaining = n;
+		while (remaining > 0) {
+			std::streamsize readSize = readSome(s, remaining);
+			s+=readSize;
+			remaining -= readSize;
+			totalReadSize += readSize;
+			if (readSize == 0)
+				break;
+		}
+		return totalReadSize;
+	}
+	std::streamsize readSome(char *s, std::streamsize n) {
+		int readSize;
+		if (buffers.size() == 0)
+			return 0;
+		else if (buffers.size() == 1) {
+			// front buffer may not be full
+			readSize = std::min(n, (writeOffset - readOffset));
+			if (readSize == 0)
+				return 0;
+		} else {
+			// front buffer is full
+			readSize = std::min(n, BUFFER_SIZE - readOffset);
+		}
+		memcpy(s, buffers.front().get() + readOffset, readSize);
+		readOffset += readSize;
+		readCount += readSize;
+		if (readOffset == BUFFER_SIZE)
+			removeFirstBuffer();
+		return readSize;
+	}
+	std::streamsize tellp() const {
+		return writeCount;
+	}
+	std::streamsize tellg() const {
+		return readCount;
+	}
+
+protected:
+	void clear() {
+		writeOffset = readOffset = writeCount = readCount = 0;
+		buffers.clear();
+	}
+	void addBuffer() {
+		assert(writeOffset == BUFFER_SIZE);
+		BufferType p( new char[BUFFER_SIZE] );
+		buffers.push_back( p );
+		writeOffset = 0;
+	}
+	void removeFirstBuffer() {
+		assert(readOffset == BUFFER_SIZE);
+		assert(!buffers.empty());
+		buffers.pop_front();
+		readOffset = 0;
+	}
+private:
+	std::deque< BufferType > buffers;
+	std::streamsize writeOffset, readOffset;
+	std::streamsize writeCount, readCount;
+};
+
+class memory_buffer {
+public:
+	typedef char char_type;
+	typedef boost::iostreams::bidirectional_device_tag category;
+	typedef boost::shared_ptr< memory_buffer_detail > Impl;
+	memory_buffer() : _impl( new memory_buffer_detail() ) {}
+	memory_buffer(const memory_buffer &copy) {
+		_impl = copy._impl;
+	}
+	~memory_buffer() {}
+	memory_buffer &operator=(const memory_buffer &copy) {
+		_impl = copy._impl;
+		return *this;
+	}
+	std::streamsize write(const char* s, std::streamsize n) {
+		return _impl->write(s, n);
+	}
+	std::streamsize read(char *s, std::streamsize n) {
+		return _impl->read(s, n);
+	}
+	std::streamsize tellp() const {
+		return _impl->tellp();
+	}
+	std::streamsize tellg() const {
+		return _impl->tellg();
+	}
+private:
+	Impl _impl;
+};
+
+class memory_ostream : public boost::iostreams::filtering_ostream
+{
+public:
+	typedef memory_buffer OUT;
+	memory_ostream(OUT &_os) {
+		this->push(_os);
+    }
+	virtual ~memory_ostream() {}
+};
+
+class memory_istream : public boost::iostreams::filtering_istream
+{
+public:
+	typedef memory_buffer IN;
+	memory_istream(IN &_is) {
+		this->push(_is);
+    }
+	virtual ~memory_istream() {}
 };
 
 
