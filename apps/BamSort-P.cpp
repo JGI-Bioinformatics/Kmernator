@@ -26,7 +26,7 @@ int main(int argc, char **argv)
 	int rank,size;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
-	GeneralOptions::getOptions().getDebug() = 1;
+	GeneralOptions::getOptions().getDebug() = 0;
 	BamVector reads;
 	std::string outputBam(argv[1]);
 	samfile_t *fh = NULL;
@@ -35,7 +35,7 @@ int main(int argc, char **argv)
 			std::string inputFile(argv[i]);
 			LOG_VERBOSE_OPTIONAL(1, true, "Reading " << inputFile);
 			if (fh != NULL)
-				samclose(fh);
+				BamStreamUtils::closeSamOrBam(fh);
 			fh = BamStreamUtils::openSamOrBam(inputFile);
 			long s = reads.size();
 			BamStreamUtils::readBamFile(fh, reads);
@@ -45,14 +45,13 @@ int main(int argc, char **argv)
 	LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
 
 	{
-		SamUtils::MPISortBam sortem(MPI_COMM_WORLD, reads);
+		SamUtils::MPISortBam sortem(MPI_COMM_WORLD, reads, outputBam, (fh != NULL) ? fh->header : NULL);
 	}
 
-	LOG_VERBOSE(1, "Writing our sorted reads: " << reads.size());
-	SamUtils::writeBamVector(MPI_COMM_WORLD, outputBam, reads, (fh != NULL) ? fh->header : NULL, true);
+	if (fh != NULL)
+		BamStreamUtils::closeSamOrBam(fh);
 
-	if (fh!=NULL)
-		samclose(fh);
+	LOG_VERBOSE(1, "Finished");
 
 	if (MPI_SUCCESS != MPI_Finalize())
 		LOG_THROW("MPI_Finalize() failed: ");

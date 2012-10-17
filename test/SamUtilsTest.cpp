@@ -45,7 +45,7 @@ int main(int argc, char **argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	mpi::communicator world;
 	Logger::setWorld(&world);
-	GeneralOptions::getOptions().getDebug() = 1;
+	GeneralOptions::getOptions().getDebug() = 2;
 
 	if (argc != 4)
 		LOG_THROW("Usage: SamUtilsTest my.bam testout.bam testout-sort.bam");
