@@ -183,7 +183,7 @@ public:
 	static void readBamFile(samfile_t *ins, BamVector &reads) {
 		while (true) {
 			bam1_t *bam = bam_init1();
-			if (readNextBam(ins, bam) > 0) {
+			if (readNextBam(ins, bam) >= 0) {
 				reads.push_back(bam);
 			} else {
 				bam_destroy1(bam);
@@ -335,7 +335,7 @@ public:
 			int writeCount;
 			MPI_Get_count(&status, MPI_BYTE, &writeCount);
 			if (writeCount != count)
-				throw;
+				LOG_THROW("writeCount " << writeCount << " != count " << count);
 			myOffset += count;
 			totalWritten += count;
 			LOG_DEBUG(3, "concatenateOutput(): wrote " << count);
@@ -376,12 +376,15 @@ public:
 		{
 			memory_ostream os(myBams);
 			bgzf_ostream bgzfo(os, rank == size-1);
-			if (header != NULL && rank == 0)
+			if (header != NULL && rank == 0) {
+				LOG_DEBUG_OPTIONAL(1, true, "Writing header");
 				bgzfo << *header;
+			}
 			while(!heap.empty()) {
 				bam1_p_pair bppair = heap.front();
 				bam1_pp bampp = bppair.second;
 				bam1_t *bam = bppair.first;
+				LOG_DEBUG_OPTIONAL(3, true, bam1_qname(bam));;
 				bgzfo << *bam;
 				if (destroyBam) {
 					bam_destroy1(bam);
@@ -416,8 +419,10 @@ public:
 		{
 			memory_ostream os(myBams);
 			bgzf_ostream bgzfo(os, rank == size-1);
-			if (header != NULL && rank == 0)
+			if (header != NULL && rank == 0) {
+				LOG_DEBUG_OPTIONAL(1, true, "Writing header");
 				bgzfo << *header;
+			}
 			for(BamVector::iterator it = reads.begin(); it != reads.end(); it++) {
 				bam1_t *bam = *it;
 				bgzfo << *bam;
@@ -439,7 +444,6 @@ public:
 	}
 	static long writePartialSortedBamVector(MPI_Comm comm, std::string ourFileName, BamVector &reads, IntVector &sortedCounts, bam_header_t *header = NULL) {
 		MPI_File outfh;
-		unlink(ourFileName.c_str());
 		if (MPI_SUCCESS != MPI_File_open(comm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
 			LOG_THROW("Could not open/write: " << ourFileName);
 
@@ -451,7 +455,6 @@ public:
 	}
 	static long writeBamVector(MPI_Comm comm, std::string ourFileName, BamVector &reads, bam_header_t *header = NULL, bool destroyBam = true) {
 		MPI_File outfh;
-		unlink(ourFileName.c_str());
 		if (MPI_SUCCESS != MPI_File_open(comm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
 			LOG_THROW("Could not open/write: " << ourFileName);
 
@@ -673,8 +676,8 @@ public:
 					for(int j = 0 ; j < sendCounts[i]; j++) {
 						assert(sendReadsIdx < (int) sendReads.size());
 						assert(recvReadsIdx < (int) recvReads.size());
-						assert(recvReads[recvReadsIdx]->data == NULL);
 						assert(sendReads[sendReadsIdx]->data != NULL);
+						assert(recvReads[recvReadsIdx]->data == NULL);
 						bam_copy1(recvReads[recvReadsIdx++], sendReads[sendReadsIdx++]);
 					}
 					continue;
@@ -813,7 +816,7 @@ public:
 	public:
 
 		MPIMergeSam(MPI_Comm _comm, std::string _inputFile, BamVector &_reads)
-		: comm(_comm), inputFile(_inputFile), myGobalHeaderOffset(0), myReads(_reads), readExchanger(_comm){
+		: comm(_comm), inputFile(_inputFile), myGlobalHeaderOffset(0), myReads(_reads), readExchanger(_comm){
 			fh = BamStreamUtils::openSamOrBam(inputFile);
 			setHeaderCounts();
 			pickBestAlignments();
@@ -824,22 +827,48 @@ public:
 			free(headerCounts);
 			destroyBamVector(tmpReads);
 		}
+		bam_header_t *getHeader() {
+			return fh->header;
+		}
 		// all processes write the combined BGZF compressed header to outputFile
 		// returns the fileoffset for the end of the header
+		long outputMergedHeader(std::string ourFileName) {
+			LOG_VERBOSE_OPTIONAL(1, true, "outputMergedHeader()");
+			MPI_File outfh;
+			if (MPI_SUCCESS != MPI_File_open(comm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
+				LOG_THROW("Could not open/write: " << ourFileName);
+
+			long val = outputMergedHeader(outfh);
+
+			if (MPI_SUCCESS != MPI_File_close(&outfh))
+				LOG_THROW("Could not close: " << ourFileName);
+			LOG_DEBUG_OPTIONAL(2, true, "Finished outputMergedHeader(): " << val);
+			return val;
+
+		}
 		long outputMergedHeader(MPI_File &ourFile) {
 			int rank,size;
 			MPI_Comm_rank(comm, &rank);
 			MPI_Comm_size(comm, &size);
 
 			bam_header_t *header = fh->header;
-			// fix @SN lines within plaintext header->text
+			// fix @SQ lines within plaintext header->text
 			{
 				int root = 0;
-				std::string s(header->text, header->l_text);
-				size_t firstSN = s.find_first_of("@SN");
-				size_t endSN = s.find_last_of("@SN");
-				endSN = s.find_first_of("\n", endSN) + 1;
-				int myCount = endSN - firstSN;
+				//std::string s(header->text, header->l_text);
+				char *tmp, *endSQ = NULL, *firstSQ = strstr(header->text, "@SQ");
+				if (firstSQ == NULL) LOG_THROW("Could not find @SQ in header: " << header->text);
+				tmp = firstSQ + 1; 
+				while ((tmp = strstr(tmp, "@SQ")) != NULL) {
+					endSQ = tmp;
+					tmp++;
+				}
+				if (endSQ == NULL) LOG_THROW("Could not find last @SQ record");
+				tmp = strstr(endSQ + 1, "@");
+				if (tmp == NULL) LOG_THROW("Could not find any header after @SQ section");
+				endSQ = tmp;
+
+				int myCount = endSQ - firstSQ;
 				int *counts = NULL;
 				int *displs = NULL;
 				char *buf = NULL;
@@ -847,6 +876,7 @@ public:
 					counts = (int*) calloc(size, sizeof(myCount));
 					displs = (int*) calloc(size, sizeof(myCount));
 				}
+				LOG_DEBUG(2, "Sending " << myCount << " bytes of @SQ text to root: " << (firstSQ - header->text) << " to " << (endSQ - header->text));
 
 				if (MPI_SUCCESS != MPI_Gather(&myCount, 1, MPI_INT, counts, 1, MPI_INT, root, comm))
 					LOG_THROW("MPI_Gather() failed");
@@ -859,19 +889,22 @@ public:
 					}
 					buf = (char*) calloc(total, 1);
 				}
-				if (MPI_SUCCESS != MPI_Gatherv(header->text + firstSN, myCount, MPI_BYTE, buf, counts, displs, MPI_BYTE, root, comm))
+
+				LOG_DEBUG(2, "Sending @SQ lines:\n" << std::string(firstSQ, myCount));
+				if (MPI_SUCCESS != MPI_Gatherv(firstSQ, myCount, MPI_BYTE, buf, counts, displs, MPI_BYTE, root, comm))
 					LOG_THROW("MPI_Gatherv failed");
 
 				if (rank == root) {
 					free(counts);
 					free(displs);
-					s = std::string(header->text, firstSN);
+					std::string s = std::string(header->text, firstSQ - header->text);
 					s += std::string(buf, total);
 					free(buf);
-					s += std::string(header->text + endSN, header->l_text - endSN);
+					s += std::string(endSQ, header->l_text - (endSQ - header->text));
 					header->text = (char*) realloc(header->text, s.size());
 					header->l_text = s.size();
 					s.copy(header->text, s.size());
+					LOG_DEBUG_OPTIONAL(2, true, "New header is " << s.length() << "\n" << s);
 				}
 			}
 
@@ -882,8 +915,9 @@ public:
 				if (rank == 0) {
 					// set total contigs
 					int32_t totalContigs = 0;
-					for(int i = 1 ; i < size; i++)
+					for(int i = 0 ; i < size; i++)
 						totalContigs += headerCounts[i];
+					LOG_DEBUG_OPTIONAL(2, true, "Writing header.  textSize: " << header->l_text << " contigs: " << totalContigs);
 					BamStreamUtils::writeBamHeaderPart1(bgzfo, header->l_text, header->text, totalContigs);
 				}
 				BamStreamUtils::writeBamHeaderPart2(bgzfo, header);
@@ -898,7 +932,7 @@ public:
 		}
 
 		int getMyGlobalHeaderOffset() const {
-			return myGobalHeaderOffset;
+			return myGlobalHeaderOffset;
 		}
 	protected:
 		void setHeaderCounts() {
@@ -912,8 +946,11 @@ public:
 				LOG_THROW("MPI_Allgather() failed");
 
 			for(int i = 0; i < rank; i++)
-				myGobalHeaderOffset += headerCounts[i];
-			LOG_DEBUG_OPTIONAL(1, true, "setHeaderCounts(): globalHeaderOffset: " << myGobalHeaderOffset << " my n_targets: " << fh->header->n_targets);
+				myGlobalHeaderOffset += headerCounts[i];
+			int totalHeaderCounts = myGlobalHeaderOffset;
+			for(int i = rank; i < size; i++)
+				totalHeaderCounts += headerCounts[i];
+			LOG_DEBUG_OPTIONAL(1, true, "setHeaderCounts(): globalHeaderOffset: " << myGlobalHeaderOffset << " my n_targets: " << fh->header->n_targets << " totalContigs: " << totalHeaderCounts);
 		}
 		void pickBestAlignments() {
 			LOG_DEBUG_OPTIONAL(2, true, "pickBestAlignment()");
@@ -925,7 +962,7 @@ public:
 			while (count < READS_PER_BATCH) {
 				bam1_t *tmpBam = batchReads[count];
 				int bytesRead = BamStreamUtils::readNextBam(fh, tmpBam);
-				if (bytesRead == 0)
+				if (bytesRead < 0)
 					break;
 				fixtids(tmpBam);
 				totalBytes += bytesRead;
@@ -946,9 +983,9 @@ public:
 		void fixtids(bam1_t *tmpBam) {
 			bam1_core_t &c = tmpBam->core;
 			if (c.tid >= 0)
-				c.tid += myGobalHeaderOffset;
+				c.tid += myGlobalHeaderOffset;
 			if (c.mtid >= 0)
-				c.mtid += myGobalHeaderOffset;
+				c.mtid += myGlobalHeaderOffset;
 		}
 		void fixMates(bam1_t *pre, bam1_t *cur) {
 			// derived from samtools 0.1.18 bam_mate.c
@@ -1024,19 +1061,27 @@ public:
 			MPI_Comm_size(comm, &size);
 
 			BamVector pickedReads;
-			IntVector sendCounts(size,0), sendOffsets(size,0), recvCounts(size,0), recvOffsets(size,0);
+			IntVector sendCounts(size,0), sendOffsets(size,0), recvCounts, recvOffsets(size,0);
 			int blockSize = (batchSize + size - 1) / size;
 			int count = 0;
 			int myCount;
 			for(int i = 0; i < size; i++) {
-				int c = std::min(blockSize, (int) (batchReads.size() - count));
+				int c = std::min(blockSize, (int) (batchSize - count));
 				sendCounts[i] = c;
+				if (c > 0) {
+					assert(batchReads[count] != NULL);
+					assert(batchReads[count]->data != NULL);
+					assert(batchReads[count+c-1] != NULL);
+					assert(batchReads[count+c-1]->data != NULL);
+				}
 				if (i == rank) {
 					myCount = c;
 					recvCounts.resize(size, myCount);
+					tmpReads.reserve(myCount * size);
 				}
 				count += c;
 			}
+			assert(count == batchSize);
 			while (! readExchanger.exchangeReads(batchReads, sendOffsets, sendCounts, tmpReads, recvOffsets, recvCounts, false).isDone() );
 			assert((int) tmpReads.size() >= myCount * size);
 			pickedReads.reserve(myCount);
@@ -1060,7 +1105,7 @@ public:
 	private:
 		MPI_Comm comm;
 		std::string inputFile;
-		int myGobalHeaderOffset, *headerCounts;
+		int myGlobalHeaderOffset, *headerCounts;
 		samfile_t *fh;
 		BamVector tmpReads;
 		BamVector &myReads;
@@ -1415,14 +1460,18 @@ public:
 		// %aligned + 100 - 100 * alignlen / seq_len (0-6th bits)
 		// qual     + (256-qual)<<7 (7-14th bits)
 		// unmapped + 1<<15 (15th bit)
-		if (isUnMapped(b))
-			return 1<<15;
-		else {
-			int rank = (256-b->core.qual)<<7;
+		// nodata   + 1<<19 (19th bit)
+		int rank = 0;
+		if (b->data == NULL)
+			rank += 1<<19;
+		if (isUnMapped(b)) {
+			rank += 1<<15;
+		} else {
+			rank = (256-b->core.qual)<<7;
 			if (b->core.l_qseq > 0)
 				rank += 100 - (100 * (bam_calend(&(b->core), bam1_cigar(b)) - b->core.pos)) / b->core.l_qseq;
-			return rank;
 		}
+		return rank;
 	}
 	static inline int getRankedPairedState(const bam1_t *b) {
 		// isMapped - getRankedSingleState (0-15th bits)

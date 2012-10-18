@@ -161,6 +161,21 @@ target_link_libraries( BamSort-P
                               ${KMERNATOR_P_LIBS}
                               )
 
+set_source_files_properties( MergeIndexPartitionedBam-P
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+add_executable( MergeIndexPartitionedBam-P MergeIndexPartitionedBam-P )
+set_target_properties( MergeIndexPartitionedBam-P
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
+                       )
+target_link_libraries( MergeIndexPartitionedBam-P 
+                              libbam
+                              z
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+                              
 endif()
 
 set_source_files_properties( TnfDistance

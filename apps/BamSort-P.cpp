@@ -21,7 +21,7 @@ int main(int argc, char **argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	if (argc <= 2) {
 		if (rank == 0)
-			std::cerr << "Usage: mpirun BamSort-P out.bam [in.[sb]am ...]";
+			std::cerr << "Usage: mpirun BamSort-P out.bam [in.[sb]am ...]\n\n";
 		MPI_Finalize();
 		exit(1);
 	}
@@ -44,6 +44,7 @@ int main(int argc, char **argv)
 			LOG_VERBOSE_OPTIONAL(1, true, "Loaded " << (reads.size() - s) << " new bam records");
 		}
 	}
+	unlink(outputBam.c_str());
 	LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
 
 	{
