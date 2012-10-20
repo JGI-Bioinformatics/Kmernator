@@ -215,6 +215,7 @@ public:
 	typedef bam1_t *bam1_p;
 	typedef bam1_p *bam1_pp;
 	typedef std::pair< bam1_p, bam1_pp > bam1_p_pair;
+	typedef std::pair< bam1_p, bam1_p > BamPair;
 	typedef bam1_core_t *bam1_core_p;
 
 	static int roundup(int val, int factor) {
@@ -566,7 +567,7 @@ public:
 			if (_recvCounts.empty()) {
 
 				// Determine the total recvCounts automatically
-				LOG_DEBUG_OPTIONAL(3, true, "MergeAndSortSam::exchangeReads(): receiveCounts unknown, exchanging sendCounts");
+				LOG_DEBUG_OPTIONAL(3, true, "MPIReadExchanger::exchangeReads(): receiveCounts unknown, exchanging sendCounts");
 
 				_recvCounts.resize(size, 0);
 				int *_s = packVector(_sendCounts);
@@ -644,7 +645,7 @@ public:
 				totalSendBytes += sendBytes[i];
 				totalRecvBytes += recvBytes[i];
 			}
-			LOG_DEBUG_OPTIONAL(2, true, "MergeAndSortSam::exchangeReads(): remaining to send: " << totalRemainingToSend << " recv: " << totalRemainingToRecv);
+			LOG_DEBUG_OPTIONAL(2, true, "MPIReadExchanger::exchangeReads(): remaining to send: " << totalRemainingToSend << " recv: " << totalRemainingToRecv);
 
 			if (Log::isDebug(3)) {
 				std::ostringstream ss;
@@ -822,7 +823,7 @@ public:
 			pickBestAlignments();
 		}
 		~MPIMergeSam() {
-			LOG_DEBUG_OPTIONAL(2, true, "~MergeAndSortSam()");
+			LOG_DEBUG_OPTIONAL(2, true, "~MPIMergeSam()");
 			samclose(fh);
 			free(headerCounts);
 			destroyBamVector(tmpReads);
@@ -1063,6 +1064,8 @@ public:
 			BamVector pickedReads;
 			IntVector sendCounts(size,0), sendOffsets(size,0), recvCounts, recvOffsets(size,0);
 			int blockSize = (batchSize + size - 1) / size;
+			if ((blockSize & 0x1) == 1)
+				blockSize++; // make sure pairs are kept together
 			int count = 0;
 			int myCount;
 			for(int i = 0; i < size; i++) {
@@ -1082,20 +1085,55 @@ public:
 				count += c;
 			}
 			assert(count == batchSize);
-			while (! readExchanger.exchangeReads(batchReads, sendOffsets, sendCounts, tmpReads, recvOffsets, recvCounts, false).isDone() );
+			while (! readExchanger.exchangeReads(batchReads, sendOffsets, sendCounts, tmpReads, recvOffsets, recvCounts, true).isDone() );
 			assert((int) tmpReads.size() >= myCount * size);
 			pickedReads.reserve(myCount);
 
-			for(int i = 0; i < myCount; i++) {
-				bam1_t *best = tmpReads[ rank * myCount + i];
-				for(int j = 0; j < size ; j++) {
-					if (j == rank)
-						continue;
-					bam1_t *test = tmpReads[ j * myCount + i];
-					best = isBetter(best, test);
+			if (0) {
+				for(int i = 0; i < myCount; i++) {
+					bam1_t *best = tmpReads[ rank * myCount + i];
+					for(int j = 0; j < size ; j++) {
+						if (j == rank)
+							continue;
+						bam1_t *test = tmpReads[ j * myCount + i];
+						best = isBetter(best, test);
+					}
+					bam1_t *x = bam_dup1(best);
+					pickedReads.push_back(x);
 				}
-				bam1_t *x = bam_dup1(best);
-				pickedReads.push_back(x);
+			} else {
+				BamVector reads1, reads2;
+				reads1.resize(size, NULL);
+				reads2.resize(size, NULL);
+				for(int i = 0; i < myCount; i++) {
+					bool _isPaired = false;
+					for(int j = 0; j < size; j++) {
+						bam1_t *x =  tmpReads[ j * myCount + i];
+						if (isRead1(x))
+							reads1[j] = x;
+						else
+							reads2[j] = x;
+						if (!_isPaired && isPaired(x))
+							_isPaired = true;
+					}
+					if (_isPaired) {
+						i++;
+						for(int j = 0; j < size; j++) {
+							bam1_t *x =  tmpReads[ j * myCount + i];
+							if (isRead1(x))
+								reads1[j] = x;
+							else
+								reads2[j] = x;
+						}
+						BamPair best = pickBestReadPair(reads1, reads2);
+						assert(strcmp(bam1_qname(best.first), bam1_qname(best.second)) == 0);
+
+						pickedReads.push_back( bam_dup1(best.first) );
+						pickedReads.push_back( bam_dup1(best.second) );
+					} else {
+						pickedReads.push_back( bam_dup1( pickBestRead(reads1) ) );
+					}
+				}
 			}
 
 			fixMates(pickedReads);
@@ -1403,8 +1441,83 @@ public:
 		return x;
 	}
 
-	static bam1_t *isBetter(bam1_t *a, bam1_t *b) {
-		return getRankedState(a) < getRankedState(b) ? a : b;
+	static bam1_t *pickBestRead( BamVector &reads, bool forceSingle = false ) {
+		assert(reads.size() > 0);
+		bam1_t *best = reads[0];
+		for(int j = 1; j < (int) reads.size() ; j++) {
+			best = isBetter(best, reads[j], forceSingle);
+		}
+		return best;
+	}
+
+	static BamPair pickBestReadPair( BamVector &reads1, BamVector &reads2 ) {
+		assert(reads1.size() > 0);
+		assert(reads2.size() == reads1.size());
+		BamPair best(reads1[0], reads2[0]);
+		// assess reads as Pairs first
+		for(int j = 1; j < (int) reads1.size(); j++) {
+			best = isBetter(best, BamPair(reads1[j], reads2[j]));
+		}
+		if ((isProperPair(best.first) && isProperPair(best.second)) || best.first->core.tid == best.second->core.tid)
+			return best;
+		// no pairing is proveably best.  Get best individual reads (i.e. chimers)
+		best.first = pickBestRead(reads1, true);
+		best.second= pickBestRead(reads2, true);
+		return best;
+	}
+
+	static BamPair isBetter(BamPair a, BamPair b) {
+		static char *unmapped = (char*) "unmapped";
+		int ranka = getRankedState(a.first) + getRankedState(a.second);
+		int rankb = getRankedState(b.first) + getRankedState(b.second);
+		if (ranka == rankb) {
+			// Dive deeper into AS (Alignment Score generated by aligner)
+			// less reliable as partitioned aligner did not see all the data..
+			ranka += bam_aux2i(bam_aux_get(a.first, "AS"));
+			ranka += bam_aux2i(bam_aux_get(a.second, "AS"));
+			rankb += bam_aux2i(bam_aux_get(b.first, "AS"));
+			rankb += bam_aux2i(bam_aux_get(b.second, "AS"));
+		}
+		BamPair *better = ranka < rankb ? &a : &b;
+		if (Log::isDebug(2)) {
+			char *a1str = a.first->data != NULL ? bam_format1(NULL, a.first) : unmapped;
+			char *a2str = a.second->data != NULL ? bam_format1(NULL, a.second) : unmapped;
+			char *b1str = b.first->data != NULL ? bam_format1(NULL, b.first) : unmapped;
+			char *b2str = b.second->data != NULL ? bam_format1(NULL, b.second) : unmapped;
+			LOG_DEBUG_OPTIONAL(2, true, "Selected " << (better == &a ? "a " : "b ") << ranka << " " << rankb  << "\na1 " << a1str << "\na2 " << a2str << "\nb1 " << b1str << "\nb2 " << b2str);
+			if (a1str != unmapped)
+				free(a1str);
+			if (b1str != unmapped)
+				free(b1str);
+			if (a2str != unmapped)
+				free(a2str);
+			if (b2str != unmapped)
+				free(b2str);
+		}
+		return *better;
+	}
+
+	static bam1_t *isBetter(bam1_t *a, bam1_t *b, bool forceSingle = false) {
+		static char *unmapped = (char*) "unmapped";
+		int ranka = getRankedState(a, forceSingle);
+		int rankb = getRankedState(b, forceSingle);
+		if (ranka == rankb) {
+			// Dive deeper into AS (Alignment Score generated by aligner)
+			ranka += bam_aux2i(bam_aux_get(a, "AS"));
+			rankb += bam_aux2i(bam_aux_get(b, "AS"));
+		}
+
+		bam1_t *better = ranka < rankb ? a : b;
+		if (Log::isDebug(2)) {
+			char *astr = a->data != NULL ? bam_format1(NULL, a) : unmapped;
+			char *bstr = b->data != NULL ? bam_format1(NULL, b) : unmapped;
+			LOG_DEBUG_OPTIONAL(2, true, "Selected " << (better == a ? "a " : "b ") << ranka << " " << rankb << "\n" << astr << "\n" << bstr);
+			if (astr != unmapped)
+				free(astr);
+			if (bstr != unmapped)
+				free(bstr);
+		}
+		return better;
 	}
 
 	static inline bool isPaired(const bam1_t *b) {
@@ -1450,52 +1563,59 @@ public:
 	}
 
 	// getRankedState used for comparison whether one alignment is "better" than another.  Lower is better
-	static inline int getRankedState(const bam1_t *b) {
-		if (isPaired(b))
-			return getRankedSingleState(b);
+	static inline int getRankedState(const bam1_t *bam, bool forceSingle = false) {
+		if (isPaired(bam) && ! forceSingle)
+			return getRankedPairedState(bam);
 		else
-			return getRankedPairedState(b);
+			return getRankedSingleState(bam);
 	}
-	static inline int getRankedSingleState(const bam1_t *b) {
+	static inline int getRankedSingleState(const bam1_t *bam) {
 		// %aligned + 100 - 100 * alignlen / seq_len (0-6th bits)
-		// qual     + (256-qual)<<7 (7-14th bits)
-		// unmapped + 1<<15 (15th bit)
-		// nodata   + 1<<19 (19th bit)
+		// qual     + (31-qual & 31)<<7 (7-12th bits)
+		// NM       + (31-NM & 31)<<14 (14-19th bits)
+		// unmapped + 1<<20 (20th bit)
+		// nodata   + 1<<30 (30th bit)
 		int rank = 0;
-		if (b->data == NULL)
-			rank += 1<<19;
-		if (isUnMapped(b)) {
-			rank += 1<<15;
+		if (bam->data == NULL)
+			rank += 1<<30;
+		else if (isUnMapped(bam)) {
+			rank += 1<<20;
 		} else {
-			rank = (256-b->core.qual)<<7;
-			if (b->core.l_qseq > 0)
-				rank += 100 - (100 * (bam_calend(&(b->core), bam1_cigar(b)) - b->core.pos)) / b->core.l_qseq;
+			int nm = bam_aux2i(bam_aux_get(bam, "NM"));
+			rank += (nm & 31) << 14;
+			int qual = bam->core.qual;
+			if (qual <= 31)
+				rank += (31 - (qual & 31)) << 7;
+			if (bam->core.l_qseq > 0)
+				rank += 100 - (100 * (bam_calend(&(bam->core), bam1_cigar(bam)) - bam->core.pos)) / bam->core.l_qseq;
 		}
 		return rank;
 	}
-	static inline int getRankedPairedState(const bam1_t *b) {
-		// isMapped - getRankedSingleState (0-15th bits)
-		// isMateMapped 1<<16 (16th bit)
-		// isProperPair 1<<17
-		// both mapped to same contig 1<<18
-		int rank = getRankedSingleState(b);
-		if (isMateUnMapped(b)) {
-			assert(!isProperPair(b));
-			rank += 7<<16;
+	static inline int getRankedPairedState(const bam1_t *bam) {
+		// isMapped - getRankedSingleState (0-20th bits)
+		// populate every other bit to allow room to add both mates
+		// isMateUnmapped 21+ bits
+		// isMateMapped 1<<21 (21th bit)
+		// isProperPair 1<<23
+		// both mapped to same contig 1<<25
+		int rank = getRankedSingleState(bam);
+		if (isMateUnMapped(bam)) {
+			assert(!isProperPair(bam));
+			rank += 255<<21;
 		} else {
-			if (!isProperPair(b)) {
-				rank += 1<<17;
+			if (!isProperPair(bam)) {
+				rank += 1<<23;
 			}
-			if (b->core.tid != b->core.mtid) {
-				rank += 1<<18;
+			if (bam->core.tid != bam->core.mtid) {
+				rank += 1<<25;
 			}
 		}
 		return rank;
 	}
 
 	// only use this when memory is not allocated!!!
-	static void clearData(bam1_t *b) {
-		b->data_len = 0; b->m_data = 0; b->data = NULL;
+	static void clearData(bam1_t *bam) {
+		bam->data_len = 0; bam->m_data = 0; bam->data = NULL;
 	}
 
 	static char *copyBAMCore(char *dest, const bam1_t *read) {
