@@ -1414,32 +1414,77 @@ void validateMPIWorld(mpi::communicator &world) {
 }
 
 
-template< typename OptionsTempl >
-mpi::communicator initializeWorldAndOptions(int argc, char *argv[]) {
-	int threadProvided;
-	int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
-	MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
-	mpi::environment env(argc, argv);
-	mpi::communicator world;
-	MPI_Comm_set_errhandler( world, MPI::ERRORS_THROW_EXCEPTIONS );
+template< typename OptionsTempl = NullOptions >
+class ScopedMPIComm {
+public:
+	typedef boost::shared_ptr< mpi::communicator > Comm;
 
-	try {
-		Logger::setWorld(&world);
-
-		OptionsTempl::parseOpts(argc, argv);
-
-		if (GeneralOptions::getOptions().getGatheredLogs())
-			Logger::setWorld(&world, Options::getOptions().getDebug() >= 2);
-
-		validateMPIWorld(world);
-
-	} catch (...) {
-		MPI_Finalize();
-		exit(1);
+	ScopedMPIComm(int argc, char *argv[]) {
+		_world = initializeWorldAndOptions(argc, argv);
 	}
-	world.barrier();
-	return world;
-}
+	~ScopedMPIComm() {
+		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Finishing");
+		Logger::setWorld(NULL);
+		_world.reset();
+		MPI_Finalize();
+	}
+	operator mpi::communicator() const {
+		return *_world;
+	}
+	operator mpi::communicator&() {
+		return *_world;
+	}
+	operator const mpi::communicator&() const {
+		return *_world;
+	}
 
+	operator MPI_Comm() const {
+		return (MPI_Comm) *_world;
+	}
+	int rank() const {
+		return _world->rank();
+	}
+	int size() const {
+		return _world->size();
+	}
+	void barrier() const {
+		_world->barrier();
+	}
+	void abort(int i) const {
+		_world->abort(i);
+	}
+
+protected:
+	Comm initializeWorldAndOptions(int argc, char *argv[]) {
+		int threadProvided;
+		int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
+		MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
+		mpi::environment env(argc, argv);
+		Comm comm(new mpi::communicator(MPI_COMM_WORLD, mpi::comm_duplicate));
+		MPI_Comm_set_errhandler( *comm, MPI::ERRORS_THROW_EXCEPTIONS );
+
+		try {
+			Logger::setWorld(comm.get());
+
+			OptionsTempl::parseOpts(argc, argv);
+
+			if (GeneralOptions::getOptions().getGatheredLogs())
+				Logger::setWorld(comm.get(), Options::getOptions().getDebug() >= 2);
+
+			validateMPIWorld(*comm);
+
+		} catch (...) {
+			std::cerr << "Could not initializeWorldAndOptions!" << std::endl;
+			MPI_Finalize();
+			exit(1);
+		}
+		comm->barrier();
+		return comm;
+	}
+
+private:
+	Comm _world;
+
+};
 
 #endif /* DISTRIBUTED_FUNCTIONS_H_ */

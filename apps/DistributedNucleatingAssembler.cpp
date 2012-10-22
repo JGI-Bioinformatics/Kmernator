@@ -253,7 +253,7 @@ int main(int argc, char *argv[]) {
 
 		double timing1, timing2;
 
-		mpi::communicator world = initializeWorldAndOptions< DistributedNucleatingAssemblerOptions >(argc, argv);
+		ScopedMPIComm< DistributedNucleatingAssemblerOptions > world(argc, argv);
 
 		timing1 = MPI_Wtime();
 
@@ -289,7 +289,7 @@ int main(int argc, char *argv[]) {
 			LOG_VERBOSE(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
 
 			unsigned long allFiltered;
-			reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
+			mpi::reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
 
 		}
@@ -432,8 +432,6 @@ int main(int argc, char *argv[]) {
 	} catch (...) {
 		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
 	}
-
-	MPI_Finalize();
 
 	return 0;
 }

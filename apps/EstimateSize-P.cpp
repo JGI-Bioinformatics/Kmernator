@@ -125,7 +125,7 @@ typedef OptionsBaseTemplate< _MPIEstimateSizeOptions > MPIEstimateSizeOptions;
 
 int main(int argc, char *argv[]) {
 
-	mpi::communicator world = initializeWorldAndOptions< MPIEstimateSizeOptions >(argc, argv);
+	ScopedMPIComm< MPIEstimateSizeOptions > world(argc, argv);
 
 	MemoryUtils::getMemoryUsage();
 	std::string outputFilename = Options::getOptions().getOutputFile();
@@ -157,7 +157,7 @@ int main(int argc, char *argv[]) {
 		unsigned long &baseCount = counts[2] = reads.getBaseCount();
 		LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
 
-		all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
+		mpi::all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[2] << " distributed bases");
 		totalReads += totalCounts[0];
 		totalBases += totalCounts[2];
@@ -263,8 +263,6 @@ int main(int argc, char *argv[]) {
 
 	world.barrier();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
-
-	MPI_Finalize();
 
 	return 0;
 }

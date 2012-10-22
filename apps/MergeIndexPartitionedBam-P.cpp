@@ -13,6 +13,7 @@
 
 int main(int argc, char **argv)
 {
+
 	if (MPI_SUCCESS != MPI_Init(&argc, &argv))
 		LOG_THROW("MPI_Init() failed: ");
 
@@ -27,7 +28,7 @@ int main(int argc, char **argv)
 	}
 	mpi::communicator world;
 	Logger::setWorld(&world);
-	GeneralOptions::getOptions().getDebug() = 3;
+	GeneralOptions::getOptions().getDebug() = 2;
 
 	std::string ourOutputBam(argv[1]);
 	std::string myInputFile(argv[2+rank]);
@@ -41,6 +42,7 @@ int main(int argc, char **argv)
 
 	LOG_VERBOSE(1, "Finished");
 
+	Logger::setWorld(NULL);
 	if (MPI_SUCCESS != MPI_Finalize())
 		LOG_THROW("MPI_Finalize() failed: ");
 	return 0;

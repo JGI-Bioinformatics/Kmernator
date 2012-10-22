@@ -541,12 +541,15 @@ public:
 
 	class MPIReadExchanger {
 	public:
-		MPIReadExchanger(MPI_Comm _comm) : mpicomm(_comm), buf1(NULL), buf2(NULL)  {
-
+		MPIReadExchanger(MPI_Comm _comm) : buf1(NULL), buf2(NULL)  {
+			if (MPI_Comm_dup(_comm, &mpicomm) != MPI_SUCCESS)
+				LOG_THROW("Could not duplicate MPI comm in MPIReadExchanger()");
 		}
 		~MPIReadExchanger() {
 			if (buf1 != NULL) free(buf1);
 			if (buf2 != NULL) free(buf2);
+			if (MPI_Comm_free(&mpicomm) != MPI_SUCCESS)
+				LOG_THROW("Could not free MPI comm in ~MPIReadExchanger()");
 		}
 
 		// sendCounts must be known a priori, recvCounts can be specified or be empty if it is unknown by this rank.
@@ -817,7 +820,9 @@ public:
 	public:
 
 		MPIMergeSam(MPI_Comm _comm, std::string _inputFile, BamVector &_reads)
-		: comm(_comm), inputFile(_inputFile), myGlobalHeaderOffset(0), myReads(_reads), readExchanger(_comm){
+		: inputFile(_inputFile), myGlobalHeaderOffset(0), myReads(_reads), readExchanger(_comm){
+			if (MPI_Comm_dup(_comm, &comm) != MPI_SUCCESS)
+				LOG_THROW("Could not duplicate MPI comm in MPIMergeSam()");
 			fh = BamStreamUtils::openSamOrBam(inputFile);
 			setHeaderCounts();
 			pickBestAlignments();
@@ -827,9 +832,16 @@ public:
 			samclose(fh);
 			free(headerCounts);
 			destroyBamVector(tmpReads);
+			if (MPI_Comm_free(&comm) != MPI_SUCCESS)
+				LOG_THROW("Could not free MPI comm in ~MPIMergeSam()");
 		}
 		bam_header_t *getHeader() {
 			return fh->header;
+		}
+		void syncAndPick(BamVector &reads) {
+			BamVector pickedReads = syncAndPick(reads, reads.size());
+			destroyBamVector(reads);
+			reads.swap(pickedReads);
 		}
 		// all processes write the combined BGZF compressed header to outputFile
 		// returns the fileoffset for the end of the header
@@ -1060,6 +1072,7 @@ public:
 			int rank,size;
 			MPI_Comm_rank(comm, &rank);
 			MPI_Comm_size(comm, &size);
+			assert(batchSize <= (int) batchReads.size());
 
 			BamVector pickedReads;
 			IntVector sendCounts(size,0), sendOffsets(size,0), recvCounts, recvOffsets(size,0);
@@ -1155,13 +1168,20 @@ public:
 		// A single, coordinated sorted outputFile will be constructed.
 	public:
 
-		MPISortBam(MPI_Comm _comm, BamVector &_reads) : mpicomm(_comm), myReads(_reads), readExchanger(_comm) {
+		MPISortBam(MPI_Comm _comm, BamVector &_reads) : myReads(_reads), readExchanger(_comm) {
+			if (MPI_Comm_dup(_comm, &mpicomm) != MPI_SUCCESS)
+				LOG_THROW("Could not duplicate MPI communicator in MPISortBam()");
 			sortGlobal();
 		}
-		MPISortBam(MPI_Comm _comm, BamVector &_reads, std::string outputFileName, bam_header_t *header) : mpicomm(_comm), myReads(_reads), readExchanger(_comm) {
+		MPISortBam(MPI_Comm _comm, BamVector &_reads, std::string outputFileName, bam_header_t *header) : myReads(_reads), readExchanger(_comm) {
+			if (MPI_Comm_dup(_comm, &mpicomm) != MPI_SUCCESS)
+				LOG_THROW("Could not duplicate MPI communicator in MPISortBam()");
 			sortGlobal(outputFileName, header);
 		}
-		~MPISortBam() {}
+		~MPISortBam() {
+			if(MPI_Comm_free(&mpicomm) != MPI_SUCCESS)
+				LOG_THROW("Could not free duplicated communicator in ~MPISortBam");
+		}
 
 		static void copyBamCore(bam1_core_t *dest, const bam1_core_t *src) {
 			memcpy(dest, src, sizeof(bam1_core_t));

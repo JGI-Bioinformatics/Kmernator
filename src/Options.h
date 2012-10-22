@@ -259,6 +259,8 @@ protected:
 
 /* Example copy-paste template */
 
+typedef OptionsBaseTemplate< OptionsBaseInterface > NullOptions;
+
 class _MySpecificOptions : public OptionsBaseInterface {
 public:
 	_MySpecificOptions() : myOption(1234) {

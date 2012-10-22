@@ -65,7 +65,7 @@ typedef MeraculousDistributedKmerSpectrum KS;
 
 int main(int argc, char *argv[]) {
 
-	mpi::communicator world = initializeWorldAndOptions< MeraculousCounterOptions > (argc, argv);
+	ScopedMPIComm< MeraculousCounterOptions > world(argc, argv);
 
 	MemoryUtils::getMemoryUsage();
 	std::string outputFilename = Options::getOptions().getOutputFile();
@@ -104,8 +104,6 @@ int main(int argc, char *argv[]) {
 	}
 	world.barrier();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
-
-	MPI_Finalize();
 
 	return 0;
 

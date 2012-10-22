@@ -408,14 +408,12 @@ int main(int argc, char *argv[]) {
 	int exitStatus = 0;
 
 #ifdef ENABLE_MPI
-	MPI_Init(&argc, &argv);
-	mpi::environment env(argc, argv);
-	mpi::communicator world;
+	ScopedMPIComm< SSOptions > world(argc, argv);
 	SSOptions::getOptions().getDefaultNumFiles() = world.size();
 	SSOptions::getOptions().getDefaultFileNum() = world.rank();
-	Logger::setWorld(&world);
-#endif
+#else
 	SSOptions::parseOpts(argc, argv);
+#endif
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 
 	std::string outputFile = Options::getOptions().getOutputFile();
@@ -579,7 +577,6 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	MPI_Finalize();
 #endif
 
 	return exitStatus;

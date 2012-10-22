@@ -65,7 +65,7 @@ typedef OptionsBaseTemplate< _MPIFilterReadsOptions > MPIFilterReadsOptions;
 
 int main(int argc, char *argv[]) {
 
-	mpi::communicator world = initializeWorldAndOptions< MPIFilterReadsOptions >(argc, argv);
+	ScopedMPIComm< MPIFilterReadsOptions > world (argc, argv);
 
 	if (FilterReadsBaseOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
 		LOG_THROW("Distributed version does not support max-kmer-output-depth option");
@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
 		LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
 		LOG_VERBOSE(2, "Pairs + single = " << numPairs);
 
-		all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
+		mpi::all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
 
 		setGlobalReadSetOffsets(world, reads);
@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			unsigned long allFiltered;
-			reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
+			mpi::reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
 
 		}
@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
 				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 				unsigned long allDuplicateFragments;
-				reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
+				mpi::reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
 			} else {
 				if (world.rank() == 0)
@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
 
 			if (KmerSpectrumOptions::getOptions().getVariantSigmas() > 0.0) {
 				long purgedVariants = spectrum.purgeVariants();
-				long totalPurgedVariants = all_reduce(world, purgedVariants, std::plus<long>());
+				long totalPurgedVariants = mpi::all_reduce(world, purgedVariants, std::plus<long>());
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << totalPurgedVariants << " kmer variants");
 
 				std::string hist = spectrum.getHistogram(false);
@@ -242,8 +242,6 @@ int main(int argc, char *argv[]) {
 
 	world.barrier();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
-
-	MPI_Finalize();
 
 	return 0;
 }
