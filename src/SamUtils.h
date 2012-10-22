@@ -41,6 +41,8 @@
 #include "bam.h"
 #include "Log.h"
 #include "BgzfStream.h"
+#include "MemoryBufferStream.h"
+
 namespace bam_endian {
 #include "bam_endian.h"
 static void swap_endian_data(const bam1_core_t *c, int data_len, uint8_t *data)
@@ -347,6 +349,8 @@ public:
 		return totalSize;
 	}
 
+	typedef memory_buffer<> MB;
+
 	static long writePartialSortedBamVector(MPI_Comm comm, MPI_File &ourFile, BamVector &reads, IntVector &sortedCounts, bam_header_t *header = NULL) {
 		LOG_VERBOSE_OPTIONAL(1, true, "writePartialSortedBamVector(): with numReads: " << reads.size());
 		bool destroyBam = true;
@@ -373,9 +377,9 @@ public:
 		std::make_heap(heap.begin(), heap.end(), sbp);
 
 		// output while processing the heap
-		memory_buffer myBams;
+		MemoryBuffer myBams;
 		{
-			memory_ostream os(myBams);
+			MemoryBuffer::ostream os(myBams);
 			bgzf_ostream bgzfo(os, rank == size-1);
 			if (header != NULL && rank == 0) {
 				LOG_DEBUG_OPTIONAL(1, true, "Writing header");
@@ -403,7 +407,7 @@ public:
 		{
 			long long int myLength = myBams.tellp();
 
-			memory_istream is(myBams);
+			MemoryBuffer::istream is(myBams);
 			count = concatenateOutput(comm, ourFile, myLength, is);
 		}
 		if (! destroyBam )
@@ -416,9 +420,9 @@ public:
 		int rank,size;
 		MPI_Comm_rank(comm, &rank);
 		MPI_Comm_size(comm, &size);
-		memory_buffer myBams;
+		MemoryBuffer myBams;
 		{
-			memory_ostream os(myBams);
+			MemoryBuffer::ostream os(myBams);
 			bgzf_ostream bgzfo(os, rank == size-1);
 			if (header != NULL && rank == 0) {
 				LOG_DEBUG_OPTIONAL(1, true, "Writing header");
@@ -438,7 +442,7 @@ public:
 		{
 			long long int myLength = myBams.tellp();
 
-			memory_istream is(myBams);
+			MemoryBuffer::istream is(myBams);
 			count = concatenateOutput(comm, ourFile, myLength, is);
 		}
 		return count;
