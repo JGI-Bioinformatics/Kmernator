@@ -349,8 +349,6 @@ public:
 		return totalSize;
 	}
 
-	typedef memory_buffer<> MB;
-
 	static long writePartialSortedBamVector(MPI_Comm comm, MPI_File &ourFile, BamVector &reads, IntVector &sortedCounts, bam_header_t *header = NULL) {
 		LOG_VERBOSE_OPTIONAL(1, true, "writePartialSortedBamVector(): with numReads: " << reads.size());
 		bool destroyBam = true;

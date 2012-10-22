@@ -109,19 +109,18 @@ private:
 	std::streamsize writeCount, readCount;
 };
 
-template< std::streamsize BUFFER_SIZE = 262144 >
-class memory_buffer {
+template< typename Impl >
+class stream_impl_template {
 public:
 	typedef char char_type;
 	typedef boost::iostreams::bidirectional_device_tag category;
-	typedef memory_buffer_detail< BUFFER_SIZE > Impl;
 	typedef boost::shared_ptr< Impl > ImplPtr;
-	memory_buffer() : _impl( new Impl() ) {}
-	memory_buffer(const memory_buffer &copy) {
+	stream_impl_template() : _impl( new Impl() ) {}
+	stream_impl_template(const stream_impl_template &copy) {
 		_impl = copy._impl;
 	}
-	~memory_buffer() {}
-	memory_buffer &operator=(const memory_buffer &copy) {
+	~stream_impl_template() {}
+	stream_impl_template &operator=(const stream_impl_template &copy) {
 		_impl = copy._impl;
 		return *this;
 	}
@@ -141,7 +140,7 @@ public:
 	class ostream : public boost::iostreams::filtering_ostream
 	{
 	public:
-		ostream(memory_buffer &_os) {
+		ostream(stream_impl_template &_os) {
 			this->push(_os);
 		}
 		virtual ~ostream() {}
@@ -150,7 +149,7 @@ public:
 	class istream : public boost::iostreams::filtering_istream
 	{
 	public:
-		istream(memory_buffer &_is) {
+		istream(stream_impl_template &_is) {
 			this->push(_is);
 		}
 		virtual ~istream() {}
@@ -160,6 +159,6 @@ private:
 	ImplPtr _impl;
 };
 
-typedef memory_buffer<> MemoryBuffer;
+typedef stream_impl_template< memory_buffer_detail< > > MemoryBuffer;
 
 #endif // MEMORY_BUFFER_STREAM_H_
