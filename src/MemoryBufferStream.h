@@ -28,11 +28,14 @@ public:
 
 	memory_buffer_detail(bool _setExplicitWriteClose = false)
 	: writeOffset(BUFFER_SIZE), readOffset(0), writeCount(0), readCount(0),
-	  writerTid(-1), readerTid(-1), setExplicitWriteClose(_setExplicitWriteClose), writeClosed(false) {
+	  writerTid(-1), readerTid(-1), setExplicitWriteClose(_setExplicitWriteClose), writeClosed(false), blocked(false) {
 		addBuffer();
 	}
 	virtual ~memory_buffer_detail() {
 		clear();
+	}
+	bool isBlocked() {
+		return blocked;
 	}
 	void writeClose() {
 		writeClosed = true;
@@ -55,6 +58,7 @@ public:
 		return n;
 	}
 	// returning less than n signifies EOF
+	// so only do so if writing has stopped
 	std::streamsize read(char *s, std::streamsize n) {
 		if (readerTid < 0)
 			readerTid = omp_get_thread_num();
@@ -67,8 +71,10 @@ public:
 			totalReadSize += readSize;
 			if (readSize == 0) {
 				if (setExplicitWriteClose && !writeClosed) {
+					blocked = true;
 					boost::mutex::scoped_lock mylock(writeCloseLock);
 					readReady.wait(mylock);
+					blocked = false;
 				} else {
 					break;
 				}
@@ -189,7 +195,7 @@ private:
 	std::streamsize writeOffset, readOffset;
 	std::streamsize writeCount, readCount;
 	int writerTid, readerTid;
-	bool setExplicitWriteClose, writeClosed;
+	bool setExplicitWriteClose, writeClosed, blocked;
 	BufferType front, back;
 	boost::mutex lock, writeCloseLock;
 	boost::condition_variable readReady;
@@ -238,6 +244,9 @@ public:
 		return *this;
 	}
 
+	bool isBlocked() {
+		return _impl->isBlocked();
+	}
 	void writeClose() {
 		return _impl->writeClose();
 	}
