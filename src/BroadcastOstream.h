@@ -25,25 +25,12 @@ public:
 	typedef std::map< int, BroadcastOstreamDetail *> InstanceMap;
 	const static int padding = sizeof(int) * 2; // (int)offset, (int)instance, (char[]) streambuffer
 	const static int MAX_SIZE = BUFFER_SIZE - padding - 128;
-	inline static boost::mutex &getMutex() {
-		static boost::mutex mutex;
-		return mutex;
-	}
-	inline static boost::condition_variable &getFlushReady() {
-		static boost::condition_variable flushReady;
-		return flushReady;
-	}
-	inline static boost::condition_variable &getBroadcastReady() {
-		static boost::condition_variable broadcastReady;
-		return broadcastReady;
-	}
 
-	BroadcastOstreamDetail(MPI_Comm &_comm, int _broadcastRank, std::ostream &_destination) :
+	BroadcastOstreamDetail(const MPI_Comm &_comm, int _broadcastRank, std::ostream &_destination) :
 		broadcastRank(_broadcastRank), destination(_destination) {
+		myComm = mpi::communicator(_comm, mpi::comm_duplicate),
 		assert(!omp_in_parallel());
-		if (MPI_Comm_dup(_comm, &comm) != MPI_SUCCESS)
-			LOG_THROW("Could not duplicate MPI Communicator");
-		MPI_Comm_rank(comm, &myRank);
+		MPI_Comm_rank(myComm, &myRank);
 		init();
 	}
 	~BroadcastOstreamDetail() {
@@ -51,8 +38,6 @@ public:
 		_close();
 		free(buf1); buf1 = NULL;
 		free(buf2); buf2 = NULL;
-		if (MPI_Comm_free(&comm) != MPI_SUCCESS)
-			LOG_THROW("Could not free MPI communicator in ~BroadcastOstream");
 	}
 
 	bool isActive() {
@@ -67,6 +52,8 @@ public:
 		}
 		return n;
 	}
+
+protected:
 	std::streamsize writeSome(const char* s, std::streamsize n) {
 		assert(myRank == broadcastRank);
 		assert(omp_get_thread_num() == 0);
@@ -80,24 +67,6 @@ public:
 		return wrote;
 	}
 
-/*
-	std::ostream &operator<<(std::string str) {
-		assert(myRank == broadcastRank);
-		assert(isActive());
-		int len = str.length();
-		assert(len < MAX_SIZE);
-		int &offset = _getOffset(activeIn);
-		if (len + offset >= MAX_SIZE) {
-			_flush();
-		}
-		memcpy(activeIn+offset+padding, str.c_str(), len);
-		offset += len;
-		destination << str;
-		return destination;
-	}
-*/
-
-protected:
 	int &_getOffset(char *buf) {
 		return *((int*)buf);
 	}
@@ -172,7 +141,7 @@ protected:
 		activeOut = activeIn;
 		_swapBuffers();
 
-		MPI_Bcast(activeOut, MAX_SIZE+padding, MPI_BYTE, broadcastRank, comm);
+		MPI_Bcast(activeOut, MAX_SIZE+padding, MPI_BYTE, broadcastRank, myComm);
 
 		_outputBuffer(activeOut);
 		activeOut = NULL;
@@ -182,36 +151,38 @@ protected:
 		assert(omp_in_parallel());
 		if (omp_get_thread_num() == 0) {
 			{
-				boost::mutex::scoped_lock mylock(getMutex());
+				boost::mutex::scoped_lock mylock(mutex);
 				while (activeOut != NULL) {
 					LOG_DEBUG_OPTIONAL(1, true, "BroadcastOstream::_flushThreaded(): Waiting for flushReady.");
-					getFlushReady().wait(mylock);
+					flushReady.wait(mylock);
 				}
 				_flushSerial();
 			}
-			getBroadcastReady().notify_one();
+			broadcastReady.notify_one();
 		} else {
 			{
-				boost::mutex::scoped_lock mylock(getMutex());
+				boost::mutex::scoped_lock mylock(mutex);
 				while (activeOut == NULL) {
 					LOG_DEBUG_OPTIONAL(1, true, "BroadcastOstream::_flushThreaded(): Waiting for broadcastReady.");
-					getBroadcastReady().wait(mylock);
+					broadcastReady.wait(mylock);
 				}
 				_outputBuffer(activeOut);
 				activeOut = NULL;
 			}
-			getFlushReady().notify_one();
+			flushReady.notify_one();
 		}
 	}
 
 
 private:
-	MPI_Comm comm;
+	mpi::communicator myComm;
 	int broadcastRank;
 	std::ostream &destination;
 	int myRank;
 	int myInstance;
 	char *buf1, *buf2, *activeIn, *activeOut;
+	boost::mutex mutex;
+	boost::condition_variable flushReady, broadcastReady;
 
 };
 

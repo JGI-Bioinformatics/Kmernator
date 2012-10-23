@@ -38,9 +38,10 @@ int main(int argc, char **argv)
 	LOG_VERBOSE(1, "Copying " << argv[1] << " to " << output);
 	{
 		std::ofstream os(output.c_str());
-		BroadcastOstream bcastos(MPI_COMM_WORLD, 0, os);
+		int root = 0;
+		BroadcastOstream bcastos(world, root, os);
 
-		if (rank == 0)
+		if (rank == root)
 			boost::iostreams::copy(ifs, bcastos);
 	}
 	LOG_VERBOSE_OPTIONAL(1, true, "Done");

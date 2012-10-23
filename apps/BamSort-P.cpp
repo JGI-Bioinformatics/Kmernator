@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 	LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
 
 	{
-		SamUtils::MPISortBam sortem(MPI_COMM_WORLD, reads, outputBam, (fh != NULL) ? fh->header : NULL);
+		SamUtils::MPISortBam sortem(world, reads, outputBam, (fh != NULL) ? fh->header : NULL);
 	}
 
 	if (fh != NULL)

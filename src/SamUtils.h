@@ -289,7 +289,7 @@ public:
 
 	};
 
-	static long concatenateOutput(MPI_Comm comm, MPI_File &ourFile, long long int myLength, std::istream &data) {
+	static long concatenateOutput(const MPI_Comm &comm, MPI_File &ourFile, long long int myLength, std::istream &data) {
 		LOG_VERBOSE_OPTIONAL(1, true, "concatenateOutput(): writing: " << myLength);
 		int rank,size;
 		MPI_Comm_rank(comm, &rank);
@@ -349,7 +349,7 @@ public:
 		return totalSize;
 	}
 
-	static long writePartialSortedBamVector(MPI_Comm comm, MPI_File &ourFile, BamVector &reads, IntVector &sortedCounts, bam_header_t *header = NULL) {
+	static long writePartialSortedBamVector(const MPI_Comm &comm, MPI_File &ourFile, BamVector &reads, IntVector &sortedCounts, bam_header_t *header = NULL) {
 		LOG_VERBOSE_OPTIONAL(1, true, "writePartialSortedBamVector(): with numReads: " << reads.size());
 		bool destroyBam = true;
 		int rank,size;
@@ -413,7 +413,7 @@ public:
 
 		return count;
 	}
-	static long writeBamVector(MPI_Comm comm, MPI_File &ourFile, BamVector &reads, bam_header_t *header = NULL, bool destroyBam = true) {
+	static long writeBamVector(const MPI_Comm &comm, MPI_File &ourFile, BamVector &reads, bam_header_t *header = NULL, bool destroyBam = true) {
 		LOG_VERBOSE_OPTIONAL(1, true, "writeBamVector(): with numReads: " << reads.size());
 		int rank,size;
 		MPI_Comm_rank(comm, &rank);
@@ -445,7 +445,7 @@ public:
 		}
 		return count;
 	}
-	static long writePartialSortedBamVector(MPI_Comm comm, std::string ourFileName, BamVector &reads, IntVector &sortedCounts, bam_header_t *header = NULL) {
+	static long writePartialSortedBamVector(const MPI_Comm &comm, std::string ourFileName, BamVector &reads, IntVector &sortedCounts, bam_header_t *header = NULL) {
 		MPI_File outfh;
 		if (MPI_SUCCESS != MPI_File_open(comm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
 			LOG_THROW("Could not open/write: " << ourFileName);
@@ -456,7 +456,7 @@ public:
 			LOG_THROW("Could not close: " << ourFileName);
 		return val;
 	}
-	static long writeBamVector(MPI_Comm comm, std::string ourFileName, BamVector &reads, bam_header_t *header = NULL, bool destroyBam = true) {
+	static long writeBamVector(const MPI_Comm &comm, std::string ourFileName, BamVector &reads, bam_header_t *header = NULL, bool destroyBam = true) {
 		MPI_File outfh;
 		if (MPI_SUCCESS != MPI_File_open(comm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
 			LOG_THROW("Could not open/write: " << ourFileName);
@@ -543,15 +543,13 @@ public:
 
 	class MPIReadExchanger {
 	public:
-		MPIReadExchanger(MPI_Comm _comm) : buf1(NULL), buf2(NULL)  {
-			if (MPI_Comm_dup(_comm, &mpicomm) != MPI_SUCCESS)
-				LOG_THROW("Could not duplicate MPI comm in MPIReadExchanger()");
+		MPIReadExchanger(const MPI_Comm &_comm)
+		: buf1(NULL), buf2(NULL)  {
+			myComm = mpi::communicator(_comm, mpi::comm_duplicate);
 		}
 		~MPIReadExchanger() {
 			if (buf1 != NULL) free(buf1);
 			if (buf2 != NULL) free(buf2);
-			if (MPI_Comm_free(&mpicomm) != MPI_SUCCESS)
-				LOG_THROW("Could not free MPI comm in ~MPIReadExchanger()");
 		}
 
 		// sendCounts must be known a priori, recvCounts can be specified or be empty if it is unknown by this rank.
@@ -559,8 +557,8 @@ public:
 		// _recvCounts will have the final number of reads from each rank after TransferStats.isDone()
 		TransferStats exchangeReads(const BamVector &sendReads, IntVector &sendOffsets, IntVector &_sendCounts, BamVector &recvReads, IntVector &recvOffsets, IntVector &_recvCounts, bool copyDataIfUnmapped = true) {
 			int rank,size;
-			MPI_Comm_rank(mpicomm, &rank);
-			MPI_Comm_size(mpicomm, &size);
+			MPI_Comm_rank(myComm, &rank);
+			MPI_Comm_size(myComm, &size);
 			TransferStats stats(size);
 
 			int maxReadsPerRank = (READS_PER_BATCH + size - 1)/ size;
@@ -577,7 +575,7 @@ public:
 				_recvCounts.resize(size, 0);
 				int *_s = packVector(_sendCounts);
 				int *_r = (int*) calloc(size, sizeof(int));
-				if (MPI_SUCCESS != MPI_Alltoall(_s, 1, MPI_INT, _r, 1, MPI_INT, mpicomm))
+				if (MPI_SUCCESS != MPI_Alltoall(_s, 1, MPI_INT, _r, 1, MPI_INT, myComm))
 					LOG_THROW("MPI_Alltoall() failed: ");
 				free(_s);
 				_recvCounts = unpackVector(_r, size); free(_r);
@@ -703,7 +701,7 @@ public:
 				}
 			}
 
-			if (MPI_SUCCESS != MPI_Alltoallv(buf1, &sendBytes[0], &sendByteDispl[0], MPI_BYTE, buf2, &recvBytes[0], &recvByteDispl[0], MPI_BYTE, mpicomm))
+			if (MPI_SUCCESS != MPI_Alltoallv(buf1, &sendBytes[0], &sendByteDispl[0], MPI_BYTE, buf2, &recvBytes[0], &recvByteDispl[0], MPI_BYTE, myComm))
 				LOG_THROW("MPI_Alltoallv() failed: ");
 
 			for(int i = 0; i < size; i++) {
@@ -770,7 +768,7 @@ public:
 				}
 			}
 			buf2 = (char*) realloc(buf2, totalRecvBytes);
-			if (MPI_SUCCESS != MPI_Alltoallv(buf1, &sendCounts2[0], &sendByteDispl[0], MPI_BYTE, buf2, &recvCounts2[0], &recvByteDispl[0], MPI_BYTE, mpicomm))
+			if (MPI_SUCCESS != MPI_Alltoallv(buf1, &sendCounts2[0], &sendByteDispl[0], MPI_BYTE, buf2, &recvCounts2[0], &recvByteDispl[0], MPI_BYTE, myComm))
 				LOG_THROW("MPI_Alltoallv() failed: ");
 
 			ptr = buf2;
@@ -810,7 +808,7 @@ public:
 			return stats;
 		}
 	private:
-		MPI_Comm mpicomm;
+		mpi::communicator myComm;
 		char *buf1, *buf2;
 	};
 
@@ -821,10 +819,9 @@ public:
 		// Merges 2+ streams of the same read aligned to separate partitions of the index
 	public:
 
-		MPIMergeSam(MPI_Comm _comm, std::string _inputFile, BamVector &_reads)
+		MPIMergeSam(const MPI_Comm &_comm, std::string _inputFile, BamVector &_reads)
 		: inputFile(_inputFile), myGlobalHeaderOffset(0), myReads(_reads), readExchanger(_comm){
-			if (MPI_Comm_dup(_comm, &comm) != MPI_SUCCESS)
-				LOG_THROW("Could not duplicate MPI comm in MPIMergeSam()");
+			myComm = mpi::communicator(_comm, mpi::comm_duplicate),
 			fh = BamStreamUtils::openSamOrBam(inputFile);
 			setHeaderCounts();
 			pickBestAlignments();
@@ -834,8 +831,6 @@ public:
 			samclose(fh);
 			free(headerCounts);
 			destroyBamVector(tmpReads);
-			if (MPI_Comm_free(&comm) != MPI_SUCCESS)
-				LOG_THROW("Could not free MPI comm in ~MPIMergeSam()");
 		}
 		bam_header_t *getHeader() {
 			return fh->header;
@@ -850,7 +845,7 @@ public:
 		long outputMergedHeader(std::string ourFileName) {
 			LOG_VERBOSE_OPTIONAL(1, true, "outputMergedHeader()");
 			MPI_File outfh;
-			if (MPI_SUCCESS != MPI_File_open(comm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
+			if (MPI_SUCCESS != MPI_File_open(myComm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
 				LOG_THROW("Could not open/write: " << ourFileName);
 
 			long val = outputMergedHeader(outfh);
@@ -863,8 +858,8 @@ public:
 		}
 		long outputMergedHeader(MPI_File &ourFile) {
 			int rank,size;
-			MPI_Comm_rank(comm, &rank);
-			MPI_Comm_size(comm, &size);
+			MPI_Comm_rank(myComm, &rank);
+			MPI_Comm_size(myComm, &size);
 
 			bam_header_t *header = fh->header;
 			// fix @SQ lines within plaintext header->text
@@ -893,7 +888,7 @@ public:
 				}
 				LOG_DEBUG(2, "Sending " << myCount << " bytes of @SQ text to root: " << (firstSQ - header->text) << " to " << (endSQ - header->text));
 
-				if (MPI_SUCCESS != MPI_Gather(&myCount, 1, MPI_INT, counts, 1, MPI_INT, root, comm))
+				if (MPI_SUCCESS != MPI_Gather(&myCount, 1, MPI_INT, counts, 1, MPI_INT, root, myComm))
 					LOG_THROW("MPI_Gather() failed");
 
 				int total = 0;
@@ -906,7 +901,7 @@ public:
 				}
 
 				LOG_DEBUG(2, "Sending @SQ lines:\n" << std::string(firstSQ, myCount));
-				if (MPI_SUCCESS != MPI_Gatherv(firstSQ, myCount, MPI_BYTE, buf, counts, displs, MPI_BYTE, root, comm))
+				if (MPI_SUCCESS != MPI_Gatherv(firstSQ, myCount, MPI_BYTE, buf, counts, displs, MPI_BYTE, root, myComm))
 					LOG_THROW("MPI_Gatherv failed");
 
 				if (rank == root) {
@@ -943,7 +938,7 @@ public:
 			int mySize = myHeaderPart.tellg();
 			LOG_DEBUG_OPTIONAL(2, true, "my bgzf compressed header size: " << mySize);
 
-			return concatenateOutput(comm, ourFile, myHeaderPart.tellp(), myHeaderPart);
+			return concatenateOutput(myComm, ourFile, myHeaderPart.tellp(), myHeaderPart);
 		}
 
 		int getMyGlobalHeaderOffset() const {
@@ -952,12 +947,12 @@ public:
 	protected:
 		void setHeaderCounts() {
 			int rank,size;
-			MPI_Comm_rank(comm, &rank);
-			MPI_Comm_size(comm, &size);
+			MPI_Comm_rank(myComm, &rank);
+			MPI_Comm_size(myComm, &size);
 			headerCounts = (int*) calloc(size, sizeof(int));
 			headerCounts[rank] = fh->header->n_targets;
 
-			if (MPI_SUCCESS != MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, headerCounts, 1, MPI_INT, comm))
+			if (MPI_SUCCESS != MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, headerCounts, 1, MPI_INT, myComm))
 				LOG_THROW("MPI_Allgather() failed");
 
 			for(int i = 0; i < rank; i++)
@@ -1072,8 +1067,8 @@ public:
 		BamVector syncAndPick(const BamVector &batchReads, int batchSize) {
 			LOG_DEBUG(3, "syncAndPick(): " << batchReads.size() << " batchSize: " << batchSize);
 			int rank,size;
-			MPI_Comm_rank(comm, &rank);
-			MPI_Comm_size(comm, &size);
+			MPI_Comm_rank(myComm, &rank);
+			MPI_Comm_size(myComm, &size);
 			assert(batchSize <= (int) batchReads.size());
 
 			BamVector pickedReads;
@@ -1156,7 +1151,7 @@ public:
 
 		}
 	private:
-		MPI_Comm comm;
+		mpi::communicator myComm;
 		std::string inputFile;
 		int myGlobalHeaderOffset, *headerCounts;
 		samfile_t *fh;
@@ -1170,25 +1165,23 @@ public:
 		// A single, coordinated sorted outputFile will be constructed.
 	public:
 
-		MPISortBam(MPI_Comm _comm, BamVector &_reads) : myReads(_reads), readExchanger(_comm) {
-			if (MPI_Comm_dup(_comm, &mpicomm) != MPI_SUCCESS)
-				LOG_THROW("Could not duplicate MPI communicator in MPISortBam()");
+		MPISortBam(const MPI_Comm &_comm, BamVector &_reads)
+		: myReads(_reads), readExchanger(_comm) {
+			myComm = mpi::communicator(_comm, mpi::comm_duplicate);
 			sortGlobal();
 		}
-		MPISortBam(MPI_Comm _comm, BamVector &_reads, std::string outputFileName, bam_header_t *header) : myReads(_reads), readExchanger(_comm) {
-			if (MPI_Comm_dup(_comm, &mpicomm) != MPI_SUCCESS)
-				LOG_THROW("Could not duplicate MPI communicator in MPISortBam()");
+		MPISortBam(const MPI_Comm &_comm, BamVector &_reads, std::string outputFileName, bam_header_t *header)
+		: myReads(_reads), readExchanger(_comm) {
+			myComm = mpi::communicator(_comm, mpi::comm_duplicate),
 			sortGlobal(outputFileName, header);
 		}
 		~MPISortBam() {
-			if(MPI_Comm_free(&mpicomm) != MPI_SUCCESS)
-				LOG_THROW("Could not free duplicated communicator in ~MPISortBam");
 		}
 
 		static void copyBamCore(bam1_core_t *dest, const bam1_core_t *src) {
 			memcpy(dest, src, sizeof(bam1_core_t));
 		}
-		static BamCoreVector calculateGlobalPartitions(BamVector &sortedReads, MPI_Comm mpicomm, int granularity = -1) {
+		static BamCoreVector calculateGlobalPartitions(BamVector &sortedReads, const MPI_Comm &mpicomm, int granularity = -1) {
 			LOG_DEBUG_OPTIONAL(2, true, "calculateGlobalPartitions(): " << sortedReads.size());
 			int myRank, ourSize;
 			MPI_Comm_rank(mpicomm, &myRank);
@@ -1320,15 +1313,15 @@ public:
 		}
 		void sortGlobal(std::string outputFileName, bam_header_t *header) {
 			IntVector sortedCounts = _sortGlobal();
-			writePartialSortedBamVector(mpicomm, outputFileName, myReads, sortedCounts, header);
+			writePartialSortedBamVector(myComm, outputFileName, myReads, sortedCounts, header);
 		}
 
 	protected:
 		IntVector _sortGlobal() {
 			LOG_DEBUG_OPTIONAL(1, true, "sortGlobal(): " << myReads.size());
 			int myRank, ourSize;
-			MPI_Comm_rank(mpicomm, &myRank);
-			MPI_Comm_size(mpicomm, &ourSize);
+			MPI_Comm_rank(myComm, &myRank);
+			MPI_Comm_size(myComm, &ourSize);
 
 			sortLocal(myReads);
 
@@ -1338,7 +1331,7 @@ public:
 				return sortedCounts;
 			}
 
-			BamCoreVector partitions = calculateGlobalPartitions(myReads, mpicomm);
+			BamCoreVector partitions = calculateGlobalPartitions(myReads, myComm);
 
 			// calculate full read counts
 			IntVector sendCounts(ourSize, 0);
@@ -1404,7 +1397,7 @@ public:
 		}
 
 	private:
-		MPI_Comm mpicomm;
+		mpi::communicator myComm;
 		BamVector &myReads;
 		MPIReadExchanger readExchanger;
 

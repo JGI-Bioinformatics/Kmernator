@@ -1452,6 +1452,12 @@ public:
 	void abort(int i) const {
 		_world->abort(i);
 	}
+	mpi::communicator split(int color) {
+		return _world->split(color);
+	}
+	mpi::communicator split(int color, int key) {
+		return _world->split(color, key);
+	}
 
 protected:
 	Comm initializeWorldAndOptions(int argc, char *argv[]) {

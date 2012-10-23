@@ -39,15 +39,15 @@
 #include <boost/algorithm/string.hpp>
 #include <fstream>
 
+#include "mpi.h"
 #include "config.h"
 #include "Sequence.h"
 #include "ReadSet.h"
 #include "Options.h"
 #include "Log.h"
 #include "Utils.h"
-#ifdef ENABLE_MPI
 #include "DistributedFunctions.h"
-#endif
+#include "BroadcastOstream.h"
 #include <unistd.h>
 
 using namespace std;
@@ -407,13 +407,9 @@ int main(int argc, char *argv[]) {
 
 	int exitStatus = 0;
 
-#ifdef ENABLE_MPI
 	ScopedMPIComm< SSOptions > world(argc, argv);
 	SSOptions::getOptions().getDefaultNumFiles() = world.size();
 	SSOptions::getOptions().getDefaultFileNum() = world.rank();
-#else
-	SSOptions::parseOpts(argc, argv);
-#endif
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 
 	std::string outputFile = Options::getOptions().getOutputFile();
@@ -500,9 +496,13 @@ int main(int argc, char *argv[]) {
 
 			assert(out1 != NULL || ops != NULL);
 			if (secondDim > 0) {
+				mpi::communicator local = world.split(first);
+				int root = 0;
+				BroadcastOstream bcastos(local, root, (ops == NULL ? *out1 : *ops));
 				for(int secondIt = 0 ; secondIt < secondDim ; secondIt++) {
 					LOG_DEBUG_OPTIONAL(1, true, "second: " << secondIt << " mydim:" << first << ", " << second << " : " << secondDim << " part " << first*secondDim + second);
-					outputRegularFiles(inputs, (ops == NULL ? *out1 : *ops), first*secondDim + secondIt, numFiles);
+					if (local.rank() == root)
+						outputRegularFiles(inputs, bcastos, first*secondDim + secondIt, numFiles);
 				}
 			} else {
 				outputRegularFiles(inputs, (ops == NULL) ? *out1 : *ops, fileNum, numFiles);
@@ -551,15 +551,12 @@ int main(int argc, char *argv[]) {
 		}
 		Cleanup::cleanup();
 		sleep(1); // attempt to let other processes get the signal
-#ifdef ENABLE_MPI
 		MPI_Abort(world, 1);
-#endif
 		LOG_THROW("Found a problem...");
 	}
 
 	Cleanup::cleanup();
 
-#ifdef ENABLE_MPI
 	niceBarrier(world);
 	OptionsBaseInterface::StringListType merges = SSOptions::getOptions().getMergeList();
 	for(unsigned int i = 0; i < merges.size(); i++) {
@@ -576,8 +573,6 @@ int main(int argc, char *argv[]) {
 			DistributedOfstreamMap::mergeFiles(world, myFile, mergeFile, true);
 		}
 	}
-
-#endif
 
 	return exitStatus;
 }
