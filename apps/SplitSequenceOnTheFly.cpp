@@ -56,14 +56,6 @@ class _SSOptions : public OptionsBaseInterface {
 public:
 	typedef OptionsBaseInterface::StringListType StringListType;
 
-	static int &getDefaultNumFiles() {
-		static int dummy = 1;
-		return dummy;
-	}
-	static int &getDefaultFileNum() {
-		static int dummy2 = 0;
-		return dummy2;
-	}
 	int &getNumFiles() {
 		return numFiles;
 	}
@@ -116,7 +108,7 @@ public:
 		return extraFifo;
 	}
 
-	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), secondDim(0), evenChunks(1), minReadLength(0), fifoFile(false) {}
+	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(-1), fileNum(-1), secondDim(0), evenChunks(1), minReadLength(0), fifoFile(false) {}
 
 	std::string _replaceWithKeys(std::string input) {
 		size_t pos;
@@ -185,6 +177,29 @@ public:
 		return output;
 	}
 
+	void setFileDimensions(const MPI_Comm &comm) {
+		if (numFiles == -1)
+			MPI_Comm_size(comm, &numFiles);
+		if (fileNum == -1)
+			MPI_Comm_rank(comm, &fileNum);
+
+		if (fileNum >= numFiles)
+			LOG_THROW("You can not specify --file-num ge --num-files (" << fileNum << " " << numFiles);
+
+		getPipeCommand() = _replaceWithKeys(getPipeCommand());
+		getForkCommand() = _replaceWithKeys(getForkCommand());
+		getExtraFifo() = _replaceWithKeys(getExtraFifo());
+		getMergeList() = _replaceWithKeys(getMergeList());
+		getSplitFile() = _replaceWithKeys(getSplitFile());
+		GeneralOptions::getOptions().getOutputFile() = _replaceWithKeys(GeneralOptions::getOptions().getOutputFile());
+		GeneralOptions::getOptions().getInputFiles() = _replaceWithKeys(GeneralOptions::getOptions().getInputFiles());
+
+		if (secondDim > 0 && numFiles % secondDim != 0) {
+			LOG_THROW("if you use --second-dim, it must be a factor of the number of files: " << numFiles << " which " << secondDim << " is not.");
+		}
+
+	}
+
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
 		GeneralOptions::getOptions().getKeepReadComment() = false;
@@ -196,8 +211,8 @@ public:
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		po::options_description opts("Split Sequence Options");
 		opts.add_options()
-								("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
-								("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to output (0-(N-1))")
+								("num-files", po::value<int>()->default_value(numFiles), "The number of files to split into N (automatically set under MPI)")
+								("file-num",  po::value<int>()->default_value(fileNum), "The number of the file to output (0-(N-1)) (automatically set under MPI)")
 								("second-dim", po::value<int>()->default_value(secondDim), "if > 0, then ranks will be divided by secondDim, and secondDim iterations of splitting will be performed, broadcasting secondDim chunks (of NumFiles) of the split data to each subrank group.  Use the keywords '{FirstNum}' '{SecondNum}' and '{UniqFirst}' and '{UniqSecond}'")
 								("even-chunks", po::value<int>()->default_value(evenChunks), "if > 1 then the output of each partition will be spread out across the file (recommend 10 if the ordering is less important than predictable runtime of forked commands)")
 								("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{Uniq}', '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
@@ -220,11 +235,6 @@ public:
 		setOpt("num-files", getNumFiles());
 		setOpt("file-num", getFileNum());
 		setOpt("second-dim", getSecondDim());
-		if (secondDim > 0 && numFiles % secondDim != 0) {
-			std::stringstream ss;
-			ss << "if you use --second-dim, it must be a factor of the number of files: " << numFiles << " which " << secondDim << " is not.";
-			setOptionsErrorMsg(ss.str());
-		}
 		setOpt("even-chunks", getEvenChunks());
 		setOpt("min-read-length", getMinReadLength());
 		setOpt("split-file", getSplitFile());
@@ -235,15 +245,7 @@ public:
 		setOpt2("extra-fifo", getExtraFifo());
 
 
-		getPipeCommand() = _replaceWithKeys(getPipeCommand());
-		getForkCommand() = _replaceWithKeys(getForkCommand());
-		getExtraFifo() = _replaceWithKeys(getExtraFifo());
-		getMergeList() = _replaceWithKeys(getMergeList());
-		getSplitFile() = _replaceWithKeys(getSplitFile());
-		GeneralOptions::getOptions().getOutputFile() = _replaceWithKeys(GeneralOptions::getOptions().getOutputFile());
-		GeneralOptions::getOptions().getInputFiles() = _replaceWithKeys(GeneralOptions::getOptions().getInputFiles());
-
-		if (Options::getOptions().getInputFiles().empty() || getNumFiles() == 0 || getFileNum() >= getNumFiles()) {
+		if (Options::getOptions().getInputFiles().empty() || getNumFiles() == 0) {
 			ret = false;
 			std::stringstream ss;
 			ss <<"Please specify num-files, file-num and at least one input file.\nnum-files=" << getNumFiles() << "\nfile-num=" << getFileNum();
@@ -350,6 +352,7 @@ unsigned long outputSplitFiles(OptionsBaseInterface::FileListType inputs, T &out
 }
 
 std::vector< int > forkCommand() {
+	LOG_DEBUG_OPTIONAL(1, true, "forkCommand()");
 	std::vector< int > forks;
 	StringListType forkCommand = SSOptions::getOptions().getForkCommand();
 	if (forkCommand.empty())
@@ -408,8 +411,8 @@ int main(int argc, char *argv[]) {
 	int exitStatus = 0;
 
 	ScopedMPIComm< SSOptions > world(argc, argv);
-	SSOptions::getOptions().getDefaultNumFiles() = world.size();
-	SSOptions::getOptions().getDefaultFileNum() = world.rank();
+
+	SSOptions::getOptions().setFileDimensions(world);
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 
 	std::string outputFile = Options::getOptions().getOutputFile();
@@ -461,11 +464,13 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (!outputFile.empty()) {
+			LOG_VERBOSE_OPTIONAL(1, true, "writing to output file: " << outputFile);
 			out1 = out1f = new std::ofstream(outputFile.c_str());
 		}
 
 		if (!splitFile.empty()) {
 			assert(out1f != NULL);
+			LOG_VERBOSE_OPTIONAL(1, true, "writing to second output (split) file: " << splitFile);
 			out2f = new std::ofstream(splitFile.c_str());
 			omp_set_dynamic(0);
 			omp_set_num_threads(2);
@@ -479,19 +484,20 @@ int main(int argc, char *argv[]) {
 				} else {
 					outputSplitFiles(inputs, *out1f, *out2f, fileNum, numFiles);
 				}
-				if (omp_get_thread_num() == 0)
+				if (omp_get_thread_num() == 0) {
+					LOG_DEBUG_OPTIONAL(1, true, "Closing output1");
 					out1f->close();
-				if (omp_get_thread_num() == 1)
+				}
+				if (omp_get_thread_num() == 1) {
+					LOG_DEBUG_OPTIONAL(1, true, "Closing output2");
 					out2f->close();
+				}
 			}
 		} else {
 			std::string pipeCommand = SSOptions::getOptions().getPipeCommand();
 			if (!pipeCommand.empty()) {
+				LOG_VERBOSE_OPTIONAL(1, true, "Outputting to pipeCommand: " << pipeCommand);
 				ops = new OPipestream(pipeCommand);
-			}
-
-			if (!outputFile.empty()) {
-				out1 = out1f = new std::ofstream(outputFile.c_str());
 			}
 
 			assert(out1 != NULL || ops != NULL);
@@ -508,11 +514,12 @@ int main(int argc, char *argv[]) {
 				outputRegularFiles(inputs, (ops == NULL) ? *out1 : *ops, fileNum, numFiles);
 			}
 
-			if (ops != NULL) {
-				delete ops;
-				ops = NULL;
-			}
+		}
 
+		LOG_DEBUG_OPTIONAL(1, true, "Closing output(s)");
+		if (ops != NULL) {
+			delete ops;
+			ops = NULL;
 		}
 
 		if (out1f != NULL) {

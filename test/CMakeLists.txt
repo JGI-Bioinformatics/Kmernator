@@ -137,6 +137,9 @@ target_link_libraries( BgzfStreamTest
 add_test( BgzfStreamTest BgzfStreamTest )
 
 if( MPI_FOUND )
+add_test(testSplitSequenceOnTheFly runSplitSequenceOnTheFlyTests.sh)
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runSplitSequenceOnTheFlyTests.sh test/ )
+
 add_executable( TestMPI TestMPI )
 set_source_files_properties( TestMPI
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
