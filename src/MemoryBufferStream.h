@@ -115,7 +115,17 @@ public:
 	typedef char char_type;
 	typedef boost::iostreams::bidirectional_device_tag category;
 	typedef boost::shared_ptr< Impl > ImplPtr;
+
 	stream_impl_template() : _impl( new Impl() ) {}
+	template<typename U1>
+	stream_impl_template(U1 u1) : _impl( new Impl(u1) ) {};
+
+	template<typename U1, typename U2>
+	stream_impl_template(U1 u1, U2 u2) : _impl( new Impl(u2, u2) ) {};
+
+	template<typename U1, typename U2, typename U3>
+	stream_impl_template(U1 u1, U2 u2, U3 &u3) : _impl( new Impl(u1, u2, u3) ) {};
+
 	stream_impl_template(const stream_impl_template &copy) {
 		_impl = copy._impl;
 	}

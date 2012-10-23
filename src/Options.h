@@ -171,6 +171,7 @@ public:
 	}
 };
 
+
 // Singleton template class
 template <class T>
 class OptionsBaseTemplate {
@@ -257,9 +258,13 @@ protected:
 	OptionsBaseTemplate& operator=(OptionsBaseTemplate const&); // disabled
 };
 
-/* Example copy-paste template */
+class NullClass {};
+class NullOptions : public OptionsBaseTemplate< NullClass > {
+public:
+	static void parseOpts(int argc, char *argv[]) {}
+};
 
-typedef OptionsBaseTemplate< OptionsBaseInterface > NullOptions;
+/* Example copy-paste template */
 
 class _MySpecificOptions : public OptionsBaseInterface {
 public:

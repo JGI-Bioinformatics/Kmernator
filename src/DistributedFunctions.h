@@ -1413,7 +1413,6 @@ void validateMPIWorld(mpi::communicator &world) {
 	reduceOMPThreads(world);
 }
 
-
 template< typename OptionsTempl = NullOptions >
 class ScopedMPIComm {
 public:

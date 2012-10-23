@@ -175,6 +175,21 @@ target_link_libraries( MergeIndexPartitionedBam-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+
+
+set_source_files_properties( MPIBroadcastStream
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+add_executable( MPIBroadcastStream MPIBroadcastStream )
+set_target_properties( MPIBroadcastStream
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
+                       )
+target_link_libraries( MPIBroadcastStream 
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+
                               
 endif()
 
