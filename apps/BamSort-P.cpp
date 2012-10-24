@@ -10,11 +10,46 @@
 #include "SamUtils.h"
 #include "Log.h"
 #include "Options.h"
+#include "MPIUtils.h"
+
+class _BamSortOptions : public OptionsBaseInterface {
+public:
+	_BamSortOptions() : unmappedReads(), unmappedReadPairs() {
+	}
+	virtual ~_BamSortOptions() {}
+	void _resetDefaults() {
+		// Other *::_resetDefaults();
+	}
+	std::string &getUnmappedReads() {
+		return unmappedReads;
+	}
+	std::string &getUnmappedReadPairs() {
+		return unmappedReadPairs;
+	}
+	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		po::options_description opts("BamSort-P Options");
+		opts.add_options()
+				("unmapped-read-pairs", po::value<std::string>()->default_value(unmappedReadPairs), "gzipped file to place unmapped read Pairs Fastqs (can be same as --unmapped-reads)")
+				("unmapped-reads", po::value<std::string>()->default_value(unmappedReads), "gzipped file to place unmapped reads Fastqs (can be same as --unmapped-read-pairs)");
+		desc.add(opts);
+		// Other *::_setOptions(desc,p);
+	}
+	bool _parseOptions(po::variables_map &vm) {
+		bool ret = true;
+		setOpt("unmapped-read-pairs", unmappedReadPairs);
+		setOpt("unmapped-reads", unmappedReads);
+		// Other ret &= *::_parseOptions(vm);
+		return ret;
+	}
+private:
+	std::string unmappedReads;
+	std::string unmappedReadPairs;
+};
+typedef OptionsBaseTemplate< _BamSortOptions > BamSortOptions;
 
 int main(int argc, char **argv)
 {
-	if (MPI_SUCCESS != MPI_Init(&argc, &argv))
-		LOG_THROW("MPI_Init() failed: ");
+	ScopedMPIComm< BamSortOptions > world(argc, argv);
 
 	int rank,size;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -25,8 +60,6 @@ int main(int argc, char **argv)
 		MPI_Finalize();
 		exit(1);
 	}
-	mpi::communicator world;
-	Logger::setWorld(&world);
 
 	GeneralOptions::getOptions().getDebug() = 0;
 	BamVector reads;
@@ -44,6 +77,7 @@ int main(int argc, char **argv)
 			LOG_VERBOSE_OPTIONAL(1, true, "Loaded " << (reads.size() - s) << " new bam records");
 		}
 	}
+
 	unlink(outputBam.c_str());
 	LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
 
@@ -56,7 +90,5 @@ int main(int argc, char **argv)
 
 	LOG_VERBOSE(1, "Finished");
 
-	if (MPI_SUCCESS != MPI_Finalize())
-		LOG_THROW("MPI_Finalize() failed: ");
 	return 0;
 }

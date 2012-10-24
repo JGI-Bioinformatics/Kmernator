@@ -12,9 +12,10 @@
 #include <boost/iostreams/copy.hpp>
 
 #include "Log.h"
+#include "MPIUtils.h"
 #include "Options.h"
 #include "BroadcastOstream.h"
-#include "DistributedFunctions.h"
+
 
 int main(int argc, char **argv)
 {

@@ -193,6 +193,46 @@ public:
 			}
 		}
 	}
+	static std::string getPairTag(bam1_t *bam) {
+		std::string s;
+		if ((bam->core.flag & BAM_FPAIRED) == BAM_FPAIRED) {
+			s = std::string((bam->core.flag & BAM_FREAD1) ? "/1" : "/2" );
+		}
+		return s;
+	}
+	static std::string getSequence(bam1_t *bam) {
+
+		if (bam->core.l_qseq) {
+			std::stringstream ss;
+			uint8_t *s = bam1_seq(bam);
+			for (int32_t i = 0; i < bam->core.l_qseq; ++i)
+				ss << bam_nt16_rev_table[bam1_seqi(s, i)];
+			return ss.str();
+		} else {
+			return std::string('N', 1);
+		}
+
+	}
+	static std::string getQualFasta(bam1_t *bam, int offset = 33) {
+		uint8_t *t = bam1_qual(bam);
+		int32_t len = bam->core.l_qseq;
+		if (len == 0)
+			return std::string((char) offset, 1);
+		if (t[0] == 0xff) {
+			return std::string((char) 60+offset, len);
+		} else {
+			std::stringstream ss;
+			for (int32_t i = 0; i < len; ++i)
+				ss << (char) t[i] + offset;
+			return ss.str();
+		}
+	}
+	static std::ostream &writeFastq(std::ostream &os, bam1_t *bam, int offset = 33) {
+		os << '@' << bam1_qname(bam) << getPairTag(bam) << "\n"
+				<< getSequence(bam) << "\n+\n"
+				<< getQualFasta(bam, offset) << "\n";
+		return os;
+	}
 };
 
 // define write operator for a bam record
@@ -1077,7 +1117,7 @@ public:
 			if ((blockSize & 0x1) == 1)
 				blockSize++; // make sure pairs are kept together
 			int count = 0;
-			int myCount;
+			int myCount = 0;
 			for(int i = 0; i < size; i++) {
 				int c = std::min(blockSize, (int) (batchSize - count));
 				sendCounts[i] = c;
@@ -1099,50 +1139,36 @@ public:
 			assert((int) tmpReads.size() >= myCount * size);
 			pickedReads.reserve(myCount);
 
-			if (0) {
-				for(int i = 0; i < myCount; i++) {
-					bam1_t *best = tmpReads[ rank * myCount + i];
-					for(int j = 0; j < size ; j++) {
-						if (j == rank)
-							continue;
-						bam1_t *test = tmpReads[ j * myCount + i];
-						best = isBetter(best, test);
-					}
-					bam1_t *x = bam_dup1(best);
-					pickedReads.push_back(x);
+			BamVector reads1, reads2;
+			reads1.resize(size, NULL);
+			reads2.resize(size, NULL);
+			for(int i = 0; i < myCount; i++) {
+				bool _isPaired = false;
+				for(int j = 0; j < size; j++) {
+					bam1_t *x =  tmpReads[ j * myCount + i];
+					if (isRead1(x))
+						reads1[j] = x;
+					else
+						reads2[j] = x;
+					if (!_isPaired && isPaired(x))
+						_isPaired = true;
 				}
-			} else {
-				BamVector reads1, reads2;
-				reads1.resize(size, NULL);
-				reads2.resize(size, NULL);
-				for(int i = 0; i < myCount; i++) {
-					bool _isPaired = false;
+				if (_isPaired) {
+					i++;
 					for(int j = 0; j < size; j++) {
 						bam1_t *x =  tmpReads[ j * myCount + i];
 						if (isRead1(x))
 							reads1[j] = x;
 						else
 							reads2[j] = x;
-						if (!_isPaired && isPaired(x))
-							_isPaired = true;
 					}
-					if (_isPaired) {
-						i++;
-						for(int j = 0; j < size; j++) {
-							bam1_t *x =  tmpReads[ j * myCount + i];
-							if (isRead1(x))
-								reads1[j] = x;
-							else
-								reads2[j] = x;
-						}
-						BamPair best = pickBestReadPair(reads1, reads2);
-						assert(strcmp(bam1_qname(best.first), bam1_qname(best.second)) == 0);
+					BamPair best = pickBestReadPair(reads1, reads2);
+					assert(strcmp(bam1_qname(best.first), bam1_qname(best.second)) == 0);
 
-						pickedReads.push_back( bam_dup1(best.first) );
-						pickedReads.push_back( bam_dup1(best.second) );
-					} else {
-						pickedReads.push_back( bam_dup1( pickBestRead(reads1) ) );
-					}
+					pickedReads.push_back( bam_dup1(best.first) );
+					pickedReads.push_back( bam_dup1(best.second) );
+				} else {
+					pickedReads.push_back( bam_dup1( pickBestRead(reads1) ) );
 				}
 			}
 
@@ -1181,6 +1207,7 @@ public:
 		static void copyBamCore(bam1_core_t *dest, const bam1_core_t *src) {
 			memcpy(dest, src, sizeof(bam1_core_t));
 		}
+
 		static BamCoreVector calculateGlobalPartitions(BamVector &sortedReads, const MPI_Comm &mpicomm, int granularity = -1) {
 			LOG_DEBUG_OPTIONAL(2, true, "calculateGlobalPartitions(): " << sortedReads.size());
 			int myRank, ourSize;
@@ -1401,15 +1428,57 @@ public:
 		BamVector &myReads;
 		MPIReadExchanger readExchanger;
 
-
 	};
 
+	// in-place sorts a BamVector
 	static void sortLocal(BamVector &reads) {
 		LOG_DEBUG_OPTIONAL(1, true, "sortLocal(): " << reads.size());
 		std::sort(reads.begin(), reads.end(), SortByPosition());
 		LOG_DEBUG_OPTIONAL(2, true, "sortLocal(): finished");
 	}
 
+	// takes all unmapped reads in reads and puts them in unmappedReads
+	// migrated reads will have NULL in reads (use collapseVector to fix)
+	static void splitUnmapped(BamVector &reads, BamVector &unmappedReads, bool onlyUnmappedPairs = false) {
+		if (onlyUnmappedPairs) {
+			int testPairedOrdering = 0;
+			const int MAX_TEST = 1000;
+			for(long i = 0; i < (long) reads.size()-1; i+=2) {
+				if (testPairedOrdering++ < MAX_TEST) {
+					if (strcmp(bam1_qname(reads[i]), bam1_qname(reads[i+1])) != 0) {
+						LOG_WARN(1, "splitUnmapped(): Detected bam not sorted by name.  Aborting by onlyUnmappedPairs");
+						break;
+					}
+				}
+				if ((!isMapped(reads[i])) && (!isMapped(reads[i+1]))) {
+					unmappedReads.push_back(reads[i]);
+					unmappedReads.push_back(reads[i+1]);
+					reads[i] = NULL;
+					reads[i+1] = NULL;
+				}
+			}
+		} else {
+			for(long i = 0; i < (long) reads.size(); i++) {
+				if (reads[i] != NULL && !isMapped(reads[i])) {
+					unmappedReads.push_back(reads[i]);
+					reads[i] = NULL;
+				}
+			}
+		}
+	}
+
+	// removes NULL entries from reads
+	static void collapseVector(BamVector &reads) {
+		long countBams = 0;
+		for(long i = 0 ; i < (long) reads.size(); i++) {
+			if (reads[i] != NULL) {
+				if (i != countBams)
+					reads[countBams] = reads[i];
+				countBams++;
+			}
+		}
+		reads.resize(countBams);
+	}
 	static void dumpBamVector(int debugLevel, BamVector &reads, std::string msg) {
 		if (Log::isDebug(debugLevel)) {
 			std::stringstream ss;

@@ -49,8 +49,9 @@
 #include "Options.h"
 #include "Log.h"
 #include "Utils.h"
-#include "DistributedFunctions.h"
+#include "MPIUtils.h"
 #include "BroadcastOstream.h"
+#include "DistributedOfstreamMap.h"
 #include <unistd.h>
 
 using namespace std;
