@@ -42,6 +42,7 @@
 #include "Log.h"
 #include "BgzfStream.h"
 #include "MemoryBufferStream.h"
+#include "MPIUtils.h"
 
 namespace bam_endian {
 #include "bam_endian.h"
@@ -164,9 +165,12 @@ public:
 			//printf("Checking if %s is a SAM formatted file\n", fileName);
 			in = samopen(fileName.c_str(), "r", 0);
 			if (in == NULL || in->header == NULL) {
-				//printf("Error! Failed to open BAM/SAM file %s\n", fileName);
+				LOG_THROW("openSamOrBam(): Could not open: " << fileName);
 				exit(1);
-			}
+			} else
+				LOG_VERBOSE_OPTIONAL(1, true, "Opened Sam file: " << fileName);
+		} else {
+			LOG_VERBOSE_OPTIONAL(1, true, "Opened Bam file: " << fileName);
 		}
 		return in;
 	}
@@ -222,11 +226,13 @@ public:
 			return std::string((char) 60+offset, len);
 		} else {
 			std::stringstream ss;
-			for (int32_t i = 0; i < len; ++i)
-				ss << (char) t[i] + offset;
+			for (int32_t i = 0; i < len; ++i) {
+				ss.put((char) (t[i] + offset));
+			}
 			return ss.str();
 		}
 	}
+
 	static std::ostream &writeFastq(std::ostream &os, bam1_t *bam, int offset = 33) {
 		os << '@' << bam1_qname(bam) << getPairTag(bam) << "\n"
 				<< getSequence(bam) << "\n+\n"
@@ -329,66 +335,6 @@ public:
 
 	};
 
-	static long concatenateOutput(const MPI_Comm &comm, MPI_File &ourFile, long long int myLength, std::istream &data) {
-		LOG_VERBOSE_OPTIONAL(1, true, "concatenateOutput(): writing: " << myLength);
-		int rank,size;
-		MPI_Comm_rank(comm, &rank);
-		MPI_Comm_size(comm, &size);
-
-		// exchange sizes
-		long long int *ourSizes = (long long int*) calloc(size, sizeof(myLength));
-		ourSizes[rank] = myLength;
-
-		if (MPI_SUCCESS != MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, ourSizes, 1, MPI_LONG_LONG_INT, comm))
-			LOG_THROW("MPI_Allgather() failed");
-
-		long long int totalSize = 0, myOffset = 0, myEnd = 0;;
-
-		if (rank == 0) {
-			if (MPI_SUCCESS != MPI_File_get_size(ourFile, &totalSize))
-				LOG_THROW("MPI_File_get_size() failed");
-		}
-		MPI_Bcast(&totalSize, 1, MPI_LONG_LONG_INT, 0, comm);
-		LOG_DEBUG_OPTIONAL(2, rank == 0, "ourFile is already: " << totalSize);
-
-		for(int i = 0; i < size; i++) {
-			if (i == rank)
-				myOffset = totalSize;
-			totalSize += ourSizes[i];
-			if (i == rank)
-				myEnd = totalSize;
-		}
-		free(ourSizes);
-		// MPI_FILE_WRITE
-		LOG_DEBUG(2, "myOffset: " << myOffset << " total size will be: " << totalSize << " MySize: " << myLength << " myEnd: " << myEnd);
-
-		if (MPI_SUCCESS != MPI_File_set_size(ourFile, totalSize))
-			LOG_THROW("MPI_File_set_size failed");
-
-		MPI_Offset totalWritten = 0;
-		int bufSize = 16 * 1024 * 1024; // 16 MB chunks
-		char *buf = (char*) calloc(bufSize, 1);
-		while(!data.eof() & !data.fail()) {
-			data.read(buf, bufSize);
-			int count = data.gcount();
-			MPI_Status status;
-			if (MPI_SUCCESS != MPI_File_write_at(ourFile, myOffset, buf, count, MPI_BYTE, &status))
-				LOG_THROW("MPI_File_write_at() failed");
-
-			int writeCount;
-			MPI_Get_count(&status, MPI_BYTE, &writeCount);
-			if (writeCount != count)
-				LOG_THROW("writeCount " << writeCount << " != count " << count);
-			myOffset += count;
-			totalWritten += count;
-			LOG_DEBUG(3, "concatenateOutput(): wrote " << count);
-		}
-		LOG_DEBUG_OPTIONAL(2, true, "concatenateOutput: completed writing: " << totalWritten << " myOffset: " << myOffset);
-		assert(myOffset == myEnd);
-		free(buf);
-		return totalSize;
-	}
-
 	static long writePartialSortedBamVector(const MPI_Comm &comm, MPI_File &ourFile, BamVector &reads, IntVector &sortedCounts, bam_header_t *header = NULL) {
 		LOG_VERBOSE_OPTIONAL(1, true, "writePartialSortedBamVector(): with numReads: " << reads.size());
 		bool destroyBam = true;
@@ -446,7 +392,7 @@ public:
 			long long int myLength = myBams.tellp();
 
 			MemoryBuffer::istream is(myBams);
-			count = concatenateOutput(comm, ourFile, myLength, is);
+			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
 		}
 		if (! destroyBam )
 			reads.pop_back(); // remove terminate condition
@@ -476,36 +422,53 @@ public:
 				}
 			}
 		}
+		reads.clear();
+
 		long count = 0;
 		{
 			long long int myLength = myBams.tellp();
 
 			MemoryBuffer::istream is(myBams);
-			count = concatenateOutput(comm, ourFile, myLength, is);
+			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
 		}
 		return count;
 	}
+	static long writeFastqGz(const MPI_Comm &comm, BamVector &reads, MPI_File &ourFile, bool destroyBam = true) {
+		LOG_VERBOSE_OPTIONAL(1, true, "writeFastqGz(): " << reads.size());
+		MemoryBuffer mygz;
+		{
+			MemoryBuffer::ostream os(mygz);
+			bgzf_ostream bgzfo(os, false);
+
+			for(BamVector::iterator it = reads.begin(); it != reads.end(); it++) {
+				bam1_t *bam = *it;
+				BamStreamUtils::writeFastq(bgzfo, bam);
+				if (destroyBam) {
+					bam_destroy1(bam);
+					*it = NULL;
+				}
+			}
+		}
+		if (destroyBam)
+			reads.clear();
+		long count = 0;
+		{
+			long long int myLength = mygz.tellp();
+
+			MemoryBuffer::istream is(mygz);
+			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
+		}
+		return count;
+	}
+
 	static long writePartialSortedBamVector(const MPI_Comm &comm, std::string ourFileName, BamVector &reads, IntVector &sortedCounts, bam_header_t *header = NULL) {
-		MPI_File outfh;
-		if (MPI_SUCCESS != MPI_File_open(comm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
-			LOG_THROW("Could not open/write: " << ourFileName);
-
-		long val = writePartialSortedBamVector(comm, outfh,reads, sortedCounts, header);
-
-		if (MPI_SUCCESS != MPI_File_close(&outfh))
-			LOG_THROW("Could not close: " << ourFileName);
-		return val;
+		return writePartialSortedBamVector(comm, ScopedMPIFile(comm, ourFileName),reads, sortedCounts, header);
 	}
 	static long writeBamVector(const MPI_Comm &comm, std::string ourFileName, BamVector &reads, bam_header_t *header = NULL, bool destroyBam = true) {
-		MPI_File outfh;
-		if (MPI_SUCCESS != MPI_File_open(comm, (char*) ourFileName.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outfh))
-			LOG_THROW("Could not open/write: " << ourFileName);
-
-		long val = writeBamVector(comm, outfh,reads, header,destroyBam);
-
-		if (MPI_SUCCESS != MPI_File_close(&outfh))
-			LOG_THROW("Could not close: " << ourFileName);
-		return val;
+		return writeBamVector(comm, ScopedMPIFile(comm, ourFileName),reads, header,destroyBam);
+	}
+	static long writeFastqGz(const MPI_Comm &comm, BamVector &reads, std::string ourFileName, bool destroyBam = true) {
+		return writeFastqGz(comm, reads, ScopedMPIFile(comm, ourFileName), destroyBam);
 	}
 
 	class TransferStats {
@@ -978,7 +941,7 @@ public:
 			int mySize = myHeaderPart.tellg();
 			LOG_DEBUG_OPTIONAL(2, true, "my bgzf compressed header size: " << mySize);
 
-			return concatenateOutput(myComm, ourFile, myHeaderPart.tellp(), myHeaderPart);
+			return MPIUtils::concatenateOutput(myComm, ourFile, myHeaderPart.tellp(), myHeaderPart);
 		}
 
 		int getMyGlobalHeaderOffset() const {

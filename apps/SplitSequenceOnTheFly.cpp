@@ -550,7 +550,7 @@ int main(int argc, char *argv[]) {
 
 	Cleanup::cleanup();
 
-	niceBarrier(world);
+	MPIUtils::niceBarrier(world);
 	OptionsBaseInterface::StringListType merges = SSOptions::getOptions().getMergeList();
 	for(unsigned int i = 0; i < merges.size(); i++) {
 		std::string &merge = merges[i];

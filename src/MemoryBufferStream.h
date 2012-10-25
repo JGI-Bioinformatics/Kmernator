@@ -257,6 +257,13 @@ public:
 		ostream(stream_impl_template &_os) {
 			this->push(_os);
 		}
+/*
+		template<typename U>
+		ostream(U &u, stream_impl_template &_os) {
+			this->push(u);
+			this->push(_os);
+		};
+*/
 		virtual ~ostream() {}
 	};
 
@@ -266,6 +273,13 @@ public:
 		istream(stream_impl_template &_is) {
 			this->push(_is);
 		}
+/*
+		template<typename U>
+		istream(U &u, stream_impl_template &_is) {
+			this->push(u);
+			this->push(_is);
+		};
+*/
 		virtual ~istream() {}
 	};
 
