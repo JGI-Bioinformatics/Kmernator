@@ -32,6 +32,10 @@
 #ifndef SAMUTILS_H_
 #define SAMUTILS_H_
 
+#include <iostream>
+#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
+
 #include "mpi.h"
 #include <stdint.h>
 #include <string>
@@ -234,7 +238,7 @@ public:
 	}
 
 	static std::ostream &writeFastq(std::ostream &os, bam1_t *bam, int offset = 33) {
-		os << '@' << bam1_qname(bam) << getPairTag(bam) << "\n"
+		os << "@" << bam1_qname(bam) << getPairTag(bam) << "\n"
 				<< getSequence(bam) << "\n+\n"
 				<< getQualFasta(bam, offset) << "\n";
 		return os;
@@ -343,26 +347,27 @@ public:
 		MPI_Comm_size(comm, &size);
 		assert((int) sortedCounts.size() == size);
 
-		// prepare the heap
-		std::vector< bam1_p_pair > heap;
-		heap.reserve(size + 1);
-		long totalCount = 0;
-		for(int i = 0; i < size; i++) {
-			if (sortedCounts[i] > 0 && reads[totalCount] != NULL) {
-				heap.push_back( bam1_p_pair(reads[totalCount], &reads[totalCount]));
-				reads[totalCount] = NULL;
-			}
-			totalCount += sortedCounts[i];
-		}
-		assert(totalCount == (int) reads.size());
-		reads.push_back(NULL); // terminate condition
-
-		SortByPosition sbp;
-		std::make_heap(heap.begin(), heap.end(), sbp);
-
 		// output while processing the heap
 		MemoryBuffer myBams;
-		{
+		if (! reads.empty() ) {
+
+			// prepare the heap
+			std::vector< bam1_p_pair > heap;
+			heap.reserve(size + 1);
+			long totalCount = 0;
+			for(int i = 0; i < size; i++) {
+				if (sortedCounts[i] > 0 && reads[totalCount] != NULL) {
+					heap.push_back( bam1_p_pair(reads[totalCount], &reads[totalCount]));
+					reads[totalCount] = NULL;
+				}
+				totalCount += sortedCounts[i];
+			}
+			assert(totalCount == (int) reads.size());
+			reads.push_back(NULL); // terminate condition
+
+			SortByPosition sbp;
+			std::make_heap(heap.begin(), heap.end(), sbp);
+
 			MemoryBuffer::ostream os(myBams);
 			bgzf_ostream bgzfo(os, rank == size-1);
 			if (header != NULL && rank == 0) {
@@ -405,7 +410,7 @@ public:
 		MPI_Comm_rank(comm, &rank);
 		MPI_Comm_size(comm, &size);
 		MemoryBuffer myBams;
-		{
+		if (!reads.empty()) {
 			MemoryBuffer::ostream os(myBams);
 			bgzf_ostream bgzfo(os, rank == size-1);
 			if (header != NULL && rank == 0) {
@@ -422,7 +427,8 @@ public:
 				}
 			}
 		}
-		reads.clear();
+		if (destroyBam)
+			reads.clear();
 
 		long count = 0;
 		{
@@ -436,13 +442,15 @@ public:
 	static long writeFastqGz(const MPI_Comm &comm, BamVector &reads, MPI_File &ourFile, bool destroyBam = true) {
 		LOG_VERBOSE_OPTIONAL(1, true, "writeFastqGz(): " << reads.size());
 		MemoryBuffer mygz;
-		{
-			MemoryBuffer::ostream os(mygz);
-			bgzf_ostream bgzfo(os, false);
+		if (!reads.empty()) {
+			MemoryBuffer::ostream mos(mygz);
+			boost::iostreams::filtering_ostream os;
+			os.push(boost::iostreams::gzip_compressor());
+			os.push(mos);
 
 			for(BamVector::iterator it = reads.begin(); it != reads.end(); it++) {
 				bam1_t *bam = *it;
-				BamStreamUtils::writeFastq(bgzfo, bam);
+				BamStreamUtils::writeFastq(os, bam);
 				if (destroyBam) {
 					bam_destroy1(bam);
 					*it = NULL;
@@ -451,6 +459,7 @@ public:
 		}
 		if (destroyBam)
 			reads.clear();
+
 		long count = 0;
 		{
 			long long int myLength = mygz.tellp();

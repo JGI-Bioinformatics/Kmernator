@@ -101,20 +101,20 @@ int main(int argc, char **argv)
 	if (!BamSortOptions::getOptions().getUnmappedReadPairs().empty()) {
 		BamVector unmappedReads;
 		SamUtils::splitUnmapped(reads, unmappedReads, true);
-		if (!unmappedReads.empty()) {
+		if (!unmappedReads.empty())
 			needsCollapse = true;
-			SamUtils::writeFastqGz(world, unmappedReads, BamSortOptions::getOptions().getUnmappedReadPairs(), true);
-			assert(unmappedReads.empty());
-		}
+		SamUtils::writeFastqGz(world, unmappedReads, BamSortOptions::getOptions().getUnmappedReadPairs(), true);
+		assert(unmappedReads.empty());
 	}
 	if (!BamSortOptions::getOptions().getUnmappedReads().empty()) {
 		BamVector unmappedReads;
 		SamUtils::splitUnmapped(reads, unmappedReads, false);
-		if (!unmappedReads.empty()) {
+		if (!unmappedReads.empty())
 			needsCollapse = true;
-			SamUtils::writeFastqGz(world, unmappedReads, BamSortOptions::getOptions().getUnmappedReads(), true);
-			assert(unmappedReads.empty());
-		}
+		needsCollapse = true;
+		SamUtils::writeFastqGz(world, unmappedReads, BamSortOptions::getOptions().getUnmappedReads(), true);
+		assert(unmappedReads.empty());
+
 	}
 
 	if (needsCollapse)
