@@ -55,5 +55,5 @@ cmake $Kmernator -DCMAKE_CXX_FLAGS="-O0 -g -Wall -DDEBUG" -DCMAKE_C_FLAGS="-O0 -
 cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -pg -Wall"
 
 # no openmp
-cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall " -DDISABLE_OPENMP
+cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall " -DDISABLE_OPENMP=1
 
