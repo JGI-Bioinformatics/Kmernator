@@ -171,6 +171,7 @@ public:
 	}
 };
 
+
 // Singleton template class
 template <class T>
 class OptionsBaseTemplate {
@@ -255,6 +256,12 @@ protected:
 	virtual ~OptionsBaseTemplate() {}  // hidden destructor
 	OptionsBaseTemplate(OptionsBaseTemplate const&); // disabled
 	OptionsBaseTemplate& operator=(OptionsBaseTemplate const&); // disabled
+};
+
+class NullClass {};
+class NullOptions : public OptionsBaseTemplate< NullClass > {
+public:
+	static void parseOpts(int argc, char *argv[]) {}
 };
 
 /* Example copy-paste template */

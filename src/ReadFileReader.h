@@ -70,8 +70,8 @@ private:
 	ifstream _ifs;
 	ifstream _qs;
 	istringstream _iss;
-	Kmernator::FilteredIStream _fis;
-	int _streamType; // 0 - file , 1 - string, 2 - mmap
+	istream *_is;
+	int _streamType; // 0 - file , 1 - string, 2 - mmap, 3 - generic input stream
 
 public:
 	ReadFileReader(): _parser(), _streamType(1) {}
@@ -119,11 +119,20 @@ public:
 		setReader(mmap1,mmap2);
 	}
 
+	ReadFileReader(istream &inputStream) : _streamType(3) {
+		_is = &inputStream;
+		char c = _is->peek();
+		if (_is->eof())
+			return;
+		setParser(*_is, c);
+	}
+
 	~ReadFileReader() {
 		switch (_streamType) {
 		case(0) : _ifs.close();	_qs.close(); break;
 		case(1) : break;
 		case(2) : break;
+		case(3) : break;
 		}
 	}
 
@@ -169,7 +178,10 @@ public:
 		assert(_streamType == 0);
 		if (fs1.fail() || !fs1.good())
 			LOG_THROW("ReadFileRader::setParser(): istream fail() or !good()");
-		setParser(fs1, fs1.peek());
+		char c = fs1.peek();
+		if (fs1.eof())
+			return;
+		setParser(fs1, c);
 	}
 	template<typename U> void setParser(U &data, char marker) {
 		LOG_DEBUG(3, "setParser(U)");
@@ -309,6 +321,7 @@ public:
 			case(0) : size = FileUtils::getFileSize(_ifs); break;
 			case(1) : size = FileUtils::getFileSize(_iss); break;
 			case(2) : size = 0; break;
+			case(3) : size = 0; break;
 			}
 			return size;
 		}

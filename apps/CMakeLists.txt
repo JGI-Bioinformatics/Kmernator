@@ -146,6 +146,51 @@ target_link_libraries( MeraculousCounter
                               ${KMERNATOR_P_LIBS}
                               )
 
+set_source_files_properties( BamSort-P
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+add_executable( BamSort-P BamSort-P )
+set_target_properties( BamSort-P
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
+                       )
+target_link_libraries( BamSort-P 
+                              libbam
+                              z
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+
+set_source_files_properties( MergeIndexPartitionedBam-P
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+add_executable( MergeIndexPartitionedBam-P MergeIndexPartitionedBam-P )
+set_target_properties( MergeIndexPartitionedBam-P
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
+                       )
+target_link_libraries( MergeIndexPartitionedBam-P 
+                              libbam
+                              z
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+
+
+set_source_files_properties( MPIBroadcastStream
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+add_executable( MPIBroadcastStream MPIBroadcastStream )
+set_target_properties( MPIBroadcastStream
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
+                       )
+target_link_libraries( MPIBroadcastStream 
+                              Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+
+                              
 endif()
 
 set_source_files_properties( TnfDistance
@@ -195,9 +240,10 @@ target_link_libraries(        FixPair
                               )
 
 
-add_executable( SplitSequenceOnTheFly SplitSequenceOnTheFly )
 
 if( MPI_FOUND )
+add_executable( SplitSequenceOnTheFly SplitSequenceOnTheFly )
+
 set_source_files_properties( SplitSequenceOnTheFly
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
@@ -212,17 +258,7 @@ target_link_libraries(        SplitSequenceOnTheFly
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
-else()
-set_source_files_properties( SplitSequenceOnTheFly
-                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
-                             )
 
-target_link_libraries(        SplitSequenceOnTheFly
-                              Sequence
-                              ReadSet
-                              Log
-                              ${KMERNATOR_BOOST_LIBS}
-                              )
 
 endif()
 

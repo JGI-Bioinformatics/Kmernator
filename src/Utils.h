@@ -1059,19 +1059,20 @@ private:
 		assert(threadId < omp_get_max_threads());
 		static SeedPtr threadSeedsPtr;
 
-		if (threadSeedsPtr.get() == NULL || (int) threadSeedsPtr->size() < omp_get_max_threads()) {
+		if (threadSeedsPtr.get() == NULL || (int) threadSeedsPtr->size() <= threadId) {
 #pragma omp critical
 			{
 				unsigned int baseSeed = 0;
-				if (threadSeedsPtr.get() == NULL || (int) threadSeedsPtr->size() < omp_get_max_threads()) {
+				if (threadSeedsPtr.get() == NULL || (int) threadSeedsPtr->size() <= threadId) {
 					SeedPtr newSeeds;
 					if (threadSeedsPtr.get() != NULL)
 						newSeeds.reset( new SeedVector(*threadSeedsPtr) );
 					else
 						newSeeds.reset( new SeedVector );
-					newSeeds->reserve(omp_get_max_threads());
+					int numSeeds = std::max(threadId+1, omp_get_max_threads());
+					newSeeds->reserve(numSeeds);
 
-					while ((int) newSeeds->size() < omp_get_max_threads()) {
+					while ((int) newSeeds->size() < numSeeds) {
 						baseSeed += (time(NULL) + 2*time(NULL)) ^ newSeeds->size();
 						newSeeds->push_back( rand_r(&baseSeed) );
 					}

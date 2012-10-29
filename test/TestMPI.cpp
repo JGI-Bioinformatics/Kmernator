@@ -7,7 +7,6 @@
 
 
 #include <stdio.h>
-#include <omp.h>
 #include "config.h"
 #include "Options.h"
 #include "MPIBuffer.h"

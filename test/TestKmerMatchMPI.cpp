@@ -163,7 +163,7 @@ bool testMatchesSelf(mpi::communicator &world, ReadSet &q, ReadSet &t) {
 int main(int argc, char **argv)
 {
 
-	mpi::communicator world = initializeWorldAndOptions< KmerMatchTestOptions >(argc, argv);
+	ScopedMPIComm< KmerMatchTestOptions > world(argc, argv);
 
 	TrackingData::setMinimumWeight(0.0);
 
@@ -191,7 +191,6 @@ int main(int argc, char **argv)
 	passed &= testMatchesSelf(world, greads, greads);
 	passed &= testMatchesSelf(world, greads2, greads2);
 
-	MPI_Finalize();
 	return passed ? 0 : -1;
 }
 

@@ -104,6 +104,8 @@ public:
 	static void setWorld(void *_w, bool debugGather = false) {
 		*_getWorld() = _w;
 		_debugGather() = debugGather;
+		if (_w == NULL)
+			return;
 #ifdef _USE_MPI
 		_getWorldRank() = (*((mpi::communicator**)_getWorld()))->rank();
 		getRank() = " R" + boost::lexical_cast<std::string>(_getWorldRank());

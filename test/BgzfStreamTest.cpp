@@ -93,6 +93,22 @@ void testGzip(std::string test)
 
 }
 
+void testBGZFIO(std::string test, bool withEOF) {
+	std::ostringstream oss, oss2;
+	{
+		bgzf_ostream bgzf_o(oss, withEOF);
+		bgzf_o << test;
+	}
+	std::string s = oss.str();
+	{
+		std::istringstream iss(s);
+		bgzf_istream bgzf_i(iss);
+		boost::iostreams::copy(bgzf_i, oss2);
+	}
+	std::string s2 = oss2.str();
+	BOOST_CHECK_EQUAL(test.length(), s2.length());
+	BOOST_CHECK_EQUAL(strcmp(test.c_str(), s2.c_str()), 0);
+}
 void testBGZF(std::string test, bool withEOF)
 {
 	std::ostringstream bgzf_oss, decomp_oss;
@@ -164,12 +180,16 @@ BOOST_AUTO_TEST_CASE( BgzfStreamTest )
 	testGzip("Testing");
 	testBGZF("Testing", true);
 	testBGZF("Testing", false);
+	testBGZFIO("Testing", true);
+	testBGZFIO("Testing", false);
 	int j = 1023;
 	while (j < 256*1024) {
 		std::string str = generateSomething(j);
 		testGzip(str);
 		testBGZF(str, true);
 		testBGZF(str, false);
+		testBGZFIO(str, true);
+		testBGZFIO(str, false);
 		j = j + 8192;
 	}
 

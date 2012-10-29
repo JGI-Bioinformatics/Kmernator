@@ -137,6 +137,9 @@ target_link_libraries( BgzfStreamTest
 add_test( BgzfStreamTest BgzfStreamTest )
 
 if( MPI_FOUND )
+add_test(testSplitSequenceOnTheFly runSplitSequenceOnTheFlyTests.sh)
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runSplitSequenceOnTheFlyTests.sh test/ )
+
 add_executable( TestMPI TestMPI )
 set_source_files_properties( TestMPI
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
@@ -170,6 +173,23 @@ target_link_libraries (TestKmerMatchMPI
 add_test(testKmerMatchMPI testKmerMatchMPI.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/testKmerMatchMPI.sh test/ )
 
+add_executable( SamUtilsTest SamUtilsTest)
+set_source_files_properties( SamUtilsTest
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+set_target_properties( SamUtilsTest
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
+                       )
+target_link_libraries (SamUtilsTest
+                            Log
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              z
+                              libbam
+                              )
+add_test(SamUtilsTest SamUtilsTest.sh)
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/SamUtilsTest.sh test/ )
+
 endif()
 
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fastq test/ )
@@ -191,6 +211,8 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/phix.mercount.m21 test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/phix.mergraph.m21.D2 test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runMeraculousTests.sh test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runRandomlySampleTests.sh test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10k.bam test/ )
+
 
 add_test(filter runFilterTests.sh)
 add_test(meraculous runMeraculousTests.sh)

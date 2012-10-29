@@ -37,6 +37,8 @@
 #include <zlib.h>
 
 #include <boost/iostreams/filter/symmetric.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/categories.hpp>
 
 
 class bgzf_detail  {
@@ -115,8 +117,7 @@ public:
 	    bool deflateBlock()
 	    {
 	        assert(compressed_block_length == 0);
-	        int block_length = fp->uncompressed_block_size;
-	        assert(fp->block_offset <= block_length);
+	        assert(fp->block_offset <= fp->uncompressed_block_size);
 	        compressed_block_length = deflate_block(fp, fp->block_offset);
 	        return fp->block_offset == 0;
 	    }
@@ -253,11 +254,10 @@ public:
 		bool readIntoBuffer(const char*& begin_in, const char *end_in) {
 			if (!readHeader(begin_in, end_in))
 				return false;
-			int max_block_length = fp->compressed_block_size;
 			int block_length = getBlockLength();
 			int bytesInputAvailable = end_in - begin_in;
 			int bytesLeftInBuffer = block_length - fp->block_offset;
-			assert(block_length <= max_block_length);
+			assert(block_length <= fp->compressed_block_size);
 
 			int copy_length = std::min(bytesInputAvailable, bytesLeftInBuffer);
 			if (copy_length > 0) {
@@ -324,9 +324,9 @@ protected:
 	static void reset(BGZF *fp) {
 		if (fp->uncompressed_block != NULL) free(fp->uncompressed_block);
 		if (fp->compressed_block != NULL) free(fp->compressed_block);
-		if (fp != NULL) free(fp);
 		fp->uncompressed_block = NULL;
 		fp->compressed_block = NULL;
+		if (fp != NULL) free(fp);
 		fp = NULL;
 	}
 
@@ -427,12 +427,15 @@ protected:
 		int compressed_length = 0;
 		while (1) {
 			z_stream zs;
-			zs.zalloc = NULL;
-			zs.zfree = NULL;
+			zs.msg = Z_NULL;
+			zs.opaque = Z_NULL;
+			zs.zalloc = Z_NULL;
+			zs.zfree = Z_NULL;
 			zs.next_in = (Bytef*) fp->uncompressed_block;
 			zs.avail_in = input_length;
 			zs.next_out = (Bytef*)&buffer[BLOCK_HEADER_LENGTH];
 			zs.avail_out = buffer_size - BLOCK_HEADER_LENGTH - BLOCK_FOOTER_LENGTH;
+			zs.data_type = Z_BINARY;
 
 			int status = deflateInit2(&zs, fp->compress_level, Z_DEFLATED,
 					GZIP_WINDOW_BITS, Z_DEFAULT_MEM_LEVEL, Z_DEFAULT_STRATEGY);
@@ -505,8 +508,10 @@ protected:
 
 		z_stream zs;
 		int status;
-		zs.zalloc = NULL;
-		zs.zfree = NULL;
+		zs.msg = Z_NULL;
+		zs.opaque = Z_NULL;
+		zs.zalloc = Z_NULL;
+		zs.zfree = Z_NULL;
 		zs.next_in = (Bytef*) fp->compressed_block + 18;
 		zs.avail_in = block_length - 16;
 		zs.next_out = (Bytef*) fp->uncompressed_block;
@@ -573,5 +578,33 @@ public:
 	basic_bgzf_decompressor() : base_type(bgzf_detail::DEFAULT_BLOCK_SIZE) {}
 };
 typedef basic_bgzf_decompressor<> bgzf_decompressor;
+
+class bgzf_ostream : public boost::iostreams::filtering_ostream
+{
+public:
+	template< typename OUT >
+	bgzf_ostream(OUT &_os, bool addEOFBlock = true) : comp() {
+		comp.setAddEOFBlock(addEOFBlock);
+		this->push(comp);
+		this->push(_os);
+        }
+	virtual ~bgzf_ostream() {}
+private:
+	bgzf_compressor comp;
+};
+
+class bgzf_istream : public boost::iostreams::filtering_istream
+{
+public:
+	template< typename IN >
+	bgzf_istream(IN &_is) : decomp() {
+		this->push(decomp);
+		this->push(_is);
+        }
+	virtual ~bgzf_istream() {}
+private:
+	bgzf_decompressor decomp;
+};
+
 
 #endif

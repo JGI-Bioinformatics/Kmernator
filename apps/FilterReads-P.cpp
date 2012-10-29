@@ -65,10 +65,13 @@ typedef OptionsBaseTemplate< _MPIFilterReadsOptions > MPIFilterReadsOptions;
 
 int main(int argc, char *argv[]) {
 
-	mpi::communicator world = initializeWorldAndOptions< MPIFilterReadsOptions >(argc, argv);
+	ScopedMPIComm< MPIFilterReadsOptions > world (argc, argv);
 
-	if (FilterReadsBaseOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
-		LOG_THROW("Distributed version does not support max-kmer-output-depth option");
+	if (ReadSelectorOptions::getOptions().getMaxKmerDepth() > 0 && ReadSelectorOptions::getOptions().getNormalizationMethod() == "OPTIMAL" && world.size() > 1) {
+		if (Logger::isMaster())
+			LOG_WARN(1, "Setting --normalization-method to RANDOM, as Distributed version does not support 'OPTIMAL' option");
+		ReadSelectorOptions::getOptions().getNormalizationMethod() = "RANDOM";
+	}
 
 	MemoryUtils::getMemoryUsage();
 	std::string outputFilename = Options::getOptions().getOutputFile();
@@ -92,7 +95,7 @@ int main(int argc, char *argv[]) {
 		LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
 		LOG_VERBOSE(2, "Pairs + single = " << numPairs);
 
-		all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
+		mpi::all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
 
 		setGlobalReadSetOffsets(world, reads);
@@ -112,7 +115,7 @@ int main(int argc, char *argv[]) {
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			unsigned long allFiltered;
-			reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
+			mpi::reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
 
 		}
@@ -126,7 +129,7 @@ int main(int argc, char *argv[]) {
 				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 				unsigned long allDuplicateFragments;
-				reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
+				mpi::reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
 			} else {
 				if (world.rank() == 0)
@@ -176,7 +179,7 @@ int main(int argc, char *argv[]) {
 
 			if (KmerSpectrumOptions::getOptions().getVariantSigmas() > 0.0) {
 				long purgedVariants = spectrum.purgeVariants();
-				long totalPurgedVariants = all_reduce(world, purgedVariants, std::plus<long>());
+				long totalPurgedVariants = mpi::all_reduce(world, purgedVariants, std::plus<long>());
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << totalPurgedVariants << " kmer variants");
 
 				std::string hist = spectrum.getHistogram(false);
@@ -202,35 +205,28 @@ int main(int argc, char *argv[]) {
 
 
 		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
-		unsigned int depthRange = ReadSelectorOptions::getOptions().getDepthRange();
-		unsigned int depthStep = 2;
-		if (depthRange < minDepth) {
-			depthRange = minDepth;
-		}
 
 		if (!outputFilename.empty()) {
-			for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
-				std::string pickOutputFilename = outputFilename;
-				if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-					pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
-					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << thisDepth);
-				} else {
-					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
-				}
-				RS selector(world, reads, spectrum.weak);
-				selector.scoreAndTrimReads(minDepth);
-
-				// TODO implement a more efficient algorithm to output data in order
-
-				// rank 0 will overwrite, all others will append
-				if (world.rank() != 0)
-					OfstreamMap::getDefaultAppend() = true;
-
-				// let only one rank at a time write to the files
-				LOG_VERBOSE(1, "Writing Files");
-
-				selectReads(thisDepth, reads, selector, pickOutputFilename);
+			std::string pickOutputFilename = outputFilename;
+			if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
+				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(minDepth);
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << minDepth);
+			} else {
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
 			}
+			RS selector(world, reads, spectrum.weak);
+			selector.scoreAndTrimReads(minDepth);
+
+			// TODO implement a more efficient algorithm to output data in order
+
+			// rank 0 will overwrite, all others will append
+			if (world.rank() != 0)
+				OfstreamMap::getDefaultAppend() = true;
+
+			// let only one rank at a time write to the files
+			LOG_VERBOSE(1, "Writing Files");
+
+			selectReads(minDepth, reads, selector, pickOutputFilename);
 		}
 		spectrum.reset();
 		LOG_DEBUG(1, "Finished, waiting for rest of collective");
@@ -242,8 +238,6 @@ int main(int argc, char *argv[]) {
 
 	world.barrier();
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
-
-	MPI_Finalize();
 
 	return 0;
 }

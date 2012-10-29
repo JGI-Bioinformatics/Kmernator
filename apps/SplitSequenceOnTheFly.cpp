@@ -29,26 +29,30 @@
 // PURPOSE.
 //
 
+#include <boost/thread.hpp>
+
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 
 #include <boost/shared_ptr.hpp>
 #include <boost/iostreams/device/file_descriptor.hpp>
 #include <boost/iostreams/stream.hpp>
 #include <boost/algorithm/string.hpp>
-#include <fstream>
+#include <boost/ref.hpp>
 
 #include "config.h"
+#include "mpi.h"
 #include "Sequence.h"
 #include "ReadSet.h"
 #include "Options.h"
 #include "Log.h"
 #include "Utils.h"
-#ifdef ENABLE_MPI
-#include "DistributedFunctions.h"
-#endif
- #include <unistd.h>
+#include "MPIUtils.h"
+#include "BroadcastOstream.h"
+#include "DistributedOfstreamMap.h"
+#include <unistd.h>
 
 using namespace std;
 
@@ -56,14 +60,6 @@ class _SSOptions : public OptionsBaseInterface {
 public:
 	typedef OptionsBaseInterface::StringListType StringListType;
 
-	static int &getDefaultNumFiles() {
-		static int dummy = 1;
-		return dummy;
-	}
-	static int &getDefaultFileNum() {
-		static int dummy2 = 0;
-		return dummy2;
-	}
 	int &getNumFiles() {
 		return numFiles;
 	}
@@ -71,23 +67,26 @@ public:
 		return fileNum;
 	}
 	int getFirstDim() {
-		if (secondDim == 0)
+		if (secondDim <= 1)
 			return numFiles;
 		else
 			return numFiles / secondDim;
 	}
-	int &getSecondDim() {
-		return secondDim;
+	int getSecondDim() {
+		if (secondDim <= 1)
+			return 1;
+		else
+			return secondDim;
 	}
 	int getFirst() {
-		if (secondDim == 0)
+		if (secondDim <= 0)
 			return fileNum;
 		else
 			return fileNum / secondDim;
 	}
 	int getSecond() {
-		if (secondDim == 0)
-			return 0;
+		if (secondDim <= 0)
+			return 1;
 		else
 			return fileNum % secondDim;
 	}
@@ -116,7 +115,7 @@ public:
 		return extraFifo;
 	}
 
-	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(getDefaultNumFiles()), fileNum(getDefaultFileNum()), secondDim(0), evenChunks(1), minReadLength(0), fifoFile(false) {}
+	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(-1), fileNum(-1), secondDim(0), evenChunks(1), minReadLength(0), fifoFile(false) {}
 
 	std::string _replaceWithKeys(std::string input) {
 		size_t pos;
@@ -185,6 +184,29 @@ public:
 		return output;
 	}
 
+	void setFileDimensions(const MPI_Comm &comm) {
+		if (numFiles == -1)
+			MPI_Comm_size(comm, &numFiles);
+		if (fileNum == -1)
+			MPI_Comm_rank(comm, &fileNum);
+
+		if (fileNum >= numFiles)
+			LOG_THROW("You can not specify --file-num ge --num-files (" << fileNum << " " << numFiles);
+
+		getPipeCommand() = _replaceWithKeys(getPipeCommand());
+		getForkCommand() = _replaceWithKeys(getForkCommand());
+		getExtraFifo() = _replaceWithKeys(getExtraFifo());
+		getMergeList() = _replaceWithKeys(getMergeList());
+		getSplitFile() = _replaceWithKeys(getSplitFile());
+		GeneralOptions::getOptions().getOutputFile() = _replaceWithKeys(GeneralOptions::getOptions().getOutputFile());
+		GeneralOptions::getOptions().getInputFiles() = _replaceWithKeys(GeneralOptions::getOptions().getInputFiles());
+
+		if (secondDim > 0 && numFiles % secondDim != 0) {
+			LOG_THROW("if you use --second-dim, it must be a factor of the number of files: " << numFiles << " which " << secondDim << " is not.");
+		}
+
+	}
+
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
 		GeneralOptions::getOptions().getKeepReadComment() = false;
@@ -192,22 +214,24 @@ public:
 		Options::getOptions().getVerbose() = 0;
 		Options::getOptions().getDebug() = 0;
 		Options::getOptions().getMmapInput() = false;
+		Options::getOptions().getMaxThreads() = 1;
+
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		po::options_description opts("Split Sequence Options");
 		opts.add_options()
-						("num-files", po::value<int>()->default_value(getDefaultNumFiles()), "The number of files to split into N")
-						("file-num",  po::value<int>()->default_value(getDefaultFileNum()), "The number of the file to output (0-(N-1))")
-						("second-dim", po::value<int>()->default_value(secondDim), "if > 0, then ranks will be divided by secondDim, and secondDim iterations of splitting will be performed, broadcasting secondDim chunks (of NumFiles) of the split data to each subrank group.  Use the keywords '{FirstNum}' '{SecondNum}' and '{UniqFirst}' and '{UniqSecond}'")
-						("even-chunks", po::value<int>()->default_value(evenChunks), "if > 1 then the output of each partition will be spread out across the file (recommend 10 if the ordering is less important than predictable runtime of forked commands)")
-						("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{Uniq}', '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
-						("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
-						("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
-						("output-fifo", po::value<bool>()->default_value(fifoFile), "if set, --output-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
-						("extra-fifo", po::value<StringListType>(), "optional additional fifo file(s) (to potentially use with --fork-command)")
-						("fork-command", po::value<StringListType>(), "optional command(s) to fork between opening output files and wait to finish before starting any merges")
-						("min-read-length", po::value<int>()->default_value(minReadLength), "minimum read length to output (applies to unpaired only)")
-						;
+								("num-files", po::value<int>()->default_value(numFiles), "The number of files to split into N (automatically set under MPI)")
+								("file-num",  po::value<int>()->default_value(fileNum), "The number of the file to output (0-(N-1)) (automatically set under MPI)")
+								("second-dim", po::value<int>()->default_value(secondDim), "if > 0, then ranks will be divided by secondDim, and secondDim iterations of splitting will be performed, broadcasting secondDim chunks (of NumFiles) of the split data to each subrank group.  Use the keywords '{FirstNum}' '{SecondNum}' and '{UniqFirst}' and '{UniqSecond}'")
+								("even-chunks", po::value<int>()->default_value(evenChunks), "if > 1 then the output of each partition will be spread out across the file (recommend 10 if the ordering is less important than predictable runtime of forked commands)")
+								("pipe-command", po::value<std::string>(), "a command to pipe the portion of the file(s) into.  Use the keyword variables '{Uniq}', '{FileNum}' and '{NumFiles}' to replace with MPI derived values")
+								("merge", po::value<StringListType>(), "two arguments.  First is per-mpi file (use keywords) second is final file; can be specified multiple times")
+								("split-file", po::value<std::string>()->default_value(splitFile), "if set, paired (second) reads will be sent to this file.  first reads will go to --output-file")
+								("output-fifo", po::value<bool>()->default_value(fifoFile), "if set, --output-file (and --split-file) will be fifo files which will be created on start and deleted on exit")
+								("extra-fifo", po::value<StringListType>(), "optional additional fifo file(s) (to potentially use with --fork-command)")
+								("fork-command", po::value<StringListType>(), "optional command(s) to fork between opening output files and wait to finish before starting any merges")
+								("min-read-length", po::value<int>()->default_value(minReadLength), "minimum read length to output (applies to unpaired only)")
+								;
 
 		desc.add(opts);
 		GeneralOptions::_setOptions(desc, p);
@@ -219,12 +243,7 @@ public:
 		bool ret = GeneralOptions::_parseOptions(vm);
 		setOpt("num-files", getNumFiles());
 		setOpt("file-num", getFileNum());
-		setOpt("second-dim", getSecondDim());
-		if (secondDim > 0 && numFiles % secondDim != 0) {
-			std::stringstream ss;
-			ss << "if you use --second-dim, it must be a factor of the number of files: " << numFiles << " which " << secondDim << " is not.";
-			setOptionsErrorMsg(ss.str());
-		}
+		setOpt("second-dim", secondDim);
 		setOpt("even-chunks", getEvenChunks());
 		setOpt("min-read-length", getMinReadLength());
 		setOpt("split-file", getSplitFile());
@@ -235,15 +254,7 @@ public:
 		setOpt2("extra-fifo", getExtraFifo());
 
 
-		getPipeCommand() = _replaceWithKeys(getPipeCommand());
-		getForkCommand() = _replaceWithKeys(getForkCommand());
-		getExtraFifo() = _replaceWithKeys(getExtraFifo());
-		getMergeList() = _replaceWithKeys(getMergeList());
-		getSplitFile() = _replaceWithKeys(getSplitFile());
-		GeneralOptions::getOptions().getOutputFile() = _replaceWithKeys(GeneralOptions::getOptions().getOutputFile());
-		GeneralOptions::getOptions().getInputFiles() = _replaceWithKeys(GeneralOptions::getOptions().getInputFiles());
-
-		if (Options::getOptions().getInputFiles().empty() || getNumFiles() == 0 || getFileNum() >= getNumFiles()) {
+		if (Options::getOptions().getInputFiles().empty() || getNumFiles() == 0) {
 			ret = false;
 			std::stringstream ss;
 			ss <<"Please specify num-files, file-num and at least one input file.\nnum-files=" << getNumFiles() << "\nfile-num=" << getFileNum();
@@ -289,118 +300,97 @@ void outputRegularFiles(OptionsBaseInterface::FileListType inputs, T &output1, i
 	}
 }
 
-typedef boost::shared_ptr< Kmernator::MmapSource > MmapPtr;
-typedef  boost::shared_ptr< ReadFileReader > RFRPtr;
-
 template<typename T>
-void _writeSplitReads(std::vector<RFRPtr> & readers, unsigned long readNumOfPair, int chunks, int fileNum, int numFiles, std::vector<MmapPtr> & mmaps, unsigned long  & numReads, T & output, FormatOutput & outputFormat, OptionsBaseInterface::FileListType & inputs)
-{
-	std::string name, bases, quals, comment;
-	for(int i=0; i < (int)readers.size(); i++) {
-		for(int j = 0 ; j < chunks; j++) {
-			readers[i]->seekToPartition( fileNum+j*chunks, numFiles*chunks );
+class OutputSplitFiles {
+private:
+	const OptionsBaseInterface::FileListType &inputs;
+	int readNum;
+	T &output;
+	int first, secondDim, numFiles;
+	unsigned long &numReads;
+	OutputSplitFiles() { throw; }
+	OutputSplitFiles(const OutputSplitFiles& copy) { throw; }
+	OutputSplitFiles &operator=(const OutputSplitFiles &copy) { throw; }
+public:
+	typedef boost::shared_ptr< Kmernator::MmapSource > MmapPtr;
+	typedef boost::shared_ptr< ReadFileReader > RFRPtr;
+	OutputSplitFiles(const OptionsBaseInterface::FileListType &_inputs, int _readNum, T &_output, int _first, int _secondDim, int _numFiles, unsigned long &_numReads)
+	: inputs(_inputs), readNum(_readNum), output(_output), first(_first), secondDim(_secondDim), numFiles(_numFiles), numReads(_numReads) {
+		if (readNum > 1)
+			LOG_THROW("Invalid readNum: " << readNum);
+	}
+	void operator()() {
+		numReads = 0;
+		if (secondDim > 1) {
+			for(int secondIt = 0 ; secondIt < secondDim ; secondIt++) {
+				LOG_DEBUG_OPTIONAL(1, true, "second: " << secondIt << " mydim:" << first << ", " << secondIt << " : " << secondDim << " part " << first*secondDim + secondIt);
+				numReads += outputSplitFiles(inputs, readNum, output, first*secondDim + secondIt, numFiles);
+			}
+		} else {
+			numReads = outputSplitFiles(inputs, readNum, output, first, numFiles);
+		}
+		output.close();
+	}
+	unsigned long getNumReads() {
+		return numReads;
+	}
+protected:
 
-			madvise(const_cast<char*>(mmaps[i]->data()+readers[i]->getPos()), readers[i]->getLastPos() - readers[i]->getPos(), MADV_SEQUENTIAL);
+	unsigned long outputSplitFiles(const OptionsBaseInterface::FileListType &inputs, int readNum, T &output, int fileNum, int numFiles) {
 
-			while (readers[i]->nextRead(name, bases, quals, comment)) {
-				if ((numReads & 0x01) == readNumOfPair) {
-					output << outputFormat.toString(name, bases, quals, comment);
+		int numInputs = inputs.size();
+		std::vector< RFRPtr > readers;
+		std::vector< MmapPtr > mmaps;
+		mmaps.reserve(numInputs);
+
+		readers.reserve(numInputs);
+		int chunks = SSOptions::getOptions().getEvenChunks();
+
+		for(int i=0; i < numInputs; i++) {
+			mmaps.push_back( MmapPtr(new Kmernator::MmapSource(inputs[i], FileUtils::getFileSize(inputs[i]))) );
+			readers.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
+		}
+
+		assert(numInputs == (int)readers.size());
+
+		FormatOutput outputFormat = FormatOutput::getDefault();
+		unsigned long numReads = 0;
+
+		for(int i=0; i < numInputs; i++)
+			madvise(const_cast<char*>(mmaps[i]->data()), mmaps[i]->size(), MADV_DONTNEED);
+
+		_writeSplitReads(readers, readNum, chunks, fileNum, numFiles, mmaps, numReads, output, outputFormat, inputs);
+
+		LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads);
+
+		return numReads;
+
+	}
+	void _writeSplitReads(std::vector<RFRPtr> & readers, unsigned long readNumOfPair, int chunks, int fileNum, int numFiles, std::vector<MmapPtr> & mmaps, unsigned long  & numReads, T & output, FormatOutput & outputFormat, const OptionsBaseInterface::FileListType & inputs)
+	{
+		std::string name, bases, quals, comment;
+		for(int i=0; i < (int)readers.size(); i++) {
+			for(int j = 0 ; j < chunks; j++) {
+				readers[i]->seekToPartition( fileNum+j*chunks, numFiles*chunks );
+
+				madvise(const_cast<char*>(mmaps[i]->data()+readers[i]->getPos()), readers[i]->getLastPos() - readers[i]->getPos(), MADV_SEQUENTIAL);
+
+				while (readers[i]->nextRead(name, bases, quals, comment)) {
+					if ((numReads & 0x01) == readNumOfPair) {
+						output << outputFormat.toString(name, bases, quals, comment);
+					}
+					numReads++;
+					LOG_DEBUG_OPTIONAL(2, ((numReads & 0x0fff) == 0), "reading and writing split file " << i << " " << inputs[i] << " for read " << numReads/2);
 				}
-				numReads++;
-				LOG_DEBUG_OPTIONAL(2, (numReads & 0xffff) == 0, "reading and writing split file " << i << " " << inputs[i] << " for read " << numReads/2);
 			}
+			LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read. " << numReads << " " << readers[i]->getPos());
 		}
-		LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read. " << numReads << " " << readers[i]->getPos());
+		LOG_DEBUG_OPTIONAL(1, true, "Finished reading and writing split files for read. " << numReads);
 	}
-	LOG_DEBUG_OPTIONAL(1, true, "Finished reading and writing split files for read. " << numReads);
-}
-
-template<typename T>
-void outputSplitFiles(OptionsBaseInterface::FileListType inputs, T &output1, T &output2, int fileNum, int numFiles) {
-
-	int numInputs = inputs.size();
-	std::vector< MmapPtr > mmaps;
-	mmaps.reserve(numInputs);
-	std::vector< RFRPtr > readers1, readers2;
-	readers1.reserve(numInputs);
-	readers2.reserve(numInputs);
-	int chunks = SSOptions::getOptions().getEvenChunks();
-
-	for(int i=0; i < numInputs; i++) {
-		mmaps.push_back( MmapPtr(new Kmernator::MmapSource(inputs[i], FileUtils::getFileSize(inputs[i]))) );
-		readers1.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
-		readers2.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
-	}
-
-
-	assert(numInputs == (int)readers1.size());
-	assert(numInputs == (int)readers2.size());
-
-	FormatOutput outputFormat = FormatOutput::getDefault();
-	omp_set_dynamic(0);
-	omp_set_num_threads(2);
-	unsigned long numReads1 = 0, numReads2 = 0;
-	#pragma omp single
-	for(int i=0; i < numInputs; i++)
-		madvise(const_cast<char*>(mmaps[i]->data()), mmaps[i]->size(), MADV_DONTNEED);
-
-	//int second = SSOptions::getOptions().getSecond();
-	//int first = SSOptions::getOptions().getFirst();
-	int secondDim = SSOptions::getOptions().getSecondDim();
-
-	if (secondDim == 0) {
-		#pragma omp parallel num_threads(2)
-		{
-			if (omp_get_num_threads() != 2)
-				LOG_THROW("Invalid number of threads! " << omp_get_num_threads());
-
-			if (omp_get_thread_num() == 0) {
-
-				_writeSplitReads(readers1, 0, chunks, fileNum, numFiles, mmaps, numReads1, output1, outputFormat, inputs);
-
-			} else {
-
-				_writeSplitReads(readers2, 1, chunks, fileNum, numFiles, mmaps, numReads2, output2, outputFormat, inputs);
-
-			}
-
-			LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads1 << " " << numReads2);
-			#pragma omp barrier
-		}
-
-	} else {
-
-		#pragma omp parallel num_threads(2)
-		{
-			if (omp_get_num_threads() != 2)
-				LOG_THROW("Invalid number of threads! " << omp_get_num_threads());
-
-			if (omp_get_thread_num() == 0) {
-
-				_writeSplitReads(readers1, 0, chunks, fileNum, numFiles, mmaps, numReads1, output1, outputFormat, inputs);
-
-			}
-			if (omp_get_thread_num() == 1) {
-
-				_writeSplitReads(readers2, 1, chunks, fileNum, numFiles, mmaps, numReads2, output2, outputFormat, inputs);
-
-			}
-			LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads1 << " " << numReads2);
-			#pragma omp barrier
-		}
-
-	}
-
-
-
-	if (numReads1 != numReads2) {
-		LOG_THROW("Invalid number of paired reads! " << numReads1/2 << " vs " << numReads2/2);
-	}
-	LOG_DEBUG_OPTIONAL(1, true, "Finished outputSplitFiles");
-
-}
+};
 
 std::vector< int > forkCommand() {
+	LOG_DEBUG_OPTIONAL(1, true, "forkCommand()");
 	std::vector< int > forks;
 	StringListType forkCommand = SSOptions::getOptions().getForkCommand();
 	if (forkCommand.empty())
@@ -412,44 +402,6 @@ std::vector< int > forkCommand() {
 		int child = Fork::forkCommand(forkCommand[i]);
 		forks.push_back(child);
 
-		if (0) {
-		int child = fork();
-		if (child < 0)
-			LOG_THROW("Could not fork child process");
-
-		if (child == 0) {
-			// child
-			if (0) {
-			std::vector<std::string> forkCommandArgs;
-			boost::split(forkCommandArgs, forkCommand[i], boost::is_any_of("\t "));
-			char *forkArgs[forkCommandArgs.size()];
-			forkArgs[forkCommandArgs.size()-1] = NULL;
-			for(int j = 0 ; j < (int) forkCommandArgs.size(); j++)
-				forkArgs[j] = strdup(forkCommandArgs[j].c_str());
-
-			std::stringstream ss;
-			ss << "Executing ( " << getpid() << ") : " << forkArgs[0] << " ";
-			for (int j=1; j < (int) forkCommandArgs.size(); j++)
-				ss << forkArgs[j] << "\t";
-			ss << std::endl;
-			std::string msg = ss.str();
-			std::cerr << msg;
-			execvp(forkArgs[0], forkArgs);
-			std::cerr << "Should not get here!" << std::endl;
-			exit(1);
-			} else {
-			int ret = system(forkCommand[i].c_str());
-			if (ret != 0)
-				LOG_ERROR(1, "Failed to execute: " << forkCommand[i]);
-			exit(ret);
-			}
-		} else {
-			// parent
-			LOG_DEBUG_OPTIONAL(1, true, "forkPid: " << child);
-			forks.push_back( child );
-			Cleanup::trackChild( child );
-		}
-		}
 	}
 	return forks;
 }
@@ -458,15 +410,9 @@ int main(int argc, char *argv[]) {
 
 	int exitStatus = 0;
 
-#ifdef ENABLE_MPI
-	MPI_Init(&argc, &argv);
-	mpi::environment env(argc, argv);
-	mpi::communicator world;
-	SSOptions::getOptions().getDefaultNumFiles() = world.size();
-	SSOptions::getOptions().getDefaultFileNum() = world.rank();
-	Logger::setWorld(&world);
-#endif
-	SSOptions::parseOpts(argc, argv);
+	ScopedMPIComm< SSOptions > world(argc, argv);
+
+	SSOptions::getOptions().setFileDimensions(world);
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 
 	std::string outputFile = Options::getOptions().getOutputFile();
@@ -518,54 +464,58 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (!outputFile.empty()) {
+			LOG_VERBOSE_OPTIONAL(1, true, "writing to output file: " << outputFile);
 			out1 = out1f = new std::ofstream(outputFile.c_str());
 		}
 
 		if (!splitFile.empty()) {
 			assert(out1f != NULL);
+			LOG_VERBOSE_OPTIONAL(1, true, "writing to second output (split) file: " << splitFile);
 			out2f = new std::ofstream(splitFile.c_str());
-			if (secondDim > 0) {
-				for(int secondIt = 0 ; secondIt < secondDim ; secondIt++) {
-					LOG_DEBUG_OPTIONAL(1, true, "second: " << secondIt << " mydim:" << first << ", " << second << " : " << secondDim << " part " << first*secondDim + second);
-					outputSplitFiles(inputs, *out1f, *out2f, first*secondDim + secondIt, numFiles);
-				}
-			} else {
-				outputSplitFiles(inputs, *out1f, *out2f, fileNum, numFiles);
-			}
-
+			unsigned long numReads1 = 0, numReads2 = 0;
+			OutputSplitFiles<std::ofstream> osf1(inputs, 0, *out1f, first, secondDim, numFiles, numReads1);
+			OutputSplitFiles<std::ofstream> osf2(inputs, 1, *out2f, first, secondDim, numFiles, numReads2);
+			boost::thread t1(boost::ref(osf1)), t2(boost::ref(osf2));
+			t1.join();
+			t2.join();
+			LOG_DEBUG_OPTIONAL(1, true, "Split " << numReads1 << " and " << numReads2 << " reads");
 		} else {
 			std::string pipeCommand = SSOptions::getOptions().getPipeCommand();
 			if (!pipeCommand.empty()) {
+				LOG_VERBOSE_OPTIONAL(1, true, "Outputting to pipeCommand: " << pipeCommand);
 				ops = new OPipestream(pipeCommand);
-			}
-
-			if (!outputFile.empty()) {
-				out1 = out1f = new std::ofstream(outputFile.c_str());
 			}
 
 			assert(out1 != NULL || ops != NULL);
 			if (secondDim > 0) {
+				mpi::communicator local = world.split(first);
+				int root = 0;
+				BroadcastOstream bcastos(local, root, (ops == NULL ? *out1 : *ops));
 				for(int secondIt = 0 ; secondIt < secondDim ; secondIt++) {
 					LOG_DEBUG_OPTIONAL(1, true, "second: " << secondIt << " mydim:" << first << ", " << second << " : " << secondDim << " part " << first*secondDim + second);
-					outputRegularFiles(inputs, (ops == NULL ? *out1 : *ops), first*secondDim + secondIt, numFiles);
+					if (local.rank() == root)
+						outputRegularFiles(inputs, bcastos, first*secondDim + secondIt, numFiles);
 				}
 			} else {
 				outputRegularFiles(inputs, (ops == NULL) ? *out1 : *ops, fileNum, numFiles);
 			}
 
-			if (ops != NULL) {
-				delete ops;
-				ops = NULL;
-			}
+		}
 
+		LOG_DEBUG_OPTIONAL(1, true, "Closing output(s)");
+		if (ops != NULL) {
+			delete ops;
+			ops = NULL;
 		}
 
 		if (out1f != NULL) {
-			out1f->close();
+			if (out1f->good())
+				out1f->close();
 			out1f = NULL;
 		}
 		if (out2f != NULL) {
-			out2f->close();
+			if (out2f->good())
+				out2f->close();
 			out2f = NULL;
 		}
 
@@ -594,16 +544,13 @@ int main(int argc, char *argv[]) {
 		}
 		Cleanup::cleanup();
 		sleep(1); // attempt to let other processes get the signal
-#ifdef ENABLE_MPI
 		MPI_Abort(world, 1);
-#endif
 		LOG_THROW("Found a problem...");
 	}
 
 	Cleanup::cleanup();
 
-#ifdef ENABLE_MPI
-	niceBarrier(world);
+	MPIUtils::niceBarrier(world);
 	OptionsBaseInterface::StringListType merges = SSOptions::getOptions().getMergeList();
 	for(unsigned int i = 0; i < merges.size(); i++) {
 		std::string &merge = merges[i];
@@ -619,9 +566,6 @@ int main(int argc, char *argv[]) {
 			DistributedOfstreamMap::mergeFiles(world, myFile, mergeFile, true);
 		}
 	}
-
-	MPI_Finalize();
-#endif
 
 	return exitStatus;
 }
