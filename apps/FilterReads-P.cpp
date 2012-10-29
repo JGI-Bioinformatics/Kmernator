@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
 
 	ScopedMPIComm< MPIFilterReadsOptions > world (argc, argv);
 
-	if (FilterReadsBaseOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
+	if (ReadSelectorOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
 		LOG_THROW("Distributed version does not support max-kmer-output-depth option");
 
 	MemoryUtils::getMemoryUsage();
@@ -202,35 +202,28 @@ int main(int argc, char *argv[]) {
 
 
 		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
-		unsigned int depthRange = ReadSelectorOptions::getOptions().getDepthRange();
-		unsigned int depthStep = 2;
-		if (depthRange < minDepth) {
-			depthRange = minDepth;
-		}
 
 		if (!outputFilename.empty()) {
-			for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
-				std::string pickOutputFilename = outputFilename;
-				if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-					pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
-					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << thisDepth);
-				} else {
-					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
-				}
-				RS selector(world, reads, spectrum.weak);
-				selector.scoreAndTrimReads(minDepth);
-
-				// TODO implement a more efficient algorithm to output data in order
-
-				// rank 0 will overwrite, all others will append
-				if (world.rank() != 0)
-					OfstreamMap::getDefaultAppend() = true;
-
-				// let only one rank at a time write to the files
-				LOG_VERBOSE(1, "Writing Files");
-
-				selectReads(thisDepth, reads, selector, pickOutputFilename);
+			std::string pickOutputFilename = outputFilename;
+			if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
+				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(minDepth);
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << minDepth);
+			} else {
+				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
 			}
+			RS selector(world, reads, spectrum.weak);
+			selector.scoreAndTrimReads(minDepth);
+
+			// TODO implement a more efficient algorithm to output data in order
+
+			// rank 0 will overwrite, all others will append
+			if (world.rank() != 0)
+				OfstreamMap::getDefaultAppend() = true;
+
+			// let only one rank at a time write to the files
+			LOG_VERBOSE(1, "Writing Files");
+
+			selectReads(minDepth, reads, selector, pickOutputFilename);
 		}
 		spectrum.reset();
 		LOG_DEBUG(1, "Finished, waiting for rest of collective");

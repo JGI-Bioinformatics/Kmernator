@@ -760,6 +760,12 @@ public:
 	const Value *endValue() const {
 		return getValueStart() + _size;
 	}
+	Value *beginValue() {
+		return getValueStart();
+	}
+	Value *endValue() {
+		return getValueStart() + _size;
+	}
 	ValueType sumAll() const {
 		ValueType sum = ValueType();
 		for(const Value *it = beginValue(); it != endValue(); it++)

@@ -812,7 +812,7 @@ done when empty cycle is received
 		}
 		return numKmers;
 	}
-	void scoreAndTrimReads(ScoreType minimumKmerScore, int correctionAttempts = 0) {
+	void scoreAndTrimReads(ScoreType minimumKmerScore, enum RS::KmerScoringType scoringType = RS::_KS_MAX_SCORING) {
 		this->_trims.resize(this->_reads.getSize());
 		bool useKmers = KmerBaseOptions::getOptions().getKmerSize() != 0;
 
@@ -911,6 +911,7 @@ done when empty cycle is received
 
 					if (useKmers) {
 						this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);
+						this->scoreReadByScoringType(buffBegin, buffEnd, trim, scoringType);
 					}
 
 					this->setTrimHeaders(trim, useKmers);

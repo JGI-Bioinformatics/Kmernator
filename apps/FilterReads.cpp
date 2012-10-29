@@ -151,28 +151,21 @@ int main(int argc, char *argv[]) {
 
 
 		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
-		unsigned int depthRange = ReadSelectorOptions::getOptions().getDepthRange();
-		unsigned int depthStep = 2;
-		if (depthRange < minDepth) {
-			depthRange = minDepth;
-		}
 
 		if (!outputFilename.empty()) {
 
-			for(unsigned int thisDepth = depthRange ; thisDepth >= minDepth; thisDepth /= depthStep) {
-				std::string pickOutputFilename = outputFilename;
-				if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-					pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(thisDepth);
-					LOG_VERBOSE(1, "Trimming reads with minDepth: " << thisDepth);
-				} else {
-					LOG_VERBOSE(1, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
-				}
-
-				RS selector(reads, spectrum.weak);
-				selector.scoreAndTrimReads(minDepth);
-
-				selectReads(thisDepth, reads, selector, pickOutputFilename);
+			std::string pickOutputFilename = outputFilename;
+			if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
+				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(minDepth);
+				LOG_VERBOSE(1, "Trimming reads with minDepth: " << minDepth);
+			} else {
+				LOG_VERBOSE(1, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
 			}
+
+			RS selector(reads, spectrum.weak);
+			selector.scoreAndTrimReads(minDepth);
+
+			selectReads(minDepth, reads, selector, pickOutputFilename);
 		}
 		LOG_DEBUG(1, "Clearing spectrum");
 		spectrum.reset();

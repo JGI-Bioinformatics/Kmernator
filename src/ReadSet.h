@@ -108,6 +108,9 @@ public:
 		inline bool isPaired() const {
 			return (read1 != MAX_READ_IDX && read2 != MAX_READ_IDX);
 		}
+		inline bool hasAValidRead() const {
+			return (read1 != MAX_READ_IDX || read2 != MAX_READ_IDX);
+		}
 	};
 
 	typedef std::vector<Pair> PairedIndexType;
