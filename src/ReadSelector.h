@@ -62,7 +62,7 @@ public:
 		opts.add_options()
 				// output read selection
 
-				("max-kmer-output-depth", po::value<int>()->default_value(maxKmerDepth), "i.e. targeted read normalization depth.  The maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output")
+				("max-kmer-output-depth", po::value<int>()->default_value(maxKmerDepth), "i.e. targeted read normalization depth.  The maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output.  To get targeted depth, multiply maxKmerOutputDepth by: (readLength - kmerSize - 1) / readLength")
 
 				("normalization-method", po::value<std::string>()->default_value(normalizationMethod), "If --max-kmer-output-depth is selected, what algorithm to use (RANDOM, OPTIMAL) (optimal is *very* slow and is not implemented in MPI")
 
@@ -925,9 +925,7 @@ public:
 
 	};
 	void setTrimHeaders(ReadTrimType &trim, bool useKmers) {
-		double reportScore;
 		if (trim.trimLength > 0) {
-			reportScore= trim.score;
 			if (useKmers) {
 				trim.trimLength += KmerSizer::getSequenceLength() - 1;
 			}
@@ -935,13 +933,11 @@ public:
 			// keep available so that pairs will be selected together
 			trim.trimOffset = 0;
 			trim.score = -1.0;
-			reportScore = 0.0;
 		}
 		std::stringstream ss;
 		if (!trim.label.empty())
 			ss << " ";
-		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength
-				<< " Score:" << std::fixed << std::setprecision(2) << reportScore;
+		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength;
 		trim.label += ss.str();
 	}
 
@@ -996,13 +992,20 @@ public:
 
 	template<typename IT>
 	void scoreReadByScoringType(IT begin, IT end,  ReadTrimType &trim, enum KmerScoringType scoringType) {
+		if (begin == end) {
+			trim.score = -1;
+			return;
+		}
 		switch(scoringType) {
-		case KS_SUM: break;
-		case KS_MEDIAN: scoreReadByMedianKmer(begin, end, trim); break;
-		case KS_AVG: scoreReadByAvgKmer(begin, end, trim); break;
+		case KS_SUM:
+			scoreReadBySumKmer(begin, end, trim); break;
+		case KS_MEDIAN:
+			scoreReadByMedianKmer(begin, end, trim); break;
+		case KS_AVG:
+			scoreReadBySumKmer(begin, end, trim, true); break;
 		case KS_MIN:
 		case KS_MAX:
-			scoreReadByLimit(begin, end, trim, scoringType); break;
+			scoreReadByLimit(begin, end, trim, scoringType);
 			break;
 		default:
 			LOG_THROW("Invalid scoring type!");
@@ -1020,11 +1023,11 @@ public:
 			scores.push_back(*it);
 		std::sort(scores.begin(), scores.end());
 		trim.score = scores[scores.size()/2];
-		trim.label += " Med: " + boost::lexical_cast<std::string>((int) (trim.score + 0.5));
+		trim.label += " MedScore:" + boost::lexical_cast<std::string>((int) (trim.score + 0.5));
 	};
 
 	template<typename IT>
-	void scoreReadByAvgKmer(IT begin, IT end, ReadTrimType &trim) {
+	void scoreReadBySumKmer(IT begin, IT end, ReadTrimType &trim, bool byAvg = false) {
 
 		double sum = 0.0;
 		int count = 0;
@@ -1033,8 +1036,9 @@ public:
 			count++;
 		}
 
-		trim.score = sum / (count > 0 ? count : 1);
-		trim.label += " Avg: " + boost::lexical_cast<std::string>((int) (trim.score + 0.5));
+		if (byAvg)
+			trim.score = sum / (count > 0 ? count : 1);
+		trim.label += (byAvg ? " AvgScore:" : " SumScore:") + boost::lexical_cast<std::string>((int) (trim.score + 0.5));
 	};
 
 	template<typename IT>
@@ -1053,7 +1057,7 @@ public:
 				limitScore = limitScore < val ? limitScore : val;
 		}
 		trim.score = limitScore;
-		trim.label += (scoringType == KS_MAX) ? " Max: " : " Min: ";
+		trim.label += (scoringType == KS_MAX) ? " MaxScore:" : " MinScore:";
 		trim.label += boost::lexical_cast<std::string>((int) (trim.score + 0.5));
 	};
 

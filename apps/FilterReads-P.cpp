@@ -67,8 +67,11 @@ int main(int argc, char *argv[]) {
 
 	ScopedMPIComm< MPIFilterReadsOptions > world (argc, argv);
 
-	if (ReadSelectorOptions::getOptions().getMaxKmerDepth() > 0 && world.size() > 1)
-		LOG_THROW("Distributed version does not support max-kmer-output-depth option");
+	if (ReadSelectorOptions::getOptions().getMaxKmerDepth() > 0 && ReadSelectorOptions::getOptions().getNormalizationMethod() == "OPTIMAL" && world.size() > 1) {
+		if (Logger::isMaster())
+			LOG_WARN(1, "Setting --normalization-method to RANDOM, as Distributed version does not support 'OPTIMAL' option");
+		ReadSelectorOptions::getOptions().getNormalizationMethod() = "RANDOM";
+	}
 
 	MemoryUtils::getMemoryUsage();
 	std::string outputFilename = Options::getOptions().getOutputFile();
