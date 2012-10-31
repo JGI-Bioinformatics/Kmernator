@@ -18,9 +18,6 @@ public:
 	_BamSortOptions() : unmappedReads(), unmappedReadPairs() {
 	}
 	virtual ~_BamSortOptions() {}
-	void _resetDefaults() {
-		// Other *::_resetDefaults();
-	}
 	std::string &getUnmappedReads() {
 		return unmappedReads;
 	}
@@ -33,6 +30,10 @@ public:
 	FileListType &getInputBams() {
 		return inputBams;
 	}
+	void _resetDefaults() {
+		GeneralOptions::_resetDefaults();
+		GeneralOptions::getOptions().getDebug() = 0;
+	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("output-bam", 1);
 		p.add("input-bams", -1);
@@ -44,10 +45,15 @@ public:
 				("unmapped-read-pairs", po::value<std::string>()->default_value(unmappedReadPairs), "gzipped file to place unmapped read Pairs Fastqs (can be same as --unmapped-reads)")
 				("unmapped-reads", po::value<std::string>()->default_value(unmappedReads), "gzipped file to place unmapped reads Fastqs (can be same as --unmapped-read-pairs)");
 		desc.add(opts);
+
+		GeneralOptions::_setOptions(desc, p);
 		// Other *::_setOptions(desc,p);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
+
+		ret |= GeneralOptions::_parseOptions(vm);
+
 		setOpt("unmapped-read-pairs", unmappedReadPairs);
 		setOpt("unmapped-reads", unmappedReads);
 		setOpt("output-bam", outputBam);
@@ -78,7 +84,6 @@ int main(int argc, char **argv)
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-	GeneralOptions::getOptions().getDebug() = 1;
 	BamVector reads;
 	std::string outputBam = BamSortOptions::getOptions().getOutputBam();
 	OptionsBaseInterface::FileListType inputBams = BamSortOptions::getOptions().getInputBams();
