@@ -674,7 +674,7 @@ public:
 	typedef Kmer::NumberType NumberType;
 
 	typedef std::vector<ScoreType> KmerValueVector;
-	typedef typename KmerValueVector::const_iterator KmerValueVectorIterator;
+	typedef typename KmerValueVector::iterator KmerValueVectorIterator;
 	typedef std::vector<KmerValueVector> KmerValueVectorVector;
 	typedef std::vector<ReadSetSizeType> ReadIdxVector;
 	typedef typename ReadIdxVector::const_iterator ReadIdxVectorIterator;
@@ -908,9 +908,13 @@ done when empty cycle is received
 					KmerValueVectorIterator buffBegin = (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i] );
 					KmerValueVectorIterator buffEnd = ( ((i+1) < readOffsetBuffer[threadId].size()) ? (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i+1]) : batchBuffer[threadId].end() );
 					ReadTrimType &trim = this->_trims[readIdx];
-					for(KmerValueVectorIterator it = buffBegin; it != buffEnd; it++)
+
+					for(KmerValueVectorIterator it = buffBegin; it != buffEnd; it++) {
 						if (*it == -1)
 							LOG_WARN(1, "readIdx: " << readIdx << " pos: " << (it - buffBegin) << " did not get updated!");
+						if (*it < minimumKmerScore)
+							*it = 0.0;
+					}
 
 					if (useKmers) {
 						this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);

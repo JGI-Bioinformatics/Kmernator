@@ -187,6 +187,16 @@ public:
 		KS_AVG,
 		_KS_MAX_SCORING
 	} ;
+	static const char* getKmerScoringTypeLabel(enum KmerScoringType scoreType) {
+		static const char* const _labels[] = {
+			"Score",
+			"MedianScore",
+			"MinScore",
+			"MaxScore",
+			"AvgScore"
+		};
+		return _labels[scoreType];
+	}
 
 	class ReadTrimType {
 	public:
@@ -937,7 +947,7 @@ public:
 		std::stringstream ss;
 		if (!trim.label.empty())
 			ss << " ";
-		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength;
+		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength << " " << getKmerScoringTypeLabel(_defaultScoringType) << ":" << (int) (trim.score+0.5);
 		trim.label += ss.str();
 	}
 
@@ -952,24 +962,27 @@ public:
 			}
 		}
 	}
-	void scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore, enum KmerScoringType scoringType = _KS_MAX_SCORING) {
-		if (scoringType == _KS_MAX_SCORING)
-			scoringType = _defaultScoringType;
+	void scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore) {
 		KA kmers = getKmersForRead(read);
 		setKmerValues(kmers, minimumKmerScore);
+		LOG_DEBUG_OPTIONAL(1, true, "Trim and Score: " << read.getName());
 
 		trimReadByKmers(kmers.beginValue(), kmers.endValue(), markupLength, trim, minimumKmerScore);
 
 		if (trim.trimLength > 0)
-			scoreReadByScoringType(kmers.beginValue() + trim.trimOffset, kmers.beginValue() + trim.trimOffset + trim.trimLength, trim, scoringType);
+			scoreReadByScoringType(kmers.beginValue() + trim.trimOffset, kmers.beginValue() + trim.trimOffset + trim.trimLength, trim, _defaultScoringType);
 		else
 			trim.score = -1;
 	}
 
 	void setKmerValues(KA &kmers, double minimumKmerScore) {
-		for(KA::Iterator it = kmers.begin(); it != kmers.end(); it++) {
+		setKmerValues(kmers.begin(), kmers.end(), minimumKmerScore);
+	}
+	template<typename IT>
+	void setKmerValues(IT begin, IT end, double minimumKmerScore) {
+		for(IT it = begin; it != end; it++) {
 			ScoreType score = getValue(it->key());
-			if(score >= minimumKmerScore)
+			if (score >= minimumKmerScore)
 				it->value() = score;
 			else
 				it->value() = 0.0;
@@ -983,7 +996,7 @@ public:
 
 		_setNumKmers(markupLength, numKmers);
 
-		trimReadByMinimumKmerScore(minimumKmerScore, trim, begin, end);
+		trimReadByMinimumKmerScore(minimumKmerScore, trim, begin, begin + numKmers);
 	};
 
 	void scoreReadByScoringType(KA &kmers, ReadTrimType &trim, enum KmerScoringType scoringType) {
@@ -1010,6 +1023,14 @@ public:
 		default:
 			LOG_THROW("Invalid scoring type!");
 		}
+		if (Log::isDebug(5)) {
+			std::stringstream ss;
+			ss << "Scores: " << " FinalScore: " << trim.score << ". ";
+			for(IT it = begin; it != end ; it++)
+				ss << *it << ", ";
+			std::string s = ss.str();
+			LOG_DEBUG_OPTIONAL(5, true, s);
+		}
 	};
 
 	template<typename IT>
@@ -1018,12 +1039,26 @@ public:
 		// find the median score
 		std::vector< ScoreType > scores;
 		scores.reserve(end-begin);
-		IT it = begin;
-		while(it++ != end)
+		for(IT it = begin; it != end; it++)
 			scores.push_back(*it);
 		std::sort(scores.begin(), scores.end());
 		trim.score = scores[scores.size()/2];
-		trim.label += " MedScore:" + boost::lexical_cast<std::string>((int) (trim.score + 0.5));
+		if (Log::isDebug(5)) {
+			std::stringstream ss;
+			ss << "Median Calculation: ";
+			int c = 0;
+			for(IT it = begin; it != end ; it++)
+				ss << c++ << ":" << *it << ", ";
+			c = 0;
+			ss << std::endl;
+			for(std::vector<ScoreType>::iterator it2 = scores.begin(); it2 != scores.end(); it2++)
+				ss << c++ << ":" << *it2 << ", ";
+			ss << std::endl;
+			ss << "Final: " << scores.size() << " " << scores.size()/2 << " " << trim.score;
+			std::string s = ss.str();
+			LOG_DEBUG_OPTIONAL(5, true, s);
+		}
+
 	};
 
 	template<typename IT>
@@ -1038,7 +1073,6 @@ public:
 
 		if (byAvg)
 			trim.score = sum / (count > 0 ? count : 1);
-		trim.label += (byAvg ? " AvgScore:" : " SumScore:") + boost::lexical_cast<std::string>((int) (trim.score + 0.5));
 	};
 
 	template<typename IT>
@@ -1057,13 +1091,9 @@ public:
 				limitScore = limitScore < val ? limitScore : val;
 		}
 		trim.score = limitScore;
-		trim.label += (scoringType == KS_MAX) ? " MaxScore:" : " MinScore:";
-		trim.label += boost::lexical_cast<std::string>((int) (trim.score + 0.5));
 	};
 
-	virtual void scoreAndTrimReads(ScoreType minimumKmerScore, enum KmerScoringType scoringType = _KS_MAX_SCORING) {
-		if (scoringType == _KS_MAX_SCORING)
-			scoringType = _defaultScoringType;
+	virtual void scoreAndTrimReads(ScoreType minimumKmerScore) {
 
 		_trims.resize(_reads.getSize());
 		bool useKmers = KmerBaseOptions::getOptions().getKmerSize() != 0;
@@ -1080,7 +1110,7 @@ public:
 			SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 
 			if (useKmers) {
-				scoreReadByKmers(read, markupLength, trim, minimumKmerScore, scoringType);
+				scoreReadByKmers(read, markupLength, trim, minimumKmerScore);
 			} else { // !useKmers
 				trimReadByMarkupLength(read, trim, markupLength);
 			}
