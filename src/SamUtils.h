@@ -267,10 +267,14 @@ public:
 		if (c->pos < -1 || c->mpos < -1) return false;
 		if (header && (c->pos >= (int) header->target_len[c->tid] || c->mpos >= (int) header->target_len[c->mtid])) return false;
 
-		if (data_len < c->l_qname) return false;
-		if (data_len < c->l_qname + (c->l_qseq+1) / 2 + c->n_cigar * 4) return false;
+		if (data_len < c->l_qname + c->l_qseq + (c->l_qseq+1) / 2 + c->n_cigar * 4) return false;
 		if ((c->flag & 0xf800) != 0) return false;
 		if (header && (abs(c->isize) > header->target_len[c->tid])) return false;
+		int maxAuxSize = 18 * 8 + // sizeof i fields
+			20 * (4 + c->l_qseq) + // sizeof Z, B, S fields (assume sequence length)
+			3 * 26 * (4 + c->l_qseq); // sizeof all reserved fields (assume sequence length)
+		if (data_len > c->n_cigar * 4 + c->l_qname + c->l_qseq + (c->l_qseq+1)/2 + maxAuxSize)
+			return false;
 		return true;
 	}
 	static bool validateBam(const bam_header_t *header, const bam1_t *b)
@@ -282,7 +286,7 @@ public:
 		s = (char*) memchr(bam1_qname(b), '\0', c->l_qname);
 		if (s != &bam1_qname(b)[c->l_qname-1]) return false;
 
-		if (b->data_len !=  b->data_len - c->n_cigar * 4 - c->l_qname - c->l_qseq - (c->l_qseq+1)/2 - b->l_aux) return false;
+		if (b->data_len != c->n_cigar * 4 + c->l_qname + c->l_qseq + (c->l_qseq+1)/2 + b->l_aux) return false;
 
 		if (c->bin != bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)))) return false;
 
