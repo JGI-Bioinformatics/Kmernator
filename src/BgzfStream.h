@@ -33,7 +33,9 @@
 #include <string.h>
 #include <iostream>
 #include <algorithm>
+#include <vector>
 #include "bgzf.h"
+#include "Log.h"
 #include <zlib.h>
 
 #include <boost/iostreams/filter/symmetric.hpp>
@@ -45,6 +47,7 @@ class bgzf_detail  {
 public:
 	typedef char char_type;
 	typedef int8_t bgzf_byte_t;
+	typedef std::vector< int64_t > FileOffsetVector;
 	static const int DEFAULT_BLOCK_SIZE = 64 * 1024;
 	static const int MAX_BLOCK_SIZE = 64 * 1024;
 	static const int BLOCK_HEADER_LENGTH = 18;
@@ -84,6 +87,7 @@ public:
 	    ~bgzf_compressor_impl()
 	    {
 	        reset(fp);
+	        blockFileOffsets.clear();
 	    }
 
 	    void close()
@@ -119,6 +123,7 @@ public:
 	        assert(compressed_block_length == 0);
 	        assert(fp->block_offset <= fp->uncompressed_block_size);
 	        compressed_block_length = deflate_block(fp, fp->block_offset);
+	        blockFileOffsets.push_back( fp->block_address );
 	        return fp->block_offset == 0;
 	    }
 
@@ -177,10 +182,14 @@ public:
 			}
 
 		}
+	    const FileOffsetVector &getBlockFileOffsets() const {
+	    	return blockFileOffsets;
+	    }
 	private:
 		BGZF *fp;
 		size_t compressed_block_length, compressed_block_written_offset;
 		bool isEOF;
+		FileOffsetVector blockFileOffsets;
 	};
 
 	class bgzf_decompressor_impl {
@@ -330,6 +339,7 @@ protected:
 		fp = NULL;
 	}
 
+public:
 	// copied from bgzf.c
 	/* The MIT License
 
@@ -377,6 +387,12 @@ protected:
 		buffer[1] = value >> 8;
 		buffer[2] = value >> 16;
 		buffer[3] = value >> 24;
+	}
+
+	static inline
+	uint32_t
+	unpackInt32(uint8_t * buffer) {
+		return (buffer[0] | (buffer[1] << 8) | (buffer[2] << 16) | (buffer[3] << 24));
 	}
 
 	static inline
@@ -536,8 +552,9 @@ protected:
 		return zs.total_out;
 	}
 
+public:
 	static
-	int
+	bool
 	check_header(const bgzf_byte_t* header)
 	{
 		return (header[0] == GZIP_ID1 &&
@@ -547,10 +564,99 @@ protected:
 				unpackInt16((uint8_t*)&header[10]) == BGZF_XLEN &&
 				header[12] == BGZF_ID1 &&
 				header[13] == BGZF_ID2 &&
-				unpackInt16((uint8_t*)&header[14]) == BGZF_LEN);
+				unpackInt16((uint8_t*)&header[14]) == BGZF_LEN &&
+				header[15] == 0);
 	}
 	// end copied from bgzf.c
 
+	static bool checkInflate(char *compressedBuffer, char *uncompressedBuffer, int block_length, uint32_t crc, uint32_t uncompressedLength) {
+
+		z_stream zs;
+		int status;
+		zs.msg = Z_NULL;
+		zs.opaque = Z_NULL;
+		zs.zalloc = Z_NULL;
+		zs.zfree = Z_NULL;
+		zs.next_in = (Bytef*) compressedBuffer + 18;
+		zs.avail_in = block_length - 16;
+		zs.next_out = (Bytef*) uncompressedBuffer;
+		zs.avail_out = DEFAULT_BLOCK_SIZE;
+
+		status = inflateInit2(&zs, GZIP_WINDOW_BITS);
+		if (status != Z_OK) {
+			fprintf(stderr, "inflate init failed");
+			return -1;
+		}
+		status = inflate(&zs, Z_FINISH);
+		if (status != Z_STREAM_END) {
+			inflateEnd(&zs);
+			fprintf(stderr, "inflate failed");
+			return -1;
+		}
+		status = inflateEnd(&zs);
+		if (status != Z_OK) {
+			fprintf(stderr, "inflate failed");
+			return -1;
+		}
+		return crc == zs.adler && uncompressedLength == zs.total_out;
+
+	}
+
+	// returns -1 if there is no block after offset and before eof
+	static int64_t getNextBlockFileOffset(FILE *f, int64_t offset, uint16_t &compressedBlockLength, char *uncompblock, uint32_t &uncompressedBlockLength) {
+		fseek(f, offset, SEEK_SET);
+		size_t readSize = DEFAULT_BLOCK_SIZE*3;
+		int8_t *bgzfBuff = (int8_t*) calloc(readSize, 1);
+//		buffer[0] = GZIP_ID1;
+//		buffer[1] = GZIP_ID2;
+//		buffer[2] = CM_DEFLATE;
+//		buffer[3] = FLG_FEXTRA;
+//		buffer[4] = 0; // mtime
+//		buffer[5] = 0;
+//		buffer[6] = 0;
+//		buffer[7] = 0;
+//		buffer[8] = 0;
+//		buffer[9] = OS_UNKNOWN;
+//		buffer[10] = BGZF_XLEN;
+//		buffer[11] = 0;
+//		buffer[12] = BGZF_ID1;
+//		buffer[13] = BGZF_ID2;
+//		buffer[14] = BGZF_LEN;
+//		buffer[15] = 0;
+//		buffer[16] = 0; // placeholder for block length
+//		buffer[17] = 0;
+		size_t bytes = fread(bgzfBuff, 1, readSize, f);
+
+		int64_t newOffset = -1;
+		for(int i = 0; i < (int) bytes - 34; i++) {
+			if (!bgzf_detail::check_header(bgzfBuff + i)) {
+				LOG_DEBUG_OPTIONAL(3, true, "check_header failed for " << i);
+				continue;
+			}
+			compressedBlockLength = unpackInt16((uint8_t*) bgzfBuff + i + 16);
+			uint32_t crc = unpackInt32((uint8_t*) bgzfBuff + i + compressedBlockLength + 1 - 8);
+			uncompressedBlockLength = unpackInt32((uint8_t*) bgzfBuff + i + compressedBlockLength + 1 - 4);
+			if (!checkInflate((char*) bgzfBuff + i, uncompblock, compressedBlockLength, crc, uncompressedBlockLength)) {
+				LOG_DEBUG_OPTIONAL(2, true, "checkInflate failed for " << i);
+				continue;
+			}
+			newOffset = i + offset;
+			if (i + compressedBlockLength < (int) bytes - 34 && ! bgzf_detail::check_header(bgzfBuff + i + compressedBlockLength)) {
+				LOG_DEBUG_OPTIONAL(1, true, "check_header for next block failed for " << i << " + " << compressedBlockLength);
+				continue;
+			}
+			break;
+		}
+		free(bgzfBuff);
+
+		if (newOffset >= 0) {
+			LOG_DEBUG_OPTIONAL(1, true, "getNextBlockFileOffset(): Found " << newOffset << " (" << (newOffset - offset) << " tries)");
+		} else {
+			LOG_DEBUG_OPTIONAL(1, true, "getNextBlockFileOffset(): Did not find a new block after: " << offset);
+		}
+
+		return newOffset;
+	};
 
 };
 
