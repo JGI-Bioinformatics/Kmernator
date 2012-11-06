@@ -32,18 +32,21 @@
 #ifndef SAMUTILS_H_
 #define SAMUTILS_H_
 
-#include <iostream>
-#include <boost/iostreams/filtering_streambuf.hpp>
-#include <boost/iostreams/filter/gzip.hpp>
-
 #include "mpi.h"
+#include "zlib.h"
+#include "sam.h"
+#include "bam.h"
+
+#include <iostream>
 #include <stdint.h>
 #include <string>
 #include <algorithm>
 
-#include "sam.h"
-#include "bam.h"
+#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
+
 #include "Log.h"
+#include "Utils.h"
 #include "BgzfStream.h"
 #include "MemoryBufferStream.h"
 #include "MPIUtils.h"
@@ -181,6 +184,7 @@ public:
 	}
 
 	static samfile_t *openSamOrBam(std::string fileName) {
+		// TODO test for BAM, then SAM.gz, then SAM
 		samfile_t *in = samopen(fileName.c_str(), "rb", 0);
 		if (in == NULL || in->header == NULL) {
 			//printf("Checking if %s is a SAM formatted file\n", fileName);
@@ -188,8 +192,9 @@ public:
 			if (in == NULL || in->header == NULL) {
 				LOG_THROW("openSamOrBam(): Could not open: " << fileName);
 				exit(1);
-			} else
-			LOG_VERBOSE_OPTIONAL(1, true, "Opened Sam file: " << fileName);
+			} else {
+				LOG_VERBOSE_OPTIONAL(1, true, "Opened Sam file: " << fileName);
+			}
 		} else {
 			LOG_VERBOSE_OPTIONAL(1, true, "Opened Bam file: " << fileName);
 		}
@@ -207,17 +212,78 @@ public:
 		return bytesRead;
 	}
 
-	static void readBamFile(samfile_t *ins, BamVector &reads) {
-		while (true) {
-			bam1_t *bam = bam_init1();
-			if (readNextBam(ins, bam) >= 0) {
-				reads.push_back(bam);
-			} else {
-				bam_destroy1(bam);
-				break;
-			}
+	static int readNextBam(samfile_t *ins, BamVector &reads) {
+		bam1_t *bam = bam_init1();
+		int bytes;
+		if ((bytes = readNextBam(ins, bam)) >= 0) {
+			reads.push_back(bam);
+			return bytes;
+		} else {
+			bam_destroy1(bam);
+			return -1;
 		}
 	}
+
+	static void readBamFile(samfile_t *ins, BamVector &reads) {
+		while (true) {
+			if (readNextBam(ins, reads) < 0)
+				break;
+		}
+	}
+
+	static void readBamFile(samfile_t *ins, BamVector &reads, int64_t lastOffset) {
+		while (lastOffset < 0 || samTell(ins) < lastOffset) {
+			if (readNextBam(ins, reads) < 0)
+				break;
+		}
+	}
+
+	static void readBamFile(std::string filename, BamVector &reads) {
+		 samfile_t *fp = openSamOrBam(filename);
+		 readBamFile(fp, reads);
+		 closeSamOrBam(fp);
+	}
+
+	static void readBamFile(const MPI_Comm &comm, std::string filename, BamVector &reads) {
+		int rank, size;
+		MPI_Comm_rank(comm, &rank);
+		MPI_Comm_size(comm, &size);
+		long fileSize = 0;
+		if (rank == 0) {
+			fileSize = FileUtils::getFileSize(filename);
+		}
+		long ourBoundaries[size];
+		samfile_t *fp = openSamOrBam(filename);
+		if (rank == 0) {
+			long offset = samTell(fp);
+			// convert to raw offset if a BAM
+			if ((fp->type&1)== 1)
+				offset >>= 16;
+			long blockSize = (fileSize - offset + size - 1) / size;
+			for(int i = 0; i < size; i++)
+				ourBoundaries[i] = offset + blockSize * i;
+		}
+		MPI_Bcast(&ourBoundaries[0], size, MPI_LONG_LONG_INT, 0, comm);
+		int64_t myStart = ourBoundaries[rank], myEnd = -1;
+		if (setNextPointer(fp, myStart)) {
+			myStart = samTell(fp);
+		} else {
+			myStart = -1;
+		}
+		ourBoundaries[rank] = myStart;
+		MPI_Allgather(MPI_IN_PLACE, 0, MPI_LONG_LONG_INT, &ourBoundaries[0], 1, MPI_LONG_LONG_INT, comm);
+		for(int i = rank+1; i < size; i++) {
+			myEnd = ourBoundaries[i];
+			if (myEnd >= 0)
+				break;
+		}
+		LOG_DEBUG_OPTIONAL(1, true, "readBamFile(" << filename << "): Starting at: " << myStart << " ending at " << myEnd);
+		if (myStart == -1)
+			return;
+		readBamFile(fp, reads, myEnd);
+	}
+
+
 	static std::string getPairTag(bam1_t *bam) {
 		std::string s;
 		if ((bam->core.flag & BAM_FPAIRED) == BAM_FPAIRED) {
@@ -333,14 +399,27 @@ public:
 	}
 
 
-	bool setNextBamPointer(samfile_t *fp, int64_t geFileOffset) {
-		int64_t bamPointer;
+	static int64_t samTell(samfile_t *fp) {
+		if ((fp->type&1) == 1) {
+			return bam_tell(fp->x.bam);
+		} else if (fp->type == 2) {
+//			gzFile &f = fp->x.tamr.fp;
+//			return gztell(f);
+			return -1;
+		} else {
+			return -1;
+		}
+	}
+
+	// returns false if there is no record >= the raw file offset
+	// returns false if this is a sam.gz
+	static bool setNextPointer(samfile_t *fp, int64_t geFileOffset) {
 		if ((fp->type&1) == 1) {
 			// bamfile
+			int64_t bamPointer;
 			int64_t bgzfOffset;
 			int maxBufSize = bgzf_detail::DEFAULT_BLOCK_SIZE + BAM_CORE_SIZE + 4;
-			boost::shared_ptr<char> uncompBlock(new char[bgzf_detail::DEFAULT_BLOCK_SIZE]), bamBuf;
-			bamBuf.reset(new char[maxBufSize]);
+			boost::shared_ptr<char> uncompBlock(new char[bgzf_detail::DEFAULT_BLOCK_SIZE]), bamBuf(new char[maxBufSize]);
 			uint16_t compressedBlockLength;
 			uint32_t uncompressedBlockLength;
 			bgzfOffset = bgzf_detail::getNextBlockFileOffset(fp->x.bam->file, geFileOffset, compressedBlockLength, uncompBlock.get(), uncompressedBlockLength);
@@ -377,9 +456,32 @@ public:
 				if (newOffset != bgzfOffset)
 					LOG_WARN(1, "Detected potentially different BGZF offsets from " << (newOffset - compressedBlockLength) << ": " << newOffset << " vs " << bgzfOffset);
 			}
+			return false;
+		} else if (fp->type == 2) {
+//			gzFile &f = fp->x.tamr.fp;
+//			// samfile.gz is unsupported
+//			if (gzdirect(f) == 0)
+//				return false;
+//			kstream_t *ks = fp->x.tamr.ks;
+//			if (gzseek(f, geFileOffset, SEEK_SET) == -1)
+//				return false;
+//			int bytes, bufSize = bgzf_detail::DEFAULT_BLOCK_SIZE;
+//			boost::shared_ptr<char> buf(new char[bufSize]);
+//			while ((bytes = gzread(f, buf.get(), bufSize)) > 0) {
+//				// next record is at the end of line.
+//				// TODO check for paired records in read order
+//				char *s = (char*) memchr(buf.get(), '\n', bufSize);
+//				if (s != NULL) {
+//					geFileOffset += (s - (char*) buf.get()) + 1;
+//					if (gzseek(f, geFileOffset, SEEK_SET) == -1)
+//						return false;
+//					ks_rewind(ks);
+//					return true;
+//				}
+//			}
+			return false;
 		} else {
-			// samfile
-			LOG_THROW("Unsupported");
+			return false;
 		}
 	}
 
@@ -410,7 +512,7 @@ public:
 	typedef std::pair<bam1_p, bam1_p> BamPair;
 	typedef bam1_core_t *bam1_core_p;
 
-	static int roundup(int val, int factor) {
+	static int roundUp(int val, int factor) {
 		int mod = val % factor;
 		if (mod > 0)
 			val += (factor - mod);
@@ -962,7 +1064,7 @@ public:
 					if (dataLen > 0) {
 						assert(ptrOffset + dataLen <= totalRecvBytes);
 						assert(copyDataIfUnmapped | isMapped(recvReads[recvReadsIdx]));
-						int m_data = roundup(dataLen, 8);
+						int m_data = roundUp(dataLen, 8);
 						if (m_data > recvReads[recvReadsIdx]->m_data) {
 							recvReads[recvReadsIdx]->m_data = m_data;
 							recvReads[recvReadsIdx]->data = (uint8_t*) realloc(
@@ -1452,7 +1554,7 @@ public:
 			for (int i = 0; i < ourSize; i++) {
 				ourGranularity[i] = (ourSize * ourDataSizes[i * 2]
 						* granularity + ourTotalSize - 1) / ourTotalSize;
-				ourGranularity[i] = roundup(ourGranularity[i], (ourSize - 1)); // add extra samples to make a multiple of (ourSize-1)
+				ourGranularity[i] = roundUp(ourGranularity[i], (ourSize - 1)); // add extra samples to make a multiple of (ourSize-1)
 				numSamples += ourGranularity[i];
 				if (i < myRank)
 					mySampleOffset = numSamples;
@@ -1957,7 +2059,7 @@ public:
 		read->l_aux = *(ptr++);
 		read->data_len = *(ptr++);
 		if (read->m_data < read->data_len) {
-			int m_data = roundup(read->data_len, 8);
+			int m_data = roundUp(read->data_len, 8);
 			read->m_data = m_data;
 			read->data = (uint8_t*) realloc(read->data, m_data);
 		}
