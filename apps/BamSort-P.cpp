@@ -88,19 +88,10 @@ int main(int argc, char **argv)
 	std::string outputBam = BamSortOptions::getOptions().getOutputBam();
 	OptionsBaseInterface::FileListType inputBams = BamSortOptions::getOptions().getInputBams();
 
+	BamStreamUtils::BamHeaderPtr header;
+
 	samfile_t *fh = NULL;
-	for(int i = 0; i < (int) inputBams.size(); i++) {
-		if ((i) % size == rank) {
-			std::string inputFile(inputBams[i]);
-			LOG_VERBOSE_OPTIONAL(1, true, "Reading " << inputFile);
-			if (fh != NULL)
-				BamStreamUtils::closeSamOrBam(fh);
-			fh = BamStreamUtils::openSamOrBam(inputFile);
-			long s = reads.size();
-			BamStreamUtils::readBamFile(fh, reads);
-			LOG_VERBOSE_OPTIONAL(1, true, "Loaded " << (reads.size() - s) << " new bam records");
-		}
-	}
+    header = BamStreamUtils::readBamFile(world, inputBams, reads);
 
 	bool needsCollapse = false;
 	if (!BamSortOptions::getOptions().getUnmappedReadPairs().empty()) {
@@ -129,7 +120,7 @@ int main(int argc, char **argv)
 	LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
 
 	{
-		SamUtils::MPISortBam sortem(world, reads, outputBam, (fh != NULL) ? fh->header : NULL);
+		SamUtils::MPISortBam sortem(world, reads, outputBam, header.get());
 	}
 
 	if (fh != NULL)

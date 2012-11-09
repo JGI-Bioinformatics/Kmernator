@@ -598,7 +598,10 @@ public:
 			fprintf(stderr, "inflate failed");
 			return -1;
 		}
-		return crc == zs.adler && uncompressedLength == zs.total_out;
+		uint32_t _crc = crc32(0L, Z_NULL, 0);
+		_crc = crc32(_crc, (Bytef*) uncompressedBuffer, uncompressedLength);
+		LOG_DEBUG_OPTIONAL(4, true, "checkInflate: crc: " << crc << " _crc: " << _crc << " length: " << uncompressedLength << " total_out: " << zs.total_out );
+		return crc == _crc && uncompressedLength == zs.total_out;
 
 	}
 
@@ -630,7 +633,7 @@ public:
 		int64_t newOffset = -1;
 		for(int i = 0; i < (int) bytes - 34; i++) {
 			if (!bgzf_detail::check_header(bgzfBuff + i)) {
-				LOG_DEBUG_OPTIONAL(3, true, "check_header failed for " << i);
+				LOG_DEBUG_OPTIONAL(5, true, "check_header failed for " << i);
 				continue;
 			}
 			compressedBlockLength = unpackInt16((uint8_t*) bgzfBuff + i + 16);
@@ -641,8 +644,8 @@ public:
 				continue;
 			}
 			newOffset = i + offset;
-			if (i + compressedBlockLength < (int) bytes - 34 && ! bgzf_detail::check_header(bgzfBuff + i + compressedBlockLength)) {
-				LOG_DEBUG_OPTIONAL(1, true, "check_header for next block failed for " << i << " + " << compressedBlockLength);
+			if (i + compressedBlockLength < (int) bytes - 34 && ! bgzf_detail::check_header(bgzfBuff + i + compressedBlockLength + 1)) {
+				LOG_DEBUG_OPTIONAL(2, true, "check_header for next block failed for " << i << " + " << compressedBlockLength);
 				continue;
 			}
 			break;
@@ -650,9 +653,9 @@ public:
 		free(bgzfBuff);
 
 		if (newOffset >= 0) {
-			LOG_DEBUG_OPTIONAL(1, true, "getNextBlockFileOffset(): Found " << newOffset << " (" << (newOffset - offset) << " tries)");
+			LOG_DEBUG_OPTIONAL(2, true, "getNextBlockFileOffset(): Found " << newOffset << " (" << (newOffset - offset) << " tries)");
 		} else {
-			LOG_DEBUG_OPTIONAL(1, true, "getNextBlockFileOffset(): Did not find a new block after: " << offset);
+			LOG_DEBUG_OPTIONAL(2, true, "getNextBlockFileOffset(): Did not find a new block after: " << offset);
 		}
 
 		return newOffset;

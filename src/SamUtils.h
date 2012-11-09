@@ -98,10 +98,14 @@ static void swap_endian_data(const bam1_core_t *c, int data_len, uint8_t *data) 
 
 }
 
+std::ostream &operator<<(std::ostream& os, const bam1_core_t &core);
 class BamStreamUtils {
 public:
+	static const int READS_PER_BATCH = 1024; //32768;
 	typedef std::vector<bam1_t *> BamVector;
 	typedef std::vector<bam1_core_t> BamCoreVector;
+	typedef boost::shared_ptr< bam_header_t > BamHeaderPtr;
+
 	static std::ostream &writeBamHeaderPart1(std::ostream &os,
 			bam_header_t *header) {
 		return writeBamHeaderPart1(os, header->l_text, header->text,
@@ -183,6 +187,13 @@ public:
 		return os;
 	}
 
+	static std::ostream &writeBamCore(std::ostream &os, const bam1_core_t &c) {
+		os << "core: " << c.flag << " " << c.tid << ":" << c.pos << "m" << c.mtid << ":"
+		   << c.mpos << "=" << c.isize << "q:" << c.qual << "n:" << c.l_qname << "b:" << c.bin
+		   << "l:" << c.l_qseq << "c:" << c.n_cigar;
+		return os;
+	}
+
 	static samfile_t *openSamOrBam(std::string fileName) {
 		// TODO test for BAM, then SAM.gz, then SAM
 		samfile_t *in = samopen(fileName.c_str(), "rb", 0);
@@ -209,6 +220,7 @@ public:
 		assert(read != NULL);
 
 		int bytesRead = samread(ins, read);
+		LOG_DEBUG_OPTIONAL(4, true, "readNextBam(): " << bytesRead << " : " << bam1_qname(read));
 		return bytesRead;
 	}
 
@@ -224,63 +236,139 @@ public:
 		}
 	}
 
-	static void readBamFile(samfile_t *ins, BamVector &reads) {
+	static bool readBamFile(samfile_t *ins, BamVector &reads) {
 		while (true) {
 			if (readNextBam(ins, reads) < 0)
 				break;
 		}
+		return true;
 	}
 
-	static void readBamFile(samfile_t *ins, BamVector &reads, int64_t lastOffset) {
+	static bool readBamFile(samfile_t *ins, BamVector &reads, int64_t lastOffset) {
 		while (lastOffset < 0 || samTell(ins) < lastOffset) {
 			if (readNextBam(ins, reads) < 0)
 				break;
 		}
+		return true;
 	}
 
-	static void readBamFile(std::string filename, BamVector &reads) {
-		 samfile_t *fp = openSamOrBam(filename);
-		 readBamFile(fp, reads);
-		 closeSamOrBam(fp);
-	}
+	static bool distributeReads(const MPI_Comm &comm, BamVector &reads);
+	static void distributeReadsFinal(const MPI_Comm &comm, BamVector &reads);
 
-	static void readBamFile(const MPI_Comm &comm, std::string filename, BamVector &reads) {
+	static void readBamFile(const MPI_Comm &comm, samfile_t *ins, BamVector &reads, int64_t lastOffset) {
 		int rank, size;
 		MPI_Comm_rank(comm, &rank);
 		MPI_Comm_size(comm, &size);
-		long fileSize = 0;
-		if (rank == 0) {
-			fileSize = FileUtils::getFileSize(filename);
-		}
-		long ourBoundaries[size];
-		samfile_t *fp = openSamOrBam(filename);
-		if (rank == 0) {
-			long offset = samTell(fp);
-			// convert to raw offset if a BAM
-			if ((fp->type&1)== 1)
-				offset >>= 16;
-			long blockSize = (fileSize - offset + size - 1) / size;
-			for(int i = 0; i < size; i++)
-				ourBoundaries[i] = offset + blockSize * i;
-		}
-		MPI_Bcast(&ourBoundaries[0], size, MPI_LONG_LONG_INT, 0, comm);
-		int64_t myStart = ourBoundaries[rank], myEnd = -1;
-		if (setNextPointer(fp, myStart)) {
-			myStart = samTell(fp);
-		} else {
-			myStart = -1;
-		}
-		ourBoundaries[rank] = myStart;
-		MPI_Allgather(MPI_IN_PLACE, 0, MPI_LONG_LONG_INT, &ourBoundaries[0], 1, MPI_LONG_LONG_INT, comm);
-		for(int i = rank+1; i < size; i++) {
-			myEnd = ourBoundaries[i];
-			if (myEnd >= 0)
+		long count = 0;
+		while (lastOffset < 0 || samTell(ins) < lastOffset) {
+			if (readNextBam(ins, reads) < 0)
 				break;
+			if (++count % READS_PER_BATCH == 0) {
+				LOG_DEBUG_OPTIONAL(2, true, "read: " << count << " reads so far.  Storing: " << reads.size());
+				distributeReads(comm, reads);
+			}
 		}
-		LOG_DEBUG_OPTIONAL(1, true, "readBamFile(" << filename << "): Starting at: " << myStart << " ending at " << myEnd);
-		if (myStart == -1)
-			return;
-		readBamFile(fp, reads, myEnd);
+		LOG_DEBUG_OPTIONAL(2, true, "Finished my partition.  read: " << count << " reads.  Storing: " << reads.size());
+		distributeReads(comm, reads);
+	}
+
+	static BamHeaderPtr readBamFile(std::string filename, BamVector &reads) {
+		 samfile_t *fp = openSamOrBam(filename);
+		 readBamFile(fp, reads);
+		 BamHeaderPtr header(fp->header);
+		 fp->header = NULL;
+		 closeSamOrBam(fp);
+		 return header;
+	}
+
+	static BamHeaderPtr readBamFile(const MPI_Comm &comm, std::string filename, BamVector &reads) {
+		std::vector< std::string > filenames;
+		filenames.push_back(filename);
+		return readBamFile(comm, filenames, reads);
+	}
+	static BamHeaderPtr readBamFile(const MPI_Comm &comm, std::vector< std::string > filenames, BamVector &reads) {
+		int rank, size;
+		MPI_Comm_rank(comm, &rank);
+		MPI_Comm_size(comm, &size);
+		BamHeaderPtr header;
+		std::vector<long> myEnds(filenames.size(), -1);
+		std::vector<samfile_t*> fps(filenames.size(), NULL);
+
+		for(int i = 0; i < (int) filenames.size(); i++) {
+			std::string filename = filenames[i];
+			long fileSize = 0;
+			if (rank == 0) {
+				fileSize = FileUtils::getFileSize(filename);
+			}
+			int64_t ourBoundaries[size];
+			samfile_t *fp = openSamOrBam(filename);
+			if (fp->type == 2) {
+				// This is a SAM, so only one can write...
+				if (rank == i % size) {
+					fps[i] = fp;
+					myEnds[i] = -1;
+				} else {
+					header.reset(fp->header);
+					fp->header = NULL;
+					closeSamOrBam(fp);
+				}
+				continue;
+			}
+			if (rank == 0) {
+				if ((fp->type&1)== 1) {
+					// this is a BAM
+					long offset = samTell(fp);
+					// convert to raw offset
+					offset >>= 16;
+					long blockSize = (fileSize - offset + size - 1) / size;
+					for(int i = 0; i < size; i++)
+						ourBoundaries[i] = offset + blockSize * i;
+				} else {
+					LOG_THROW("Can not read a SAM/BAM we are writing to...");
+				}
+			}
+			MPI_Bcast(&ourBoundaries[0], size, MPI_LONG_LONG_INT, 0, comm);
+
+			int64_t myStart = ourBoundaries[rank], myEnd = -1;
+
+			// The BAM should be seekable, so everyone can read
+
+			if (setNextPointer(fp, myStart)) {
+				myStart = samTell(fp);
+			} else {
+				myStart = -1;
+			}
+
+			ourBoundaries[rank] = myStart;
+			MPI_Allgather(MPI_IN_PLACE, 0, MPI_LONG_LONG_INT, &ourBoundaries[0], 1, MPI_LONG_LONG_INT, comm);
+			for(int j = rank+1; j < size; j++) {
+				myEnd = ourBoundaries[j];
+				if (myEnd >= 0)
+					break;
+			}
+
+			LOG_DEBUG_OPTIONAL(2, true, "readBamFile(" << filename << "): Starting at: " << myStart << " ending at " << myEnd);
+			if (myStart == -1) {
+				header.reset(fp->header);
+				fp->header = NULL;
+				closeSamOrBam(fp);
+			} else {
+				fps[i] = fp;
+				myEnds[i] = myEnd;
+			}
+		}
+		for(int i = 0; i < (int) filenames.size(); i++) {
+			samfile_t *fp = fps[i];
+			if (fp != NULL) {
+				LOG_VERBOSE_OPTIONAL(1, true, "Reading " << filenames[i]);
+				readBamFile(comm, fp, reads, myEnds[i]);
+				header.reset(fp->header);
+				fp->header = NULL;
+				closeSamOrBam(fp);
+			}
+		}
+		distributeReadsFinal(comm, reads);
+		return header;
 	}
 
 
@@ -347,14 +435,19 @@ public:
 	{
 		char *s;
 		const bam1_core_t *c = &(b->core);
+		LOG_DEBUG_OPTIONAL(5, true, "validateBam(header)1");
 		if (!validateBam(header, c, b->data_len)) return false;
+		LOG_DEBUG_OPTIONAL(5, true, "validateBam(header)2");
 
 		s = (char*) memchr(bam1_qname(b), '\0', c->l_qname);
 		if (s != &bam1_qname(b)[c->l_qname-1]) return false;
+		LOG_DEBUG_OPTIONAL(5, true, "validateBam(header)3");
 
 		if (b->data_len != c->n_cigar * 4 + c->l_qname + c->l_qseq + (c->l_qseq+1)/2 + b->l_aux) return false;
+		LOG_DEBUG_OPTIONAL(5, true, "validateBam(header)4 " << *c);
 
-		if (c->bin != bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)))) return false;
+		if (c->pos >= 0 && ((c->flag&BAM_FUNMAP) == 0) && c->bin != bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)))) return false;
+		LOG_DEBUG_OPTIONAL(5, true, "validateBam(header)5");
 
 		return true;
 	}
@@ -370,6 +463,7 @@ public:
 				break;
 			success++;
 		}
+		LOG_DEBUG_OPTIONAL(5, true, "validateBam(" << count << "):" << success);
 		return success == count;
 	}
 
@@ -394,7 +488,7 @@ public:
 		c->l_qseq = x[4];
 		c->mtid = x[5]; c->mpos = x[6]; c->isize = x[7];
 		passed = validateBam(header, c, block_len - BAM_CORE_SIZE);
-
+		LOG_DEBUG_OPTIONAL(5, true, "checkBamCore: " << passed << " " << *c);
 		return passed;
 	}
 
@@ -403,8 +497,7 @@ public:
 		if ((fp->type&1) == 1) {
 			return bam_tell(fp->x.bam);
 		} else if (fp->type == 2) {
-//			gzFile &f = fp->x.tamr.fp;
-//			return gztell(f);
+			// samfile unsupported
 			return -1;
 		} else {
 			return -1;
@@ -414,6 +507,7 @@ public:
 	// returns false if there is no record >= the raw file offset
 	// returns false if this is a sam.gz
 	static bool setNextPointer(samfile_t *fp, int64_t geFileOffset) {
+		LOG_DEBUG_OPTIONAL(3, true, "setNextPointer(): " << geFileOffset);
 		if ((fp->type&1) == 1) {
 			// bamfile
 			int64_t bamPointer;
@@ -442,6 +536,7 @@ public:
 					if (validateBam(fp, b, 100)) {
 						if (bam_seek(fp->x.bam, bamPointer, SEEK_SET) != 0)
 							LOG_THROW("We should be able to bam_seek to this region: " << bgzfOffset << ", " << pos);
+						LOG_DEBUG_OPTIONAL(4, true, "Found next pointer: " << bgzfOffset << ", " << pos << " (" << bamPointer << ")");
 						return true;
 					}
 				}
@@ -458,27 +553,7 @@ public:
 			}
 			return false;
 		} else if (fp->type == 2) {
-//			gzFile &f = fp->x.tamr.fp;
-//			// samfile.gz is unsupported
-//			if (gzdirect(f) == 0)
-//				return false;
-//			kstream_t *ks = fp->x.tamr.ks;
-//			if (gzseek(f, geFileOffset, SEEK_SET) == -1)
-//				return false;
-//			int bytes, bufSize = bgzf_detail::DEFAULT_BLOCK_SIZE;
-//			boost::shared_ptr<char> buf(new char[bufSize]);
-//			while ((bytes = gzread(f, buf.get(), bufSize)) > 0) {
-//				// next record is at the end of line.
-//				// TODO check for paired records in read order
-//				char *s = (char*) memchr(buf.get(), '\n', bufSize);
-//				if (s != NULL) {
-//					geFileOffset += (s - (char*) buf.get()) + 1;
-//					if (gzseek(f, geFileOffset, SEEK_SET) == -1)
-//						return false;
-//					ks_rewind(ks);
-//					return true;
-//				}
-//			}
+			// samfile unsupported
 			return false;
 		} else {
 			return false;
@@ -499,13 +574,18 @@ std::ostream &operator<<(std::ostream& os, bam_header_t &_header) {
 	BamStreamUtils::writeBamHeaderPart2(os, header);
 	return os;
 }
+
+std::ostream &operator<<(std::ostream& os, const bam1_core_t &core) {
+	return BamStreamUtils::writeBamCore(os, core);
+}
 typedef BamStreamUtils::BamVector BamVector;
 typedef BamStreamUtils::BamCoreVector BamCoreVector;
 
 class SamUtils {
 public:
-	static const int READS_PER_BATCH = 32768;
+	static const int READS_PER_BATCH = BamStreamUtils::READS_PER_BATCH;
 	typedef std::vector<int> IntVector;
+	typedef std::vector<int64_t> LongVector;
 	typedef bam1_t *bam1_p;
 	typedef bam1_p *bam1_pp;
 	typedef std::pair<bam1_p, bam1_pp> bam1_p_pair;
@@ -518,14 +598,14 @@ public:
 			val += (factor - mod);
 		return val;
 	}
-	static int *packVector(const IntVector &in) {
-		int *packed = (int*) calloc(in.size(), sizeof(int));
+	static int64_t *packVector(const LongVector &in) {
+		int64_t *packed = (int64_t *) calloc(in.size(), sizeof(int64_t));
 		for (int i = 0; i < (int) in.size(); i++)
 			packed[i] = in[i];
 		return packed;
 	}
-	static IntVector unpackVector(int *in, int size) {
-		IntVector unpacked;
+	static LongVector unpackVector(int64_t *in, int size) {
+		LongVector unpacked;
 		unpacked.reserve(size);
 		for (int i = 0; i < size; i++)
 			unpacked.push_back(in[i]);
@@ -536,7 +616,7 @@ public:
 
 	public:
 		inline bool operator()(const bam1_p_pair a, const bam1_p_pair b) const {
-			return cmpBam(a.first, b.first);
+			return cmpBam(a.first, b.first) > 0; // for heap to sort minimum at top of the heap
 		}
 		inline bool operator()(const bam1_pp a, const bam1_pp b) const {
 			return cmpBam(*a, *b) < 0;
@@ -582,9 +662,10 @@ public:
 	};
 
 	static long writePartialSortedBamVector(const MPI_Comm &comm,
-			MPI_File &ourFile, BamVector &reads, IntVector &sortedCounts,
+			MPI_File &ourFile, BamVector &reads, LongVector &sortedCounts,
 			bam_header_t *header = NULL) {
 		LOG_VERBOSE_OPTIONAL(1, true, "writePartialSortedBamVector(): with numReads: " << reads.size());
+		LOG_DEBUG_OPTIONAL(3, true, "sortedCounts: " << Log::toString(sortedCounts.begin(), sortedCounts.end()));
 		int rank, size;
 		MPI_Comm_rank(comm, &rank);
 		MPI_Comm_size(comm, &size);
@@ -607,7 +688,7 @@ public:
 				}
 				totalCount += sortedCounts[i];
 			}
-			assert(totalCount == (int) (reads.size() - 1));
+			assert(totalCount == (long) (reads.size() - 1));
 
 			SortByPosition sbp;
 			std::make_heap(heap.begin(), heap.end(), sbp);
@@ -618,12 +699,14 @@ public:
 				LOG_DEBUG_OPTIONAL(1, true, "Writing header");
 				bgzfo << *header;
 			}
+			long count = 0;
 			while (!heap.empty()) {
+				count++;
 				bam1_p_pair bppair = heap.front();
 				bam1_pp bampp = bppair.second;
 				bam1_t *bam = bppair.first;
 				assert(bam != NULL);
-				LOG_DEBUG_OPTIONAL(3, true, bam1_qname(bam));;
+				LOG_DEBUG_OPTIONAL(3, true, "Writing: " << count << " " << bam1_qname(bam) << " " << bam->core.tid << "," << bam->core.pos);;
 				bgzfo << *bam;
 				bam_destroy1(bam);
 				std::pop_heap(heap.begin(), heap.end(), sbp);
@@ -639,7 +722,7 @@ public:
 		}
 		long count = 0;
 		{
-			long long int myLength = myBams.tellp();
+			int64_t myLength = myBams.tellp();
 
 			MemoryBuffer::istream is(myBams);
 			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
@@ -679,7 +762,7 @@ public:
 
 		long count = 0;
 		{
-			long long int myLength = myBams.tellp();
+			int64_t myLength = myBams.tellp();
 
 			MemoryBuffer::istream is(myBams);
 			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
@@ -710,7 +793,7 @@ public:
 
 		long count = 0;
 		{
-			long long int myLength = mygz.tellp();
+			int64_t myLength = mygz.tellp();
 
 			MemoryBuffer::istream is(mygz);
 			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
@@ -719,7 +802,7 @@ public:
 	}
 
 	static long writePartialSortedBamVector(const MPI_Comm &comm,
-			std::string ourFileName, BamVector &reads, IntVector &sortedCounts,
+			std::string ourFileName, BamVector &reads, LongVector &sortedCounts,
 			bam_header_t *header = NULL) {
 		return writePartialSortedBamVector(comm, ScopedMPIFile(comm,
 				ourFileName), reads, sortedCounts, header);
@@ -738,9 +821,10 @@ public:
 
 	class TransferStats {
 	public:
-		IntVector recvRemaining, globalRemaining, sent, remainingToSend,
-				received;
-		int myTotalRemainingToSend;
+		LongVector recvRemaining, globalRemaining, sent, remainingToSend,
+				received, globalSent;
+		long myTotalRemainingToSend, myTotalSent;
+		const static int offsetBytes = sizeof(long) * 4;
 		TransferStats(int size) {
 			clear(size);
 		}
@@ -748,67 +832,82 @@ public:
 			received.resize(size, 0);
 			recvRemaining.resize(size, 0);
 			globalRemaining.resize(size, 0);
+			globalSent.resize(size, 0);
 			sent.resize(size, 0);
 			remainingToSend.resize(size, 0);
 			myTotalRemainingToSend = 0;
+			myTotalSent = 0;
 		}
-		void setMySending(int rank, int _sent, int _remainingToSend) {
+		void setMySending(int rank, long _sent, long _remainingToSend) {
 			assert(_remainingToSend >= 0);
 			assert(_sent >= 0);
 			myTotalRemainingToSend += _remainingToSend;
 			remainingToSend[rank] = _remainingToSend;
 			sent[rank] = _sent;
+			myTotalSent += _sent;
 		}
 		void *setSendingBuffer(void *_ptr, int rank) {
-			int *ptr = (int*) _ptr;
-			*(ptr++) = myTotalRemainingToSend;
-			*(ptr++) = remainingToSend[rank];
-			*(ptr++) = sent[rank];
-			return ptr;
-		}
-		void setRemainingFromRank(int rank, int _received, int _recvRemaining,
-				int _totalRemaining) {
-			received[rank] = _received;
-			recvRemaining[rank] = _recvRemaining;
-			globalRemaining[rank] = _totalRemaining;
-		}
-		void *setRemainingFromRank(void *_ptr, int rank) {
-			int *ptr = (int*) _ptr;
-			globalRemaining[rank] = *(ptr++);
-			recvRemaining[rank] = *(ptr++);
-			received[rank] = *(ptr++);
-			return ptr;
-		}
-		int getMyTotalRemainingToSend() const {
-			return myTotalRemainingToSend;
-		}
-		int getMyRemainingToSendToRank(int rank) const {
-			return remainingToSend[rank];
-		}
-		int getMySendingToRank(int rank) const {
-			return sent[rank];
-		}
-		int getRemainingFromRank(int rank) const {
-			return recvRemaining[rank];
-		}
-		int getReceivedFromRank(int rank) const {
-			return received[rank];
-		}
-		void *setSendingBuffer(int *ptr, int rank) {
+			long *ptr = (long*) _ptr;
 			*(ptr++) = getMyTotalRemainingToSend();
 			*(ptr++) = getMyRemainingToSendToRank(rank);
 			*(ptr++) = getMySendingToRank(rank);
+			*(ptr++) = myTotalSent;
 			return ptr;
+		}
+
+		void setRemainingFromRank(int rank, long _received, long _recvRemaining,
+				long _totalRemaining, long _myTotalSent) {
+			received[rank] = _received;
+			recvRemaining[rank] = _recvRemaining;
+			globalRemaining[rank] = _totalRemaining;
+			globalSent[rank] = _myTotalSent;
+		}
+		void *setRemainingFromRank(void *_ptr, int rank) {
+			long *ptr = (long*) _ptr;
+			globalRemaining[rank] = *(ptr++);
+			recvRemaining[rank] = *(ptr++);
+			received[rank] = *(ptr++);
+			globalSent[rank] = *(ptr++);
+			return ptr;
+		}
+		long getMyTotalRemainingToSend() const {
+			return myTotalRemainingToSend;
+		}
+		long getMyTotalSent() const {
+			return myTotalSent;
+		}
+		long getMyRemainingToSendToRank(int rank) const {
+			return remainingToSend[rank];
+		}
+		long getMySendingToRank(int rank) const {
+			return sent[rank];
+		}
+		long getRemainingFromRank(int rank) const {
+			return recvRemaining[rank];
+		}
+		long getReceivedFromRank(int rank) const {
+			return received[rank];
 		}
 		long getGlobalRemaining() const {
 			long count = 0;
-			for (IntVector::const_iterator it = globalRemaining.begin(); it
+			for (LongVector::const_iterator it = globalRemaining.begin(); it
 					!= globalRemaining.end(); it++)
 				count += *it;
 			return count;
 		}
+		long getGlobalSent() const {
+			long count = 0;
+			for (LongVector::const_iterator it = globalSent.begin(); it
+					!= globalSent.end(); it++)
+				count += *it;
+			return count;
+
+		}
 		bool isDone() const {
 			return getGlobalRemaining() == 0;
+		}
+		bool emptyExchange() const {
+			return getGlobalSent() == 0;
 		}
 	};
 
@@ -833,17 +932,17 @@ public:
 		// _recvCounts will have the final number of reads from each rank after TransferStats.isDone()
 		// bams within sendReads will be destroyed and replaced with NULL entries
 		TransferStats exchangeReads(BamVector & sendReads,
-				IntVector & sendOffsets, const IntVector & _sendCounts,
-				BamVector & recvReads, IntVector & recvOffsets,
-				IntVector & _recvCounts, bool copyDataIfUnmapped = true) {
+				LongVector & sendOffsets, const LongVector & _sendCounts,
+				BamVector & recvReads, LongVector & recvOffsets,
+				LongVector & _recvCounts, bool copyDataIfUnmapped = true) {
 			TransferStats stats(size);
 			recycleReads.reserve(READS_PER_BATCH);
-			int maxReadsPerRank = (READS_PER_BATCH + size - 1) / size;
+			long maxReadsPerRank = (READS_PER_BATCH + size - 1) / size;
 			IntVector sendBytes(size, 0), sendByteDispl(size, 0), recvBytes(
 					size, 0), recvByteDispl(size, 0);
-			IntVector sendCounts = _sendCounts, recvCounts = _recvCounts;
-			IntVector sendCountDispl(size, 0), recvCountDispl(size, 0);
-			int totalToReceive = 0;
+			LongVector sendCounts = _sendCounts, recvCounts = _recvCounts;
+			LongVector sendCountDispl(size, 0), recvCountDispl(size, 0);
+			long totalToReceive = 0;
 			if (_recvCounts.empty()) {
 				calculateReceiveCounts(_recvCounts, _sendCounts);
 				recvCounts = _recvCounts;
@@ -851,7 +950,7 @@ public:
 			for (int i = 0; i < (int) (_recvCounts.size()); i++)
 				totalToReceive += _recvCounts[i];
 
-			if ((int) recvReads.size() < totalToReceive)
+			if ((long) recvReads.size() < totalToReceive)
 				recvReads.resize(totalToReceive, NULL);
 			if (Log::isDebug(3)) {
 				std::ostringstream ss;
@@ -871,9 +970,9 @@ public:
 			assert((int) recvOffsets.size() == size);
 			int sendReadsIdx, recvReadsIdx;
 			long totalSendBytes = 0, totalRecvBytes = 0;
-			int offsetBytes = sizeof(int) * 3;
-			int totalSendCounts = 0, totalRecvCounts = 0;
-			int totalRemainingToSend = 0, totalRemainingToRecv = 0;
+			int offsetBytes = TransferStats::offsetBytes;
+			long totalSendCounts = 0, totalRecvCounts = 0;
+			long totalRemainingToSend = 0, totalRemainingToRecv = 0;
 			for (int i = 0; i < size; i++) {
 				sendCounts[i] = _sendCounts[i] - sendOffsets[i];
 				totalRemainingToSend += sendCounts[i];
@@ -924,8 +1023,7 @@ public:
 				std::string s = ss.str();
 				LOG_DEBUG(3, "exchangeReads(): exchange blocks " << s);
 			}
-			IntVector sendCounts2(size, 0);
-			IntVector recvCounts2(size, 0);
+			IntVector sendCounts2(size, 0), recvCounts2(size, 0);
 			// buffer concats 3 ints (totalRemaining, remainingToRank, sentToRank) then the bam1_t structures for each rank
 			buf1 = (char*) (realloc(buf1, totalSendBytes));
 			buf2 = (char*) (realloc(buf2, totalRecvBytes));
@@ -971,8 +1069,7 @@ public:
 				LOG_THROW("MPI_Alltoallv() failed: ");
 			for (int i = 0; i < size; i++) {
 				if (i == rank) {
-					stats.setRemainingFromRank(i, sendCounts[i], 0,
-							stats.getMyTotalRemainingToSend());
+					stats.setRemainingFromRank(i, sendCounts[i], 0,	stats.getMyTotalRemainingToSend(), stats.getMyTotalSent());
 				} else {
 					stats.setRemainingFromRank(buf2 + recvByteDispl[i], i);
 				}
@@ -1083,22 +1180,21 @@ public:
 				recvOffsets[i] += recvCounts[i];
 			}
 
-			LOG_DEBUG_OPTIONAL(2, rank == 0, "exchangeReads() Finished.  Remaining: " << stats.getGlobalRemaining());
+			LOG_DEBUG_OPTIONAL(2, rank == 0, "exchangeReads() Finished.  Remaining: " << stats.getGlobalRemaining() << " Global Sent: " << stats.getGlobalSent());
 			return stats;
 		}
 		BamVector &getRecycleReads() {
 			return recycleReads;
 		}
 	protected:
-		void calculateReceiveCounts(IntVector & _recvCounts,
-				const IntVector & _sendCounts) {
+		void calculateReceiveCounts(LongVector & _recvCounts,
+				const LongVector & _sendCounts) {
 			// Determine the total recvCounts automatically
 			LOG_DEBUG_OPTIONAL(3, true, "MPIReadExchanger::calculateReceiveCounts(): receiveCounts unknown, exchanging sendCounts");
 			_recvCounts.resize(size, 0);
-			int *_s = packVector(_sendCounts);
-			int *_r = (int*) (calloc(size, sizeof(int)));
-			if (MPI_SUCCESS != MPI_Alltoall(_s, 1, MPI_INT, _r, 1, MPI_INT,
-					myComm))
+			int64_t *_s = packVector(_sendCounts);
+			int64_t *_r = (int64_t*) (calloc(size, sizeof(int64_t)));
+			if (MPI_SUCCESS != MPI_Alltoall(_s, 1, MPI_LONG_LONG_INT, _r, 1, MPI_LONG_LONG_INT,	myComm))
 				LOG_THROW("MPI_Alltoall() failed: ");
 			free(_s);
 			_recvCounts = unpackVector(_r, size);
@@ -1123,8 +1219,8 @@ public:
 				BamVector &_reads) :
 			inputFile(_inputFile), myGlobalHeaderOffset(0), myReads(_reads),
 					readExchanger(_comm) {
-			myComm = mpi::communicator(_comm, mpi::comm_duplicate), fh
-					= BamStreamUtils::openSamOrBam(inputFile);
+			myComm = mpi::communicator(_comm, mpi::comm_duplicate);
+			fh = BamStreamUtils::openSamOrBam(inputFile);
 			setHeaderCounts();
 			pickBestAlignments();
 		}
@@ -1408,7 +1504,7 @@ public:
 			assert(batchSize <= (int) batchReads.size());
 
 			BamVector pickedReads;
-			IntVector sendCounts(size, 0), sendOffsets(size, 0), recvCounts,
+			LongVector sendCounts(size, 0), sendOffsets(size, 0), recvCounts,
 					recvOffsets(size, 0);
 			int blockSize = (batchSize + size - 1) / size;
 			if ((blockSize & 0x1) == 1)
@@ -1521,7 +1617,7 @@ public:
 				granularity = (ourSize - 1) * 11;
 
 			// find first unmapped read
-			long myUnmapped, myTotal = sortedReads.size();
+			int64_t myUnmapped, myTotal = sortedReads.size();
 			if (sortedReads.empty()) {
 				myUnmapped = 0;
 			} else {
@@ -1531,16 +1627,15 @@ public:
 				myUnmapped = sortedReads.end() - it;
 			}
 
-			long *ourDataSizes =
-					(long*) calloc(ourSize * 2, sizeof(myUnmapped));
+			int64_t *ourDataSizes =
+					(int64_t*) calloc(ourSize * 2, sizeof(myUnmapped));
 
 			ourDataSizes[myRank * 2] = myTotal;
 			ourDataSizes[myRank * 2 + 1] = myUnmapped;
 			long myMapped = myTotal - myUnmapped;
 			LOG_DEBUG_OPTIONAL(2, true, "myTotal: " << ourDataSizes[myRank*2] << " myunmapped: " << ourDataSizes[myRank*2+1] << " myMapped: " << myMapped);
 
-			if (MPI_SUCCESS != MPI_Allgather(MPI_IN_PLACE, 0, MPI_LONG,
-					ourDataSizes, 2, MPI_LONG, mpicomm))
+			if (MPI_SUCCESS != MPI_Allgather(MPI_IN_PLACE, 0, MPI_LONG_LONG_INT, ourDataSizes, 2, MPI_LONG_LONG_INT, mpicomm))
 				LOG_THROW("MPI_Allgather() failed");
 
 			long ourTotalSize = 0, ourTotalUnmapped = 0;
@@ -1649,16 +1744,17 @@ public:
 			_sortGlobal();
 
 			// sortLocal
+			checkNulls("Before sortLocal()", myReads);
 			sortLocal(myReads);
 		}
 		void sortGlobal(std::string outputFileName, bam_header_t *header) {
-			IntVector sortedCounts = _sortGlobal();
+			LongVector sortedCounts = _sortGlobal();
 			writePartialSortedBamVector(myComm, outputFileName, myReads,
 					sortedCounts, header);
 		}
 
 	protected:
-		IntVector _sortGlobal() {
+		LongVector _sortGlobal() {
 			LOG_DEBUG_OPTIONAL(1, true, "sortGlobal(): " << myReads.size());
 			int myRank, ourSize;
 			MPI_Comm_rank(myComm, &myRank);
@@ -1667,7 +1763,7 @@ public:
 			sortLocal(myReads);
 
 			if (ourSize == 1) {
-				IntVector sortedCounts;
+				LongVector sortedCounts;
 				sortedCounts.push_back(myReads.size());
 				return sortedCounts;
 			}
@@ -1676,8 +1772,8 @@ public:
 					myComm);
 
 			// calculate full read counts
-			IntVector sendCounts(ourSize, 0);
-			int totalSendCounts = 0;
+			LongVector sendCounts(ourSize, 0);
+			long totalSendCounts = 0;
 
 			bam1_t *b = bam_init1();
 			BamVector::iterator start = myReads.begin(), it;
@@ -1700,7 +1796,7 @@ public:
 								start = it;
 							}
 							int remainingRanks = ourSize - i;
-							int remainingReads = (myReads.end() - start
+							long remainingReads = (myReads.end() - start
 									+ remainingRanks - 1) / remainingRanks;
 							sendCounts[i] += remainingReads;
 							it = start + remainingReads;
@@ -1714,6 +1810,7 @@ public:
 			}
 			bam_destroy1(b);
 
+			checkNulls("before exchange: ", myReads);
 			assert(totalSendCounts == (int) myReads.size());
 
 			if (Log::isDebug(2)) {
@@ -1735,7 +1832,7 @@ public:
 				LOG_DEBUG_OPTIONAL(2, true, s);
 			}
 			// exchange reads (in batches)
-			IntVector sendOffsets(ourSize, 0), recvOffsets(ourSize, 0),
+			LongVector sendOffsets(ourSize, 0), recvOffsets(ourSize, 0),
 					recvCounts;
 			BamVector globalReads;
 			while (!readExchanger.exchangeReads(myReads, sendOffsets,
@@ -1743,7 +1840,8 @@ public:
 				;
 			std::swap(myReads, globalReads);
 			destroyBamVector(globalReads);
-			LOG_DEBUG_OPTIONAL(1, true, "sortGlobal() finished: " << myReads.size());
+			LOG_DEBUG_OPTIONAL(1, true, "_sortGlobal() finished: " << myReads.size());
+			checkNulls("after _sortGlobal: ", myReads);
 			return recvCounts;
 		}
 
@@ -1757,7 +1855,9 @@ public:
 	// in-place sorts a BamVector
 	static void sortLocal(BamVector &reads) {
 		LOG_DEBUG_OPTIONAL(1, true, "sortLocal(): " << reads.size());
+		checkNulls("Before sortLocal:", reads);
 		std::sort(reads.begin(), reads.end(), SortByPosition());
+		checkNulls("After sortLocal:", reads);
 		LOG_DEBUG_OPTIONAL(2, true, "sortLocal(): finished");
 	}
 
@@ -2075,6 +2175,23 @@ public:
 		BamVector recycledReads;
 		resetBamVector(reads, size, recycledReads);
 	}
+	static void truncateNulls(BamVector &reads, int offset = 0) {
+		assert(offset <= (int) reads.size());
+		BamVector::iterator startNull = reads.end();
+		for(BamVector::iterator it = reads.begin() + offset; it != reads.end(); it++) {
+			if (startNull != reads.end() && *it != NULL) {
+				LOG_DEBUG_OPTIONAL(2, true, "truncateNulls() removing (middle): " << startNull - reads.begin() << " to " << it - reads.begin());
+				it = reads.erase(startNull, it);
+				startNull = reads.end();
+			}
+			if (startNull == reads.end() && *it == NULL)
+				startNull = it;
+		}
+		if (startNull != reads.end()) {
+			LOG_DEBUG_OPTIONAL(2, true, "truncateNulls() removing (last): " << startNull - reads.begin() << " to " << reads.end() - reads.begin());
+			reads.erase(startNull, reads.end());
+		}
+	}
 	static void resetBamVector(BamVector &reads, int size,
 			BamVector &recycledReads) {
 		reads.reserve(size + 1); // add extra for option to add extra NULL at end for heapsort
@@ -2097,6 +2214,152 @@ public:
 		reads.clear();
 	}
 
+	static void checkNulls(std::string mesg, const BamVector &reads) {
+		std::stringstream ss;
+		for (BamVector::const_iterator it = reads.begin(); it != reads.end(); it++)
+			if (*it == NULL)
+				ss << (it - reads.begin()) << ", ";
+		std::string s = ss.str();
+		if (s.length() > 0) {
+			LOG_DEBUG_OPTIONAL(2, true, "checkNulls() " << mesg << reads.size() << " : " << s);
+		}
+	}
+
 };
+
+class DistributeReads {
+public:
+	typedef SamUtils::IntVector IntVector;
+	typedef SamUtils::LongVector LongVector;
+	static DistributeReads &getInstance(const MPI_Comm &comm, BamVector &_myReads) {
+		boost::shared_ptr< DistributeReads > &_ = _getInstance();
+		if (_.get() == NULL) {
+			_.reset(new DistributeReads( comm, _myReads ));
+		}
+		return *_;
+	}
+	static void clearInstance() {
+		_getInstance().reset();
+	}
+
+	bool exchange() {
+		updateState();
+		int size = worldState.size();
+		long target = (nowTotal + size - 1) / size;
+		LongVector sendOffsets(size, 0), sendCounts(size,0 ), recvOffsets(size, 0), recvCounts(size, 0);
+		LongVector deltas(size, 0);
+		long totSend = 0, totRecv = 0, keepOffset = 0;
+		int factor = 1;
+		for(int i = 0; i < size; i++) {
+			if (worldState[i] * factor > target + size) {
+				deltas[i] = worldState[i] - target;
+				totSend += deltas[i];
+			} else if (worldState[i] / factor < target - size) {
+				deltas[i] = worldState[i] - target;
+				totRecv += deltas[i];
+			}
+		}
+		int64_t myDelta = deltas[myRank];
+
+		LOG_DEBUG_OPTIONAL(2, true, "DistributeReads::exchange(): " << worldState[myRank] << " myDelta=" << myDelta);
+		int mySent= 0;
+		if (myDelta > 0) {
+			for(int i = 0; i < size; i++) {
+				if (i == myRank)
+					continue;
+				if (deltas[i] < 0) {
+					// sending
+					int delta = (std::min(0-deltas[i], myDelta) * myDelta + totSend - 1) / totSend;
+					assert(delta >= 0);
+					sendCounts[i] += delta;
+					mySent += delta;
+					LOG_DEBUG_OPTIONAL(2, true, "DistributeReads::exchange(): Sending to rank: " << i << " " << delta);
+				}
+			}
+			assert(mySent <= myDelta + size);
+
+		} else if (myDelta < 0) {
+			for(int i = 0; i < size; i++) {
+				if (i == myRank)
+					continue;
+				if (deltas[i] > 0) {
+					// receiving from deltas[i]
+					int delta = (std::min(0-myDelta, deltas[i]) * deltas[i] + totSend - 1) / totSend;
+					assert(delta >= 0);
+					recvCounts[i] += delta;
+					LOG_DEBUG_OPTIONAL(2, true, "DistributeReads::exchange(): Receiving from rank: " << i << " " << delta);
+				}
+			}
+		}
+		assert(mySent <= (int) myReads.size());
+		sendOffsets[0] = keepOffset = myReads.size() - mySent;
+		sendCounts[0] += keepOffset;
+		SamUtils::checkNulls("before distribute exchange:", myReads);
+		BamVector tmp;
+		SamUtils::TransferStats stats = exchanger.exchangeReads(myReads, sendOffsets, sendCounts, tmp, recvOffsets, recvCounts, true);
+		if (true) {
+			// exchangeReads not done to completion can leave nulls in the BamVector
+			SamUtils::truncateNulls(myReads, keepOffset);
+			SamUtils::truncateNulls(tmp, 0);
+		}
+		myReads.reserve(myReads.size() + tmp.size());
+		myReads.insert(myReads.begin() + keepOffset, tmp.begin(), tmp.end());
+		tmp.clear();
+		SamUtils::checkNulls("after distribute exchange:", myReads);
+
+		LOG_DEBUG_OPTIONAL(2, true, "DistributeReads() now at " << myReads.size());
+		return stats.isDone() && stats.emptyExchange();
+	}
+private:
+	static boost::shared_ptr< DistributeReads > &_getInstance() {
+		static boost::shared_ptr< DistributeReads > _;
+		return _;
+	}
+	SamUtils::MPIReadExchanger exchanger;
+	SamUtils::LongVector worldState;
+	BamVector &myReads;
+	mpi::communicator myComm;
+	int myRank;
+	long lastTotal, nowTotal;
+
+
+	DistributeReads(const MPI_Comm &comm, BamVector &_myReads) : exchanger(comm), worldState(), myReads(_myReads) {
+		myComm = mpi::communicator(comm, mpi::comm_duplicate);
+		int rank, size;
+		MPI_Comm_rank(myComm, &rank);
+		MPI_Comm_size(myComm, &size);
+		myRank = rank;
+		worldState.resize(size, 0);
+		updateState();
+	}
+
+	void updateState() {
+		lastTotal = 0;
+		for(int i = 0; i < (int) worldState.size(); i++)
+			lastTotal += worldState[i];
+
+		worldState[myRank] = myReads.size();
+		MPI_Allgather(MPI_IN_PLACE, 0, MPI_LONG_LONG_INT, &worldState[0], 1, MPI_LONG_LONG_INT, myComm);
+
+		nowTotal = 0;
+		for(int i = 0; i < (int) worldState.size(); i++)
+			nowTotal += worldState[i];
+
+	}
+};
+
+bool BamStreamUtils::distributeReads(const MPI_Comm &comm, BamVector &reads) {
+	DistributeReads &dr = DistributeReads::getInstance(comm, reads);
+	return dr.exchange();
+}
+
+void BamStreamUtils::distributeReadsFinal(const MPI_Comm &comm, BamVector &reads) {
+
+	while (! distributeReads(comm, reads) ) {}
+
+	DistributeReads::clearInstance();
+}
+
+
 
 #endif /* SAMUTILS_H_ */
