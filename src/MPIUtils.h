@@ -142,20 +142,20 @@ public:
 
 	}
 
-	static long concatenateOutput(const MPI_Comm &comm, MPI_File &ourFile, long long int myLength, std::istream &data) {
+	static long concatenateOutput(const MPI_Comm &comm, MPI_File &ourFile, int64_t myLength, std::istream &data) {
 		LOG_VERBOSE_OPTIONAL(1, true, "concatenateOutput(): writing: " << myLength);
 		int rank,size;
 		MPI_Comm_rank(comm, &rank);
 		MPI_Comm_size(comm, &size);
 
 		// exchange sizes
-		long long int *ourSizes = (long long int*) calloc(size, sizeof(myLength));
+		int64_t *ourSizes = (int64_t*) calloc(size, sizeof(myLength));
 		ourSizes[rank] = myLength;
 
 		if (MPI_SUCCESS != MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, ourSizes, 1, MPI_LONG_LONG_INT, comm))
 			LOG_THROW("MPI_Allgather() failed");
 
-		long long int totalSize = 0, myOffset = 0, myEnd = 0;;
+		MPI_Offset totalSize = 0, myOffset = 0, myEnd = 0;;
 
 		if (rank == 0) {
 			if (MPI_SUCCESS != MPI_File_get_size(ourFile, &totalSize))
