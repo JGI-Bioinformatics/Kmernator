@@ -341,6 +341,14 @@ public:
 		setErrorMessage(msg);
 		return _log(getErrorOstream(), msg, bypassMPI);
 	}
+	template<typename T>
+	static std::string toString(T begin, T end) {
+		std::stringstream ss;
+		ss << (end-begin) << ": ";
+		for(T it = begin; it != end; it++)
+			ss << *it << ", ";
+		return ss.str();
+	}
 };
 
 class LoggedException : public std::exception {
