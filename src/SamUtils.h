@@ -101,7 +101,7 @@ static void swap_endian_data(const bam1_core_t *c, int data_len, uint8_t *data) 
 std::ostream &operator<<(std::ostream& os, const bam1_core_t &core);
 class BamStreamUtils {
 public:
-	static const int READS_PER_BATCH = 1024; //32768;
+	static const int READS_PER_BATCH = 32768;
 	typedef std::vector<bam1_t *> BamVector;
 	typedef std::vector<bam1_core_t> BamCoreVector;
 	typedef boost::shared_ptr< bam_header_t > BamHeaderPtr;
@@ -268,8 +268,8 @@ public:
 				distributeReads(comm, reads);
 			}
 		}
-		LOG_DEBUG_OPTIONAL(2, true, "Finished my partition.  read: " << count << " reads.  Storing: " << reads.size());
 		distributeReads(comm, reads);
+		LOG_DEBUG_OPTIONAL(1, true, "Finished my partition.  read: " << count << " reads.  Storing: " << reads.size());
 	}
 
 	static BamHeaderPtr readBamFile(std::string filename, BamVector &reads) {
@@ -2242,14 +2242,14 @@ public:
 		_getInstance().reset();
 	}
 
-	bool exchange() {
-		updateState();
+	bool exchange(bool isFinal = false) {
+		isFinal &= updateState(isFinal);
 		int size = worldState.size();
 		long target = (nowTotal + size - 1) / size;
 		LongVector sendOffsets(size, 0), sendCounts(size,0 ), recvOffsets(size, 0), recvCounts(size, 0);
 		LongVector deltas(size, 0);
 		long totSend = 0, totRecv = 0, keepOffset = 0;
-		int factor = 1;
+		double factor = 0.98;
 		for(int i = 0; i < size; i++) {
 			if (worldState[i] * factor > target + size) {
 				deltas[i] = worldState[i] - target;
@@ -2261,36 +2261,37 @@ public:
 		}
 		int64_t myDelta = deltas[myRank];
 
-		LOG_DEBUG_OPTIONAL(2, true, "DistributeReads::exchange(): " << worldState[myRank] << " myDelta=" << myDelta);
-		int mySent= 0;
-		if (myDelta > 0) {
-			for(int i = 0; i < size; i++) {
-				if (i == myRank)
-					continue;
-				if (deltas[i] < 0) {
-					// sending
-					int delta = (std::min(0-deltas[i], myDelta) * myDelta + totSend - 1) / totSend;
-					assert(delta >= 0);
-					sendCounts[i] += delta;
-					mySent += delta;
-					LOG_DEBUG_OPTIONAL(2, true, "DistributeReads::exchange(): Sending to rank: " << i << " " << delta);
-				}
-			}
-			assert(mySent <= myDelta + size);
+		LOG_DEBUG(2, "DistributeReads::exchange(): " << worldState[myRank] << " myDelta=" << myDelta);
 
-		} else if (myDelta < 0) {
-			for(int i = 0; i < size; i++) {
-				if (i == myRank)
-					continue;
-				if (deltas[i] > 0) {
-					// receiving from deltas[i]
-					int delta = (std::min(0-myDelta, deltas[i]) * deltas[i] + totSend - 1) / totSend;
-					assert(delta >= 0);
-					recvCounts[i] += delta;
-					LOG_DEBUG_OPTIONAL(2, true, "DistributeReads::exchange(): Receiving from rank: " << i << " " << delta);
+		if (totRecv == 0 && totSend == 0)
+			return isFinal;
+
+		// calculate who sends reads, how many and to where
+		int mySent= 0;
+		int firstSource = 0;
+		long maxPerRank = SamUtils::READS_PER_BATCH / size;
+		for(int sink = 0; sink < size; sink++) {
+			if (deltas[sink] < 0) {
+				while (firstSource < size && deltas[firstSource] <= 0) firstSource++;
+				for(int source = firstSource; source < size ; source++) {
+					if (deltas[source] > 0) {
+						long delta = std::min(maxPerRank, 0-deltas[sink]);
+						delta = std::min(delta, deltas[source]);
+						if (sink == myRank) {
+							recvCounts[source] = delta;
+						}
+						if (source == myRank) {
+							mySent += delta;
+							sendCounts[sink] = delta;
+							assert(mySent <= myDelta + size);
+						}
+						deltas[sink] += delta;
+						deltas[source] -= delta;
+					}
 				}
 			}
 		}
+
 		assert(mySent <= (int) myReads.size());
 		sendOffsets[0] = keepOffset = myReads.size() - mySent;
 		sendCounts[0] += keepOffset;
@@ -2308,7 +2309,7 @@ public:
 		SamUtils::checkNulls("after distribute exchange:", myReads);
 
 		LOG_DEBUG_OPTIONAL(2, true, "DistributeReads() now at " << myReads.size());
-		return stats.isDone() && stats.emptyExchange();
+		return isFinal && stats.isDone() && stats.emptyExchange();
 	}
 private:
 	static boost::shared_ptr< DistributeReads > &_getInstance() {
@@ -2333,18 +2334,35 @@ private:
 		updateState();
 	}
 
-	void updateState() {
+	bool updateState(bool isFinal = false) {
+		bool areAllFinal = isFinal;
 		lastTotal = 0;
 		for(int i = 0; i < (int) worldState.size(); i++)
 			lastTotal += worldState[i];
 
-		worldState[myRank] = myReads.size();
+		// send negative count to signify this rank is in final stage
+		// add 1 to make all possible values > 0
+		worldState[myRank] = myReads.size() + 1;
+		if (isFinal) {
+			worldState[myRank] = 0 - worldState[myRank];
+		}
+		assert(worldState[myRank] != 0);
 		MPI_Allgather(MPI_IN_PLACE, 0, MPI_LONG_LONG_INT, &worldState[0], 1, MPI_LONG_LONG_INT, myComm);
 
 		nowTotal = 0;
-		for(int i = 0; i < (int) worldState.size(); i++)
+		for(int i = 0; i < (int) worldState.size(); i++) {
+			// check for allAreFinal
+			// correct worldState to be the size of world reads.
+			if (worldState[i] > 0) {
+				areAllFinal = false;
+				worldState[i] -= 1;
+			} else {
+				worldState[i] = 0 - worldState[i] - 1;
+			}
 			nowTotal += worldState[i];
+		}
 
+		return areAllFinal;
 	}
 };
 
@@ -2355,8 +2373,12 @@ bool BamStreamUtils::distributeReads(const MPI_Comm &comm, BamVector &reads) {
 
 void BamStreamUtils::distributeReadsFinal(const MPI_Comm &comm, BamVector &reads) {
 
-	while (! distributeReads(comm, reads) ) {}
-
+	{
+		DistributeReads &dr = DistributeReads::getInstance(comm, reads);
+		while ( !dr.exchange(true) ) {
+			LOG_DEBUG_OPTIONAL(2, true, "distributeReadsFinal()");
+		}
+	}
 	DistributeReads::clearInstance();
 }
 
