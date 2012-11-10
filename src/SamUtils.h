@@ -229,6 +229,8 @@ public:
 		// TODO test for BAM, then SAM.gz, then SAM
 		samfile_t *in = samopen(fileName.c_str(), "rb", 0);
 		if (in == NULL || in->header == NULL) {
+			if (in != NULL)
+				samclose(in);
 			//printf("Checking if %s is a SAM formatted file\n", fileName);
 			in = samopen(fileName.c_str(), "r", 0);
 			if (in == NULL || in->header == NULL) {
