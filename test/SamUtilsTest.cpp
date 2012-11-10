@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 			keep.push_back(reads[i]);
 			reads[i] = NULL;
 		}
-		SamUtils::destroyBamVector(reads);
+		BamManager::destroyBamVector(reads);
 		reads.swap(keep);
 	}
 	LOG_VERBOSE(1, "reads.size(): " << reads.size());
@@ -86,7 +86,7 @@ int main(int argc, char **argv)
 	}
 	SamUtils::writeBamVector(MPI_COMM_WORLD, argv[3], reads, header.get(), false);
 
-	SamUtils::destroyBamVector(reads);
+	BamManager::destroyBamVector(reads);
 	if (fh != NULL)
 		samclose(fh);
 
