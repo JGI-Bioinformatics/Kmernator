@@ -98,13 +98,44 @@ static void swap_endian_data(const bam1_core_t *c, int data_len, uint8_t *data) 
 
 }
 
+class BamHeaderPtr {
+public:
+	typedef bam_header_t T;
+	typedef boost::shared_ptr< T > SP;
+	typedef T* P;
+
+	class BamHeaderDeleter {
+	public:
+		void operator()(P p) {
+			bam_header_destroy(p);
+		}
+	};
+
+	BamHeaderPtr() {}
+	BamHeaderPtr(P &h) {
+		reset(h);
+	}
+	~BamHeaderPtr() {}
+	void reset() {
+		ptr.reset();
+	}
+	void reset(P &h) {
+		ptr.reset(h, BamHeaderDeleter());
+		h=NULL; // I now own it
+	}
+	P get() {
+		return ptr.get();
+	}
+private:
+	SP ptr;
+};
+
 std::ostream &operator<<(std::ostream& os, const bam1_core_t &core);
 class BamStreamUtils {
 public:
 	static const int READS_PER_BATCH = 32768;
 	typedef std::vector<bam1_t *> BamVector;
 	typedef std::vector<bam1_core_t> BamCoreVector;
-	typedef boost::shared_ptr< bam_header_t > BamHeaderPtr;
 
 	static std::ostream &writeBamHeaderPart1(std::ostream &os,
 			bam_header_t *header) {
@@ -276,7 +307,6 @@ public:
 		 samfile_t *fp = openSamOrBam(filename);
 		 readBamFile(fp, reads);
 		 BamHeaderPtr header(fp->header);
-		 fp->header = NULL;
 		 closeSamOrBam(fp);
 		 return header;
 	}
@@ -303,16 +333,15 @@ public:
 			int64_t ourBoundaries[size];
 			samfile_t *fp = openSamOrBam(filename);
 			if (fp->type == 2) {
-				// This is a SAM, so only one can write...
+				// This is a SAM, so only one can read...
 				if (rank == i % size) {
 					fps[i] = fp;
 					myEnds[i] = -1;
 				} else {
 					header.reset(fp->header);
-					fp->header = NULL;
 					closeSamOrBam(fp);
 				}
-				continue;
+				continue; // one rank will read later
 			}
 			if (rank == 0) {
 				if ((fp->type&1)== 1) {
@@ -350,7 +379,6 @@ public:
 			LOG_DEBUG_OPTIONAL(2, true, "readBamFile(" << filename << "): Starting at: " << myStart << " ending at " << myEnd);
 			if (myStart == -1) {
 				header.reset(fp->header);
-				fp->header = NULL;
 				closeSamOrBam(fp);
 			} else {
 				fps[i] = fp;
@@ -363,7 +391,6 @@ public:
 				LOG_VERBOSE_OPTIONAL(1, true, "Reading " << filenames[i]);
 				readBamFile(comm, fp, reads, myEnds[i]);
 				header.reset(fp->header);
-				fp->header = NULL;
 				closeSamOrBam(fp);
 			}
 		}
@@ -419,11 +446,14 @@ public:
 		if (c->tid < -1 || c->mtid < -1) return false;
 		if (header && (c->tid >= header->n_targets || c->mtid >= header->n_targets)) return false;
 		if (c->pos < -1 || c->mpos < -1) return false;
-		if (header && (c->pos >= (int) header->target_len[c->tid] || c->mpos >= (int) header->target_len[c->mtid])) return false;
+		if (header && c->tid >= 0 && c->pos >= 0)
+			if (c->pos >= (int) header->target_len[c->tid]) return false;
+		if (header && c->mtid >= 0 && c->mpos >= 0)
+			if (c->mpos >= (int) header->target_len[c->mtid]) return false;
 
 		if (data_len < c->l_qname + c->l_qseq + (c->l_qseq+1) / 2 + c->n_cigar * 4) return false;
 		if ((c->flag & 0xf800) != 0) return false;
-		if (header && (abs(c->isize) > header->target_len[c->tid])) return false;
+		if (header && c->tid >= 0 && (abs(c->isize) > header->target_len[c->tid])) return false;
 		int maxAuxSize = 18 * 8 + // sizeof i fields
 			20 * (4 + c->l_qseq) + // sizeof Z, B, S fields (assume sequence length)
 			3 * 26 * (4 + c->l_qseq); // sizeof all reserved fields (assume sequence length)
@@ -513,7 +543,8 @@ public:
 			int64_t bamPointer;
 			int64_t bgzfOffset;
 			int maxBufSize = bgzf_detail::DEFAULT_BLOCK_SIZE + BAM_CORE_SIZE + 4;
-			boost::shared_ptr<char> uncompBlock(new char[bgzf_detail::DEFAULT_BLOCK_SIZE]), bamBuf(new char[maxBufSize]);
+			boost::shared_ptr<char> uncompBlock(new char[bgzf_detail::DEFAULT_BLOCK_SIZE]);
+			boost::shared_ptr<char> bamBuf(new char[maxBufSize]);
 			uint16_t compressedBlockLength;
 			uint32_t uncompressedBlockLength;
 			bgzfOffset = bgzf_detail::getNextBlockFileOffset(fp->x.bam->file, geFileOffset, compressedBlockLength, uncompBlock.get(), uncompressedBlockLength);

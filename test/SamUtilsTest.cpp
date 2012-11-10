@@ -53,7 +53,7 @@ int main(int argc, char **argv)
 	samfile_t *fh = NULL;
 	// BamStreamUtils::openSamOrBam(f)
 	BamVector reads;
-	BamStreamUtils::BamHeaderPtr header = BamStreamUtils::readBamFile(world, argv[1], reads);
+	BamHeaderPtr header = BamStreamUtils::readBamFile(world, argv[1], reads);
 	if (0) {
 		fh = BamStreamUtils::openSamOrBam(argv[1]);
 

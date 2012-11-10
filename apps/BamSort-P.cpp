@@ -88,10 +88,7 @@ int main(int argc, char **argv)
 	std::string outputBam = BamSortOptions::getOptions().getOutputBam();
 	OptionsBaseInterface::FileListType inputBams = BamSortOptions::getOptions().getInputBams();
 
-	BamStreamUtils::BamHeaderPtr header;
-
-	samfile_t *fh = NULL;
-    header = BamStreamUtils::readBamFile(world, inputBams, reads);
+	BamHeaderPtr header = BamStreamUtils::readBamFile(world, inputBams, reads);
 
 	bool needsCollapse = false;
 	if (!BamSortOptions::getOptions().getUnmappedReadPairs().empty()) {
@@ -123,8 +120,7 @@ int main(int argc, char **argv)
 		SamUtils::MPISortBam sortem(world, reads, outputBam, header.get());
 	}
 
-	if (fh != NULL)
-		BamStreamUtils::closeSamOrBam(fh);
+	header.reset();
 
 	LOG_VERBOSE(1, "Finished");
 
