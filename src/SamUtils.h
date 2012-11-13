@@ -38,6 +38,7 @@
 #include "bam.h"
 
 #include <iostream>
+#include <fstream>
 #include <stdint.h>
 #include <string>
 #include <algorithm>
@@ -342,22 +343,32 @@ public:
 	}
 
 	static samfile_t *openSamOrBam(std::string fileName) {
-		// TODO test for BAM, then SAM.gz, then SAM
-		samfile_t *in = samopen(fileName.c_str(), "rb", 0);
-		if (in == NULL || in->header == NULL) {
-			if (in != NULL)
-				samclose(in);
-			//printf("Checking if %s is a SAM formatted file\n", fileName);
-			in = samopen(fileName.c_str(), "r", 0);
-			if (in == NULL || in->header == NULL) {
-				LOG_THROW("openSamOrBam(): Could not open: " << fileName);
-				exit(1);
-			} else {
-				LOG_VERBOSE_OPTIONAL(1, true, "Opened Sam file: " << fileName);
-			}
-		} else {
-			LOG_VERBOSE_OPTIONAL(1, true, "Opened Bam file: " << fileName);
+
+		bool isBam = false;
+		{
+			std::ifstream f(fileName.c_str());
+			char buf[18];
+			if (!f.read(buf, 18).fail() && bgzf_detail::check_header((bgzf_detail::bgzf_byte_t*) buf))
+				isBam = true;
 		}
+
+		samfile_t *in = NULL;
+
+		if (isBam) {
+			in = samopen(fileName.c_str(), "rb", 0);
+		} else {
+			in = samopen(fileName.c_str(), "r", 0);
+		}
+		if (in == NULL || in->header == NULL) {
+			if (in != NULL) {
+				samclose(in);
+				LOG_THROW("Could not open the " << (isBam?"bam":"sam") << ": " << fileName);
+			} else {
+				LOG_THROW("Could not read the header from " << (isBam?"bam":"sam") << ": " << fileName);
+				exit(1);
+			}
+		}
+		LOG_VERBOSE_OPTIONAL(1, true, "Opened " << (isBam?"bam":"sam") << ": " << fileName);
 		return in;
 	}
 	static void closeSamOrBam(samfile_t *fh) {
@@ -404,7 +415,7 @@ public:
 	static bool distributeReads(const MPI_Comm &comm, BamVector &reads);
 	static void distributeReadsFinal(const MPI_Comm &comm, BamVector &reads);
 
-	static void readBamFile(const MPI_Comm &comm, samfile_t *ins, BamVector &reads, int64_t lastOffset) {
+	static void readBamFile(const MPI_Comm &comm, samfile_t *ins, BamVector &reads, int64_t lastOffset, bool needsBalance = true) {
 		int rank, size;
 		MPI_Comm_rank(comm, &rank);
 		MPI_Comm_size(comm, &size);
@@ -414,10 +425,12 @@ public:
 				break;
 			if (++count % READS_PER_BATCH == 0) {
 				LOG_DEBUG_OPTIONAL(2, true, "read: " << count << " reads so far.  Storing: " << reads.size());
-				distributeReads(comm, reads);
+				if (needsBalance)
+					distributeReads(comm, reads);
 			}
 		}
-		distributeReads(comm, reads);
+		if (needsBalance)
+			distributeReads(comm, reads);
 		LOG_DEBUG_OPTIONAL(1, true, "Finished my partition.  read: " << count << " reads.  Storing: " << reads.size());
 	}
 
@@ -441,17 +454,26 @@ public:
 		BamHeaderPtr header;
 		std::vector<long> myEnds(filenames.size(), -1);
 		std::vector<samfile_t*> fps(filenames.size(), NULL);
+		bool needsBalance = false;
+		long totalFileSize = 0;
+		int countSamFiles = 0;
 
 		for(int i = 0; i < (int) filenames.size(); i++) {
 			std::string filename = filenames[i];
 			long fileSize = 0;
 			if (rank == 0) {
 				fileSize = FileUtils::getFileSize(filename);
+				totalFileSize += fileSize;
 			}
 			int64_t ourBoundaries[size];
 			samfile_t *fp = openSamOrBam(filename);
 			if (fp->type == 2) {
-				// This is a SAM, so only one can read...
+				// This is a SAM
+				// balance while reading if this file is  significantly different from the running total
+				if (rank == 0 && (fileSize * 0.95 > (totalFileSize / (i+1.0)) || fileSize / 0.95 < (totalFileSize / (i+1.0))))
+					needsBalance = true;
+
+				// only only one rank can read a SAM...
 				if (rank == i % size) {
 					fps[i] = fp;
 					myEnds[i] = -1;
@@ -459,6 +481,7 @@ public:
 					header.reset(fp->header);
 					closeSamOrBam(fp);
 				}
+				countSamFiles++;
 				continue; // one rank will read later
 			}
 			if (rank == 0) {
@@ -503,16 +526,29 @@ public:
 				myEnds[i] = myEnd;
 			}
 		}
+
+		// determine whether balance is needed while reading
+		if (countSamFiles > 0 && countSamFiles % size != 0)
+			needsBalance = true;
+		char x = needsBalance ? 1 : 0;
+		MPI_Bcast(&x, 1, MPI_BYTE, 0, comm);
+		needsBalance = x == 1 ? true : false;
+		LOG_DEBUG_OPTIONAL(1, needsBalance && rank == 0, "Balancing reads while reading the files");
+
 		for(int i = 0; i < (int) filenames.size(); i++) {
 			samfile_t *fp = fps[i];
 			if (fp != NULL) {
 				LOG_VERBOSE_OPTIONAL(1, true, "Reading " << filenames[i]);
-				readBamFile(comm, fp, reads, myEnds[i]);
+				readBamFile(comm, fp, reads, myEnds[i], needsBalance);
 				header.reset(fp->header);
 				closeSamOrBam(fp);
 			}
 		}
+
+		// whether or not balance was needed during the reading
+		// re-balance now to improve sorting partition estimates
 		distributeReadsFinal(comm, reads);
+
 		return header;
 	}
 
@@ -2327,12 +2363,13 @@ public:
 		LongVector sendOffsets(size, 0), sendCounts(size,0 ), recvOffsets(size, 0), recvCounts(size, 0);
 		LongVector deltas(size, 0);
 		long totSend = 0, totRecv = 0, keepOffset = 0;
-		double factor = 0.98;
+		long maxPerRank = SamUtils::READS_PER_BATCH / size;
+		long slop = isFinal ? size : maxPerRank / 2;
 		for(int i = 0; i < size; i++) {
-			if (worldState[i] * factor > target + size) {
+			if (worldState[i] > target + slop) {
 				deltas[i] = worldState[i] - target;
 				totSend += deltas[i];
-			} else if (worldState[i] / factor < target - size) {
+			} else if (worldState[i] < target - slop) {
 				deltas[i] = worldState[i] - target;
 				totRecv += deltas[i];
 			}
@@ -2347,7 +2384,6 @@ public:
 		// calculate who sends reads, how many and to where
 		int mySent= 0;
 		int firstSource = 0;
-		long maxPerRank = SamUtils::READS_PER_BATCH / size;
 		for(int sink = 0; sink < size; sink++) {
 			if (deltas[sink] < 0) {
 				while (firstSource < size && deltas[firstSource] <= 0) firstSource++;
