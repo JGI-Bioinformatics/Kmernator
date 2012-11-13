@@ -38,6 +38,7 @@
 #include <cstring>
 #include <vector>
 
+#include <unistd.h>
 
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
@@ -228,23 +229,24 @@ public:
 
 			ret = _parseOptions( getVarMap() );
 
-			if (hasOptionsErrorMsg())
-				LOG_THROW(getOptionsErrorMsg());
-			if (!Log::getErrorMessages().empty())
-				LOG_THROW("");
-			if (!ret)
-				LOG_THROW("one or more options are invalid");
+			if (hasOptionsErrorMsg() || !Log::getErrorMessages().empty() || !ret) {
+				LOG_THROW("one or more options are invalid: " << getOptionsErrorMsg());
+			}
 
 		} catch (std::exception &e) {
-			std::cerr << getDesc() << std::endl << std::endl;
-			std::cerr << "Please fix the command line arguments:" << std::endl << std::endl << e.what();
-			std::cerr << std::endl << std::endl;
-			exit(1);
+			if (Logger::isMaster()) {
+				std::cerr << getDesc() << std::endl << std::endl;
+				std::cerr << "Please fix the command line arguments:" << std::endl << std::endl << e.what();
+				std::cerr << std::endl << std::endl;
+			}
+			throw e;
 		} catch (...) {
-			std::cerr << getDesc() << std::endl << std::endl;
-			std::cerr << "Please fix the command line arguments: something is wrong... " << std::endl << std::endl;
-			std::cerr << std::endl << std::endl;
-			exit(1);
+			if (Logger::isMaster()) {
+				std::cerr << getDesc() << std::endl << std::endl;
+				std::cerr << "Please fix the command line arguments: something is wrong... " << std::endl << std::endl;
+				std::cerr << std::endl << std::endl;
+			}
+			throw;
 		}
 
 	}
@@ -442,6 +444,9 @@ public:
 			validateOMPThreads();
 
 			setOpt2("input-file", getInputFiles());
+			for(FileListType::iterator it = getInputFiles().begin(); it != getInputFiles().end(); it++)
+				if (access(it->c_str(), R_OK) != 0)
+					setOptionsErrorMsg("input file: " + *it + " can not be read");
 
 			setOpt("output-file", getOutputFile(), print);
 

@@ -269,7 +269,12 @@ protected:
 			validateMPIWorld(*comm);
 
 		} catch (...) {
-			std::cerr << "Could not initializeWorldAndOptions!" << std::endl;
+
+			if (Logger::isMaster()) {
+				std::cerr << "Could not initializeWorldAndOptions!" << std::endl;
+				MPI_Abort(MPI_COMM_WORLD, 1);
+			}
+			comm->barrier();
 			MPI_Finalize();
 			exit(1);
 		}
