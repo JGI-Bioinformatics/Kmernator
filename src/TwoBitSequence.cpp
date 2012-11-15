@@ -122,6 +122,8 @@ TwoBitSequence::TwoBitSequence() {
 	TwoBitSequence::initReverseComplementTable();
 	TwoBitSequence::initPermutationsTable();
 	TwoBitSequence::initGCTable();
+	TwoBitSequence::initShiftLeftMatrix();
+	TwoBitSequence::initUncompressSequenceLookuptTable();
 }
 
 /* initialize reverse complement table
@@ -236,8 +238,30 @@ BaseLocationVectorType TwoBitSequence::compressSequence(const char *bases,
 	return otherBases;
 }
 
-void TwoBitSequence::uncompressSequence(const TwoBitEncoding *in,
-		int num_bases, char *bases) {
+char TwoBitSequence::uncompressSequenceLookupTable[256][4];
+void TwoBitSequence::initUncompressSequenceLookupTable() {
+	char btable[4] = { 'A', 'C', 'G', 'T' };
+	for(char twoBitEnc = 0; i < 255; i++) {
+		char *bases = uncompressSequenceLookupTable[twoBitEnc];
+		int num_bases = 4;
+	        while (num_bases) {
+			for (int i = 6; i >= 0 && num_bases; i -= 2) {
+				char base = btable[(twoBitEnc >> i) & 3];
+				*bases++ = base;
+				num_bases--;
+	                }
+		}
+	}
+}
+void TwoBitSequence::uncompressSequence(const TwoBitEncoding *in, int num_bases, char *bases) {
+	int j = 0;
+	char *seq;
+	for(int i = 0; i < num_bases; i+=4) {
+		seq = uncompressSequenceLookupTable[*in++];
+		memcpy(bases+i, seq, 4);
+	}
+	*(bases+num_bases) = '\0';	
+	if (false) {
 	static char btable[4] = { 'A', 'C', 'G', 'T' };
 	while (num_bases) {
 		for (int i = 6; i >= 0 && num_bases; i -= 2) {
@@ -248,21 +272,18 @@ void TwoBitSequence::uncompressSequence(const TwoBitEncoding *in,
 		in++;
 	}
 	*bases = '\0';
+	}
 }
 
 void TwoBitSequence::uncompressSequence(const TwoBitEncoding *in , int num_bases, std::string &bases) {
-	if (num_bases < 1024) {
-		char tmp[num_bases];
-		uncompressSequence(in, num_bases, tmp);
-		bases = std::string(tmp,num_bases);
-	} else {
-		char *tmp = (char*) malloc(num_bases);
-		if (tmp == NULL) throw std::bad_alloc();
-		uncompressSequence(in, num_bases, tmp);
-		bases = std::string(tmp,num_bases);
-		free(tmp);
-	}
+	STACK_ALLOC(char, tmp, num_bases + 4);
+
+	uncompressSequence(in, num_bases, tmp);
+	bases = std::string(tmp,num_bases);
+
+	STACK_DEALLOC(tmp);
 }
+
 
 void TwoBitSequence::applyMarkup(std::string &bases,
 		const BaseLocationVectorType &markupBases) {
@@ -331,7 +352,7 @@ SequenceLengthType TwoBitSequence::firstMarkupNorX(const BaseLocationVectorType 
 std::string TwoBitSequence::getFasta(const TwoBitEncoding *in,
 		SequenceLengthType offset, SequenceLengthType length) {
 
-	STACK_ALLOC(char, buffer, offset+length+1);
+	STACK_ALLOC(char, buffer, offset+length+4);
 
 	uncompressSequence(in, offset+length, buffer);
 
@@ -346,11 +367,12 @@ void TwoBitSequence::reverseComplement(const TwoBitEncoding *in,
 		TwoBitEncoding *out, SequenceLengthType length) {
 	SequenceLengthType twoBitLength = fastaLengthToTwoBitLength(length);
 
-	out += twoBitLength;
+	const TwoBitEncoding *tmpIn = in + twoBitLength;
+
 	unsigned long bitShift = length & 0x03;
 
-	for (SequenceLengthType i = 0; i < twoBitLength; i++)
-		*(--out) = reverseComplementTable[*in++];
+	while (tmpIn != in)
+		*(out++) = reverseComplementTable[*(--in)];
 
 	if (bitShift > 0) {
 		shiftLeft(out, out, twoBitLength, 4 - bitShift);
@@ -367,6 +389,9 @@ std::string TwoBitSequence::getReverseComplementFasta(const TwoBitEncoding *in, 
 void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut,
 		SequenceLengthType twoBitLength, unsigned char shiftAmountInBases,
 		bool hasExtraByte) {
+	assert(shiftAmountInBases <= 3);
+	assert(twoBitLength > 0);
+
 	TwoBitEncoding *in = (TwoBitEncoding*) twoBitIn;
 	TwoBitEncoding *out = (TwoBitEncoding*) twoBitOut;
 
@@ -375,11 +400,7 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut,
 		return;
 	}
 
-	if (shiftAmountInBases > 3) {
-		throw ;
-	}
-
-	in+= twoBitLength;
+	in += twoBitLength;
 	out += twoBitLength;
 
 	unsigned short buffer;
@@ -389,6 +410,7 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut,
 		buffer = *(--in);
 	}
 
+	if (false) {
 	const int shift = (8-shiftAmountInBases*2);
 	for (SequenceLengthType i = 0; i < twoBitLength; i++) {
 		TwoBitEncoding byte = ((buffer >> 8) | (buffer << 8)) >> shift;
@@ -396,7 +418,27 @@ void TwoBitSequence::shiftLeft(const void *twoBitIn, void *twoBitOut,
 			buffer = *((unsigned short *)--in);
 		*--out = byte;
 	}
+	} else {
+		TwoBitEncoding *shiftLookup = shiftLeftMatrix[shiftAmountInBases-1];
+		while (true) {
+			*--out = *(shiftLookup + buffer);
+			if (in == twoBitIn)
+				break;
+			buffer = *((unsigned short *)--in);
+		}
+	}
 
+}
+
+TwoBitEncoding TwoBitSequence::shiftLeftMatrix[3][65536];
+void TwoBitSequence::initShiftLeftMatrix() {
+	for (int shiftAmountInBases = 1; shiftAmountInBases <= 3; shiftAmountInBases++) {
+		const int shift = (8-shiftAmountInBases*2);
+		for (unsigned short buffer = 0 ; buffer < 65536; buffer++) {
+			TwoBitEncoding byte = ((buffer >> 8) | (buffer << 8)) >> shift;
+			shiftLeftMatrix[shiftAmountInBases-1][buffer] = byte;
+		}
+	}
 }
 
 void TwoBitSequence::extendBase(std::string _fasta, char base, void *twoBitOut, bool toRight) {

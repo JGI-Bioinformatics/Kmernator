@@ -116,12 +116,16 @@ private:
 	static void initReverseComplementTable();
 	static void initPermutationsTable();
 	static void initGCTable();
+	static void initShiftLeftMatrix();
+	static void initUncompressSequenceLookupTable();
 
 public:
 	static TwoBitEncoding bitMasks[8];
 	static TwoBitEncoding reverseComplementTable[256];
 	static TwoBitEncoding permutations[256 * 12];
 	static SequenceLengthType  gcCount[256];
+	static TwoBitEncoding shiftLeftMatrix[3][65536];
+	static char uncompressSequenceLookupTable[256][4];
 
 public:
 	static char uncompressBase(unsigned int v);

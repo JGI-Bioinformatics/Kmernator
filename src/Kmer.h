@@ -361,7 +361,6 @@ public:
 		ElementType(IndexType idx,
 				const KmerArray &array) :
 					_array(&array), _idx(idx) {
-			setLock();
 		}
 		ElementType(const ElementType &copy) :
 			_array(NULL), _idx(MAX_INDEX)  {
@@ -374,24 +373,14 @@ public:
 			reset();
 			_idx = copy._idx;
 			_array = copy._array;
-			setLock();
 			return *this;
 		}
 		void reset() {
-			unsetLock();
 			_idx = MAX_INDEX;
 			_array = NULL;
 		}
 		inline bool isValid() const {
 			return _array != NULL && _idx != MAX_INDEX;
-		}
-		void setLock() {
-			if (isValid())
-				_array->setSharedLock();
-		}
-		void unsetLock() {
-			if (isValid())
-				_array->unsetSharedLock();
 		}
 
 		const Kmer &key() const {
@@ -445,125 +434,6 @@ private:
 		return _capacity == MAX_INDEX;
 	}
 
-#ifdef _USE_THREADSAFE_KMER
-
-	typedef std::vector< omp_nest_lock_t > LockVector;
-	mutable omp_nest_lock_t _lock;
-	mutable LockVector _sharedLocks;
-
-private:
-
-	// thread locking routines
-	void initLock() const {omp_init_nest_lock(&_lock); initSharedLocks();}
-	void destroyLock() const {omp_destroy_nest_lock(&_lock); destroySharedLocks();}
-	void initSharedLocks() const {
-		_sharedLocks.clear();
-		_sharedLocks.resize( omp_get_num_procs() );
-		for(size_t i=0; i < _sharedLocks.size(); i++)
-			omp_init_nest_lock( &(_sharedLocks[i]) );
-	}
-	void destroySharedLocks() const {
-		for(size_t i=0; i < _sharedLocks.size(); i++)
-			omp_destroy_nest_lock( &(_sharedLocks[i]) );
-		_sharedLocks.clear();
-	}
-
-	inline void setLock() const {omp_set_nest_lock(&_lock);}
-	inline bool testLock() const {return omp_test_nest_lock(&_lock);}
-	inline void unsetLock() const {omp_unset_nest_lock(&_lock);}
-
-public:
-	// TODO make a true shared lock without a severe performance penalty
-
-	void setSharedLock() const {
-		if (_sharedLocks.empty())
-			return;
-		unsigned int myThread = omp_get_thread_num();
-		bool gotShared = false;
-		while (!gotShared) {
-
-			bool gotExclusive = false;
-			if (testLock()) {
-				gotShared = omp_test_nest_lock( &( _sharedLocks[myThread] ) );
-				unsetLock();
-				gotExclusive = true;
-			}
-			if (! gotShared ) {
-
-				usleep(1);
-
-			}
-		}
-
-	}
-
-	inline void unsetSharedLock() const {
-		if (_sharedLocks.empty())
-			return;
-		unsigned int myThread = omp_get_thread_num();
-		omp_unset_nest_lock( &( _sharedLocks[ myThread ] ) );
-	}
-
-	inline void setExclusiveLock() const {
-		if (_sharedLocks.empty())
-			return;
-		bool gotExclusive = false;
-		while(!gotExclusive) {
-
-			gotExclusive = true;
-			if (testLock()) {
-				size_t i = 0;
-				for(; i < _sharedLocks.size(); i++) {
-					if (! omp_test_nest_lock( &( _sharedLocks[i] ) )) {
-						gotExclusive = false;
-						break;
-					}
-				}
-				if (! gotExclusive) {
-					// unset acquired locks
-					unsetLock();
-					for(size_t j = 0; j<i; j++)
-						omp_unset_nest_lock( &( _sharedLocks[j] ) );
-					usleep(1);
-				}
-			} else {
-				gotExclusive = false;
-			}
-
-		}
-	}
-	inline void unsetExclusiveLock() const {
-		if (_sharedLocks.empty())
-			return;
-
-		unsetLock();
-		// unset acquired shared locks
-		for(size_t j = 0; j < _sharedLocks.size(); j++)
-			omp_unset_nest_lock( &( _sharedLocks[j] ) );
-
-	}
-
-#else // _USE_THREADSAFE_KMER
-private:
-	void initLock() const {
-	}
-	void destroyLock() const {
-	}
-	void initSharedLocks() const {
-	}
-	void destroySharedLocks() const {
-	}
-public:
-	inline void setSharedLock() const {
-	}
-	inline void unsetSharedLock() const {
-	}
-	inline void setExclusiveLock() const {
-	}
-	inline void unsetExclusiveLock() const {
-	}
-
-#endif //  _USE_THREADSAFE_KMER
 private:
 	static inline const void *_add(const void *ptr, IndexType i) {
 		return ((char *) ptr + i * KmerSizer::getByteSize());
@@ -582,17 +452,14 @@ private:
 
 public:
 	void setReadOnlyOptimization() const {
-		destroyLock();
 	}
 	void unsetReadOnlyOptimization() {
-		initLock();
 	}
 
 public:
 
 	KmerArray(IndexType size = 0) :
 		_begin(NULL), _size(0), _capacity(0) {
-		initLock();
 		resize(size);
 	}
 
@@ -602,7 +469,6 @@ private:
 public:
 	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false, bool *bools = NULL) :
 		_begin(NULL), _size(0), _capacity(0) {
-		initLock();
 		SequenceLengthType kmerSize = KmerSizer::getSequenceLength();
 		assert(kmerSize > 0);
 		if (kmerSize <= length) {
@@ -618,7 +484,6 @@ public:
 
 	KmerArray(const KmerArray &copy) :
 		_begin(NULL), _size(0), _capacity(0) {
-		initLock();
 		*this = copy;
 	}
 
@@ -633,7 +498,6 @@ public:
 
 	~KmerArray() {
 		reset();
-		destroyLock();
 	}
 
 	KmerArray &operator=(const KmerArray &other) {
@@ -647,10 +511,8 @@ public:
 			return *this;
 		}
 
-		setExclusiveLock();
 		resize(other.size());
 		if (size() == 0) {
-			unsetExclusiveLock();
 			return *this;
 		}
 		if (_begin == NULL)
@@ -659,13 +521,11 @@ public:
 
 		_copyRange(other._begin, other.getValueStart(), 0, 0, _size, false);
 
-		unsetExclusiveLock();
 		return *this;
 	}
 
 	// restore a new array from a mmap, allocating new memory
 	KmerArray(const void *src) : _begin(NULL), _size(0), _capacity(0) {
-		initLock();
 		IndexType *size = (IndexType *) src;
 		resize(*size);
 		void *ptr = ++size;
@@ -793,7 +653,6 @@ public:
 			return;
 		}
 
-		setExclusiveLock();
 
 		if (_begin != NULL && releaseMemory) {
 			// destruct old Values
@@ -807,7 +666,6 @@ public:
 		}
 		_size = 0;
 
-		unsetExclusiveLock();
 	}
 
 	inline IndexType size() const {
@@ -842,7 +700,6 @@ public:
 			return;
 		IndexType oldSize = _size;
 
-		setExclusiveLock();
 		// alloc / realloc memory
 		_setMemory(size, idx, reserveExtra);
 
@@ -851,14 +708,13 @@ public:
 					"RuntimeError: KmerArray::resize(): Could not allocate memory in KmerArray resize()");
 		}
 
-		if (size > oldSize && idx == MAX_INDEX) {
+		if (false && size > oldSize && idx == MAX_INDEX) {
 			// zero fill remainder
 			void *start = _add(_begin, oldSize);
 			memset(start, 0, KmerSizer::getByteSize() * (size - oldSize));
 
 			// Values should already have been constructed
 		}
-		unsetExclusiveLock();
 	}
 
 	void _copyRange(const void * srcKmer, const ValueType *srcValue,
@@ -905,6 +761,11 @@ public:
 
 	void _setMemory(IndexType size, IndexType idx, bool reserveExtra = true) {
 		assert(!isMmaped()); // mmaped can not be modified!
+
+		if (reserveExtra && idx == MAX_IDX && size <= _capacity) {
+			_size = size;
+			return;
+		}
 
 		// preserve old pointers and metrics
 		void *oldBegin = _begin;
@@ -1017,13 +878,9 @@ public:
 	void build(const TwoBitEncoding *twoBit, SequenceLengthType length,
 			bool leastComplement = false, bool *bools = NULL) {
 		assert(!isMmaped()); // mmaped can not be modified!
-		setExclusiveLock();
-		SequenceLengthType numKmers = length - KmerSizer::getSequenceLength()
-		+ 1;
-		if (_size != numKmers)
-			LOG_THROW(
-					"Invalid: attempt to build an incorrectly sized KmerArray in KmerArray build()");
-		;
+		SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
+		if (numKmers != _size)
+			resize(numKmers, MAX_IDX, _capacity > 0);
 
 		KmerArray &kmers = *this;
 		long numBytes = (numKmers + 3) / 4;
@@ -1066,7 +923,6 @@ public:
 			}
 
 		}
-		unsetExclusiveLock();
 	}
 
 	static SequenceLengthType _numPermutations(SequenceLengthType len, short editDistance) {
@@ -1183,9 +1039,7 @@ protected:
 	}
 public:
 	IndexType find(const Kmer &target) const {
-		setSharedLock();
 		IndexType idx = _find(target);
-		unsetSharedLock();
 		return idx;
 	}
 	IndexType find(const Kmer &target, bool &targetIsFound) const {
@@ -1225,9 +1079,7 @@ protected:
 
 public:
 	IndexType findSorted(const Kmer &target, bool &targetIsFound) const {
-		setSharedLock();
 		IndexType idx = _findSorted(target, targetIsFound);
-		unsetSharedLock();
 		return idx;
 	}
 
@@ -1246,28 +1098,20 @@ protected:
 
 public:
 	void insertAt(IndexType idx, const Kmer &target) {
-		setExclusiveLock();
 		_insertAt(idx, target);
-		unsetExclusiveLock();
 	}
 	void insertAt(IndexType idx, const Kmer &target, const Value &value) {
-		setExclusiveLock();
 		_insertAt(idx,target,value);
-		unsetExclusiveLock();
 	}
 
 	IndexType append(const Kmer &target) {
-		setExclusiveLock();
 		IndexType idx = size();
 		_insertAt(idx, target);
-		unsetExclusiveLock();
 		return idx;
 	}
 	IndexType append(const Kmer &target, const Value &value) {
-		setExclusiveLock();
 		IndexType idx = size();
 		_insertAt(idx, target, value);
-		unsetExclusiveLock();
 		return idx;
 	}
 
@@ -1287,31 +1131,23 @@ protected:
 
 public:
 	IndexType insertSorted(const Kmer &target) {
-		setExclusiveLock();
 		IndexType idx = _insertSorted(target);
-		unsetExclusiveLock();
 		return idx;
 	}
 	IndexType insertSorted(const Kmer &target, const Value &value) {
-		setExclusiveLock();
 		IndexType idx = _insertSorted(target,value);
-		unsetExclusiveLock();
 		return idx;
 	}
 
 	void remove(const Kmer &target) {
-		setExclusiveLock();
 		bool isFound;
 		IndexType idx = find(target, isFound);
 		if (isFound)
 			remove(idx);
-		unsetExclusiveLock();
 	}
 	void remove(IndexType idx) {
 		assert(!isMmaped()); // mmaped can not be modified!
-		setExclusiveLock();
 		resize(size()-1,idx);
-		unsetExclusiveLock();
 	}
 
 	class CompareArrayIdx {
@@ -1356,14 +1192,12 @@ public:
 		if (idx1 >= size() || idx2 >= size())
 			LOG_THROW("Invalid: attempt to access index greater than size in KmerArray swap()");
 
-		setExclusiveLock();
 		get(idx1).swap(get(idx2));
 		if (sizeof(ValueType) > 0) {
 			ValueType tmp = valueAt(idx1);
 			valueAt(idx1) = valueAt(idx2);
 			valueAt(idx2) = tmp;
 		}
-		unsetExclusiveLock();
 	}
 	void swap(KmerArray &other) {
 		std::swap(_begin, other._begin);
@@ -1374,7 +1208,6 @@ public:
 	// purge all element where the value is less than minimumCount
 	// assumes that ValueType can be cast into long
 	IndexType purgeMinCount(long minimumCount) {
-		setExclusiveLock();
 		// scan values that pass, keep list and count
 		IndexType maxSize = size();
 		IndexType passing[maxSize];
@@ -1403,12 +1236,10 @@ public:
 			swap(tmp);
 		}
 
-		unsetExclusiveLock();
 		return affected;
 	}
 
 	std::string toString() const {
-		setSharedLock();
 		std::stringstream ss;
 		ss << "{";
 		IndexType idx=0;
@@ -1418,7 +1249,6 @@ public:
 		if (idx < size())
 			ss << " ... " << size() - idx << " more ";
 		ss << "}";
-		unsetSharedLock();
 		return ss.str();
 	}
 
@@ -1761,10 +1591,8 @@ public:
 	}
 
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
-		bucket.setExclusiveLock();
 		IndexType idx = isSorted() ? bucket.insertSorted(key,value) : bucket.append(key,value);
 		ElementType element = bucket.getElement(idx);
-		bucket.unsetExclusiveLock();
 		return element;
 	}
 	ElementType insert(const KeyType &key, const ValueType &value) {
@@ -1773,11 +1601,9 @@ public:
 
 	bool remove(const KeyType &key, BucketType &bucket) {
 		bool isFound;
-		bucket.setExclusiveLock();
 		IndexType idx = isSorted() ? bucket.findSorted(key, isFound) : bucket.find(key, isFound);
 		if (isFound && idx != BucketType::MAX_INDEX)
 			bucket.remove(idx);
-		bucket.unsetExclusiveLock();
 		return isFound;
 	}
 	bool remove(const KeyType &key) {
@@ -1807,32 +1633,26 @@ public:
 	const bool getValueIfExists(const KeyType &key, ValueType &value, const BucketType &bucket) const {
 		bool isFound;
 		IndexType existingIndex;
-		bucket.setSharedLock();
 		existingIndex = isSorted() ? bucket.findSorted(key, isFound) : bucket.find(key, isFound);
 		if (isFound)
 			value = bucket.valueAt(existingIndex);
-		bucket.unsetSharedLock();
 		return isFound;
 	}
 
 	const ElementType getElementIfExists(const KeyType &key, const BucketType &bucket) const {
 		IndexType existingIdx;
 		ElementType element;
-		bucket.setSharedLock();
 		if (_exists(key, existingIdx, bucket)) {
 			element = bucket.getElement(existingIdx);
 		}
-		bucket.unsetSharedLock();
 		return element;
 	}
 	ElementType getElementIfExists(const KeyType &key, BucketType &bucket) {
 		IndexType existingIdx;
 		ElementType element;
-		bucket.setSharedLock();
 		if (_exists(key, existingIdx, bucket)) {
 			element = bucket.getElement(existingIdx);
 		}
-		bucket.unsetSharedLock();
 		return element;
 	}
 
@@ -1846,13 +1666,11 @@ public:
 	ElementType getOrSetElement(const KeyType &key, BucketType &bucket, ValueType value) {
 		IndexType existingIdx;
 		ElementType element;
-		bucket.setExclusiveLock();
 		if (_exists(key, existingIdx, bucket)) {
 			element = bucket.getElement(existingIdx);
 		} else {
 			element = insert(key, value, bucket);
 		}
-		bucket.unsetExclusiveLock();
 		return element;
 	}
 	ElementType getOrSetElement(const KeyType &key, ValueType value) {

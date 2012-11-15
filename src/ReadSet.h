@@ -146,7 +146,7 @@ private:
 		return false;
 	}
 	inline void _setFastqStart(const Read &read) {
-		if (read.hasQuals() && Read::FASTQ_START_CHAR != Kmernator::FASTQ_START_CHAR_STD && omp_get_thread_num() == 0) {
+		if (getSize() < 20000 && read.hasQuals() && Read::FASTQ_START_CHAR != Kmernator::FASTQ_START_CHAR_STD && omp_get_thread_num() == 0) {
 			std::string quals = read.getQuals();
 			std::string::iterator it = std::min_element(quals.begin(), quals.end());
 			if (it != quals.end() && *it < Read::FASTQ_START_CHAR) {

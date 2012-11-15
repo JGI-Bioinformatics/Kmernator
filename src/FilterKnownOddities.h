@@ -222,9 +222,10 @@ public:
 		KmerSizer::set(length);
 
 		LOG_DEBUG(2, "Preparing exact match artifacts");
+		KmerReadUtils kru;
 		for (unsigned int i = 0; i < sequences.getSize(); i++) {
 			const Read read = sequences.getRead(i);
-			KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true);
+			KmerWeightedExtensions &kmers = kru.buildWeightedKmers(read, true);
 			for (Kmer::IndexType j = 0; j < kmers.size(); j++) {
 				filter.getOrSetElement( kmers[j] , i );
 			}

@@ -316,6 +316,7 @@ public:
 				loopThreadId--; loopNumThreads--;
 			}
 			if (isRunningInLoop) {
+				KmerReadUtils kru;
 				for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
 				{
 
@@ -325,7 +326,7 @@ public:
 						continue;
 
 					DataPointers pointers(*this);
-					KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
+					KmerWeightedExtensions &kmers = kru.buildWeightedKmers(read, true, true);
 					ReadSetSizeType globalReadIdx = readIdx + globalReadSetOffset;
 					LOG_DEBUG(3, "_buildKmerSpectrumMPI(): Read " << readIdx << " (" << globalReadIdx << ") " << kmers.size() );
 
