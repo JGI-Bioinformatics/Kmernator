@@ -72,7 +72,7 @@ endif()
 #
 # zlib
 #
-FindZLIB()
+find_package( ZLIB REQUIRED )
 if ( ZLIB_FOUND )
   include_directories(${ZLIB_INCLUDE_DIR})
   link_directories(${ZLIB_LIBRARIES})

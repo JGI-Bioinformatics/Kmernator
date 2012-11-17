@@ -101,7 +101,9 @@ const int OMP_MAX_THREADS_DEFAULT = omp_get_max_threads();
 #endif
 
 #ifndef DEBUG
+#ifndef NDEBUG
 #define NDEBUG
+#endif
 #endif
 #include <cassert>
 
