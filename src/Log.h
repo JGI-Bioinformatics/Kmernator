@@ -223,6 +223,18 @@ public:
 	inline OstreamPtr getOstreamPtr() {
 		return &( (std::ostream&) *this);
 	}
+	class ScopedLevel {
+	public:
+		int _oldLevel;
+		Logger &_log;
+		ScopedLevel(Logger &log, int newLevel) : _log(log) {
+			_oldLevel = log.getLevel();
+			_log.setLevel(newLevel);
+		}
+		~ScopedLevel() {
+			_log.setLevel(_oldLevel);
+		}
+	};
 };
 
 class Log
@@ -281,16 +293,16 @@ public:
 	static inline const bool printOptions() {
 		return Logger::isMaster() && ((isVerbose(1) || isDebug(1)));
 	}
-	static inline const Logger &getDebug() {
+	static inline Logger &getDebug() {
 		return debugOstream;
 	}
-	static inline const Logger &getVerbose() {
+	static inline Logger &getVerbose() {
 		return verboseOstream;
 	}
-	static inline const Logger &getWarning() {
+	static inline Logger &getWarning() {
 		return warningOstream;
 	}
-	static inline const Logger &getError() {
+	static inline Logger &getError() {
 		return errorOstream;
 	}
 
@@ -341,6 +353,15 @@ public:
 		setErrorMessage(msg);
 		return _log(getErrorOstream(), msg, bypassMPI);
 	}
+	template<typename T>
+	static std::string toString(T begin, T end) {
+		std::stringstream ss;
+		ss << (end-begin) << ": ";
+		for(T it = begin; it != end; it++)
+			ss << *it << ", ";
+		return ss.str();
+	}
+
 };
 
 class LoggedException : public std::exception {

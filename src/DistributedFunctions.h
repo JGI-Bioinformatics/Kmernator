@@ -316,6 +316,7 @@ public:
 				loopThreadId--; loopNumThreads--;
 			}
 			if (isRunningInLoop) {
+				KmerReadUtils kru;
 				for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
 				{
 
@@ -325,7 +326,7 @@ public:
 						continue;
 
 					DataPointers pointers(*this);
-					KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
+					KmerWeightedExtensions &kmers = kru.buildWeightedKmers(read, true, true);
 					ReadSetSizeType globalReadIdx = readIdx + globalReadSetOffset;
 					LOG_DEBUG(3, "_buildKmerSpectrumMPI(): Read " << readIdx << " (" << globalReadIdx << ") " << kmers.size() );
 
@@ -674,7 +675,7 @@ public:
 	typedef Kmer::NumberType NumberType;
 
 	typedef std::vector<ScoreType> KmerValueVector;
-	typedef typename KmerValueVector::const_iterator KmerValueVectorIterator;
+	typedef typename KmerValueVector::iterator KmerValueVectorIterator;
 	typedef std::vector<KmerValueVector> KmerValueVectorVector;
 	typedef std::vector<ReadSetSizeType> ReadIdxVector;
 	typedef typename ReadIdxVector::const_iterator ReadIdxVectorIterator;
@@ -787,8 +788,8 @@ done when empty cycle is received
 
 
 	int _batchKmerLookup(const Read &read, SequenceLengthType markupLength, ReadSetSizeType offset, KmerValueVector &batchBuffer,
-			ReqRespKmerMessageBuffer &sendReq, int &thisThreadId, int &numThreads, int &rank, int &worldSize) {
-		KA kmers = this->getKmersForRead(read);
+			ReqRespKmerMessageBuffer &sendReq, int &thisThreadId, int &numThreads, int &rank, int &worldSize, KA &kmers) {
+		this->getKmersForRead(read, kmers);
 		SequenceLengthType numKmers = kmers.size();
 
 		this->_setNumKmers(markupLength, numKmers);
@@ -847,12 +848,13 @@ done when empty cycle is received
 
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier. message buffers ready");
 		_world.barrier();
+		std::vector< KA > _kmers(numThreads, KA());
 
 #pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
 		{
 			while (batchReadIdx < mostReads) {
 				int threadId = omp_get_thread_num();
-
+				KA &kmers = _kmers[omp_get_thread_num()];
 				// initialize read/kmer buffers
 				batchBuffer[threadId].resize(0);
 				readIndexBuffer[threadId].resize(0);
@@ -888,7 +890,7 @@ done when empty cycle is received
 						SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 
 						if (useKmers) {
-							_batchKmerLookup(read, markupLength, offset, batchBuffer[threadId], *reqRespBuffer, threadId, numThreads, rank, worldSize);
+							_batchKmerLookup(read, markupLength, offset, batchBuffer[threadId], *reqRespBuffer, threadId, numThreads, rank, worldSize, kmers);
 						} else {
 							this->trimReadByMarkupLength(read, this->_trims[readIdx], markupLength);
 						}
@@ -908,9 +910,13 @@ done when empty cycle is received
 					KmerValueVectorIterator buffBegin = (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i] );
 					KmerValueVectorIterator buffEnd = ( ((i+1) < readOffsetBuffer[threadId].size()) ? (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i+1]) : batchBuffer[threadId].end() );
 					ReadTrimType &trim = this->_trims[readIdx];
-					for(KmerValueVectorIterator it = buffBegin; it != buffEnd; it++)
+
+					for(KmerValueVectorIterator it = buffBegin; it != buffEnd; it++) {
 						if (*it == -1)
 							LOG_WARN(1, "readIdx: " << readIdx << " pos: " << (it - buffBegin) << " did not get updated!");
+						if (*it < minimumKmerScore)
+							*it = 0.0;
+					}
 
 					if (useKmers) {
 						this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);

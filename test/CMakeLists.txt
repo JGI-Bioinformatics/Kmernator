@@ -213,7 +213,6 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runMeraculousTests.sh tes
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runRandomlySampleTests.sh test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10k.bam test/ )
 
-
 add_test(filter runFilterTests.sh)
 add_test(meraculous runMeraculousTests.sh)
 add_test(randomlysample runRandomlySampleTests.sh)

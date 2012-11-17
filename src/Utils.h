@@ -289,7 +289,7 @@ public:
 		}
 		std::string getFinalString() {
 			assert(isStringStream());
-			long long int bytes = ss->tellp();
+			int64_t bytes = ss->tellp();
 			LOG_DEBUG(3, "OfstreamMap::OStreamPtr::getFinalString(): Writing out " << bytes << " bytes in-memory for virtual file: " << getFilePath());
 			std::string s = ss->str();
 			reset();

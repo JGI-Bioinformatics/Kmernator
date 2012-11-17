@@ -50,17 +50,18 @@ int main(int argc, char **argv)
 	if (argc != 4)
 		LOG_THROW("Usage: SamUtilsTest my.bam testout.bam testout-sort.bam");
 
+	samfile_t *fh = NULL;
 	// BamStreamUtils::openSamOrBam(f)
-	samfile_t *fh = BamStreamUtils::openSamOrBam(argv[1]);
-
-	// readBamFile(f, BamVector &)
 	BamVector reads;
-	BamStreamUtils::readBamFile(fh, reads);
-	LOG_VERBOSE(1, "reads.size(): " << reads.size());
+	BamHeaderPtr header = BamStreamUtils::readBamFile(world, argv[1], reads);
+	if (0) {
+		fh = BamStreamUtils::openSamOrBam(argv[1]);
 
-	// HACK until bamseek is available
-	int blocksize = (reads.size() + size - 1) / size;
-	{
+		// readBamFile(f, BamVector &)
+		BamStreamUtils::readBamFile(fh, reads);
+		LOG_VERBOSE(1, "reads.size(): " << reads.size());
+		// HACK to support without bamseek
+		int blocksize = (reads.size() + size - 1) / size;
 		BamVector keep;
 		keep.reserve(blocksize);
 		for(int i = blocksize * rank; i < blocksize * (rank+1); i++) {
@@ -69,7 +70,7 @@ int main(int argc, char **argv)
 			keep.push_back(reads[i]);
 			reads[i] = NULL;
 		}
-		SamUtils::destroyBamVector(reads);
+		BamManager::destroyBamVector(reads);
 		reads.swap(keep);
 	}
 	LOG_VERBOSE(1, "reads.size(): " << reads.size());
@@ -77,18 +78,17 @@ int main(int argc, char **argv)
 	LOG_VERBOSE(1, "Copying bam to " << argv[2]);
 	unlink(argv[2]);
 
-	SamUtils::writeBamVector(MPI_COMM_WORLD, argv[2], reads, fh->header, false);
+	SamUtils::writeBamVector(MPI_COMM_WORLD, argv[2], reads, header.get(), false);
 
 	unlink(argv[3]);
 	{
 		SamUtils::MPISortBam sortem(MPI_COMM_WORLD, reads);
 	}
-	SamUtils::writeBamVector(MPI_COMM_WORLD, argv[3], reads, fh->header, false);
+	SamUtils::writeBamVector(MPI_COMM_WORLD, argv[3], reads, header.get(), false);
 
-	SamUtils::destroyBamVector(reads);
-	samclose(fh);
-
-
+	BamManager::destroyBamVector(reads);
+	if (fh != NULL)
+		samclose(fh);
 
 
 	if (MPI_SUCCESS != MPI_Finalize())

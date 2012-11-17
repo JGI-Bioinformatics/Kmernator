@@ -482,9 +482,11 @@ public:
 			set(kmer);
 		}
 		void reset() {
-			solidElem = SolidElementType();
-			weakElem = WeakElementType();
-			singletonElem = SingletonElementType();
+			if (spectrum->hasSolids)
+				solidElem.reset();
+			weakElem.reset();
+			if (spectrum->hasSingletons)
+				singletonElem.reset();
 		}
 		void set(const Kmer &kmer) {
 			reset();
@@ -493,7 +495,7 @@ public:
 
 			if (!solidElem.isValid()) {
 				weakElem = spectrum->getIfExistsWeak(kmer);
-				if (spectrum->hasSingletons && !weakElem.isValid())
+				if (!weakElem.isValid() && spectrum->hasSingletons)
 					singletonElem = spectrum->getIfExistsSingleton(kmer);
 			}
 		}
@@ -1722,11 +1724,12 @@ public:
 
 	}
 	void _buildKmerSpectrumSerial(const ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts, long batch, long purgeEvery, long &purgeCount) {
+		KmerReadUtils kru;
 		for (long batchIdx=0; batchIdx < (long) store.getSize(); batchIdx++)
 		{
 			const Read &read = store.getRead( batchIdx );
 			if ( !read.isDiscarded() ) {
-				KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
+				KmerWeightedExtensions &kmers = kru.buildWeightedKmers(read, true, true);
 
 				append(kmers, batchIdx, isSolid, partIdx, numParts);
 			}
@@ -1772,6 +1775,7 @@ public:
 		}
 		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads << " over " << store.getSize() << " reads");
 
+		KmerReadUtils kru[numThreads];
 		while (batchIdx < (long) store.getSize())
 		{
 			for(int tmpThread1=0; tmpThread1 < numThreads; tmpThread1++)
@@ -1785,7 +1789,7 @@ public:
 			}
 
 
-#pragma omp parallel for schedule(dynamic) num_threads(numThreads)
+#pragma omp parallel for schedule(guided) num_threads(numThreads)
 			for (long i=0; i < batch; i++)
 			{
 				long readIdx = batchIdx + i;
@@ -1797,7 +1801,7 @@ public:
 				if (read.isDiscarded())
 					continue;
 
-				KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true, true);
+				KmerWeightedExtensions &kmers = kru[omp_get_thread_num()].buildWeightedKmers(read, true, true);
 				for (long j = 0; j < numThreads; j++)
 					startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
 				for (IndexType j = 0; j < kmers.size(); j++) {

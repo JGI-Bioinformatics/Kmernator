@@ -38,17 +38,25 @@
 #include "Kmer.h"
 
 class KmerReadUtils {
+private:
+	KmerWeightedExtensions kmers;
 public:
-	static KmerWeightedExtensions buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
-		if (read.isDiscarded())
-			return KmerWeightedExtensions();
+	KmerReadUtils() {
+		LOG_DEBUG_OPTIONAL(1, true, "KmerReadUtils()" << &kmers);
+	}
+	~KmerReadUtils() {}
+	KmerWeightedExtensions &buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
+		if (read.isDiscarded()) {
+			kmers.resize(0);
+			return kmers;
+		}
 
 		SequenceLengthType readLength = read.getLength();
 		STACK_ALLOC(bool, bools, readLength);
 		std::string fasta = read.getFastaNoMarkup();
 		int kmerLen = KmerSizer::getSequenceLength();
 
-		KmerWeightedExtensions kmers(read.getTwoBitSequence(), readLength, leastComplement, bools);
+		kmers.build(read.getTwoBitSequence(), readLength, leastComplement, bools);
 		std::string quals = read.getQuals();
 		size_t markupIdx = 0;
 

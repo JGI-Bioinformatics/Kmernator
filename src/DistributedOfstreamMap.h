@@ -22,7 +22,7 @@
 class DistributedOfstreamMap : public OfstreamMap
 {
 public:
-	static const long long int WRITE_BLOCK_SIZE = (8 * 1024 * 1024); // Write in 8MB chunks if possible
+	static const int64_t WRITE_BLOCK_SIZE = (8 * 1024 * 1024); // Write in 8MB chunks if possible
 
 private:
 	mpi::communicator _world;
@@ -156,8 +156,8 @@ public:
 				assert(it->second.empty()); // File must be closed / in a string already
 			}
 
-			long long int mySize = contents.length();
-			long long int sendPos[size], recvPos[size], totalSize = 0, myStart = 0;
+			int64_t mySize = contents.length();
+			int64_t sendPos[size], recvPos[size], totalSize = 0, myStart = 0;
 			for(int i = 0; i < size; i++)
 				sendPos[i] = _world.rank() == i ? mySize : 0;
 			MPI_Allreduce(&sendPos, &recvPos, size, MPI_LONG_LONG_INT, MPI_SUM, _world);
@@ -180,13 +180,13 @@ public:
 			}
 			LOG_DEBUG(2, "Writing " << mySize << " at " << myStart << " to " << fullPath);
 			char *data = const_cast<char*>(contents.data());
-			long long int offset = 0;
-			long long int maxwrite = 0xf000000; // keep writes to less than max int size at a time to avoid MPI overflows
-			long long int bytesToEndofBlock = WRITE_BLOCK_SIZE - (myStart % WRITE_BLOCK_SIZE);
+			int64_t offset = 0;
+			int64_t maxwrite = 0xf000000; // keep writes to less than max int size at a time to avoid MPI overflows
+			int64_t bytesToEndofBlock = WRITE_BLOCK_SIZE - (myStart % WRITE_BLOCK_SIZE);
 			bytesToEndofBlock = std::min(bytesToEndofBlock, mySize - offset);
 			bytesToEndofBlock = bytesToEndofBlock == 0 ? maxwrite : bytesToEndofBlock;
 			while (offset < mySize) {
-				long long int thisWriteSize = std::min(maxwrite, mySize - offset);
+				int64_t thisWriteSize = std::min(maxwrite, mySize - offset);
 				thisWriteSize = std::min(bytesToEndofBlock, thisWriteSize);
 				MPI_File_write_at(ourFile, myStart+offset, data+offset, thisWriteSize, MPI_BYTE, MPI_STATUS_IGNORE);
 				offset += thisWriteSize;
@@ -228,7 +228,7 @@ public:
 	}
 
 	static void mergeFiles(mpi::communicator &world, std::string rankFile, std::string globalFile, bool unlinkAfter = false) {
-		long long int mySize = 0;
+		MPI_Offset mySize = 0;
 		char *buf[2];
 		int bufSize = WRITE_BLOCK_SIZE;
 		buf[0] = new char[bufSize];
@@ -260,7 +260,7 @@ public:
 			LOG_DEBUG_OPTIONAL(1, true, "No myFile to merge");
 		}
 
-		long long int sendPos[size], recvPos[size], totalSize = 0, myStart = 0, myPos = 0;
+		int64_t sendPos[size], recvPos[size], totalSize = 0, myStart = 0, myPos = 0;
 		for(int i = 0; i < size; i++)
 			sendPos[i] = (rank == i) ? mySize : 0;
 		MPI_Allreduce(&sendPos, &recvPos, size, MPI_LONG_LONG_INT, MPI_SUM, world);
@@ -285,7 +285,7 @@ public:
 		MPI_Status status, writeStatus;
 		MPI_Request writeRequest = MPI_REQUEST_NULL;
 		myPos = myStart;
-		long long int bytesToEndofBlock = WRITE_BLOCK_SIZE - (myStart % WRITE_BLOCK_SIZE);
+		MPI_Offset bytesToEndofBlock = WRITE_BLOCK_SIZE - (myStart % WRITE_BLOCK_SIZE);
 		int lastWrite = 0;
 		bytesToEndofBlock = std::min(bytesToEndofBlock, mySize);
 		while (isOpen && myPos < myStart + mySize) {

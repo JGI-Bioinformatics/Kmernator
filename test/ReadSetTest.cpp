@@ -257,12 +257,13 @@ void testKmerMap(SequenceLengthType size) {
 	Read readC("C", C, "", ""), readCq("Cq", C, std::string("h",C.length()), "");
 
 	KmerWeightedExtensions weights;
-	weights = KmerReadUtils::buildWeightedKmers(readA);
-	weights = KmerReadUtils::buildWeightedKmers(readAq);
-	weights = KmerReadUtils::buildWeightedKmers(readB);
-	weights = KmerReadUtils::buildWeightedKmers(readBq);
-	weights = KmerReadUtils::buildWeightedKmers(readC);
-	weights = KmerReadUtils::buildWeightedKmers(readCq);
+	KmerReadUtils kru;
+	weights = kru.buildWeightedKmers(readA);
+	weights = kru.buildWeightedKmers(readAq);
+	weights = kru.buildWeightedKmers(readB);
+	weights = kru.buildWeightedKmers(readBq);
+	weights = kru.buildWeightedKmers(readC);
+	weights = kru.buildWeightedKmers(readCq);
 
 
 	KmerSizer::set(oldSize);

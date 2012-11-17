@@ -222,9 +222,10 @@ public:
 		KmerSizer::set(length);
 
 		LOG_DEBUG(2, "Preparing exact match artifacts");
+		KmerReadUtils kru;
 		for (unsigned int i = 0; i < sequences.getSize(); i++) {
-			const Read read = sequences.getRead(i);
-			KmerWeightedExtensions kmers = KmerReadUtils::buildWeightedKmers(read, true);
+			const Read &read = sequences.getRead(i);
+			KmerWeightedExtensions &kmers = kru.buildWeightedKmers(read, true);
 			for (Kmer::IndexType j = 0; j < kmers.size(); j++) {
 				filter.getOrSetElement( kmers[j] , i );
 			}
@@ -592,7 +593,7 @@ public:
 			size = reads.getPairSize();
 
 		LOG_VERBOSE(1, "Applying Artifact filter to " << size << " " << (byPair?"Pairs":"Reads"));
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(guided)
 		for (long idx = 0; idx < size; idx++) {
 			LOG_DEBUG(5, "filtering read" << (byPair ? "pair " : "" ) << idx);
 
