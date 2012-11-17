@@ -848,7 +848,7 @@ done when empty cycle is received
 
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier. message buffers ready");
 		_world.barrier();
-		KA _kmers[numThreads];
+		std::vector< KA > _kmers(numThreads, KA());
 
 #pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
 		{

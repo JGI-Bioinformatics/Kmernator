@@ -450,13 +450,16 @@ private:
 		return *((Kmer *) _add(_begin, index));
 	}
 
-	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity) {}
+	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity) {
+		LOG_DEBUG(6, "private KmerArray(" << begin << ", " << size << "," << capacity << "): " << toThis());
+	}
 
 public:
 
 	KmerArray(IndexType size = 0) :
 		_begin(NULL), _size(0), _capacity(0) {
 		resize(size);
+		LOG_DEBUG(6, "KmerArray(" << size << "): " << toThis());
 	}
 
 	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false, bool *bools = NULL) :
@@ -471,12 +474,13 @@ public:
 		} else {
 			resize(0);
 		}
-		LOG_DEBUG(5, "KmerArray(," << length << "," << leastComplement << ",):" << size());
+		LOG_DEBUG(6, "KmerArray(" << twoBit <<"," << length << "," << leastComplement << "," << bools << "):" << toThis());
 	}
 
 	KmerArray(const KmerArray &copy) :
 		_begin(NULL), _size(0), _capacity(0) {
 		*this = copy;
+		LOG_DEBUG(6, "KmerArray(" << copy.toThis() << "):" << toThis());
 	}
 
 	KmerArray copyRange(SequenceLengthType offset, SequenceLengthType length) {
@@ -489,10 +493,13 @@ public:
 	}
 
 	~KmerArray() {
+		LOG_DEBUG(6, "~KmerArray(): " << toThis());
 		reset();
 	}
 
 	KmerArray &operator=(const KmerArray &other) {
+		LOG_DEBUG(6, "KmerArray &operator=(" << other.toThis() << "): " << toThis());
+		
 		if (this == &other)
 			return *this;
 		reset();
@@ -526,6 +533,7 @@ public:
 			long kmerSize  = _size * KmerSizer::getByteSize();
 			_copyRange(ptr, (ValueType *) (((char*)ptr)+kmerSize), 0, 0, _size, false);
 		}
+		LOG_DEBUG(6, "KmerArray(" << src << "): " << toThis());
 	}
 
 	// store an existing array to a mmap
@@ -1237,7 +1245,13 @@ public:
 		return affected;
 	}
 
-	std::string toString() const {
+	std::string toThis() const {
+		std::stringstream ss;
+		ss << "KmerArray " << this << "={" << _begin << ", " << _size << ", " << _capacity << "}";
+		return ss.str();
+	}
+
+	std::string toString(bool inclMemPtr = false) const {
 		std::stringstream ss;
 		ss << "{";
 		IndexType idx=0;

@@ -695,7 +695,7 @@ public:
 		long heapSize = 0;
 		int allAreDone = 0;
 
-		KA _kmers[omp_get_num_threads()];
+		std::vector< KA > _kmers(omp_get_max_threads(), KA());
 		long pairsSize = _reads.getPairSize();
 #pragma omp parallel
 		{
@@ -1101,13 +1101,11 @@ public:
 		bool useKmers = KmerBaseOptions::getOptions().getKmerSize() != 0;
 
 		long readsSize = _reads.getSize();
-		std::vector< KA > _kmers(omp_get_num_threads(), KA());
-		LOG_DEBUG_OPTIONAL(1, true, "Starting bad section");
+		std::vector< KA > _kmers(omp_get_max_threads(), KA());
 
 #pragma omp parallel for schedule(guided)
 		for(long i = 0; i < readsSize; i++) {
 			KA &kmers = _kmers[omp_get_thread_num()];
-			LOG_DEBUG_OPTIONAL(1, true, "almost at bad section:" << &kmers << " - " << kmers.size());
 			ReadTrimType &trim = _trims[i];
 			const Read &read = _reads.getRead(i);
 			if (read.isDiscarded()) {
