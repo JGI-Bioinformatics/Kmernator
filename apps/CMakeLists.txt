@@ -155,7 +155,7 @@ set_target_properties( BamSort-P
                        )
 target_link_libraries( BamSort-P 
                               libbam
-                              z
+                              ${ZLIB_LIBRARIES} 
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
@@ -170,7 +170,7 @@ set_target_properties( MergeIndexPartitionedBam-P
                        )
 target_link_libraries( MergeIndexPartitionedBam-P 
                               libbam
-                              z
+                              ${ZLIB_LIBRARIES} 
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}

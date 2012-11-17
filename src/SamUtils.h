@@ -710,7 +710,7 @@ public:
 				bam1_t *b = BamManager::getSharedInstance().initOrRecycle();
 				int pos;
 				for(pos = 0; pos < (int) uncompressedBlockLength; pos++) {
-					if (pos >= (readSize - BAM_CORE_SIZE - 4))
+					if (pos >= (int) (readSize - BAM_CORE_SIZE - 4))
 						break;
 					if (!checkBamCore(fp->header, b, bamBuf.get() + pos))
 						continue;
