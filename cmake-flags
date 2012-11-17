@@ -3,7 +3,7 @@
 Kmernator=/path/to/sourcecode/of/Kmernator
 
 # for normal build
-cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall" -DCMAKE_C_FLAGS="-O3 -g -Wall"
+cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall -DNDEBUG" -DCMAKE_C_FLAGS="-O3 -g -Wall -DNDEBUG"
 
 # for build without MPI (if mpic++ exists and you do not want it for some reason)
 cmake $Kmernator -DCMAKE_CXX_FLAGS="-O3 -g -Wall" -DCMAKE_C_FLAGS="-O3 -g -Wall" -DDISABLE_MPI
@@ -19,7 +19,7 @@ module swap PrgEnv-pgi PrgEnv-gnu
 module remove xt-shmem
 module remove iobuf
 mpilib=$(basename $MPICH_DIR/lib/libmpich_gnu*.a); mpilib=${mpilib%.a} ; mpilib2=${mpilib#lib}
-cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DCMAKE_CXX_FLAGS="-O3 -Wall -funroll-loops -ffast-math" -DCMAKE_C_FLAGS="-O3 -Wall -funroll-loops -ffast-math"  -DMPI_COMPILER=`which CC` -DMPI_LIBRARY="$mpilib2" -DMPI_INCLUDE_PATH="${MPICH_DIR}/include" -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>$mpilib ;"
+cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DCMAKE_CXX_FLAGS="-O3 -Wall -funroll-loops -ffast-math -DNDEBUG" -DCMAKE_C_FLAGS="-O3 -Wall -funroll-loops -ffast-math -DNDEBUG"  -DMPI_COMPILER=`which CC` -DMPI_LIBRARY="$mpilib2" -DMPI_INCLUDE_PATH="${MPICH_DIR}/include" -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>$mpilib ;"
 
 ### OLD
 #cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DCMAKE_CXX_FLAGS="-O3 -Wall -funroll-loops -ffast-math" -DCMAKE_C_FLAGS="-O3 -Wall -funroll-loops -ffast-math"  -DMPI_INCLUDE_PATH="-I$MPICH_DIR/include" -DMPI_LIBRARY="$MPICH_DIR/lib/libmpich_gnu.a" -DMPI_LINK_FLAGS=" " -DMPI_LIBRARIES=" " -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>mpich_gnu ;"
