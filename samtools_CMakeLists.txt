@@ -62,9 +62,9 @@ add_library(bam_md STATIC bam_md)
 add_library(bam_pileup STATIC bam_pileup)
 
 add_library(libbam 
-    STATIC 
+    SHARED 
         bam sam bgzf bam_sort sam_header bam_aux kstring 
-        faidx bam_import bam_pileup razf bam_index) 
+        faidx bam_import bam_pileup razf bam_index z) 
 # kstring   bam_aux bam_import bam_index razf faidx bedidx 
 #knetfile bam_sort sam_header bam_reheader kprobaln bam_cat bam_md 
 #)

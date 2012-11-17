@@ -70,6 +70,17 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 
 #
+# zlib
+#
+FindZLIB()
+if ( ZLIB_FOUND )
+  include_directories(${ZLIB_INCLUDE_DIR})
+  link_directories(${ZLIB_LIBRARIES})
+else()
+  error("Can not compile without zlib")
+endif()
+
+#
 # OpenMP
 #
 find_package( OpenMP )
