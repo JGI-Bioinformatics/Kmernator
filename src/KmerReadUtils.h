@@ -41,12 +41,14 @@ class KmerReadUtils {
 private:
 	KmerWeightedExtensions kmers;
 public:
-	KmerReadUtils() {}
+	KmerReadUtils() {
+		LOG_DEBUG_OPTIONAL(1, true, "KmerReadUtils()" << &kmers);
+	}
 	~KmerReadUtils() {}
 	KmerWeightedExtensions &buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
 		if (read.isDiscarded()) {
 			kmers.resize(0);
-			return;
+			return kmers;
 		}
 
 		SequenceLengthType readLength = read.getLength();
@@ -54,7 +56,6 @@ public:
 		std::string fasta = read.getFastaNoMarkup();
 		int kmerLen = KmerSizer::getSequenceLength();
 
-		SequenceLengthType numKmers = readLength - kmerLen + 1;
 		kmers.build(read.getTwoBitSequence(), readLength, leastComplement, bools);
 		std::string quals = read.getQuals();
 		size_t markupIdx = 0;

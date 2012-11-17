@@ -450,11 +450,7 @@ private:
 		return *((Kmer *) _add(_begin, index));
 	}
 
-public:
-	void setReadOnlyOptimization() const {
-	}
-	void unsetReadOnlyOptimization() {
-	}
+	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity) {}
 
 public:
 
@@ -463,10 +459,6 @@ public:
 		resize(size);
 	}
 
-private:
-	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity) {}
-
-public:
 	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false, bool *bools = NULL) :
 		_begin(NULL), _size(0), _capacity(0) {
 		SequenceLengthType kmerSize = KmerSizer::getSequenceLength();
@@ -690,8 +682,8 @@ public:
 		}
 	}
 
-	void resize(IndexType size) {
-		resize(size, MAX_INDEX, false);
+	void resize(IndexType size, bool reserveExtra = false) {
+		resize(size, MAX_INDEX, reserveExtra);
 	}
 	void resize(IndexType size, IndexType idx, bool reserveExtra = true) {
 		assert(!isMmaped()); // mmaped can not be modified!
@@ -761,8 +753,9 @@ public:
 
 	void _setMemory(IndexType size, IndexType idx, bool reserveExtra = true) {
 		assert(!isMmaped()); // mmaped can not be modified!
+		LOG_DEBUG_OPTIONAL(2, true, "_setMemory(" << this << ", " << size << ", " << idx << ", " << reserveExtra << "): " << _begin << " size: " << _size << " capacity: " << _capacity);
 
-		if (reserveExtra && idx == MAX_IDX && size <= _capacity) {
+		if (reserveExtra && idx == MAX_INDEX && size <= _capacity) {
 			_size = size;
 			return;
 		}
@@ -873,14 +866,19 @@ public:
 			// free old memory
 			std::free(oldBegin);
 		}
+		LOG_DEBUG_OPTIONAL(3, true, "_setMemory(" << this << ", " << size << ", " << idx << ", " << reserveExtra << "): exited. memChanged:" << memChanged << " - " << _begin << " size: " << _size << " capacity: " << _capacity);
 	}
 
 	void build(const TwoBitEncoding *twoBit, SequenceLengthType length,
 			bool leastComplement = false, bool *bools = NULL) {
 		assert(!isMmaped()); // mmaped can not be modified!
+		if (length < KmerSizer::getSequenceLength()) {
+			resize(0, _capacity > 0);
+			return;
+		}
 		SequenceLengthType numKmers = length - KmerSizer::getSequenceLength() + 1;
 		if (numKmers != _size)
-			resize(numKmers, MAX_IDX, _capacity > 0);
+			resize(numKmers, MAX_INDEX, _capacity > 0);
 
 		KmerArray &kmers = *this;
 		long numBytes = (numKmers + 3) / 4;

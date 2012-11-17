@@ -788,8 +788,8 @@ done when empty cycle is received
 
 
 	int _batchKmerLookup(const Read &read, SequenceLengthType markupLength, ReadSetSizeType offset, KmerValueVector &batchBuffer,
-			ReqRespKmerMessageBuffer &sendReq, int &thisThreadId, int &numThreads, int &rank, int &worldSize) {
-		KA kmers = this->getKmersForRead(read);
+			ReqRespKmerMessageBuffer &sendReq, int &thisThreadId, int &numThreads, int &rank, int &worldSize, KA &kmers) {
+		this->getKmersForRead(read, kmers);
 		SequenceLengthType numKmers = kmers.size();
 
 		this->_setNumKmers(markupLength, numKmers);
@@ -848,12 +848,13 @@ done when empty cycle is received
 
 		LOG_DEBUG(2, "scoreAndTrimReads(): barrier. message buffers ready");
 		_world.barrier();
+		KA _kmers[numThreads];
 
 #pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
 		{
 			while (batchReadIdx < mostReads) {
 				int threadId = omp_get_thread_num();
-
+				KA &kmers = _kmers[omp_get_thread_num()];
 				// initialize read/kmer buffers
 				batchBuffer[threadId].resize(0);
 				readIndexBuffer[threadId].resize(0);
@@ -889,7 +890,7 @@ done when empty cycle is received
 						SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 
 						if (useKmers) {
-							_batchKmerLookup(read, markupLength, offset, batchBuffer[threadId], *reqRespBuffer, threadId, numThreads, rank, worldSize);
+							_batchKmerLookup(read, markupLength, offset, batchBuffer[threadId], *reqRespBuffer, threadId, numThreads, rank, worldSize, kmers);
 						} else {
 							this->trimReadByMarkupLength(read, this->_trims[readIdx], markupLength);
 						}

@@ -39,13 +39,13 @@ const char fastaG[] = "GGGG";
 const char fastaT[] = "TTTT";
 
 const char fasta1[] = "ACGTCGTAGTACTACG";
-const char rev1[] = "CGTAGTACTACGACGT";
+const char rev1[]   = "CGTAGTACTACGACGT";
 const char fasta2[] = "ACGTCGTAGTACTACGA";
-const char rev2[] = "TCGTAGTACTACGACGT";
+const char rev2[]   = "TCGTAGTACTACGACGT";
 const char fasta3[] = "CACGTCGTAGTACTACGA";
-const char rev3[] = "TCGTAGTACTACGACGTG";
+const char rev3[]   = "TCGTAGTACTACGACGTG";
 const char fasta4[] = "GCACGTCGTAGTACTACGA";
-const char rev4[] = "TCGTAGTACTACGACGTGC";
+const char rev4[]   = "TCGTAGTACTACGACGTGC";
 const char n1[] = "NCGTAGTACTACGACGTGCC";
 const char n2[] = "NCGTANTACTACGACGTGCCA";
 const char n3[] = "NCGTANTACTNCGACGTGCCAG";
@@ -112,14 +112,26 @@ void testLeftShift() {
 	LEFT_SHIFT("ACGT", "GTAA",2);
 	LEFT_SHIFT("ACGT", "TAAA",3);
 
-	LEFT_SHIFT("AAAAAAAA","AAAAAAAA",0);
+	LEFT_SHIFT("AAAAAAAA", "AAAAAAAA",0);
 	LEFT_SHIFT("AAAAAAAA", "AAAAAAAA",1);
 	LEFT_SHIFT("AAAAAAAA", "AAAAAAAA",2);
 	LEFT_SHIFT("AAAAAAAA", "AAAAAAAA",3);
 
-	LEFT_SHIFT("CCCCCCCC","CCCCCCCA",1);
+	LEFT_SHIFT("CCCCCCCC", "CCCCCCCA",1);
 	LEFT_SHIFT("CCCCCCCC", "CCCCCCAA",2);
 	LEFT_SHIFT("CCCCCCCC", "CCCCCAAA",3);
+
+	LEFT_SHIFT("CCCCCCC",  "CCCCCCA",1);
+	LEFT_SHIFT("CCCCCCC",  "CCCCCAA",2);
+	LEFT_SHIFT("CCCCCCC",  "CCCCAAA",3);
+
+	LEFT_SHIFT("CCCCCC",  "CCCCCA",1);
+	LEFT_SHIFT("CCCCCC",  "CCCCAA",2);
+	LEFT_SHIFT("CCCCCC",  "CCCAAA",3);
+
+	LEFT_SHIFT("CCCCC",  "CCCCA",1);
+	LEFT_SHIFT("CCCCC",  "CCCAA",2);
+	LEFT_SHIFT("CCCCC",  "CCAAA",3);
 
 	LEFT_SHIFT("ACGTACGT","CGTACGTA",1);
 	LEFT_SHIFT("ACGTACGT", "GTACGTAA",2);
@@ -145,11 +157,41 @@ void testLeftShift() {
 		sequenceLength = std::strlen(fwd);\
 		twoBitLength = TwoBitSequence::fastaLengthToTwoBitLength(sequenceLength);\
 		TwoBitSequence::reverseComplement(in,out,sequenceLength);\
-		BOOST_CHECK_EQUAL( memcmp(out,test,twoBitLength), 0);\
+		TwoBitSequence::reverseComplement(out,out2,sequenceLength); \
+		TwoBitSequence::reverseComplement(test,out3,sequenceLength); \
 		TwoBitSequence::uncompressSequence(out, sequenceLength, fasta);\
-		BOOST_CHECK_EQUAL(rev,fasta);
+		BOOST_CHECK_EQUAL(rev,fasta); \
+		TwoBitSequence::uncompressSequence(out2, sequenceLength, fasta);\
+		BOOST_CHECK_EQUAL(fwd, fasta); \
+		TwoBitSequence::uncompressSequence(out3, sequenceLength, fasta);\
+		BOOST_CHECK_EQUAL(fwd, fasta);
 
 void testReverseComplement() {
+
+	REV_COMP("A", "T");
+	REV_COMP("C", "G");
+	REV_COMP("AA", "TT");
+	REV_COMP("CC", "GG");
+	REV_COMP("AAA", "TTT");
+	REV_COMP("CCC", "GGG");
+	REV_COMP("AAAA", "TTTT");
+	REV_COMP("CCCC", "GGGG");
+	REV_COMP("AAAAA", "TTTTT");
+	REV_COMP("CCCCC", "GGGGG");
+	REV_COMP("AAAAAA", "TTTTTT");
+	REV_COMP("CCCCCC", "GGGGGG");
+	REV_COMP("AAAAAAA", "TTTTTTT");
+	REV_COMP("CCCCCCC", "GGGGGGG");
+	REV_COMP("AAAAAAAA", "TTTTTTTT");
+	REV_COMP("CCCCCCCC", "GGGGGGGG");
+	REV_COMP("AAAAAAAAA", "TTTTTTTTT");
+	REV_COMP("CCCCCCCCC", "GGGGGGGGG");
+	REV_COMP("AAAAAAAAAA", "TTTTTTTTTT");
+	REV_COMP("CCCCCCCCCC", "GGGGGGGGGG");
+	REV_COMP("AAAAAAAAAAA", "TTTTTTTTTTT");
+	REV_COMP("CCCCCCCCCCC", "GGGGGGGGGGG");
+	REV_COMP("AAAAAAAAAAAA", "TTTTTTTTTTTT");
+	REV_COMP("CCCCCCCCCCCC", "GGGGGGGGGGGG");
 
 	REV_COMP(fastaA,fastaT);
 	REV_COMP(fastaC,fastaG);
