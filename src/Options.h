@@ -436,11 +436,8 @@ public:
 				_setVerbosityAndLogs(true);
 			}
 
-#ifdef _USE_OPENMP
-
 			setOpt("threads", getMaxThreads(), print);
 
-#endif
 			validateOMPThreads();
 
 			setOpt2("input-file", getInputFiles());
@@ -516,7 +513,6 @@ public:
 	}
 
 	void validateOMPThreads() {
-#ifdef _USE_OPENMP
 		int maxThreads = omp_get_max_threads();
 		LOG_DEBUG(2, "validating OpenMP threads: " << maxThreads);
 
@@ -525,7 +521,6 @@ public:
 			getMaxThreads() = maxThreads;
 		}
 		omp_set_num_threads(getMaxThreads());
-#endif
 	}
 
 

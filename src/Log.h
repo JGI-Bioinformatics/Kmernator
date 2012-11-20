@@ -223,17 +223,11 @@ public:
 	inline OstreamPtr getOstreamPtr() {
 		return &( (std::ostream&) *this);
 	}
+
 	class ScopedLevel {
 	public:
-		int _oldLevel;
-		Logger &_log;
-		ScopedLevel(Logger &log, int newLevel) : _log(log) {
-			_oldLevel = log.getLevel();
-			_log.setLevel(newLevel);
-		}
-		~ScopedLevel() {
-			_log.setLevel(_oldLevel);
-		}
+		ScopedTempValue<unsigned int> _s;
+		ScopedLevel(Logger &log, unsigned int newLevel) : _s(log.setLevel(), newLevel) {}
 	};
 };
 

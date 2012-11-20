@@ -29,6 +29,8 @@
 // PURPOSE.
 //
 
+#undef _USE_OPENMP
+
 #include <boost/thread.hpp>
 
 #include <iostream>

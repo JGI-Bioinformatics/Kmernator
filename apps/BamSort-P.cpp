@@ -5,6 +5,8 @@
  *      Author: regan
  */
 
+#undef _USE_OPENMP
+
 #include <string>
 
 #include "mpi.h"
@@ -33,6 +35,7 @@ public:
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
 		GeneralOptions::getOptions().getDebug() = 0;
+		GeneralOptions::getOptions().getMaxThreads() = 1;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("output-bam", 1);

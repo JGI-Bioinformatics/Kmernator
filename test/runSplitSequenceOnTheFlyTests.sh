@@ -1,5 +1,28 @@
 #!/bin/bash
 
+MPI=""
+procs=$(grep -c ^processor /proc/cpuinfo)
+
+true=$(which true)
+
+mt=time
+if memtime $true
+then
+  mt=memtime
+fi
+
+ismpi=0
+if mpirun $true
+then
+  MPI="mpirun -bycore -bind-to-core -np"
+  ismpi=1
+elif aprun -n 1 $true
+then
+  MPI="aprun -n"
+  procs=$(aprun -B uname -n | wc -l)
+fi
+
+
 SSOTF=../apps/SplitSequenceOnTheFly
 
 TMPDIR=${TMPDIR:=/tmp}
@@ -10,52 +33,62 @@ then
 fi
 rm $TMP
 
+fail()
+{
+  echo $@
+  /bin/false
+}
+
 set -e
 set -x
 
 IN=1000.fastq
 total=$(grep -c ^@ $IN)
 
-for p in {1..10}
-do
-  rm -f ${TMP}*
-  mpirun -np $p $SSOTF --output-file "$TMP-{Uniq}.fastq" $IN
-  cat ${TMP}-*.fastq | diff -q - $IN
+if [ -n "$MPI" ]
+then
 
-  rm -f ${TMP}*
-  mpirun -np $p $SSOTF --output-file "$TMP-{Uniq}.fastq.1" --split-file "$TMP-{Uniq}.fastq.2" $IN
-  c1=$(cat ${TMP}*.1 | grep -c ^@)
-  c2=$(cat ${TMP}*.2 | grep -c ^@)
-  if ((c1+c2 != total))
-  then
-    echo "Split counts differ $c1 + $c2 != $total"
-    exit 1
-  fi
-
-  if ((p%2 == 0))
-  then
+  for mpi in $(seq 1 ${procs})
+  do
+    export OMP_NUM_THREADS=1
     rm -f ${TMP}*
-    mpirun -np $p $SSOTF --second-dim 2 --output-file "$TMP-{UniqFirst}x{UniqSecond}.fastq" $IN
-    cat ${TMP}-*x000000of000002.fastq | diff -q - $IN
-    cat ${TMP}-*x000001of000002.fastq | diff -q - $IN
+    $mt $MPI $mpi $SSOTF --output-file "$TMP-{Uniq}.fastq" $IN
+    cat ${TMP}-*.fastq | diff -q - $IN
 
     rm -f ${TMP}*
-    mpirun -np $p $SSOTF --second-dim 2 --output-file "$TMP-{UniqFirst}x{UniqSecond}.fastq.1" --split-file "$TMP-{UniqFirst}x{UniqSecond}.fastq.2" $IN
-    c1=$(cat ${TMP}*x000000of000002.fastq.1 | grep -c ^@)
-    c2=$(cat ${TMP}*x000000of000002.fastq.2 | grep -c ^@)
+    $mt $MPI $mpi $SSOTF --output-file "$TMP-{Uniq}.fastq.1" --split-file "$TMP-{Uniq}.fastq.2" $IN
+    c1=$(cat ${TMP}*.1 | grep -c ^@)
+    c2=$(cat ${TMP}*.2 | grep -c ^@)
     if ((c1+c2 != total))
     then
-      echo "Split counts differ $c1 + $c2 != $total"
-      exit 1
+      fail "Split counts differ $c1 + $c2 != $total"
     fi
 
-    c1=$(cat ${TMP}*x000001of000002.fastq.1 | grep -c ^@)
-    c2=$(cat ${TMP}*x000001of000002.fastq.2 | grep -c ^@)
-    if ((c1+c2 != total))
+    if ((mpi%2 == 0))
     then
-      echo "Split2 counts differ $c1 + $c2 != $total"
-      exit 1
+      rm -f ${TMP}*
+      $mt $MPI $mpi  $SSOTF --second-dim 2 --output-file "$TMP-{UniqFirst}x{UniqSecond}.fastq" $IN
+      cat ${TMP}-*x000000of000002.fastq | diff -q - $IN
+      cat ${TMP}-*x000001of000002.fastq | diff -q - $IN
+
+      rm -f ${TMP}*
+      $mt $MPI $mpi $SSOTF --second-dim 2 --output-file "$TMP-{UniqFirst}x{UniqSecond}.fastq.1" --split-file "$TMP-{UniqFirst}x{UniqSecond}.fastq.2" $IN
+      c1=$(cat ${TMP}*x000000of000002.fastq.1 | grep -c ^@)
+      c2=$(cat ${TMP}*x000000of000002.fastq.2 | grep -c ^@)
+      if ((c1+c2 != total))
+      then
+        fail "Split counts differ $c1 + $c2 != $total"
+      fi
+
+      c1=$(cat ${TMP}*x000001of000002.fastq.1 | grep -c ^@)
+      c2=$(cat ${TMP}*x000001of000002.fastq.2 | grep -c ^@)
+      if ((c1+c2 != total))
+      then
+        fail "Split2 counts differ $c1 + $c2 != $total"
+      fi
+
     fi
 
-  fi
-done
+  done
+fi
+

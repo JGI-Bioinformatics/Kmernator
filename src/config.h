@@ -67,6 +67,8 @@ const int MAX_FILE_PARALLELISM = 4;
 
 inline int omp_get_max_threads() { return 1; }
 inline int omp_get_num_threads() { return 1; }
+inline int omp_get_num_procs() { return 1; }
+inline int omp_get_thread_limit() { return 1024; }
 inline int omp_get_thread_num()  { return 0; }
 inline void omp_set_nested(int i) {}
 inline int omp_get_nested() { return 0; }
@@ -74,6 +76,7 @@ inline void omp_set_dynamic(int i) {}
 inline int omp_get_dynamic() { return 0; }
 inline bool omp_in_parallel() { return false; }
 inline void omp_set_num_threads(int t) { assert(t==1); }
+inline int omp_get_level() { return 1; }
 
 const int MAX_FILE_PARALLELISM = 1;
 
@@ -168,5 +171,23 @@ typedef std::vector< MmapSource > MmapSourceVector;
 
 
 };
+
+template<typename T>
+class ScopedTempValue {
+public:
+	ScopedTempValue(T &variable, T value) : _var(variable), _oldValue(variable) {
+		_var = value;
+	}
+	~ScopedTempValue() {
+		_var = _oldValue;
+	}
+	operator T () {
+		return _oldValue;
+	}
+private:
+	T &_var;
+	T _oldValue;
+};
+
 
 #endif // _KMERNATOR_CONFIG_H

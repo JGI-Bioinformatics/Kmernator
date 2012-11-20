@@ -100,7 +100,7 @@ public:
 	typedef ReadSet::ReadSetVector MatchReadResults;
 
 	MatcherInterface(mpi::communicator &world, const ReadSet &target)
-	: _world(world), _target(target), globalQueryFile(), rmGlobalQueryFile(false) {
+	: _world(world, mpi::comm_duplicate), _target(target), globalQueryFile(), rmGlobalQueryFile(false) {
 		assert(_target.isGlobal() && _target.getGlobalSize() > 0);
 	}
 	~MatcherInterface() {
@@ -496,6 +496,7 @@ public:
 		ReadSet::ReadSetSizeType maxReadMatches = MatcherInterfaceOptions::getOptions().getMaxReadMatches();
 		ReadSet::ReadSetSizeType maxReadDepth = MatcherInterfaceOptions::getOptions().getMaxReadDepthMatches();
 
+		#pragma omp parallel for
 		for (ReadSet::ReadSetSizeType localContigIdx = 0; localContigIdx < globalReadSetVector.size(); localContigIdx++) {
 			LOG_DEBUG_OPTIONAL(2, true, "exchangeGlobalReads(): contig " << localContigIdx << ", " << globalReadSetVector[localContigIdx].getSize() << " reads");
 			if (screenForOverlap) {
@@ -750,7 +751,7 @@ public:
 	const ReadSet &getTarget() const { return _target; }
 
 protected:
-	mpi::communicator &_world;
+	mpi::communicator _world;
 	const ReadSet &_target;
 	std::string globalQueryFile;
 	bool rmGlobalQueryFile;

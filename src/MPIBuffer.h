@@ -241,7 +241,7 @@ public:
 			MessageClassProcessor processor = MessageClassProcessor(),
 			int totalBufferSize = MPIOptions::getOptions().getTotalBufferSize(),
 			float softRatio = 0.90) :
-				_world(world), _bufferSize(totalBufferSize / _world.size() / BUFFER_INSTANCES),
+				_world(world, mpi::comm_duplicate), _bufferSize(totalBufferSize / _world.size() / BUFFER_INSTANCES),
 				_messageSize(messageSize), _processor(processor), _softRatio(
 						softRatio), _softNumThreads(0), _numCheckpoints(0) {
 		assert(getMessageSize() >= (int) sizeof(MessageClass));

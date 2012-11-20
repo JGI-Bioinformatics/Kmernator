@@ -1742,20 +1742,21 @@ public:
 	}
 	void _buildKmerSpectrumParallel(const ReadSet &store, bool isSolid, NumberType partIdx, NumberType numParts, long batch, long purgeEvery, long &purgeCount) {
 
-		long numThreads = omp_get_max_threads();
+		long maxThreads = omp_get_max_threads();
+		long numThreads = maxThreads;
 		long batchIdx = 0;
 
 		// allocate a square matrix of buffers: KmerWeightedExtensions[writingThread][readingThread]
-		KmerWeightedExtensions kmerBuffers[ numThreads ][ numThreads ];
+		KmerWeightedExtensions kmerBuffers[ maxThreads ][ maxThreads ];
 		typedef std::pair< ReadSet::ReadSetSizeType, Sequence::SequenceLengthType > ReadPosType;
-		std::vector< ReadPosType > startReadIdx[ numThreads ][ numThreads ];
+		std::vector< ReadPosType > startReadIdx[ maxThreads ][ maxThreads ];
 
 		long size = store.getSize();
 		if (size < batch) {
 			batch = store.getSize() / 10 + 1;
 		}
 		long kmersPerRead = store.getMaxSequenceLength() - KmerSizer::getSequenceLength() + 1;
-		batch = std::min( batch, 128*1024*1024 / kmersPerRead / KmerSizer::getByteSize() / numThreads + 1);
+		batch = std::min( batch, 128*1024*1024 / kmersPerRead / KmerSizer::getByteSize() / maxThreads + 1);
 
 		LOG_DEBUG(1, "buildKmerSpectrumParallel(): batchSize: " << batch);
 		long reservation;
@@ -1766,16 +1767,20 @@ public:
 			reservation = batch * (kmersPerRead);
 		}
 
-		reservation /= numThreads;
+		reservation /= maxThreads;
 
-#pragma omp parallel num_threads(numThreads)
+#pragma omp parallel num_threads(maxThreads)
 		{
-			if (numThreads != omp_get_num_threads())
-				LOG_THROW("RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << numThreads << " vs " << omp_get_num_threads());
+			if (omp_get_thread_num() == 0 && numThreads != omp_get_num_threads()) {
+				numThreads = omp_get_num_threads();
+				reservation *= maxThreads;
+				reservation /= numThreads;
+				LOG_WARN(1, "RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << maxThreads << " vs " << omp_get_num_threads() << " nested:" << omp_get_nested() << " level: " << omp_get_level() << " dynamic: " << omp_get_dynamic());
+			}
 		}
-		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads << " over " << store.getSize() << " reads");
+		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << maxThreads << " over " << store.getSize() << " reads");
 
-		KmerReadUtils kru[numThreads];
+		KmerReadUtils kru[maxThreads];
 		while (batchIdx < (long) store.getSize())
 		{
 			for(int tmpThread1=0; tmpThread1 < numThreads; tmpThread1++)

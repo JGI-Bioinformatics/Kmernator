@@ -107,8 +107,11 @@ protected:
 		std::streamsize wrote = std::min(BUFFER_SIZE - writeOffset, n);
 		BufferType b = back;
 		memcpy(b.get() + writeOffset, s, wrote);
-		#pragma omp atomic
-		writeOffset += wrote;
+		{
+			// make copies to prevent race between read & write threads
+			std::streamsize tmp = writeOffset + wrote;
+			writeOffset = tmp;
+		}
 		writeCount += wrote;
 		if (writeOffset == BUFFER_SIZE)
 			addBuffer();
@@ -129,7 +132,11 @@ protected:
 				bool locked = false;
 				if (needsLock()) { lock.lock(); locked = true; }
 				if (b.get() == back.get()) {
-					readSize = std::min(n, (writeOffset - readOffset));
+					{
+						// make copies to prevent race between read and write ops
+						std::streamsize tmp = writeOffset;
+						readSize = std::min(n, (tmp - readOffset));
+					}
 					if (locked) lock.unlock();
 					if (readSize == 0)
 						return 0;
@@ -144,7 +151,6 @@ protected:
 			}
 
 			memcpy(s, b.get() + readOffset, readSize);
-			#pragma omp atomic
 			readOffset += readSize;
 			readCount += readSize;
 			if (readOffset == BUFFER_SIZE)
@@ -191,9 +197,10 @@ protected:
 	}
 
 private:
-	std::deque< BufferType > buffers;
-	std::streamsize writeOffset, readOffset;
+	volatile std::streamsize writeOffset;
+	std::streamsize readOffset;
 	std::streamsize writeCount, readCount;
+	std::deque< BufferType > buffers;
 	int writerTid, readerTid;
 	bool setExplicitWriteClose, writeClosed, blocked;
 	BufferType front, back;

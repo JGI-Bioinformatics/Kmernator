@@ -29,6 +29,8 @@
 // PURPOSE.
 //
 
+#undef _USE_OPENMP
+
 #include <iostream>
 #include <cstdlib>
 #include <cstring>

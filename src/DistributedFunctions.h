@@ -89,7 +89,7 @@ protected:
 
 public:
 	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long buckets = 0, bool separateSingletons = true)
-	: KS(buckets * _world.size(), separateSingletons), world(_world) {
+	: KS(buckets * _world.size(), separateSingletons), world(_world, mpi::comm_duplicate) {
 	}
 	~DistributedKmerSpectrum() {
 	}
@@ -685,7 +685,7 @@ protected:
 
 public:
 	DistributedReadSelector(mpi::communicator &world, const ReadSet &reads, const KMType &map)
-	: RS(reads, map), _world(world) {
+	: RS(reads, map), _world(world, mpi::comm_duplicate) {
 		LOG_DEBUG(3, this->_map.toString());
 	}
 	OFM getOFM(std::string outputFile, std::string suffix = FormatOutput::getDefaultSuffix()) {
