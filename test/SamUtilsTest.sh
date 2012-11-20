@@ -41,7 +41,7 @@ then
 elif aprun -n 1 $true
 then
   MPI="aprun -n"
-  procs=$(aprun -B uname -n | wc -l)
+  procs=$(aprun -B -q uname -n | wc -l)
   isaprun=1
 fi
 
