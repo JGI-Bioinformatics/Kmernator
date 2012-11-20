@@ -204,9 +204,10 @@ if(NOT EXISTS ${SAMTOOLS_DIR})
   if(NOT SUCCESS EQUAL 0)
     message(FATAL_ERROR "Could not unpack samtools")
   endif()
-  file(COPY ${CMAKE_SOURCE_DIR}/samtools_CMakeLists.txt DESTINATION ${SAMTOOLS_DIR})
-  file(RENAME ${SAMTOOLS_DIR}/samtools_CMakeLists.txt ${SAMTOOLS_DIR}/CMakeLists.txt)
 endif()
+
+file(COPY ${CMAKE_SOURCE_DIR}/samtools_CMakeLists.txt DESTINATION ${SAMTOOLS_DIR})
+file(RENAME ${SAMTOOLS_DIR}/samtools_CMakeLists.txt ${SAMTOOLS_DIR}/CMakeLists.txt)
 
 include_directories( ${SAMTOOLS_DIR} )
 add_subdirectory( ${SAMTOOLS_DIR} binary_dir )

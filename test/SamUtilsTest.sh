@@ -45,7 +45,15 @@ then
   isaprun=1
 fi
 
-samtools=$(echo ../samtools*/samtools)
+samtools=$(which samtools || /bin/true)
+if [ -z "$samtools" ]
+then
+  samtools=$(echo ../samtools*/samtools)
+  if [ ! -x $samtools ]
+  then
+    ( cd ../samtools* ; make samtools )
+  fi
+fi
 
 test=${1}
 test=${test:=10k.bam}
