@@ -283,7 +283,7 @@ public:
 
 		long readSetSize = store.getSize();
 
-		LOG_VERBOSE(2, "starting _buildSpectrumMPI");
+		LOG_VERBOSE(2, "starting _buildSpectrumMPI with " << omp_get_max_threads() << " threads");
 
 		StoreKmerMessageBuffer *msgBuffers;
 
@@ -852,6 +852,11 @@ done when empty cycle is received
 
 #pragma omp parallel num_threads(numThreads) firstprivate(batchReadIdx)
 		{
+			if (numThreads != omp_get_num_threads() && omp_get_thread_num() == 0) {
+				LOG_WARN(1, "Using less threads than expected: " << omp_get_num_threads() << " not " << numThreads);
+				numThreads = omp_get_num_threads();
+			}
+#pragma omp barrier
 			while (batchReadIdx < mostReads) {
 				int threadId = omp_get_thread_num();
 				KA &kmers = _kmers[omp_get_thread_num()];
@@ -862,8 +867,6 @@ done when empty cycle is received
 				batchBuffer[threadId].reserve(reserveBB);
 				readIndexBuffer[threadId].reserve(reserveOffsets);
 				readOffsetBuffer[threadId].reserve(reserveOffsets);
-
-				LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0 && threadId == 0, "trimming batch: " << batchReadIdx * _world.size());
 
 				LOG_DEBUG(3, "Starting batch for kmer lookups: " << batchReadIdx);
 
@@ -895,41 +898,44 @@ done when empty cycle is received
 							this->trimReadByMarkupLength(read, this->_trims[readIdx], markupLength);
 						}
 					}
-				}
-				assert(readOffsetBuffer[threadId].size() == readIndexBuffer[threadId].size());
+					LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0 && loopThreadId == 0, "trimming batch: " << batchReadIdx * _world.size());
+				
+					assert(readOffsetBuffer[threadId].size() == readIndexBuffer[threadId].size());
 
-				reqRespBuffer->sendReceive(); // flush/send all pending requests for this thread's batch
-				reqRespBuffer->sendReceive();
-				reqRespBuffer->sendReceive(); // receive all pending responses for this threads's batch
-				reqRespBuffer->sendReceive();
+					reqRespBuffer->sendReceive(); // flush/send all pending requests for this thread's batch
+					reqRespBuffer->sendReceive();
+					reqRespBuffer->sendReceive(); // receive all pending responses for this threads's batch
+					reqRespBuffer->sendReceive();
 
-				LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
-				for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
-					ReadSetSizeType &readIdx = readIndexBuffer[threadId][i];
+					LOG_DEBUG(3, "Starting trim for kmer lookups: " << batchReadIdx);
+					for(ReadSetSizeType i = 0; i < readIndexBuffer[threadId].size() ; i++ ) {
+						ReadSetSizeType &readIdx = readIndexBuffer[threadId][i];
 
-					KmerValueVectorIterator buffBegin = (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i] );
-					KmerValueVectorIterator buffEnd = ( ((i+1) < readOffsetBuffer[threadId].size()) ? (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i+1]) : batchBuffer[threadId].end() );
-					ReadTrimType &trim = this->_trims[readIdx];
+						KmerValueVectorIterator buffBegin = (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i] );
+						KmerValueVectorIterator buffEnd = ( ((i+1) < readOffsetBuffer[threadId].size()) ? (batchBuffer[threadId].begin() + readOffsetBuffer[threadId][i+1]) : batchBuffer[threadId].end() );
+						ReadTrimType &trim = this->_trims[readIdx];
 
-					for(KmerValueVectorIterator it = buffBegin; it != buffEnd; it++) {
-						if (*it == -1)
-							LOG_WARN(1, "readIdx: " << readIdx << " pos: " << (it - buffBegin) << " did not get updated!");
-						if (*it < minimumKmerScore)
-							*it = 0.0;
+						for(KmerValueVectorIterator it = buffBegin; it != buffEnd; it++) {
+							if (*it == -1)
+								LOG_WARN(1, "readIdx: " << readIdx << " pos: " << (it - buffBegin) << " did not get updated!");
+							if (*it < minimumKmerScore)
+								*it = 0.0;
+						}
+
+						if (useKmers) {
+							this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);
+							this->scoreReadByScoringType(buffBegin + trim.trimOffset, buffBegin + trim.trimOffset + trim.trimLength, trim, scoringType);
+						}
+
+						this->setTrimHeaders(trim, useKmers);
 					}
 
-					if (useKmers) {
-						this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);
-						this->scoreReadByScoringType(buffBegin + trim.trimOffset, buffBegin + trim.trimOffset + trim.trimLength, trim, scoringType);
-					}
-
-					this->setTrimHeaders(trim, useKmers);
 				}
-
 				//LOG_DEBUG(2, "Finished assigning trim values: " << batchReadIdx);
 				batchReadIdx += batchSize;
 
 				// local & world threads are okay to start without sync
+				
 			}
 			reqRespBuffer->finalize();
 		}

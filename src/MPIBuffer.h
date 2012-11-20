@@ -85,6 +85,7 @@ protected:
 	CallbackVector _sendReceiveCallbacks;
 	long _deliveries;
 	long _numMessages;
+	long _sendBytes, _recvBytes;
 	long _syncPoints;
 	long _syncAttempts;
 	double _transitTime;
@@ -94,12 +95,13 @@ protected:
 
 public:
 	MPIMessageBufferBase() :
-		_deliveries(0), _numMessages(0), _syncPoints(0), _syncAttempts(0), _transitTime(0), _threadWaitingTime(0), _masterWaitingTime(0) {
+		_deliveries(0), _numMessages(0), _sendBytes(0), _recvBytes(0), _syncPoints(0), _syncAttempts(0), _transitTime(0), _threadWaitingTime(0), _masterWaitingTime(0) {
 		_startTime = MPI_Wtime();
 	}
 	virtual ~MPIMessageBufferBase() {
 		LOG_VERBOSE(2, "~MPIMessageBufferBase(): " << _deliveries
 				<< " deliveries, " << _numMessages << " messages, "
+				<< _sendBytes << " b sent, " << _recvBytes << " b recv, "
 				<< _syncPoints << " / " << _syncAttempts << " syncs in " << (MPI_Wtime() - _startTime)
 				<< " seconds (" << _transitTime << " transit, " << _threadWaitingTime << " threadWait, " << _masterWaitingTime << " masterWait)");
 	}
@@ -567,11 +569,15 @@ public:
 					<< buildSize);
 		}
 		void setTransmitSizes(bool isFinalized) {
+			long bytesSend = 0, bytesRecv = 0;
+			setTransmitSizes(isFinalized, bytesSend, bytesRecv);
+		}
+		void setTransmitSizes(bool isFinalized, long &bytesSend, long &bytesRecv) {
 			if (isFinalized && buildSize == 0) {
 				for (int destRank = 0; destRank < worldSize; destRank++) {
 					getDataSize(destRank) = 0; // send no MessageHeaders
 					// add the (int) datasize to the total length sent so something is always sent
-					getSize(destRank) = sizeof(int);
+					bytesSend += getSize(destRank) = sizeof(int);
 				}
 			} else {
 				// set transmitted sizes
@@ -579,7 +585,7 @@ public:
 					int dataSize = getSize(destRank);
 					getDataSize(destRank) = dataSize; // includes MessageHeaders
 					// add the (int) datasize to the total length sent
-					getSize(destRank) += sizeof(int);
+					bytesSend += getSize(destRank) += sizeof(int);
 				}
 			}
 		}
@@ -823,7 +829,7 @@ private:
 			assert( in.areAllInState( TransmitBuffer::EMPTY_IN) );
 			assert( out.areAllInState( TransmitBuffer::READY_OUT) );
 
-			out.setTransmitSizes(out.areAllFinal());
+			out.setTransmitSizes(out.areAllFinal(), this->_sendBytes, this->_recvBytes);
 
 			LOG_DEBUG(4, "sendReceive(): Starting all2all on buffer: " << thisBuffer << " threadsSending: " << threadsSending);
 			waitTime = MPI_Wtime();
