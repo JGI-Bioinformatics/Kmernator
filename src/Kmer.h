@@ -761,7 +761,7 @@ public:
 
 	void _setMemory(IndexType size, IndexType idx, bool reserveExtra = true) {
 		assert(!isMmaped()); // mmaped can not be modified!
-		LOG_DEBUG_OPTIONAL(2, true, "_setMemory(" << this << ", " << size << ", " << idx << ", " << reserveExtra << "): " << _begin << " size: " << _size << " capacity: " << _capacity);
+		LOG_DEBUG(4, "_setMemory(" << this << ", " << size << ", " << idx << ", " << reserveExtra << "): " << _begin << " size: " << _size << " capacity: " << _capacity);
 
 		if (reserveExtra && idx == MAX_INDEX && size <= _capacity) {
 			_size = size;
@@ -874,7 +874,7 @@ public:
 			// free old memory
 			std::free(oldBegin);
 		}
-		LOG_DEBUG_OPTIONAL(3, true, "_setMemory(" << this << ", " << size << ", " << idx << ", " << reserveExtra << "): exited. memChanged:" << memChanged << " - " << _begin << " size: " << _size << " capacity: " << _capacity);
+		LOG_DEBUG(5, "_setMemory(" << this << ", " << size << ", " << idx << ", " << reserveExtra << "): exited. memChanged:" << memChanged << " - " << _begin << " size: " << _size << " capacity: " << _capacity);
 	}
 
 	void build(const TwoBitEncoding *twoBit, SequenceLengthType length,
