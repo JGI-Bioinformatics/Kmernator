@@ -362,9 +362,8 @@ public:
 
 		po::options_description miscOpts("Misc General");
 		miscOpts.add_options()
-#ifdef _USE_OPENMP
 				("threads", po::value<int>()->default_value(maxThreads), "maximum number of threads")
-#endif
+
 				// Misc General Options
 				("batch-size", po::value<unsigned int>()->default_value(batchSize), "default size of batches (reads, kmers, MPI, etc)")
 				;
