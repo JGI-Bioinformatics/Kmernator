@@ -43,6 +43,7 @@
 #include <boost/iostreams/stream.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/ref.hpp>
+#include <boost/container/vector.hpp>
 
 #include "config.h"
 #include "mpi.h"
@@ -391,7 +392,63 @@ protected:
 	}
 };
 
-std::vector< int > forkCommand() {
+class ForkCommandThread {
+public:
+	typedef boost::shared_ptr< ForkCommandThread > Ptr;
+	typedef std::vector< Ptr > Vector;
+	ForkCommandThread(std::string command) : _command(command), _status(0) {
+		_thread = boost::thread(*this);
+	}
+	~ForkCommandThread() {
+	}
+	ForkCommandThread(ForkCommandThread &move) : _command(move._command), _status(move._status), _thread(boost::move(move._thread)) {}
+	void operator()() {
+		LOG_DEBUG_OPTIONAL(2, true, "ForkCommandThread(" << _command << ")::() Starting");
+		_status = system(_command.c_str());
+		LOG_DEBUG_OPTIONAL(2, true, "ForkCommandThread(" << _command << ")::() Finished: " << _status);
+	}
+	std::string toString() {
+		return "ForkCommandThread(" + _command + "): " + boost::lexical_cast<std::string>(_status);
+	}
+	int getStatus() {
+		return _status;
+	}
+	boost::thread &getThread() {
+		return _thread;
+	}
+	int join() {
+		_thread.join();
+		return _status;
+	}
+	static int join(Vector v) {
+		int status = 0;
+		for(Vector::iterator it = v.begin(); it != v.end(); it++)
+			status += (*it)->join();
+		return status;
+	}
+private:
+	std::string _command;
+	int _status;
+	boost::thread _thread;
+};
+
+ForkCommandThread::Vector forkCommand() {
+	LOG_DEBUG_OPTIONAL(1, true, "forkCommand()");
+	ForkCommandThread::Vector forks;
+	StringListType forkCommand = SSOptions::getOptions().getForkCommand();
+
+	forks.reserve(forkCommand.size());
+	for(int i = 0; i < (int) forkCommand.size(); i++) {
+		LOG_DEBUG_OPTIONAL(1, true, "Starting " << forkCommand[i]);
+
+		ForkCommandThread::Ptr ptr(new ForkCommandThread(forkCommand[i])); 
+		forks.push_back(ptr);
+
+	}
+	return forks;
+}
+
+std::vector< int > _forkCommand() {
 	LOG_DEBUG_OPTIONAL(1, true, "forkCommand()");
 	std::vector< int > forks;
 	StringListType forkCommand = SSOptions::getOptions().getForkCommand();
@@ -424,7 +481,7 @@ int main(int argc, char *argv[]) {
 	ostream *out1 = &std::cout;
 	ofstream *out1f = NULL;
 	ofstream *out2f = NULL;
-	std::vector< int > forkPids;
+	ForkCommandThread::Vector forkThreads;
 	StringListType extraFifos = SSOptions::getOptions().getExtraFifo();
 
 	try {
@@ -461,7 +518,7 @@ int main(int argc, char *argv[]) {
 				Cleanup::addTemp(splitFile);
 			}
 
-			forkPids = forkCommand();
+			forkThreads = forkCommand();
 
 		}
 
@@ -522,16 +579,16 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (! SSOptions::getOptions().getFifoFile()) {
-			forkPids = forkCommand();
+			forkThreads = forkCommand();
 		}
 
-		if (!forkPids.empty()) {
-			for(int i = 0; i < (int) forkPids.size(); i++) {
-				LOG_DEBUG_OPTIONAL(1, true, "Waiting for forkCommand to finish: " << forkPids[i]);
-				int status = Fork::wait(forkPids[i]);
+		if (!forkThreads.empty()) {
+			for(int i = 0; i < (int) forkThreads.size(); i++) {
+				LOG_DEBUG_OPTIONAL(1, true, "Waiting for forkCommand to finish: " << forkThreads[i]->toString());
+				int status = forkThreads[i]->join();
 				if (status != 0) {
 					exitStatus += status;
-					LOG_THROW("Child process " << forkPids[i] << " errored.  Aborting");
+					LOG_THROW("Child process " << forkThreads[i]->toString() << " errored.  Aborting");
 				}
 			}
 		}
