@@ -22,7 +22,6 @@
 template< int BUFFER_SIZE = 524288 >
 class BroadcastOstreamDetail {
 public:
-	typedef std::map< int, BroadcastOstreamDetail *> InstanceMap;
 	const static int padding = sizeof(int) * 2; // (int)offset, (int)instance, (char[]) streambuffer
 	const static int MAX_SIZE = BUFFER_SIZE - padding - 128;
 

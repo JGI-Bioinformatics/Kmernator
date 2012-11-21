@@ -34,13 +34,18 @@ public:
 	virtual ~memory_buffer_detail() {
 		clear();
 	}
+	// returns true if reading while write is still open and buffer is empty
 	bool isBlocked() {
 		return blocked;
 	}
+
+	// signals write is complete so last reads can complete too
 	void writeClose() {
 		writeClosed = true;
-		if (setExplicitWriteClose == true)
+		if (setExplicitWriteClose == true) {
+			boost::mutex::scoped_lock mylock(writeCloseLock);
 			readReady.notify_one();
+		}
 	}
 
 	// never returns less than n
@@ -73,13 +78,13 @@ public:
 				if (setExplicitWriteClose && !writeClosed) {
 					blocked = true;
 					boost::mutex::scoped_lock mylock(writeCloseLock);
-					readReady.wait(mylock);
-					blocked = false;
+					readReady.timed_wait(mylock, boost::get_system_time() + boost::posix_time::milliseconds(500));
 				} else {
 					break;
 				}
 			}
 		}
+		blocked = false;
 		return totalReadSize;
 	}
 	std::streamsize tellp() const {
