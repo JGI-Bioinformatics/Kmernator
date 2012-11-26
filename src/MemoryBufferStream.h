@@ -21,14 +21,14 @@
 #include <boost/thread/condition.hpp>
 #include <boost/lexical_cast.hpp>
 
-template< std::streamsize BUFFER_SIZE = 262144 >
+template< std::streamsize BUFFER_SIZE = 131072 >
 class memory_buffer_detail {
 public:
 	typedef boost::shared_ptr< char > BufferType;
 
-	memory_buffer_detail(bool _setExplicitWriteClose = false)
+	memory_buffer_detail(bool _setExplicitWriteClose = false, bool _needsLock = false)
 	: writeOffset(BUFFER_SIZE), readOffset(0), writeCount(0), readCount(0),
-	  writerTid(-1), readerTid(-1), setExplicitWriteClose(_setExplicitWriteClose), writeClosed(false), blocked(false) {
+	  setExplicitWriteClose(_setExplicitWriteClose), needsLock(_needsLock), writeClosed(false), blocked(false) {
 		addBuffer();
 	}
 	virtual ~memory_buffer_detail() {
@@ -50,9 +50,6 @@ public:
 
 	// never returns less than n
 	std::streamsize write(const char* s, std::streamsize n) {
-		if (writerTid < 0)
-			writerTid = omp_get_thread_num();
-		assert(writerTid == omp_get_thread_num());
 		assert(!writeClosed);
 		std::streamsize wrote = 0, remaining = n;
 		while (remaining > 0) {
@@ -65,9 +62,6 @@ public:
 	// returning less than n signifies EOF
 	// so only do so if writing has stopped
 	std::streamsize read(char *s, std::streamsize n) {
-		if (readerTid < 0)
-			readerTid = omp_get_thread_num();
-		assert(readerTid == omp_get_thread_num());
 		std::streamsize totalReadSize = 0, remaining = n;
 		while (remaining > 0) {
 			std::streamsize readSize = readSome(s, remaining);
@@ -92,20 +86,6 @@ public:
 	}
 	std::streamsize tellg() const {
 		return readCount;
-	}
-
-protected:
-	void clear() {
-		{
-			bool locked = false;
-			if (needsLock()) { lock.lock(); locked = true;}
-			writeOffset = readOffset = writeCount = readCount = 0;
-			buffers.clear();
-			front.reset();
-			back.reset();
-			if (locked) lock.unlock();
-		}
-		writerTid = readerTid = -1;
 	}
 
 	std::streamsize writeSome(const char* s, std::streamsize n) {
@@ -135,7 +115,7 @@ protected:
 			if (b.get() == back.get()) {
 				// front buffer may not be full
 				bool locked = false;
-				if (needsLock()) { lock.lock(); locked = true; }
+				if (needsLock) { lock.lock(); locked = true; }
 				if (b.get() == back.get()) {
 					{
 						// make copies to prevent race between read and write ops
@@ -163,12 +143,26 @@ protected:
 		}
 		return readSize;
 	}
+
+protected:
+	void clear() {
+		{
+			bool locked = false;
+			if (needsLock) { lock.lock(); locked = true;}
+			writeOffset = readOffset = writeCount = readCount = 0;
+			buffers.clear();
+			front.reset();
+			back.reset();
+			if (locked) lock.unlock();
+		}
+	}
+
 	void addBuffer() {
 		assert(writeOffset == BUFFER_SIZE);
 		BufferType p( new char[BUFFER_SIZE] );
 		{
 			bool locked = false;
-			if (needsLock()) { lock.lock(); locked = true;}
+			if (needsLock) { lock.lock(); locked = true;}
 			buffers.push_back( p );
 			if (front.get() != buffers.front().get())
 				front = buffers.front();
@@ -182,7 +176,7 @@ protected:
 		assert(!buffers.empty());
 		{
 			bool locked = false;
-			if (needsLock()) { lock.lock(); locked = true; }
+			if (needsLock) { lock.lock(); locked = true; }
 			buffers.pop_front();
 			if (!buffers.empty()) {
 				front = buffers.front();
@@ -197,17 +191,12 @@ protected:
 		}
 	}
 
-	bool needsLock() {
-		return writerTid != readerTid && writerTid >=0 && readerTid >= 0;
-	}
-
 private:
 	volatile std::streamsize writeOffset;
 	std::streamsize readOffset;
 	std::streamsize writeCount, readCount;
 	std::deque< BufferType > buffers;
-	int writerTid, readerTid;
-	bool setExplicitWriteClose, writeClosed, blocked;
+	bool setExplicitWriteClose, needsLock, writeClosed, blocked;
 	BufferType front, back;
 	boost::mutex lock, writeCloseLock;
 	boost::condition_variable readReady;

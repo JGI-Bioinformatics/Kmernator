@@ -19,7 +19,7 @@
 
 #include "MemoryBufferStream.h"
 
-template< int BUFFER_SIZE = 524288 >
+template< int BUFFER_SIZE = 131072 >
 class BroadcastOstreamDetail {
 public:
 	const static int padding = sizeof(int) * 2; // (int)offset, (int)instance, (char[]) streambuffer
@@ -27,12 +27,14 @@ public:
 
 	BroadcastOstreamDetail(const MPI_Comm &_comm, int _broadcastRank, std::ostream &_destination) :
 		broadcastRank(_broadcastRank), destination(_destination) {
-		myComm = mpi::communicator(_comm, mpi::comm_duplicate),
+		myComm = mpi::communicator(_comm, mpi::comm_duplicate);
+		assert(MPI::Is_thread_main());
 		assert(!omp_in_parallel());
 		MPI_Comm_rank(myComm, &myRank);
 		init();
 	}
 	~BroadcastOstreamDetail() {
+		assert(MPI::Is_thread_main());
 		assert(!omp_in_parallel());
 		_close();
 		free(buf1); buf1 = NULL;
@@ -52,8 +54,8 @@ public:
 		return n;
 	}
 
-protected:
 	std::streamsize writeSome(const char* s, std::streamsize n) {
+		assert(MPI::Is_thread_main());
 		assert(myRank == broadcastRank);
 		assert(omp_get_thread_num() == 0);
 		assert(isActive());
@@ -66,6 +68,7 @@ protected:
 		return wrote;
 	}
 
+protected:
 	int &_getOffset(char *buf) {
 		return *((int*)buf);
 	}
@@ -132,6 +135,7 @@ protected:
 	}
 
 	void _flushSerial() {
+		assert(MPI::Is_thread_main());
 		assert(omp_get_thread_num() == 0);
 		assert(activeOut == NULL);
 		assert(isActive());
@@ -148,7 +152,7 @@ protected:
 	}
 	void _flushThreaded() {
 		assert(omp_in_parallel());
-		if (omp_get_thread_num() == 0) {
+		if (MPI::Is_thread_main()) { // (omp_get_thread_num() == 0) {
 			{
 				boost::mutex::scoped_lock mylock(mutex);
 				while (activeOut != NULL) {
