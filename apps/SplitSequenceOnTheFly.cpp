@@ -321,12 +321,13 @@ public:
 	: inputs(_inputs), readNum(_readNum), output(_output), first(_first), secondDim(_secondDim), numFiles(_numFiles), numReads(_numReads) {
 		if (readNum > 1)
 			LOG_THROW("Invalid readNum: " << readNum);
+		LOG_DEBUG_OPTIONAL(2, true, "OutputSplitFiles(): " << _readNum);
 	}
 	void operator()() {
 		numReads = 0;
 		if (secondDim > 1) {
 			for(int secondIt = 0 ; secondIt < secondDim ; secondIt++) {
-				LOG_DEBUG_OPTIONAL(1, true, "second: " << secondIt << " mydim:" << first << ", " << secondIt << " : " << secondDim << " part " << first*secondDim + secondIt);
+				LOG_DEBUG_OPTIONAL(1, true, "OutputSplitFiles()(): readNum: " << readNum << " second: " << secondIt << " mydim:" << first << ", " << secondIt << " : " << secondDim << " part " << first*secondDim + secondIt);
 				numReads += outputSplitFiles(inputs, readNum, output, first*secondDim + secondIt, numFiles);
 			}
 		} else {
@@ -343,15 +344,12 @@ protected:
 
 		int numInputs = inputs.size();
 		std::vector< RFRPtr > readers;
-		std::vector< MmapPtr > mmaps;
-		mmaps.reserve(numInputs);
 
 		readers.reserve(numInputs);
 		int chunks = SSOptions::getOptions().getEvenChunks();
 
 		for(int i=0; i < numInputs; i++) {
-			mmaps.push_back( MmapPtr(new Kmernator::MmapSource(inputs[i], FileUtils::getFileSize(inputs[i]))) );
-			readers.push_back(RFRPtr( new ReadFileReader(*mmaps[i])) );
+			readers.push_back(RFRPtr( new ReadFileReader(inputs[i], true)) );
 		}
 
 		assert(numInputs == (int)readers.size());
@@ -359,31 +357,26 @@ protected:
 		FormatOutput outputFormat = FormatOutput::getDefault();
 		unsigned long numReads = 0;
 
-		for(int i=0; i < numInputs; i++)
-			madvise(const_cast<char*>(mmaps[i]->data()), mmaps[i]->size(), MADV_DONTNEED);
-
-		_writeSplitReads(readers, readNum, chunks, fileNum, numFiles, mmaps, numReads, output, outputFormat, inputs);
+		_writeSplitReads(readers, readNum, chunks, fileNum, numFiles, numReads, output, outputFormat, inputs);
 
 		LOG_DEBUG_OPTIONAL(1, true, "Finished splitFiles parallel " << numReads);
 
 		return numReads;
 
 	}
-	void _writeSplitReads(std::vector<RFRPtr> & readers, unsigned long readNumOfPair, int chunks, int fileNum, int numFiles, std::vector<MmapPtr> & mmaps, unsigned long  & numReads, T & output, FormatOutput & outputFormat, const OptionsBaseInterface::FileListType & inputs)
+	void _writeSplitReads(std::vector<RFRPtr> & readers, unsigned long readNumOfPair, int chunks, int fileNum, int numFiles, unsigned long  & numReads, T & output, FormatOutput & outputFormat, const OptionsBaseInterface::FileListType & inputs)
 	{
 		std::string name, bases, quals, comment;
 		for(int i=0; i < (int)readers.size(); i++) {
 			for(int j = 0 ; j < chunks; j++) {
 				readers[i]->seekToPartition( fileNum+j*chunks, numFiles*chunks );
 
-				madvise(const_cast<char*>(mmaps[i]->data()+readers[i]->getPos()), readers[i]->getLastPos() - readers[i]->getPos(), MADV_SEQUENTIAL);
-
 				while (readers[i]->nextRead(name, bases, quals, comment)) {
 					if ((numReads & 0x01) == readNumOfPair) {
 						output << outputFormat.toString(name, bases, quals, comment);
 					}
 					numReads++;
-					LOG_DEBUG_OPTIONAL(2, ((numReads & 0x0fff) == 0), "reading and writing split file " << i << " " << inputs[i] << " for read " << numReads/2);
+					LOG_DEBUG_OPTIONAL(2, ((numReads & 0xfffff) == 0), "reading and writing split file " << i << " " << inputs[i] << " for read " << numReads/2);
 				}
 			}
 			LOG_DEBUG_OPTIONAL(2, true, "Finished reading and writing split file " << i << " " << inputs[i] << " for read. " << numReads << " " << readers[i]->getPos());
@@ -601,10 +594,11 @@ int main(int argc, char *argv[]) {
 		if (out1f != NULL) {
 			out1f->close();
 		}
-		Cleanup::cleanup();
+		Cleanup::cleanup(-1);
 		sleep(1); // attempt to let other processes get the signal
-		MPI_Abort(world, 1);
-		LOG_THROW("Found a problem...");
+		if (MPI::Is_thread_main())
+			world.abort(1);
+		LOG_THROW("Found a problem... should not get here");
 	}
 
 	Cleanup::cleanup();

@@ -1302,6 +1302,11 @@ protected:
 	void _clean(int param) {
 		// save this signals next action, and reset the rest.
 		struct sigaction &oact = getSigHandle(param);
+		if (param != 0 && param != SIGTERM) {
+			LOG_DEBUG_OPTIONAL(1, true, "Sending SIGTERM to master pid: " << getpid());
+			kill(getpid(), SIGTERM);
+		}
+		sleep(2);
 		_unsetSignals();
 		FileSet _copy;
 
@@ -1370,7 +1375,9 @@ protected:
 			}
 		}
 		if (param != 0) {
-			LOG_THROW("Terminating because of signal " << param);
+			Logger::getAbortFlag() = true;
+			if (param > 0)
+				LOG_THROW("Terminating because of signal " << param);
 		}
 	}
 

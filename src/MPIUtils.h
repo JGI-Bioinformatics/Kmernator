@@ -202,6 +202,7 @@ public:
 		return totalSize;
 	}
 };
+
 template< typename OptionsTempl = NullOptions >
 class ScopedMPIComm {
 public:
@@ -211,7 +212,11 @@ public:
 		_world = initializeWorldAndOptions(argc, argv);
 	}
 	~ScopedMPIComm() {
-		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Finishing");
+		if (Logger::getAbortFlag()) {
+			abort(1);
+		} else {
+			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Finishing");
+		}
 		Logger::setWorld(NULL);
 		_world.reset();
 		MPI_Finalize();
@@ -239,6 +244,8 @@ public:
 		_world->barrier();
 	}
 	void abort(int i) const {
+		assert(MPI::Is_thread_main());
+		LOG_WARN(1, "Aborting..");
 		_world->abort(i);
 	}
 	mpi::communicator split(int color) {

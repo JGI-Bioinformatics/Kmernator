@@ -48,6 +48,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <ctime>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 #include "config.h"
 #include <boost/lexical_cast.hpp>
@@ -81,7 +83,7 @@ class Logger
 #ifdef _USE_OPENMP
 		return " T" + boost::lexical_cast<std::string>( omp_get_thread_num() );
 #else
-		return std::string();
+		return " T" + boost::lexical_cast<std::string>( syscall(SYS_gettid) ); // gettid() );
 #endif
 	}
 	inline std::string getTime() const {
@@ -100,6 +102,10 @@ public:
 	Logger(std::ostream &os, std::string attr, unsigned int level) : _os(&os), _attribute(attr), _level(level), _thisLevel(-1) {}
 	Logger(const Logger &copy) {
 		*this = copy;
+	}
+	static bool &getAbortFlag() {
+		static bool _ = false;
+		return _;
 	}
 	static void setWorld(void *_w, bool debugGather = false) {
 		*_getWorld() = _w;
@@ -374,7 +380,7 @@ private:
 	std::string _msg;
 };
 
-#define LOG_THROW(log) {  std::stringstream ss ; ss << log; Log::Error(ss.str() , true); throw LoggedException(Log::getErrorMessages()); }
+#define LOG_THROW(log) {  std::stringstream ss ; ss << log; Log::Error(ss.str() , true); Logger::getAbortFlag() = true; throw LoggedException(Log::getErrorMessages()); }
 #define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), level >= 3); }
 #define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), level >= 2); }
 #define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { std::stringstream ss ; ss << log; Log::Warn(ss.str(), true); }
