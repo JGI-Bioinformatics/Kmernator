@@ -18,7 +18,7 @@ class _MergeIndexPartitionedBamOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
-		GeneralOptions::getOptions().getDebug() = 2;
+		GeneralOptions::getOptions().getDebug() = 0;
 		GeneralOptions::getOptions().getMaxThreads() = 1;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
@@ -88,6 +88,7 @@ int main(int argc, char **argv)
 		mpi::communicator partitionWorld = world.split(color);
 		LOG_VERBOSE(1, "Input: " << myInputFile << " split color: " << color << " rank: " << partitionWorld.rank() << " of " << partitionWorld.size());
 		SamUtils::MPIMergeSam mergeSam(partitionWorld, myInputFile, myReads);
+		BamStreamUtils::distributeReadsFinal(world, myReads);
 		unlink(ourOutputBam.c_str());
 		mergeSam.outputMergedHeader(ourOutputBam);
 		SamUtils::MPISortBam sortBam(world, myReads, ourOutputBam, NULL);
