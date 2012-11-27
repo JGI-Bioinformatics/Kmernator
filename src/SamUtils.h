@@ -134,66 +134,86 @@ private:
 class BamManager {
 public:
 	typedef std::vector<bam1_t *> BamVector;
-	static const int READS_PER_BATCH = 32768;
-
-	static inline BamManager &getSharedInstance() {
-		static BamManager _;
-		return _;
+	static inline int &getReadsPerBatch() {
+		static int READS_PER_BATCH = 32768;
+		return READS_PER_BATCH;
 	}
 
 	BamManager() {}
 	~BamManager() {
 		destroyBamVector(myReads);
 	}
-	void initBamVector(int newSize) {
-		initBamVector(myReads, newSize);
-	}
+
 	static void initBamVector(BamVector &reads, int newSize) {
 		reads.reserve(newSize + 1); // add extra for option to add extra NULL at end for heapsort
+		BamVector &bv = getSharedInstance().myReads;
 		for (int i = reads.size(); i < newSize; i++)
-			reads.push_back(bam_init1());
+			reads.push_back(initOrRecycleFrom(bv));
 	}
-	void resetBamVector(int size) {
-		resetBamVector(myReads, size);
-	}
-	static void resetBamVector(BamVector &reads, int newSize) {
-		reads.reserve(newSize + 1);// add extra for option to add extra NULL at end for heapsort
-		reads.resize(newSize);
-		for (int i = 0; i < newSize; i++) {
-			if (reads[i] == NULL)
-				reads[i] = bam_init1();
-		}
-	}
-	inline bam1_t *initOrRecycle() {
-		if (myReads.empty())
+
+	static inline bam1_t *initOrRecycleFrom(BamVector &bv) {
+		if (bv.empty())
 			return bam_init1();
 		else {
-			bam1_t *b = myReads.back();
-			myReads.pop_back();
+			bam1_t *b = bv.back();
+			bv.pop_back();
 			return b;
 		}
 	}
-	inline void destroyOrRecycle(bam1_t *b, int maxCapacity = READS_PER_BATCH) {
-		if ( (int) myReads.size() >= maxCapacity)
+	static inline bam1_t *initOrRecycle() {
+		return initOrRecycleFrom(getSharedInstance().myReads);
+	}
+	static inline void destroyOrRecycleTo(bam1_t *b, BamVector &bv, int maxCapacity = (getReadsPerBatch()*2)) {
+		if ( (int) bv.size() >= maxCapacity)
 			bam_destroy1(b);
 		else {
-			myReads.reserve(maxCapacity);
-			myReads.push_back(b);
+			bv.reserve(maxCapacity);
+			bv.push_back(b);
 		}
 	}
-	void recycleMissingReads(BamVector &reads, int size) {
+	static inline void destroyOrRecycle(bam1_t *b, int maxCapacity = (getReadsPerBatch()*2)) {
+		destroyOrRecycleTo(b, getSharedInstance().myReads, maxCapacity);
+	}
+
+	static void initOrRecycleBamVector(BamVector &reads, int size) {
 		reads.reserve(size + 1); // add extra for option to add extra NULL at end for heapsort
+		BamVector &bv = getSharedInstance().myReads;
 		for (BamVector::iterator it = reads.begin(); it != reads.end(); it++) {
 			if (*it == NULL) {
-				*it = initOrRecycle();
+				*it = initOrRecycleFrom(bv);
 			}
 		}
 		for(long i = reads.size(); i < size; i++)
-			reads.push_back(initOrRecycle());
+			reads.push_back(initOrRecycleFrom(bv));
 	}
-	void truncateNulls(int offset = 0) {
-		return truncateNulls(myReads, offset);
+
+	static void destroyOrRecycleBamVector(BamVector &reads, int maxCapacity = (getReadsPerBatch() * 2)) {
+		BamVector &bv = getSharedInstance().myReads;
+		for (BamVector::iterator it = reads.begin(); it != reads.end(); it++)
+			if (*it != NULL)
+				destroyOrRecycleTo(*it, bv, maxCapacity);
+		reads.clear();
 	}
+
+	static void destroyBamVector(BamVector &reads) {
+		BamVector &bv = getSharedInstance().myReads;
+		for (BamVector::iterator it = reads.begin(); it != reads.end(); it++)
+			if (*it != NULL)
+				destroyOrRecycleTo(*it, bv);
+		reads.clear();
+	}
+
+	static void checkNulls(std::string mesg, const BamVector &reads) {
+		std::stringstream ss;
+		for (BamVector::const_iterator it = reads.begin(); it != reads.end(); it++)
+			if (*it == NULL)
+				ss << (it - reads.begin()) << ", ";
+		std::string s = ss.str();
+		if (s.length() > 0) {
+			LOG_DEBUG_OPTIONAL(2, true, "checkNulls() " << mesg << reads.size() << " : " << s);
+		}
+	}
+
 	static void truncateNulls(BamVector &reads, int offset = 0) {
 		assert(offset <= (int) reads.size());
 		BamVector::iterator startNull = reads.end();
@@ -212,35 +232,10 @@ public:
 		}
 	}
 
-	void recycleBamVector(BamVector &reads, int maxCapacity = READS_PER_BATCH) {
-		for (BamVector::iterator it = reads.begin(); it != reads.end(); it++)
-			if (*it != NULL)
-				destroyOrRecycle(*it, maxCapacity);
-		reads.clear();
-	}
-
-	void destroyBamVector() {
-		destroyBamVector(myReads);
-	}
-	static void destroyBamVector(BamVector &reads) {
-		for (BamVector::iterator it = reads.begin(); it != reads.end(); it++)
-			if (*it != NULL)
-				bam_destroy1(*it);
-		reads.clear();
-	}
-
-	void checkNulls(std::string mesg) {
-		checkNulls(mesg, myReads);
-	}
-	static void checkNulls(std::string mesg, const BamVector &reads) {
-		std::stringstream ss;
-		for (BamVector::const_iterator it = reads.begin(); it != reads.end(); it++)
-			if (*it == NULL)
-				ss << (it - reads.begin()) << ", ";
-		std::string s = ss.str();
-		if (s.length() > 0) {
-			LOG_DEBUG_OPTIONAL(2, true, "checkNulls() " << mesg << reads.size() << " : " << s);
-		}
+protected:
+	static inline BamManager &getSharedInstance() {
+		static BamManager _;
+		return _;
 	}
 
 private:
@@ -250,7 +245,6 @@ private:
 std::ostream &operator<<(std::ostream& os, const bam1_core_t &core);
 class BamStreamUtils {
 public:
-	static const int READS_PER_BATCH = BamManager::READS_PER_BATCH;
 	typedef BamManager::BamVector BamVector;
 	typedef std::vector<bam1_core_t> BamCoreVector;
 
@@ -385,13 +379,13 @@ public:
 	}
 
 	static int readNextBam(samfile_t *ins, BamVector &reads) {
-		bam1_t *bam = BamManager::getSharedInstance().initOrRecycle();
+		bam1_t *bam = BamManager::initOrRecycle();
 		int bytes;
 		if ((bytes = readNextBam(ins, bam)) >= 0) {
 			reads.push_back(bam);
 			return bytes;
 		} else {
-			BamManager::getSharedInstance().destroyOrRecycle(bam);
+			BamManager::destroyOrRecycle(bam);
 			return -1;
 		}
 	}
@@ -420,10 +414,11 @@ public:
 		MPI_Comm_rank(comm, &rank);
 		MPI_Comm_size(comm, &size);
 		long count = 0;
+		int batchSize = BamManager::getReadsPerBatch();
 		while (lastOffset < 0 || samTell(ins) < lastOffset) {
 			if (readNextBam(ins, reads) < 0)
 				break;
-			if (++count % READS_PER_BATCH == 0) {
+			if (++count % batchSize == 0) {
 				LOG_DEBUG_OPTIONAL(2, true, "read: " << count << " reads so far.  Storing: " << reads.size());
 				if (needsBalance)
 					distributeReads(comm, reads);
@@ -607,7 +602,7 @@ public:
 
 		if (data_len < c->l_qname + c->l_qseq + (c->l_qseq+1) / 2 + c->n_cigar * 4) return false;
 		if ((c->flag & 0xf800) != 0) return false;
-		if (header && c->tid >= 0 && (abs(c->isize) > header->target_len[c->tid])) return false;
+		if (header && c->tid >= 0 && (abs(c->isize) > (int) header->target_len[c->tid])) return false;
 		int maxAuxSize = 18 * 8 + // sizeof i fields
 			20 * (4 + c->l_qseq) + // sizeof Z, B, S fields (assume sequence length)
 			3 * 26 * (4 + c->l_qseq); // sizeof all reserved fields (assume sequence length)
@@ -707,7 +702,7 @@ public:
 				if (bam_seek(fp->x.bam, bamPointer, SEEK_SET) != 0)
 					return false;
 				int readSize = bam_read(fp->x.bam, bamBuf.get(), maxBufSize);
-				bam1_t *b = BamManager::getSharedInstance().initOrRecycle();
+				bam1_t *b = BamManager::initOrRecycle();
 				int pos;
 				for(pos = 0; pos < (int) uncompressedBlockLength; pos++) {
 					if (pos >= (int) (readSize - BAM_CORE_SIZE - 4))
@@ -726,7 +721,7 @@ public:
 					}
 				}
 				// Could not find a bam record before the end of this compressed block
-				BamManager::getSharedInstance().destroyOrRecycle(b);
+				BamManager::destroyOrRecycle(b);
 				if (pos < (int) uncompressedBlockLength)
 					return false; // EOF
 
@@ -768,7 +763,6 @@ typedef BamStreamUtils::BamCoreVector BamCoreVector;
 
 class SamUtils {
 public:
-	static const int READS_PER_BATCH = BamStreamUtils::READS_PER_BATCH;
 	typedef std::vector<int> IntVector;
 	typedef std::vector<int64_t> LongVector;
 	typedef bam1_t *bam1_p;
@@ -893,7 +887,7 @@ public:
 				assert(bam != NULL);
 				LOG_DEBUG_OPTIONAL(3, true, "Writing: " << count << " " << bam1_qname(bam) << " " << bam->core.tid << "," << bam->core.pos);;
 				bgzfo << *bam;
-				BamManager::getSharedInstance().destroyOrRecycle(bam);
+				BamManager::destroyOrRecycle(bam);
 				std::pop_heap(heap.begin(), heap.end(), sbp);
 				heap.pop_back();
 				bampp++;
@@ -913,7 +907,7 @@ public:
 			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
 		}
 		reads.pop_back(); // remove terminate condition
-		BamManager::getSharedInstance().recycleBamVector(reads);
+		BamManager::destroyOrRecycleBamVector(reads);
 
 		return count;
 	}
@@ -937,7 +931,7 @@ public:
 				bgzfo << *bam;
 				LOG_DEBUG_OPTIONAL(4, true, bam1_qname(bam));
 				if (destroyBam) {
-					BamManager::getSharedInstance().destroyOrRecycle(bam);
+					BamManager::destroyOrRecycle(bam);
 					*it = NULL;
 				}
 			}
@@ -968,7 +962,7 @@ public:
 				bam1_t *bam = *it;
 				BamStreamUtils::writeFastq(os, bam);
 				if (destroyBam) {
-					BamManager::getSharedInstance().destroyOrRecycle(bam);
+					BamManager::destroyOrRecycle(bam);
 					*it = NULL;
 				}
 			}
@@ -1120,7 +1114,7 @@ public:
 				BamVector & recvReads, LongVector & recvOffsets,
 				LongVector & _recvCounts, bool copyDataIfUnmapped = true) {
 			TransferStats stats(size);
-			long maxReadsPerRank = (READS_PER_BATCH + size - 1) / size;
+			long maxReadsPerRank = (BamManager::getReadsPerBatch() + size - 1) / size;
 			IntVector sendBytes(size, 0), sendByteDispl(size, 0), recvBytes(
 					size, 0), recvByteDispl(size, 0);
 			LongVector sendCounts = _sendCounts, recvCounts = _recvCounts;
@@ -1281,7 +1275,7 @@ public:
 
 							clearData(tmpBam);
 							assert(recvReads[recvReadsIdx] == NULL);
-							recvReads[recvReadsIdx] = BamManager::getSharedInstance().initOrRecycle();
+							recvReads[recvReadsIdx] = BamManager::initOrRecycle();
 							bam_copy1(recvReads[recvReadsIdx], tmpBam);
 							recvReads[recvReadsIdx]->data_len = dataLen; // copy it back for now...
 						}
@@ -1313,7 +1307,7 @@ public:
 						ptr += sendReads[sendReadsIdx]->data_len;
 						countBytes += sendReads[sendReadsIdx]->data_len;
 					}
-					BamManager::getSharedInstance().destroyOrRecycle(sendReads[sendReadsIdx]);
+					BamManager::destroyOrRecycle(sendReads[sendReadsIdx]);
 					sendReads[sendReadsIdx] = NULL;
 					sendReadsIdx++;
 				}
@@ -1551,11 +1545,12 @@ public:
 		void pickBestAlignments() {
 			LOG_DEBUG_OPTIONAL(2, true, "pickBestAlignment()");
 			BamVector batchReads;
-			BamManager::initBamVector(batchReads, READS_PER_BATCH);
+			const int batchSize = BamManager::getReadsPerBatch();
+			BamManager::initBamVector(batchReads, batchSize);
 
 			long totalBytes = 0;
 			int count = 0;
-			while (count < READS_PER_BATCH) {
+			while (count < batchSize) {
 				bam1_t *tmpBam = batchReads[count];
 				int bytesRead = BamStreamUtils::readNextBam(fh, tmpBam);
 				if (bytesRead < 0)
@@ -1563,11 +1558,11 @@ public:
 				fixtids(tmpBam);
 				totalBytes += bytesRead;
 				count++;
-				if (count == READS_PER_BATCH) {
+				if (count == batchSize) {
 					BamVector v = syncAndPick(batchReads, count);
 					myReads.insert(myReads.end(), v.begin(), v.end());
 					count = 0;
-					BamManager::getSharedInstance().recycleBamVector(batchReads, READS_PER_BATCH);
+					BamManager::initOrRecycleBamVector(batchReads, batchSize);
 				}
 			}
 			if (count > 0) {
@@ -1575,7 +1570,7 @@ public:
 				myReads.insert(myReads.end(), v.begin(), v.end());
 			}
 
-			BamManager::destroyBamVector(batchReads);
+			BamManager::destroyOrRecycleBamVector(batchReads);
 		}
 		void fixtids(bam1_t *tmpBam) {
 			bam1_core_t &c = tmpBam->core;
@@ -1740,6 +1735,8 @@ public:
 					pickedReads.push_back(bam_dup1(pickBestRead(reads1)));
 				}
 			}
+
+			BamManager::destroyOrRecycleBamVector(tmpReads);
 
 			fixMates(pickedReads);
 			return pickedReads;
@@ -1949,7 +1946,7 @@ public:
 			LongVector sendCounts(ourSize, 0);
 			long totalSendCounts = 0;
 
-			bam1_t *b = BamManager::getSharedInstance().initOrRecycle();
+			bam1_t *b = BamManager::initOrRecycle();
 			BamVector::iterator start = myReads.begin(), it;
 			for (int i = 0; i < ourSize; i++) {
 				if (i == ourSize - 1) {
@@ -1982,7 +1979,7 @@ public:
 				totalSendCounts += sendCounts[i];
 				start = it;
 			}
-			BamManager::getSharedInstance().destroyOrRecycle(b);
+			BamManager::destroyOrRecycle(b);
 
 			// BamManager::checkNulls("before exchange: ", myReads);
 			assert(totalSendCounts == (int) myReads.size());
@@ -2364,7 +2361,7 @@ public:
 		LongVector sendOffsets(size, 0), sendCounts(size,0 ), recvOffsets(size, 0), recvCounts(size, 0);
 		LongVector deltas(size, 0);
 		long totSend = 0, totRecv = 0, keepOffset = 0;
-		long maxPerRank = SamUtils::READS_PER_BATCH / size;
+		long maxPerRank = BamManager::getReadsPerBatch() / size;
 		long slop = isFinal ? size : maxPerRank / 2;
 		for(int i = 0; i < size; i++) {
 			if (worldState[i] > target + slop) {
