@@ -1479,7 +1479,8 @@ public:
 					buf = (char*) calloc(total, 1);
 				}
 
-				LOG_DEBUG(2, "Sending @SQ lines:\n" << std::string(firstSQ, myCount));
+				LOG_DEBUG(2, "Sending @SQ " << myCount << "bytes");
+				LOG_DEBUG(3, "Sending @SQ lines:\n" << std::string(firstSQ, myCount));
 				if (MPI_SUCCESS != MPI_Gatherv(firstSQ, myCount, MPI_BYTE, buf,
 						counts, displs, MPI_BYTE, root, myComm))
 					LOG_THROW("MPI_Gatherv failed");
@@ -2173,7 +2174,7 @@ public:
 					: unmapped;
 			char *b2str = b.second->data != NULL ? bam_format1(NULL, b.second)
 					: unmapped;
-			LOG_DEBUG_OPTIONAL(2, true, "Selected " << (better == &a ? "a " : "b ") << ranka << " " << rankb << "\na1 " << a1str << "\na2 " << a2str << "\nb1 " << b1str << "\nb2 " << b2str);
+			LOG_DEBUG_OPTIONAL(4, true, "Selected " << (better == &a ? "a " : "b ") << ranka << " " << rankb << "\na1 " << a1str << "\na2 " << a2str << "\nb1 " << b1str << "\nb2 " << b2str);
 			if (a1str != unmapped)
 				free(a1str);
 			if (b1str != unmapped)
@@ -2200,7 +2201,7 @@ public:
 		if (Log::isDebug(2)) {
 			char *astr = a->data != NULL ? bam_format1(NULL, a) : unmapped;
 			char *bstr = b->data != NULL ? bam_format1(NULL, b) : unmapped;
-			LOG_DEBUG_OPTIONAL(2, true, "Selected " << (better == a ? "a " : "b ") << ranka << " " << rankb << "\n" << astr << "\n" << bstr);
+			LOG_DEBUG_OPTIONAL(4, true, "Selected " << (better == a ? "a " : "b ") << ranka << " " << rankb << "\n" << astr << "\n" << bstr);
 			if (astr != unmapped)
 				free(astr);
 			if (bstr != unmapped)
