@@ -112,8 +112,8 @@ void testBGZFIO(std::string test, bool withEOF) {
 void testBGZF(std::string test, bool withEOF)
 {
 	std::ostringstream bgzf_oss, decomp_oss;
-	bgzf_compressor bgzfout_comp;
-	bgzfout_comp.setAddEOFBlock(withEOF);
+	bgzf_compressor bgzfout_comp(withEOF);
+	//bgzfout_comp.setAddEOFBlock(withEOF);
 	boost::iostreams::filtering_ostream foss;
 	foss.push(bgzfout_comp);
 	foss.push(bgzf_oss);

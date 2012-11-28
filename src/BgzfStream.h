@@ -69,25 +69,24 @@ public:
 	class bgzf_compressor_impl {
 	public:
 		typedef char char_type;
-		static bool &getAddEOFBlock() {
-			static bool _x = true;
-			return _x;
-		}
-		static void setAddEOFBlock(bool v) {
-			getAddEOFBlock() = v;
-		}
-		bgzf_compressor_impl(bool compress = true) {
+
+		bgzf_compressor_impl(bool _addEOFBlock = true, bool compress = true) {
 			fp = (BGZF*)(calloc(sizeof (BGZF), 1));
 	        init(fp, compress);
 	        compressed_block_length = 0;
 	        compressed_block_written_offset = 0;
 	        isEOF = false;
+	        addEOFBlock = _addEOFBlock;
 	   }
 
 	    ~bgzf_compressor_impl()
 	    {
 	        reset(fp);
 	        blockFileOffsets.clear();
+	    }
+
+	    void unsetEofBlock() {
+	    	addEOFBlock = false;
 	    }
 
 	    void close()
@@ -161,7 +160,7 @@ public:
 			}
 			if (flush && fp->block_offset == 0 && readIsEmpty && writeIsEmpty && !isEOF) {
 				isEOF = true;
-				if (getAddEOFBlock()) {
+				if (addEOFBlock) {
 					deflateBlock(); // EOF marker, empty BGZF block
 					writeIsEmpty &= writeBuffer(begin_out, end_out);
 				}
@@ -188,8 +187,8 @@ public:
 	private:
 		BGZF *fp;
 		size_t compressed_block_length, compressed_block_written_offset;
-		bool isEOF;
 		FileOffsetVector blockFileOffsets;
+		bool isEOF, addEOFBlock;
 	};
 
 	class bgzf_decompressor_impl {
@@ -671,8 +670,7 @@ private:
 public:
 	typedef typename base_type::char_type               char_type;
 	typedef typename base_type::category                category;
-	basic_bgzf_compressor() : base_type(bgzf_detail::DEFAULT_BLOCK_SIZE) {}
-	void setAddEOFBlock(bool v) { impl_type::setAddEOFBlock(v); }
+	basic_bgzf_compressor(bool setEOFBlock = true) : base_type(bgzf_detail::DEFAULT_BLOCK_SIZE, setEOFBlock) {}
 };
 typedef basic_bgzf_compressor<> bgzf_compressor;
 
@@ -692,8 +690,7 @@ class bgzf_ostream : public boost::iostreams::filtering_ostream
 {
 public:
 	template< typename OUT >
-	bgzf_ostream(OUT &_os, bool addEOFBlock = true) : comp() {
-		comp.setAddEOFBlock(addEOFBlock);
+	bgzf_ostream(OUT &_os, bool addEOFBlock = true) : comp(addEOFBlock) {
 		this->push(comp);
 		this->push(_os);
         }

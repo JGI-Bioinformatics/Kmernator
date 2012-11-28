@@ -147,7 +147,7 @@ target_link_libraries( MeraculousCounter
                               )
 
 set_source_files_properties( BamSort-P
-                             PROPERTIES COMPILE_FLAGS "${KMERNATOR_MPI_CXX_FLAGS}"
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
                              )
 add_executable( BamSort-P BamSort-P )
 set_target_properties( BamSort-P

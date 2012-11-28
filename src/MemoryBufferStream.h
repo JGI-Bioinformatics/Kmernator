@@ -24,14 +24,23 @@
 template< std::streamsize BUFFER_SIZE = 131072 >
 class memory_buffer_detail {
 public:
-	typedef boost::shared_ptr< char > BufferType;
+	class Buffer {
+	public:
+		Buffer() : readOffset(0), writeOffset(0), buf(new char[BUFFER_SIZE]) {}
+		~Buffer() { delete [] buf; }
+		volatile std::streamsize readOffset, writeOffset;
+		char * buf;
+	};
+	typedef boost::shared_ptr< Buffer > BufferType;
 
-	memory_buffer_detail(bool _setExplicitWriteClose = false, bool _needsLock = false)
-	: writeOffset(BUFFER_SIZE), readOffset(0), writeCount(0), readCount(0),
-	  setExplicitWriteClose(_setExplicitWriteClose), needsLock(_needsLock), writeClosed(false), blocked(false) {
+	memory_buffer_detail(bool _setExplicitWriteClose = false)
+	: writeCount(0), readCount(0),
+	  setExplicitWriteClose(_setExplicitWriteClose), writeClosed(false), blocked(false) {
 		addBuffer();
+		LOG_DEBUG_OPTIONAL(2, true, "memory_buffer_detail(): " << this);
 	}
 	virtual ~memory_buffer_detail() {
+		LOG_DEBUG_OPTIONAL(2, true, "~memory_buffer_detail(): " << this << " readCount: " << readCount << " writeCount: " << writeCount << " buffers:" << buffers.size());
 		clear();
 	}
 	// returns true if reading while write is still open and buffer is empty
@@ -46,6 +55,7 @@ public:
 			boost::mutex::scoped_lock mylock(writeCloseLock);
 			readReady.notify_one();
 		}
+		LOG_DEBUG_OPTIONAL(2, true, "memory_buffer_detail::writeClose(): " << this << " at " << writeCount);
 	}
 
 	// never returns less than n
@@ -89,9 +99,11 @@ public:
 	}
 
 	std::streamsize writeSome(const char* s, std::streamsize n) {
-		std::streamsize wrote = std::min(BUFFER_SIZE - writeOffset, n);
 		BufferType b = back;
-		memcpy(b.get() + writeOffset, s, wrote);
+		volatile std::streamsize &writeOffset = b->writeOffset;
+		std::streamsize wrote = std::min(BUFFER_SIZE - writeOffset, n);
+
+		memcpy(b->buf + writeOffset, s, wrote);
 		{
 			// make copies to prevent race between read & write threads
 			std::streamsize tmp = writeOffset + wrote;
@@ -107,76 +119,54 @@ public:
 
 	std::streamsize readSome(char *s, std::streamsize n) {
 		int readSize;
-		if (front.get() == NULL)
+		BufferType b = front;
+		if (b.get() == NULL)
 			return 0;
 		else {
-			BufferType b = front;
-
-			if (b.get() == back.get()) {
-				// front buffer may not be full
-				bool locked = false;
-				if (needsLock) { lock.lock(); locked = true; }
-				if (b.get() == back.get()) {
-					{
-						// make copies to prevent race between read and write ops
-						std::streamsize tmp = writeOffset;
-						readSize = std::min(n, (tmp - readOffset));
-					}
-					if (locked) lock.unlock();
-					if (readSize == 0)
-						return 0;
-				} else {
-					// front buffer is full
-					if (locked) lock.unlock();
-					readSize = std::min(n, BUFFER_SIZE - readOffset);
-				}
-			} else {
-				// front buffer is full
-				readSize = std::min(n, BUFFER_SIZE - readOffset);
-			}
-
-			memcpy(s, b.get() + readOffset, readSize);
+			std::streamsize writeOffset = b->writeOffset; // make a copy
+			volatile std::streamsize &readOffset = b->readOffset;  // direct reference
+			readSize = std::min(n, writeOffset - readOffset);
+			memcpy(s, b->buf + readOffset, readSize);
 			readOffset += readSize;
 			readCount += readSize;
-			if (readOffset == BUFFER_SIZE)
+			if (readOffset == BUFFER_SIZE || (readOffset == b->writeOffset && writeClosed))
 				removeFirstBuffer();
 		}
 		return readSize;
 	}
 
+	void concat(memory_buffer_detail &src) {
+		assert(writeClosed && src.writeClosed);
+		readCount += src.readCount;
+		writeCount += src.writeCount;
+		buffers.insert(buffers.end(), src.buffers.begin(), src.buffers.end());
+		front = buffers.front();
+		back = buffers.back();
+		src.clear();
+	}
+
 protected:
 	void clear() {
 		{
-			bool locked = false;
-			if (needsLock) { lock.lock(); locked = true;}
-			writeOffset = readOffset = writeCount = readCount = 0;
+			writeCount = readCount = 0;
 			buffers.clear();
 			front.reset();
 			back.reset();
-			if (locked) lock.unlock();
 		}
 	}
 
 	void addBuffer() {
-		assert(writeOffset == BUFFER_SIZE);
-		BufferType p( new char[BUFFER_SIZE] );
+		BufferType p( new Buffer() );
 		{
-			bool locked = false;
-			if (needsLock) { lock.lock(); locked = true;}
 			buffers.push_back( p );
 			if (front.get() != buffers.front().get())
 				front = buffers.front();
 			back = p;
-			writeOffset = 0;
-			if (locked) lock.unlock();
 		}
 	}
 	void removeFirstBuffer() {
-		assert(readOffset == BUFFER_SIZE);
 		assert(!buffers.empty());
 		{
-			bool locked = false;
-			if (needsLock) { lock.lock(); locked = true; }
 			buffers.pop_front();
 			if (!buffers.empty()) {
 				front = buffers.front();
@@ -186,21 +176,18 @@ protected:
 				front.reset();
 				back.reset();
 			}
-			readOffset = 0;
-			if (locked) lock.unlock();
 		}
 	}
 
 private:
-	volatile std::streamsize writeOffset;
-	std::streamsize readOffset;
 	std::streamsize writeCount, readCount;
 	std::deque< BufferType > buffers;
-	bool setExplicitWriteClose, needsLock, writeClosed, blocked;
+	bool setExplicitWriteClose, writeClosed, blocked;
 	BufferType front, back;
-	boost::mutex lock, writeCloseLock;
+	boost::mutex writeCloseLock;
 	boost::condition_variable readReady;
 };
+
 
 template< typename Impl >
 class stream_impl_template {
@@ -245,11 +232,15 @@ public:
 		return *this;
 	}
 
+	// specialized for memory_buffer_detail
 	bool isBlocked() {
 		return _impl->isBlocked();
 	}
 	void writeClose() {
 		return _impl->writeClose();
+	}
+	void concat(stream_impl_template &src) {
+		_impl->concat(*src._impl);
 	}
 
 	class ostream : public boost::iostreams::filtering_ostream
@@ -289,5 +280,7 @@ private:
 };
 
 typedef stream_impl_template< memory_buffer_detail< > > MemoryBuffer;
+typedef boost::shared_ptr< MemoryBuffer > MemoryBufferPtr;
+typedef std::vector< MemoryBufferPtr > MemoryBufferVector;
 
 #endif // MEMORY_BUFFER_STREAM_H_

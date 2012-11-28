@@ -918,32 +918,56 @@ public:
 		int rank, size;
 		MPI_Comm_rank(comm, &rank);
 		MPI_Comm_size(comm, &size);
-		MemoryBuffer myBams;
-		if (!reads.empty()) {
-			MemoryBuffer::ostream os(myBams);
-			bgzf_ostream bgzfo(os, rank == size - 1);
-			if (header != NULL && rank == 0) {
-				LOG_DEBUG_OPTIONAL(1, true, "Writing header");
-				bgzfo << *header;
+		MemoryBufferVector myBams;
+		#pragma omp parallel
+		{
+			int threadId = omp_get_thread_num(), numThreads = omp_get_num_threads();
+			Partition<BamVector> partitions(reads, threadId, numThreads);
+			LOG_DEBUG_OPTIONAL(2, true, "Writing Bam (mini) partition: " << threadId << " of " << numThreads);
+			#pragma omp single
+			{
+				myBams.reserve(numThreads);
+				for(int i = 0; i < numThreads; i++)
+					myBams.push_back(MemoryBufferPtr(new MemoryBuffer()));
 			}
-			for (BamVector::iterator it = reads.begin(); it != reads.end(); it++) {
-				bam1_t *bam = *it;
-				bgzfo << *bam;
-				LOG_DEBUG_OPTIONAL(4, true, bam1_qname(bam));
-				if (destroyBam) {
-					BamManager::destroyOrRecycle(bam);
-					*it = NULL;
+
+			long count = 0;
+			if (!reads.empty()) {
+				MemoryBuffer::ostream os(*myBams[threadId]);
+				bool setEOFblock = (rank == (size - 1)) & (threadId == (numThreads - 1));
+				LOG_DEBUG_OPTIONAL(1, true, "bgzf_ostream(): " << setEOFblock);
+				bgzf_ostream bgzfo(os, setEOFblock);
+				if (header != NULL && rank == 0 && threadId == 0) {
+					LOG_DEBUG_OPTIONAL(1, true, "Writing header");
+					bgzfo << *header;
+				}
+
+				for (BamVector::iterator it = partitions.begin; it != partitions.end; it++) {
+					bam1_t *bam = *it;
+					LOG_DEBUG_OPTIONAL(4, true, bam1_qname(bam));
+					bgzfo << *bam;
+					if (destroyBam) {
+						BamManager::destroyOrRecycle(bam);
+						*it = NULL;
+					}
+					count++;
 				}
 			}
+			myBams[threadId]->writeClose();
+			LOG_DEBUG_OPTIONAL(2, true, "Wrote " << count << " bams in my partition");
 		}
 		if (destroyBam)
 			reads.clear();
 
+		MemoryBuffer &myBamStream = *myBams[0];
+		for(int i = 1; i < (int) myBams.size(); i++)
+			myBamStream.concat(*myBams[i]);
+
 		long count = 0;
 		{
-			int64_t myLength = myBams.tellp();
+			int64_t myLength = myBamStream.tellp();
 
-			MemoryBuffer::istream is(myBams);
+			MemoryBuffer::istream is(myBamStream);
 			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
 		}
 		return count;
@@ -951,30 +975,48 @@ public:
 	static long writeFastqGz(const MPI_Comm &comm, BamVector &reads,
 			MPI_File &ourFile, bool destroyBam = true) {
 		LOG_VERBOSE_OPTIONAL(1, true, "writeFastqGz(): " << reads.size());
-		MemoryBuffer mygz;
-		if (!reads.empty()) {
-			MemoryBuffer::ostream mos(mygz);
-			boost::iostreams::filtering_ostream os;
-			os.push(boost::iostreams::gzip_compressor());
-			os.push(mos);
+		MemoryBufferVector mygz;
+		#pragma omp parallel
+		{
+			int threadId = omp_get_thread_num(), numThreads = omp_get_num_threads();
+			#pragma omp single
+			{
+				mygz.reserve(numThreads);
+				for(int i = 0; i < numThreads; i++)
+					mygz.push_back(MemoryBufferPtr(new MemoryBuffer()));
+			}
 
-			for (BamVector::iterator it = reads.begin(); it != reads.end(); it++) {
-				bam1_t *bam = *it;
-				BamStreamUtils::writeFastq(os, bam);
-				if (destroyBam) {
-					BamManager::destroyOrRecycle(bam);
-					*it = NULL;
+
+			if (!reads.empty()) {
+				MemoryBuffer::ostream mos(*mygz[threadId]);
+				boost::iostreams::filtering_ostream os;
+				os.push(boost::iostreams::gzip_compressor());
+				os.push(mos);
+
+				Partition<BamVector> partitions = Partition<BamVector>(reads, threadId, numThreads);
+				for (BamVector::iterator it = partitions.begin; it != partitions.end; it++) {
+					bam1_t *bam = *it;
+					BamStreamUtils::writeFastq(os, bam);
+					if (destroyBam) {
+						bam_destroy1(bam);
+						*it = NULL;
+					}
 				}
 			}
+			mygz[threadId]->writeClose();
 		}
 		if (destroyBam)
 			reads.clear();
 
+		MemoryBuffer &myGzStream = *mygz[0];
+		for(int i = 1; i < (int) mygz.size(); i++)
+			myGzStream.concat(*mygz[i]);
+
 		long count = 0;
 		{
-			int64_t myLength = mygz.tellp();
+			int64_t myLength = myGzStream.tellp();
 
-			MemoryBuffer::istream is(mygz);
+			MemoryBuffer::istream is(myGzStream);
 			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
 		}
 		return count;

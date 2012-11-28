@@ -5,8 +5,6 @@
  *      Author: regan
  */
 
-#undef _USE_OPENMP
-
 #include <string>
 #include "mpi.h"
 #include "SamUtils.h"

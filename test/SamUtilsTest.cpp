@@ -29,8 +29,6 @@
 // PURPOSE.
 //
 
-#undef _USE_OPENMP
-
 #include <fstream>
 #include "mpi.h"
 #include "SamUtils.h"
