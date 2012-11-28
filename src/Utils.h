@@ -1454,7 +1454,30 @@ public:
 	}
 };
 
-
+template<typename T>
+class Partition {
+public:
+	typedef typename T::iterator I;
+	Partition(T& container, int num, int size) {
+		assert(num < size);
+		assert(num >= 0);
+		I c_begin = container.begin(), c_end = container.end();
+		long batch = container.size() / size + 1;
+		assert(c_begin + container.size() == c_end);
+		begin = c_begin;
+		if (batch * num > (int) container.size())
+			begin = c_end;
+		else
+			begin += batch * num;
+		end = c_begin;
+		if (batch * (num + 1) > (int) container.size())
+			end = c_end;
+		else
+			end += batch * (num + 1);
+		LOG_DEBUG_OPTIONAL(2, true, "Partition(" << container.size() << "," << num << "," << size <<"): " << (begin-c_begin) << ", " << (end-c_begin));
+	}
+	I begin, end;
+};
 
 #endif
 
