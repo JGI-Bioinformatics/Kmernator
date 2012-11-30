@@ -1253,7 +1253,7 @@ protected:
 			bzero(&oact, sizeof(oact));
 			sigaction(sig, NULL, &oact);
 			if ( oact.sa_handler != SIG_ERR && oact.sa_handler != SIG_IGN && oact.sa_handler != NULL ) {
-			      LOG_DEBUG_OPTIONAL(1, true, "set fall through signal handler for " << sig << " to " << oact.sa_handler );
+			      LOG_DEBUG_OPTIONAL(2, true, "set fall through signal handler for " << sig << " to " << oact.sa_handler );
 			}
 		}
 		return sh;
@@ -1303,7 +1303,7 @@ protected:
 		// save this signals next action, and reset the rest.
 		struct sigaction &oact = getSigHandle(param);
 		if (param != 0 && param != SIGTERM) {
-			LOG_DEBUG_OPTIONAL(1, true, "Sending SIGTERM to master pid: " << getpid());
+			LOG_VERBOSE_OPTIONAL(1, true, "Sending SIGTERM to master pid: " << getpid());
 			kill(getpid(), SIGTERM);
 		}
 		sleep(2);
@@ -1344,7 +1344,7 @@ protected:
 		if (param != 0) {
 			LOG_ERROR(1, "Cleaned up after signal: " << param << "... " << mesg);
 			if ( oact.sa_handler != SIG_ERR && oact.sa_handler != SIG_IGN && oact.sa_handler != NULL ) {
-				LOG_DEBUG_OPTIONAL(1, true, "Now running default signal handler" );
+				LOG_DEBUG_OPTIONAL(2, true, "Now running default signal handler" );
 				(oact.sa_handler)( param );
 			}
 		} else {
