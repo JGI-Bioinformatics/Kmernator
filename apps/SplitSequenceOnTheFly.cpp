@@ -396,9 +396,9 @@ public:
 	}
 	ForkCommandThread(ForkCommandThread &move) : _command(move._command), _status(move._status), _thread(boost::move(move._thread)) {}
 	void operator()() {
-		LOG_DEBUG_OPTIONAL(2, true, "ForkCommandThread(" << _command << ")::() Starting");
+		LOG_DEBUG_OPTIONAL(1, true, "ForkCommandThread(" << _command << ")::() Starting");
 		_status = system(_command.c_str());
-		LOG_DEBUG_OPTIONAL(2, true, "ForkCommandThread(" << _command << ")::() Finished: " << _status);
+		LOG_DEBUG_OPTIONAL(1, true, "ForkCommandThread(" << _command << ")::() Finished: " << _status);
 	}
 	std::string toString() {
 		return "ForkCommandThread(" + _command + "): " + boost::lexical_cast<std::string>(_status);
@@ -415,8 +415,10 @@ public:
 	}
 	static int join(Vector v) {
 		int status = 0;
-		for(Vector::iterator it = v.begin(); it != v.end(); it++)
+		LOG_DEBUG_OPTIONAL(1, true, "Waiting for all " << v.size() << " threads to join");
+		for(Vector::iterator it = v.begin(); it != v.end(); it++) {
 			status += (*it)->join();
+		}
 		return status;
 	}
 private:
@@ -432,7 +434,7 @@ ForkCommandThread::Vector forkCommand() {
 
 	forks.reserve(forkCommand.size());
 	for(int i = 0; i < (int) forkCommand.size(); i++) {
-		LOG_DEBUG_OPTIONAL(1, true, "Starting " << forkCommand[i]);
+		LOG_DEBUG_OPTIONAL(2, true, "forkCommand(): Starting " << forkCommand[i]);
 
 		ForkCommandThread::Ptr ptr(new ForkCommandThread(forkCommand[i])); 
 		forks.push_back(ptr);

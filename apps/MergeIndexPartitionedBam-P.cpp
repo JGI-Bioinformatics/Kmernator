@@ -87,8 +87,13 @@ int main(int argc, char **argv)
 		LOG_VERBOSE(1, "Input: " << myInputFile << " split color: " << color << " rank: " << partitionWorld.rank() << " of " << partitionWorld.size());
 		SamUtils::MPIMergeSam mergeSam(partitionWorld, myInputFile, myReads);
 		BamStreamUtils::distributeReadsFinal(world, myReads);
+
 		unlink(ourOutputBam.c_str());
-		mergeSam.outputMergedHeader(ourOutputBam);
+		if (color == 0)
+			mergeSam.outputMergedHeader(ourOutputBam);
+
+		world.barrier();
+
 		SamUtils::MPISortBam sortBam(world, myReads, ourOutputBam, NULL);
 	}
 
