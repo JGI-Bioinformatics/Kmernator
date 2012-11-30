@@ -42,9 +42,11 @@
 #include <stdint.h>
 #include <string>
 #include <algorithm>
+#include <vector>
 
 #include <boost/iostreams/filtering_streambuf.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
+#include <boost/shared_ptr.hpp>
 
 #include "Log.h"
 #include "Utils.h"
@@ -840,6 +842,7 @@ public:
 
 	};
 
+
 	static long writePartialSortedBamVector(const MPI_Comm &comm,
 			MPI_File &ourFile, BamVector &reads, LongVector &sortedCounts,
 			bam_header_t *header = NULL) {
@@ -854,23 +857,34 @@ public:
 		MemoryBuffer myBams;
 		if (!reads.empty()) {
 
-			// prepare the heap
-			std::vector<bam1_p_pair> heap;
-			heap.reserve(size + 1);
+			MergeSortedRanges< BamVector::iterator, SortByPosition> msr(SortByPosition());
+
 			long totalCount = 0;
-			reads.push_back(NULL); // terminate condition
-			for (int i = 0; i < size; i++) {
-				if (sortedCounts[i] > 0 && reads[totalCount] != NULL) {
-					heap.push_back(bam1_p_pair(reads[totalCount],
-							&reads[totalCount]));
-					reads[totalCount] = NULL;
-				}
+			for(int i = 0; i < size; i++) {
+				BamVector::iterator begin = reads.begin() + totalCount;
 				totalCount += sortedCounts[i];
+				BamVector::iterator end = reads.begin() + totalCount;
+				msr.addSortedRange(begin, end);
 			}
+			assert(msr.back().end == reads.end());
+
+			// prepare the heap
+//			std::vector<bam1_p_pair> heap;
+//			heap.reserve(size + 1);
+//			long totalCount = 0;
+//			reads.push_back(NULL); // terminate condition
+//			for (int i = 0; i < size; i++) {
+//				if (sortedCounts[i] > 0 && reads[totalCount] != NULL) {
+//					heap.push_back(bam1_p_pair(reads[totalCount],
+//							&reads[totalCount]));
+//					reads[totalCount] = NULL;
+//				}
+//				totalCount += sortedCounts[i];
+//			}
 			assert(totalCount == (long) (reads.size() - 1));
 
-			SortByPosition sbp;
-			std::make_heap(heap.begin(), heap.end(), sbp);
+//			SortByPosition sbp;
+//			std::make_heap(heap.begin(), heap.end(), sbp);
 
 			MemoryBuffer::ostream os(myBams);
 			bgzf_ostream bgzfo(os, rank == size - 1);
@@ -879,25 +893,34 @@ public:
 				bgzfo << *header;
 			}
 			long count = 0;
-			while (!heap.empty()) {
+			while (msr.hasNext()) {
 				count++;
-				bam1_p_pair bppair = heap.front();
-				bam1_pp bampp = bppair.second;
-				bam1_t *bam = bppair.first;
+				BamVector::iterator it = msr.getNext();
+				bam1_t *bam = *it;
 				assert(bam != NULL);
-				LOG_DEBUG_OPTIONAL(3, true, "Writing: " << count << " " << bam1_qname(bam) << " " << bam->core.tid << "," << bam->core.pos);;
+				LOG_DEBUG_OPTIONAL(4, true, "Writing: " << count << " " << bam1_qname(bam) << " " << bam->core.tid << "," << bam->core.pos);;
 				bgzfo << *bam;
 				BamManager::destroyOrRecycle(bam);
-				std::pop_heap(heap.begin(), heap.end(), sbp);
-				heap.pop_back();
-				bampp++;
-				if (*bampp != NULL) {
-					bppair = bam1_p_pair(*bampp, bampp);
-					*bampp = NULL;
-					heap.push_back(bppair);
-					std::push_heap(heap.begin(), heap.end(), sbp);
-				}
 			}
+//			while (!heap.empty()) {
+//				count++;
+//				bam1_p_pair bppair = heap.front();
+//				bam1_pp bampp = bppair.second;
+//				bam1_t *bam = bppair.first;
+//				assert(bam != NULL);
+//				LOG_DEBUG_OPTIONAL(3, true, "Writing: " << count << " " << bam1_qname(bam) << " " << bam->core.tid << "," << bam->core.pos);;
+//				bgzfo << *bam;
+//				BamManager::destroyOrRecycle(bam);
+//				std::pop_heap(heap.begin(), heap.end(), sbp);
+//				heap.pop_back();
+//				bampp++;
+//				if (*bampp != NULL) {
+//					bppair = bam1_p_pair(*bampp, bampp);
+//					*bampp = NULL;
+//					heap.push_back(bppair);
+//					std::push_heap(heap.begin(), heap.end(), sbp);
+//				}
+//			}
 		}
 		long count = 0;
 		{
@@ -2070,6 +2093,14 @@ public:
 		LOG_DEBUG_OPTIONAL(1, true, "sortLocal(): " << reads.size());
 		//BamManager::checkNulls("Before sortLocal:", reads);
 		std::sort(reads.begin(), reads.end(), SortByPosition());
+
+		// TODO parallel sort with threads
+		// partition
+		// std::sort each partition
+		// find median of medians
+		// MergeSortedRanges (into new vector of NULLs)
+		// swap with old vector
+
 		//BamManager::checkNulls("After sortLocal:", reads);
 		LOG_DEBUG_OPTIONAL(2, true, "sortLocal(): finished");
 	}

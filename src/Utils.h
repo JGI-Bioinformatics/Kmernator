@@ -1479,5 +1479,61 @@ public:
 	I begin, end;
 };
 
+
+template<typename RandomAccessIterator, typename Comp >
+class MergeSortedRanges {
+public:
+	class SortedRange {
+	public:
+		SortedRange(RandomAccessIterator _b, RandomAccessIterator _e) : begin(_b), end(_e) {}
+		RandomAccessIterator begin, end;
+	};
+	typedef std::vector< SortedRange > SortedRangeVector;
+	class Compare {
+	public:
+		Compare(const Comp &c) : comp(c) {}
+		inline bool operator()(SortedRange &a, SortedRange &b) {
+			return comp(*a.begin, *b.begin);
+		}
+	private:
+		Comp comp;
+	};
+	MergeSortedRanges(Comp _c) : isHeap(false), comp(_c) {}
+	~MergeSortedRanges() {}
+	void addSortedRange(const SortedRange &sr) {
+		if (sr.begin != sr.end) {
+			sortedRanges.push_back(sr);
+			if (isHeap)
+				std::push_heap(sortedRanges.begin(), sortedRanges.end());
+		}
+	}
+	void addSortedRange(RandomAccessIterator begin, RandomAccessIterator end) {
+		SortedRange sr(begin, end);
+		addSortedRange(sr);
+	}
+
+	RandomAccessIterator getNext() {
+		if (!isHeap) {
+			std::make_heap(sortedRanges.begin(), sortedRanges.end(), comp);
+			isHeap = true;
+		}
+		SortedRange f = sortedRanges.front();
+		std::pop_heap(sortedRanges.begin(), sortedRanges.end(), comp);
+		sortedRanges.pop_back();
+		RandomAccessIterator nextVal = f.begin++;
+		addSortedRange(f);
+		return nextVal;
+	}
+
+	bool hasNext() {
+		return !sortedRanges.empty();
+	}
+
+private:
+	SortedRangeVector sortedRanges;
+	bool isHeap;
+	Compare comp;
+
+};
 #endif
 
