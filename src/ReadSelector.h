@@ -51,7 +51,7 @@
 
 class _ReadSelectorOptions : public OptionsBaseInterface {
 public:
-	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(25), bimodalSigmas(-1.0), kmerScoringType("MEDIAN"), normalizationMethod("RANDOM") {
+	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(25), bimodalSigmas(-1.0), kmerScoringType("MEDIAN"), normalizationMethod("RANDOM"), useLogscaleAboveMax(true)  {
 	}
 	virtual ~_ReadSelectorOptions() {}
 	void _resetDefaults() {
@@ -63,6 +63,8 @@ public:
 				// output read selection
 
 				("max-kmer-output-depth", po::value<int>()->default_value(maxKmerDepth), "i.e. targeted read normalization depth.  The maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output.  To get targeted depth, multiply maxKmerOutputDepth by: (readLength - kmerSize - 1) / readLength")
+
+				("use-logscale-above-max", po::value<bool>()->default_value(useLogscaleAboveMax), "if --max-kmer-output-depth is set, then reads above this threshold will be reduced by the log2 kmer abundance")
 
 				("normalization-method", po::value<std::string>()->default_value(normalizationMethod), "If --max-kmer-output-depth is selected, what algorithm to use (RANDOM, OPTIMAL) (optimal is *very* slow and is not implemented in MPI")
 
@@ -91,6 +93,7 @@ public:
 		bool ret = true;
 
 		setOpt("max-kmer-output-depth", maxKmerDepth);
+		setOpt("use-logscale-above-max", useLogscaleAboveMax);
 		setOpt("partition-by-depth", partitionByDepth);
 		setOpt("min-passing-in-pair", bothPairs);
 		setOpt("remainder-trim", remainderTrim);
@@ -160,6 +163,9 @@ public:
 	std::string &getNormalizationMethod() {
 		return normalizationMethod;
 	}
+	bool &getUseLogscaleAboveMax() {
+		return useLogscaleAboveMax;
+	}
 
 private:
 	int maxKmerDepth, partitionByDepth, bothPairs, remainderTrim;
@@ -167,6 +173,7 @@ private:
 	double       bimodalSigmas;
 	std::string kmerScoringType;
 	std::string normalizationMethod;
+	bool useLogscaleAboveMax;
 };
 typedef OptionsBaseTemplate< _ReadSelectorOptions > ReadSelectorOptions;
 
@@ -605,12 +612,27 @@ public:
 		setNeedDuplicateCheck();
 	}
 
-	ReadSetSizeType pickCoverageNormalizedSubset(unsigned int targetDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = ReadSelectorOptions::getOptions().getMinReadLength(), bool byPair = false, bool bothPass = false ) {
+	inline bool chooseRead(long score, long targetDepth, bool useLogscale) {
+		if (score <= targetDepth) {
+			return true;
+		} else {
+			if (useLogscale) {
+				long choice = LongRand::rand() % score;
+				return choice <= targetDepth * log((float) score / (float) targetDepth);
+			} else {
+				long choice = LongRand::rand() % score;
+				return choice <= targetDepth;
+			}
+		}
+	}
+	ReadSetSizeType pickCoverageNormalizedSubset(long targetDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = ReadSelectorOptions::getOptions().getMinReadLength(), bool byPair = false, bool bothPass = false ) {
 		LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "pickCoverageNormalizedSubset(" << targetDepth << ", " << minimumLength << ", " << byPair << ", " << bothPass << ")");
 		ReadSetSizeType picked = 0;
 		int numThreads = omp_get_max_threads();
 		long pairsSize = _reads.getPairSize();
 		PairedIndexType myPicks[numThreads];
+		const bool useLogscale = ReadSelectorOptions::getOptions().getUseLogscaleAboveMax();
+
 		#pragma omp parallel for schedule(guided)
 		for(long pairIdx = 0; pairIdx < pairsSize; pairIdx++) {
 			const ReadSet::Pair &pair = _reads.getPair(pairIdx);
@@ -642,9 +664,7 @@ public:
 				} else {
 					pairedscore = std::max(score1, score2);
 				}
-				long choice = LongRand::rand() % pairedscore;
-				LOG_DEBUG(3, "paired score: " << pairedscore << " looking for " << targetDepth << " : " << choice);
-				if (pairedscore <= targetDepth || choice  <= targetDepth) {
+				if (chooseRead(pairedscore, targetDepth, useLogscale)) {
 					LOG_DEBUG(3, "Picked Pair " << _reads.getRead(pair.read1).getName());
 					myPicks[omp_get_thread_num()].push_back(pair);
 				}
@@ -652,11 +672,11 @@ public:
 			} else {
 				Pair twoReads;
 				LOG_DEBUG(4, "single reads");
-				if (score1 > 0.0 && (score1 <= targetDepth || LongRand::rand() % score1 <= targetDepth)) {
+				if (score1 > 0.0 && (chooseRead(score1, targetDepth, useLogscale))) {
 					LOG_DEBUG(3, "Picked Single " << _reads.getRead(pair.read1).getName());
 					twoReads.read1 = pair.read1;
 				}
-				if (score2 > 0.0 && (score2 <= targetDepth || LongRand::rand() % score2 <= targetDepth)) {
+				if (score2 > 0.0 && (chooseRead(score2, targetDepth, useLogscale))) {
 					LOG_DEBUG(3, "Picked Single " << _reads.getRead(pair.read2).getName());
 					twoReads.read2 = pair.read2;
 				}
