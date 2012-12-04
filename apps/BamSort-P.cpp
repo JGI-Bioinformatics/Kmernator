@@ -96,7 +96,7 @@ int main(int argc, char **argv)
 	int partitions = BamSortOptions::getOptions().getNumPartitions();
 
 	if (partitions > 1) {
-		if (size != inputBams.size()) {
+		if (size != (int) inputBams.size()) {
 			if (rank == 0)
 				std::cerr << "The number of files is a mismatch to the job size.  When merging partitions, this is necessary." << BamSortOptions::getDesc() << std::endl;
 			exit(1);
@@ -168,6 +168,7 @@ int main(int argc, char **argv)
 
 	header.reset();
 
+	BamManager::clearRecycledReads();
 	LOG_VERBOSE(1, "Finished");
 
 	return 0;

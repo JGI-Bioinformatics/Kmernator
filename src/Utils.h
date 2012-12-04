@@ -1504,7 +1504,7 @@ public:
 		if (sr.begin != sr.end) {
 			sortedRanges.push_back(sr);
 			if (isHeap)
-				std::push_heap(sortedRanges.begin(), sortedRanges.end());
+				std::push_heap(sortedRanges.begin(), sortedRanges.end(), comp);
 		}
 	}
 	void addSortedRange(RandomAccessIterator begin, RandomAccessIterator end) {
@@ -1527,6 +1527,10 @@ public:
 
 	bool hasNext() {
 		return !sortedRanges.empty();
+	}
+
+	SortedRangeVector getSortedRanges() {
+		return sortedRanges;
 	}
 
 private:

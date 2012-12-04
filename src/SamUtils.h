@@ -47,6 +47,7 @@
 #include <boost/iostreams/filtering_streambuf.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/shared_array.hpp>
 
 #include "Log.h"
 #include "Utils.h"
@@ -135,7 +136,9 @@ private:
 
 class BamManager {
 public:
-	typedef std::vector<bam1_t *> BamVector;
+	typedef bam1_t * bam1_p;
+	typedef std::vector<bam1_p> BamVector;
+	typedef BamVector::iterator BamVectorIterator;
 	static inline int &getReadsPerBatch() {
 		static int READS_PER_BATCH = 32768;
 		return READS_PER_BATCH;
@@ -143,12 +146,11 @@ public:
 
 	BamManager() {}
 	~BamManager() {
-		destroyBamVector(myReads);
 	}
 
 	static void initBamVector(BamVector &reads, int newSize) {
 		reads.reserve(newSize + 1); // add extra for option to add extra NULL at end for heapsort
-		BamVector &bv = getSharedInstance().myReads;
+		BamVector &bv = getRecycledReads();
 		for (int i = reads.size(); i < newSize; i++)
 			reads.push_back(initOrRecycleFrom(bv));
 	}
@@ -163,23 +165,27 @@ public:
 		}
 	}
 	static inline bam1_t *initOrRecycle() {
-		return initOrRecycleFrom(getSharedInstance().myReads);
+		return initOrRecycleFrom(getRecycledReads());
 	}
-	static inline void destroyOrRecycleTo(bam1_t *b, BamVector &bv, int maxCapacity = (getReadsPerBatch()*2)) {
-		if ( (int) bv.size() >= maxCapacity)
+	static inline void destroyOrRecycleTo(bam1_p &b, BamVector &bv, int maxCapacity = (getReadsPerBatch()*2)) {
+		if (b == NULL)
+			return;
+		if (b->data == NULL || (int) bv.size() >= maxCapacity ) {
+			LOG_DEBUG_OPTIONAL(5, true, "destroyOrRecycleTo: " << b);
 			bam_destroy1(b);
-		else {
+		} else {
 			bv.reserve(maxCapacity);
 			bv.push_back(b);
 		}
+		b = NULL;
 	}
-	static inline void destroyOrRecycle(bam1_t *b, int maxCapacity = (getReadsPerBatch()*2)) {
-		destroyOrRecycleTo(b, getSharedInstance().myReads, maxCapacity);
+	static inline void destroyOrRecycle(bam1_p &b, int maxCapacity = (getReadsPerBatch()*2)) {
+		destroyOrRecycleTo(b, getRecycledReads(), maxCapacity);
 	}
 
 	static void initOrRecycleBamVector(BamVector &reads, int size) {
 		reads.reserve(size + 1); // add extra for option to add extra NULL at end for heapsort
-		BamVector &bv = getSharedInstance().myReads;
+		BamVector &bv = getRecycledReads();
 		for (BamVector::iterator it = reads.begin(); it != reads.end(); it++) {
 			if (*it == NULL) {
 				*it = initOrRecycleFrom(bv);
@@ -190,18 +196,26 @@ public:
 	}
 
 	static void destroyOrRecycleBamVector(BamVector &reads, int maxCapacity = (getReadsPerBatch() * 2)) {
-		BamVector &bv = getSharedInstance().myReads;
+		BamVector &bv = getRecycledReads();
 		for (BamVector::iterator it = reads.begin(); it != reads.end(); it++)
 			if (*it != NULL)
 				destroyOrRecycleTo(*it, bv, maxCapacity);
 		reads.clear();
 	}
 
-	static void destroyBamVector(BamVector &reads) {
-		BamVector &bv = getSharedInstance().myReads;
-		for (BamVector::iterator it = reads.begin(); it != reads.end(); it++)
-			if (*it != NULL)
-				destroyOrRecycleTo(*it, bv);
+	static void destroyBamVector(BamVector &reads, bool forceDestroy = false) {
+		BamVector &bv = getRecycledReads();
+		for (BamVector::iterator it = reads.begin(); it != reads.end(); it++) {
+			if (*it != NULL){
+				if (forceDestroy) {
+					LOG_DEBUG_OPTIONAL(5, true, "destroyBamVector(force): " << *it);
+					bam_destroy1(*it);
+					*it = NULL;
+				} else {
+					destroyOrRecycleTo(*it, bv);
+				}
+			}
+		}
 		reads.clear();
 	}
 
@@ -234,14 +248,15 @@ public:
 		}
 	}
 
-protected:
-	static inline BamManager &getSharedInstance() {
-		static BamManager _;
-		return _;
+	static void clearRecycledReads() {
+		destroyBamVector(getRecycledReads(), true);
 	}
 
-private:
-	BamVector myReads;
+	static inline BamVector &getRecycledReads() {
+		static boost::shared_ptr< BamVector > _( new BamVector() );
+		return *_;
+	}
+
 };
 
 std::ostream &operator<<(std::ostream& os, const bam1_core_t &core);
@@ -694,8 +709,9 @@ public:
 			int64_t bamPointer;
 			int64_t bgzfOffset;
 			int maxBufSize = bgzf_detail::DEFAULT_BLOCK_SIZE + BAM_CORE_SIZE + 4;
-			boost::shared_ptr<char> uncompBlock(new char[bgzf_detail::DEFAULT_BLOCK_SIZE]);
-			boost::shared_ptr<char> bamBuf(new char[maxBufSize]);
+			boost::shared_array<char> uncompBlock, bamBuf;
+			uncompBlock.reset(new char[bgzf_detail::DEFAULT_BLOCK_SIZE]);
+			bamBuf.reset( new char[maxBufSize] );
 			uint16_t compressedBlockLength;
 			uint32_t uncompressedBlockLength;
 			bgzfOffset = bgzf_detail::getNextBlockFileOffset(fp->x.bam->file, geFileOffset, compressedBlockLength, uncompBlock.get(), uncompressedBlockLength);
@@ -719,6 +735,7 @@ public:
 						if (bam_seek(fp->x.bam, bamPointer, SEEK_SET) != 0)
 							LOG_THROW("We should be able to bam_seek to this region: " << bgzfOffset << ", " << pos);
 						LOG_DEBUG_OPTIONAL(4, true, "Found next pointer: " << bgzfOffset << ", " << pos << " (" << bamPointer << ")");
+						BamManager::destroyOrRecycle(b);
 						return true;
 					}
 				}
@@ -767,9 +784,7 @@ class SamUtils {
 public:
 	typedef std::vector<int> IntVector;
 	typedef std::vector<int64_t> LongVector;
-	typedef bam1_t *bam1_p;
-	typedef bam1_p *bam1_pp;
-	typedef std::pair<bam1_p, bam1_pp> bam1_p_pair;
+	typedef BamManager::bam1_p bam1_p;
 	typedef std::pair<bam1_p, bam1_p> BamPair;
 	typedef bam1_core_t *bam1_core_p;
 
@@ -796,20 +811,24 @@ public:
 	class SortByPosition {
 
 	public:
-		inline bool operator()(const bam1_p_pair a, const bam1_p_pair b) const {
-			return cmpBam(a.first, b.first) > 0; // for heap to sort minimum at top of the heap
-		}
-		inline bool operator()(const bam1_pp a, const bam1_pp b) const {
-			return cmpBam(*a, *b) < 0;
-		}
+		SortByPosition(bool _inv = false) : inverse(_inv) {}
 		inline bool operator()(const bam1_p a, const bam1_p b) const {
-			return cmpBam(a, b) < 0;
+			if (inverse)
+				return cmpBam(a, b) > 0;
+			else
+				return cmpBam(a, b) < 0;
 		}
 		inline bool operator()(const bam1_core_t &a, const bam1_core_t &b) const {
-			return cmpBamCore(a, b) < 0;
+			if (inverse) 
+				return cmpBamCore(a, b) > 0;
+			else
+				return cmpBamCore(a, b) < 0;
 		}
 		inline bool operator()(const bam1_core_p a, const bam1_core_p b) const {
-			return cmpBamCore(*a, *b) < 0;
+			if (inverse)
+				return cmpBamCore(*a, *b) > 0;
+			else
+				return cmpBamCore(*a, *b) < 0;
 		}
 		static inline int cmpBam(const bam1_p a, const bam1_p b) {
 			int _cmp = cmpBamCore(a->core, b->core);
@@ -839,10 +858,13 @@ public:
 			else
 				return 1;
 		}
+	private:
+		bool inverse;
 
 	};
 
 
+	typedef MergeSortedRanges< BamManager::BamVectorIterator, SortByPosition> MSR;
 	static long writePartialSortedBamVector(const MPI_Comm &comm,
 			MPI_File &ourFile, BamVector &reads, LongVector &sortedCounts,
 			bam_header_t *header = NULL) {
@@ -857,34 +879,19 @@ public:
 		MemoryBuffer myBams;
 		if (!reads.empty()) {
 
-			MergeSortedRanges< BamVector::iterator, SortByPosition> msr(SortByPosition());
+			// prepare the heap
+			MSR msr = MSR(SortByPosition(true));
 
 			long totalCount = 0;
 			for(int i = 0; i < size; i++) {
-				BamVector::iterator begin = reads.begin() + totalCount;
+				BamManager::BamVectorIterator begin = reads.begin() + totalCount;
 				totalCount += sortedCounts[i];
-				BamVector::iterator end = reads.begin() + totalCount;
+				BamManager::BamVectorIterator end = reads.begin() + totalCount;
+				LOG_DEBUG_OPTIONAL(2, true, "adding range " << bam1_qname(*begin) << " " << (*begin)->core.pos <<  " - " << bam1_qname(*(end-1)));
 				msr.addSortedRange(begin, end);
 			}
-			assert(msr.back().end == reads.end());
-
-			// prepare the heap
-//			std::vector<bam1_p_pair> heap;
-//			heap.reserve(size + 1);
-//			long totalCount = 0;
-//			reads.push_back(NULL); // terminate condition
-//			for (int i = 0; i < size; i++) {
-//				if (sortedCounts[i] > 0 && reads[totalCount] != NULL) {
-//					heap.push_back(bam1_p_pair(reads[totalCount],
-//							&reads[totalCount]));
-//					reads[totalCount] = NULL;
-//				}
-//				totalCount += sortedCounts[i];
-//			}
-			assert(totalCount == (long) (reads.size() - 1));
-
-//			SortByPosition sbp;
-//			std::make_heap(heap.begin(), heap.end(), sbp);
+			assert(msr.getSortedRanges().back().end == reads.end());
+			assert(totalCount == (long) reads.size());
 
 			MemoryBuffer::ostream os(myBams);
 			bgzf_ostream bgzfo(os, rank == size - 1);
@@ -895,32 +902,13 @@ public:
 			long count = 0;
 			while (msr.hasNext()) {
 				count++;
-				BamVector::iterator it = msr.getNext();
-				bam1_t *bam = *it;
+				BamManager::BamVectorIterator it = msr.getNext();
+				bam1_p &bam = *it;
 				assert(bam != NULL);
 				LOG_DEBUG_OPTIONAL(4, true, "Writing: " << count << " " << bam1_qname(bam) << " " << bam->core.tid << "," << bam->core.pos);;
 				bgzfo << *bam;
 				BamManager::destroyOrRecycle(bam);
 			}
-//			while (!heap.empty()) {
-//				count++;
-//				bam1_p_pair bppair = heap.front();
-//				bam1_pp bampp = bppair.second;
-//				bam1_t *bam = bppair.first;
-//				assert(bam != NULL);
-//				LOG_DEBUG_OPTIONAL(3, true, "Writing: " << count << " " << bam1_qname(bam) << " " << bam->core.tid << "," << bam->core.pos);;
-//				bgzfo << *bam;
-//				BamManager::destroyOrRecycle(bam);
-//				std::pop_heap(heap.begin(), heap.end(), sbp);
-//				heap.pop_back();
-//				bampp++;
-//				if (*bampp != NULL) {
-//					bppair = bam1_p_pair(*bampp, bampp);
-//					*bampp = NULL;
-//					heap.push_back(bppair);
-//					std::push_heap(heap.begin(), heap.end(), sbp);
-//				}
-//			}
 		}
 		long count = 0;
 		{
@@ -966,12 +954,11 @@ public:
 				}
 
 				for (BamVector::iterator it = partitions.begin; it != partitions.end; it++) {
-					bam1_t *bam = *it;
+					bam1_p &bam = *it;
 					LOG_DEBUG_OPTIONAL(4, true, bam1_qname(bam));
 					bgzfo << *bam;
 					if (destroyBam) {
 						BamManager::destroyOrRecycle(bam);
-						*it = NULL;
 					}
 					count++;
 				}
@@ -1021,6 +1008,7 @@ public:
 					bam1_t *bam = *it;
 					BamStreamUtils::writeFastq(os, bam);
 					if (destroyBam) {
+						LOG_DEBUG_OPTIONAL(5, true, "writeFastqGz: " << *bam);
 						bam_destroy1(bam);
 						*it = NULL;
 					}
@@ -1394,7 +1382,7 @@ public:
 				for (int j = 0; j < recvCounts[i]; j++) {
 					assert(recvReadsIdx < (int) recvReads.size());
 					int dataLen = recvReads[recvReadsIdx]->data_len;
-					LOG_DEBUG_OPTIONAL(3, ptrOffset < totalRecvBytes, "expanding data for rank " << i << " j " << j << " recvIdx: " << recvReadsIdx << " datalen: " << dataLen << " ptrOffset: " << ptrOffset << " totalRecvBytes: " << totalRecvBytes << " " << ptr << " " << recvReads[recvReadsIdx]->core.pos);
+					LOG_DEBUG_OPTIONAL(3, ptrOffset < totalRecvBytes, "expanding data from rank " << i << " j " << j << " recvIdx: " << recvReadsIdx << " datalen: " << dataLen << " ptrOffset: " << ptrOffset << " totalRecvBytes: " << totalRecvBytes << " " << ptr << " " << recvReads[recvReadsIdx]->core.pos);
 					if (dataLen > 0) {
 						assert(ptrOffset + dataLen <= totalRecvBytes);
 						assert(copyDataIfUnmapped | isMapped(recvReads[recvReadsIdx]));
