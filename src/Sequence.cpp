@@ -70,11 +70,12 @@ Sequence::SequencePtr Sequence::getCache() const {
 	assert(isMmaped());
 
 	CachedSequences &cache = getCachedSequencesForThread();
-	SequencePtr cachedSequence = cache.fetch( getRecord() );
-	if ( cachedSequence.get() == NULL ) {
-		return setCache();
-	} else {
+	SequencePtr cachedSequence;
+
+	if ( cache.fetch( getRecord(), cachedSequence ) && cachedSequence.get() != NULL ) {
 		return cachedSequence;
+	} else {
+		return setCache();
 	}
 }
 Sequence::SequencePtr Sequence::setCache() const {
