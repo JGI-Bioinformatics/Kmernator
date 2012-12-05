@@ -2,5 +2,6 @@ Debug
 *~
 version.h
 *.tar.bz2
+*.tar.gz
 .project
 .cproject
