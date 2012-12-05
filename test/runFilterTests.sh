@@ -3,13 +3,19 @@
 FR=../apps/FilterReads
 FRP=../apps/FilterReads-P
 
-TMPDIR=${TMPDIR:=/tmp}
-TMP=$(mktemp $TMPDIR/testXXXXXX)
+TMP=$(mktemp testXXXXXX)
+export TMPDIR=/tmp
 if [ ! -f "$TMP" ]
 then
   exit 1
 fi
 rm $TMP
+KEEP=${KEEP:=0}
+clean()
+{
+  [ X$KEEP != X0 ] || rm -rf $TMP*
+}
+trap clean 0 1 2 3 15
 
 IN=1000.fastq
 GOOD=1000-Filtered.fastq
@@ -81,5 +87,4 @@ then
   done
 fi
 
-rm -f $TMP*
 

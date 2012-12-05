@@ -4,10 +4,13 @@ set -e
 set -x
 
 T=$(mktemp -d)
+export TMPDIR=/tmp
+
+KEEP=${KEEP:=0}
 cleanup() 
 {
   echo "Cleaning up" 1>&2
-  rm -rf ${T}
+  [ X$KEEP != X0 ] || rm -rf ${T}
 }
 abort()
 {
@@ -20,6 +23,7 @@ failed()
   exit 1
 }
 trap abort 1 2 3 15
+trap cleanup 0
 
 MPI=""
 procs=$(grep -c ^processor /proc/cpuinfo)
@@ -150,6 +154,5 @@ then
   
 fi
 
-trap cleanup 0
 
 

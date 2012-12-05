@@ -25,8 +25,8 @@ fi
 
 SSOTF=../apps/SplitSequenceOnTheFly
 
-TMPDIR=${TMPDIR:=/tmp}
-TMP=$(mktemp $TMPDIR/testXXXXXX)
+TMP=$(mktemp testXXXXXX)
+export TMPDIR=/tmp
 if [ ! -f "$TMP" ]
 then
   exit 1
@@ -38,11 +38,12 @@ fail()
   echo $@
   /bin/false
 }
+KEEP=${KEEP:=0}
 clean()
 {
-  rm -rf $TMP*
+  [ X$KEEP != X0 ] || rm -rf $TMP*
 }
-trap clean 0
+trap clean 0 1 2 3 15
 
 set -e
 set -x

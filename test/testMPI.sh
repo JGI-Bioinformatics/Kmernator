@@ -11,6 +11,7 @@ then
   MPI="aprun -n"
 fi
 
+export TMPDIR=/tmp
 set -e
 set -x
 if [ -n "$MPI" ]
