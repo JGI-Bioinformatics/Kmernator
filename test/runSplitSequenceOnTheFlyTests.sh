@@ -38,6 +38,11 @@ fail()
   echo $@
   /bin/false
 }
+clean()
+{
+  rm -rf $TMP*
+}
+trap clean 0
 
 set -e
 set -x
