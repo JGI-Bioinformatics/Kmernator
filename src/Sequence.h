@@ -1,7 +1,7 @@
 //
 // Kmernator/src/Sequence.h
 //
-// Author: Rob Egan, Craig Furman
+// Author: Rob Egan
 //
 // Copyright 2010 The Regents of the University of California.
 // All rights reserved.

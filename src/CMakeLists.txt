@@ -4,7 +4,7 @@
 # Copyright 2010 The Regents of the University of California.
 # All rights reserved.
 #
-# Author: Rob Egan, Craig Furman
+# Author: Rob Egan
 #
 # The United States Government has rights in this work pursuant
 # to contracts DE-AC03-76SF00098, W-7405-ENG-36 and/or
