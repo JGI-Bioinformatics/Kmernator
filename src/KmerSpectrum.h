@@ -74,7 +74,8 @@ public:
 	_KmerSpectrumOptions() : minKmerQuality(0.10), minDepth(2), kmersPerBucket(64),
 		saveKmerMmap(false), loadKmerMmap(),
 		buildPartitions(0), kmerSubsample(1),
-		variantSigmas(-1.0), periodicSingletonPurge(0), gcHeatMap(true) {
+		variantSigmas(-1.0), minVariantKmerDepth(512), variantHammingDistance(2),
+		periodicSingletonPurge(0), gcHeatMap(true) {
 	}
 
 	void _resetDefaults() {
@@ -109,7 +110,11 @@ public:
 		experimental.add_options()
 				// Experimental KmerSpectrum Options
 
-				("variant-sigmas", po::value<double>()->default_value(variantSigmas), "Detect and purge kmer-variants if >= variant-sigmas * Poisson-stdDev (2.0-3.0 suggested).  disabled if < 0.0")
+				("variant-sigmas", po::value<double>()->default_value(variantSigmas), "Detect and purge kmer-variants if >= variant-sigmas * Poisson-stdDev (10.0 suggested).  disabled if <= 0.0")
+
+				("min-variant-kmer-depth", po::value<int>()->default_value(minVariantKmerDepth), "if variant-sigmas > 0.0, the minimum depth of a strong signal to squash the weaker variants")
+
+				("variant-edit-disance", po::value<int>()->default_value(variantHammingDistance), "the number or hamming distance edits to search for variants")
 
 				("periodic-singleton-purge", po::value<unsigned int>()->default_value(periodicSingletonPurge), "Purge singleton memory structure every # of reads")
 
@@ -146,6 +151,8 @@ public:
 		setOpt("kmer-subsample", kmerSubsample);
 
 		setOpt("variant-sigmas", getVariantSigmas());
+		setOpt("min-variant-kmer-depth", getMinVariantKmerDepth());
+		setOpt("variant-edit-disance", getVariantHammingDistance());
 		setOpt("periodic-singleton-purge", getPeriodicSingletonPurge());
 		setOpt("gc-heat-map", getGCHeatMap());
 
@@ -182,6 +189,13 @@ public:
 	{
 		return variantSigmas;
 	}
+	int &getMinVariantKmerDepth()
+	{
+		return minVariantKmerDepth;
+	}
+	int &getVariantHammingDistance() {
+		return variantHammingDistance;
+	}
 	unsigned int &getPeriodicSingletonPurge()
 	{
 		return periodicSingletonPurge;
@@ -207,6 +221,7 @@ private:
 	unsigned int buildPartitions;
 	long kmerSubsample;
 	double       variantSigmas;
+	int minVariantKmerDepth, variantHammingDistance;
 	unsigned int periodicSingletonPurge;
 	bool gcHeatMap;
 };
@@ -216,6 +231,8 @@ typedef OptionsBaseTemplate< _KmerSpectrumOptions > KmerSpectrumOptions;
 template<typename So = TrackingDataMinimal4, typename We = TrackingDataMinimal4, typename Si = TrackingDataSingleton>
 class KmerSpectrum {
 public:
+
+	static const int VARIANT_EDIT_DISTANCE_EXPONENT = 10;
 
 	typedef Kmernator::KmerIndexType IndexType;
 
@@ -1921,8 +1938,10 @@ public:
 		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
 			Kmer &varKmer = variants[i];
 			double dummy;
-			if (this->_setPurgeVariant(pointers, varKmer, threshold, dummy))
+			if (this->_setPurgeVariant(pointers, varKmer, threshold, dummy)) {
+				LOG_DEBUG(4, "Purged " << dummy << " < " << threshold << " : "  << varKmer.toFasta() << " vs " << kmer.toFasta());
 				purgedKmers++;
+			}
 		}
 		return purgedKmers;
 	}
@@ -1943,6 +1962,67 @@ public:
 		return count - sqrt(count)*variantSigmas;
 	}
 
+	long purgeVariants(double variantSigmas = KmerSpectrumOptions::getOptions().getVariantSigmas(), short editDistance = KmerSpectrumOptions::getOptions().getVariantHammingDistance(), double minVariantKmerDepth = KmerSpectrumOptions::getOptions().getMinVariantKmerDepth()) {
+		if (variantSigmas <= 0.0)
+			return 0;
+		long purgedKmers = 0;
+		double maxDepth = minVariantKmerDepth;
+
+		if (hasSolids) {
+			LOG_THROW("KmerSpectrum::purgeVariants(): Unsupported when hasSolids is set"); // TODO unsupported
+		}
+		LOG_VERBOSE(1, "Purging kmer variants within " << editDistance << " edit distance which are >= " << variantSigmas << " sigmas less abundant than a more abundant version or at least " << minVariantKmerDepth);
+		int numThreads = omp_get_max_threads();
+		this->_preVariants(variantSigmas, minVariantKmerDepth);
+		LOG_DEBUG(1, "Purging with " << numThreads << " threads");
+		std::vector<DataPointers> pointers(numThreads, DataPointers(*this));
+		std::vector<WeakBucketType> variants(numThreads);
+
+		// sweep through all kmers above minVariantKmerDepth
+		long remaining = 1;
+		long processed = 0;
+		while (remaining > 0) {
+
+			remaining = 0;
+			processed = 0;
+			LOG_DEBUG_OPTIONAL(2, true, "Starting threaded kmer scan");
+#pragma omp parallel num_threads(numThreads) reduction(+: purgedKmers) reduction(+: processed) reduction(+: remaining)
+			{
+				int threadId = omp_get_thread_num();
+
+				for(WeakIterator it = weak.beginThreaded(); it != weak.endThreaded(); it++) {
+					double count = TrackingData::useWeighted() ? it->value().getWeightedCount() : it->value().getCount();
+					if (count <= minVariantKmerDepth)
+						continue;
+					double threshold = getVariantThreshold(count, variantSigmas);
+					int thisEditDistance = editDistance;
+					while(thisEditDistance > 1) {
+						if (count > minVariantKmerDepth * (VARIANT_EDIT_DISTANCE_EXPONENT^thisEditDistance))
+							break;
+						thisEditDistance--;
+					}
+					LOG_DEBUG(2, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
+					purgedKmers += this->_purgeVariants(pointers[threadId], it->key(), variants[threadId], threshold, thisEditDistance);
+
+					if (++processed % 10000 == 0)
+						LOG_DEBUG(2, "progress processed " << processed);
+				}
+				this->_variantThreadSync(processed, remaining, maxDepth);
+			}
+			remaining = this->_variantBatchSync(remaining, purgedKmers, maxDepth, getVariantThreshold(maxDepth, variantSigmas));
+		}
+
+		LOG_DEBUG(3, "Finished processing variants: " << purgedKmers << " waiting for _postVariants");
+		purgedKmers = this->_postVariants(purgedKmers);
+
+		LOG_DEBUG(1, "Purging to min depth: " << KmerSpectrumOptions::getOptions().getMinDepth());
+		this->purgeMinDepth(KmerSpectrumOptions::getOptions().getMinDepth());
+
+		return purgedKmers;
+
+	}
+
+	// older variant purge functions not used now
 	double getNewMaxDepth(double maxDepth, double variantSigmas) {
 		// quadratic equation solving maxDepth = newMaxDepth - variantSigmas * sqrt(newMaxDepth)
 		// 0 == newMaxDepth*newMaxDepth + (variantSigmas*variantSigmas - 2*maxDepth) + maxDepth*maxDepth
@@ -1953,11 +2033,11 @@ public:
 		maxDepth = (-b + sqrt(b*b - 4*a*c)) / (2.0*a);
 		return maxDepth;
 	}
-	long purgeVariants(double variantSigmas = KmerSpectrumOptions::getOptions().getVariantSigmas(), short editDistance = 2) {
+	long purgeVariantsBottomUp(double variantSigmas = KmerSpectrumOptions::getOptions().getVariantSigmas(), short editDistance = KmerSpectrumOptions::getOptions().getVariantHammingDistance()) {
 		if (variantSigmas < 0.0)
 			return 0;
 		long purgedKmers = 0;
-		LOG_VERBOSE(1, "Purging kmer variants within " << editDistance << " edit distance which are >= " << variantSigmas << " sigmas less abundant than a more abundant version");
+		LOG_VERBOSE(1, "Purging kmer variants (bottom up) within " << editDistance << " edit distance which are >= " << variantSigmas << " sigmas less abundant than a more abundant version");
 
 		if (hasSolids) {
 			LOG_THROW("KmerSpectrum::purgeVariants(): Unsupported when hasSolids is set"); // TODO unsupported
