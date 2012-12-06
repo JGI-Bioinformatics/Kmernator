@@ -48,13 +48,17 @@
 // use about 32MB of memory total to batch & queue up messages between communications
 // this is split up across world * thread * thread arrays7
 #define MPI_BUFFER_DEFAULT_SIZE (32 * 1024 * 1024)
+#define MPI_MIN_TRANSMIT_DEFAULT_SIZE 512
 
 class _MPIOptions : public OptionsBaseInterface {
 public:
-	_MPIOptions() : mpiBufferSize(MPI_BUFFER_DEFAULT_SIZE) {}
+	_MPIOptions() : mpiBufferSize(MPI_BUFFER_DEFAULT_SIZE), mpiMinTransmitSize(MPI_MIN_TRANSMIT_DEFAULT_SIZE) {}
 	virtual ~_MPIOptions() {}
 	int &getTotalBufferSize() {
 		return mpiBufferSize;
+	}
+	int &getMinTransmitSize() {
+		return mpiMinTransmitSize;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		po::options_description opts("MPI Options");
@@ -62,15 +66,17 @@ public:
 
 					("mpi-buffer-size", po::value<int>()->default_value(mpiBufferSize),
 							"total amount of RAM to devote to MPI message batching buffers in bytes")
+					("mpi-min-transmit-size", po::value<int>()->default_value(mpiMinTransmitSize), "the minimum inter rank-thread buffer size")
 							;
 		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		setOpt("mpi-buffer-size", mpiBufferSize);
+		setOpt("mpi-min-transmit-size", mpiMinTransmitSize);
 		return true;
 	}
 protected:
-	int mpiBufferSize;
+	int mpiBufferSize, mpiMinTransmitSize;
 };
 typedef OptionsBaseTemplate< _MPIOptions > MPIOptions;
 
@@ -255,6 +261,7 @@ public:
 			_numThreads = omp_get_max_threads();
 		_softNumThreads = std::max(_numThreads * 3 / 4, 1);
 		_bufferSize /= (_numThreads * _numThreads);
+		_bufferSize = std::min(std::min(totalBufferSize,MPIOptions::getOptions().getMinTransmitSize()), _bufferSize);
 		setSoftMaxBufferSize();
 
 		_numWorldThreads = _worldSize * _numThreads;
@@ -851,6 +858,7 @@ public:
 		int offset = 0;
 		for(int rankDest = 0 ; rankDest < this->getWorldSize(); rankDest++) {
 			for(int tagDest = 0 ; tagDest < (this->getNumThreads() * numTags); tagDest++) {
+				assert(omp_get_thread_num() < this->getNumThreads());
 				const BuildBuffer &bb = buildsTWT[omp_get_thread_num()][rankDest][tagDest];
 				offset += bb.header.getOffset();
 			}
@@ -906,6 +914,7 @@ public:
 	MessageClass *bufferMessage(int rankDest, int tagDest, bool &wasSent,
 			long &messages, int trailingBytes) {
 		int threadId = omp_get_thread_num();
+		assert(threadId < this->getNumThreads() && rankDest < this->getWorldSize() && tagDest < this->numTags * this->getNumThreads());
 		BuildBuffer &bb = buildsTWT[threadId][rankDest][tagDest];
 
 		while (isReadyToSend(bb.header.getOffset(), trailingBytes))
@@ -938,6 +947,7 @@ private:
 			// allocate the out message headers
 			for (int rankDest = 0; rankDest < worldSize; rankDest++) {
 				for (int threadDest = 0; threadDest < (numThreads * numTags); threadDest++) {
+					assert(threadId < this->getNumThreads() && rankDest < this->getWorldSize() && threadDest < this->numTags * this->getNumThreads());
 					BuildBuffer &bb = buildsTWT[threadId][rankDest][threadDest];
 					assert(bb.header.validate());
 					out.setSize(rankDest, threadDest, threadId, bb);
@@ -949,6 +959,7 @@ private:
 		// copy any headers and messages to out
 		for (int rankDest = 0; rankDest < worldSize; rankDest++) {
 			for (int threadDest = 0; threadDest < (numThreads * numTags); threadDest++) {
+				assert(threadId < this->getNumThreads() && rankDest < this->getWorldSize() && threadDest < this->numTags * this->getNumThreads());
 				BuildBuffer &bb = buildsTWT[threadId][rankDest][threadDest];
 				assert(bb.header.validate());
 
