@@ -117,8 +117,11 @@ public:
 	StringListType &getExtraFifo() {
 		return extraFifo;
 	}
+	bool &getTrimPairInName() {
+		return trimPairInName;
+	}
 
-	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(-1), fileNum(-1), secondDim(0), evenChunks(1), minReadLength(0), fifoFile(false) {}
+	_SSOptions() : splitFile(), pipeCommand(), mergeList(), forkCommand(), extraFifo(), numFiles(-1), fileNum(-1), secondDim(0), evenChunks(1), minReadLength(0), fifoFile(false), trimPairInName(false) {}
 
 	std::string _replaceWithKeys(std::string input) {
 		size_t pos;
@@ -234,6 +237,7 @@ public:
 								("extra-fifo", po::value<StringListType>(), "optional additional fifo file(s) (to potentially use with --fork-command)")
 								("fork-command", po::value<StringListType>(), "optional command(s) to fork between opening output files and wait to finish before starting any merges")
 								("min-read-length", po::value<int>()->default_value(minReadLength), "minimum read length to output (applies to unpaired only)")
+								("trim-pair-in-name", po::value<bool>()->default_value(trimPairInName), "remove /1 or /2 from the name.  Useful for some aligners like bowtie2")
 								;
 
 		desc.add(opts);
@@ -255,6 +259,7 @@ public:
 		setOpt2("merge", getMergeList());
 		setOpt2("fork-command", getForkCommand());
 		setOpt2("extra-fifo", getExtraFifo());
+		setOpt("trim-pair-in-name", getTrimPairInName());
 
 
 		if (Options::getOptions().getInputFiles().empty() || getNumFiles() == 0) {
@@ -277,11 +282,17 @@ private:
 	std::string splitFile, pipeCommand;
 	StringListType mergeList, forkCommand, extraFifo;
 	int numFiles, fileNum, secondDim, evenChunks, minReadLength;
-	bool fifoFile;
+	bool fifoFile, trimPairInName;
 };
 typedef OptionsBaseTemplate< _SSOptions > SSOptions;
 typedef OptionsBaseInterface::StringListType StringListType;
 
+void trimName(std::string &name) {
+	size_t pos = name.find_last_of("/");
+	LOG_DEBUG(5, "trimName: " << name << " " << pos);
+	if (pos != std::string::npos)
+		name = name.substr(0, pos);
+}
 
 template<typename T>
 void outputRegularFiles(OptionsBaseInterface::FileListType inputs, T &output1, int fileNum, int numFiles) {
@@ -289,6 +300,7 @@ void outputRegularFiles(OptionsBaseInterface::FileListType inputs, T &output1, i
 	FormatOutput outputFormat = FormatOutput::getDefault();
 	int chunks = SSOptions::getOptions().getEvenChunks();
 	int minReadLength = SSOptions::getOptions().getMinReadLength();
+	bool trimPairInName = SSOptions::getOptions().getTrimPairInName();
 
 	for (unsigned int i = 0 ; i < inputs.size(); i++) {
 		ReadFileReader reader(inputs[i], "");
@@ -296,8 +308,11 @@ void outputRegularFiles(OptionsBaseInterface::FileListType inputs, T &output1, i
 			reader.seekToPartition( fileNum+j*chunks, numFiles*chunks );
 			std::string name, bases, quals, comment;
 			while (reader.nextRead(name, bases, quals, comment)) {
-				if ((int) bases.length() >= minReadLength)
+				if ((int) bases.length() >= minReadLength) {
+					if (trimPairInName)
+						trimName(name);
 					output1 << outputFormat.toString(name, bases, quals, comment);
+				}
 			}
 		}
 	}
@@ -366,6 +381,7 @@ protected:
 	}
 	void _writeSplitReads(std::vector<RFRPtr> & readers, unsigned long readNumOfPair, int chunks, int fileNum, int numFiles, unsigned long  & numReads, T & output, FormatOutput & outputFormat, const OptionsBaseInterface::FileListType & inputs)
 	{
+		bool trimPairInName = SSOptions::getOptions().getTrimPairInName();
 		std::string name, bases, quals, comment;
 		for(int i=0; i < (int)readers.size(); i++) {
 			for(int j = 0 ; j < chunks; j++) {
@@ -373,6 +389,8 @@ protected:
 
 				while (readers[i]->nextRead(name, bases, quals, comment)) {
 					if ((numReads & 0x01) == readNumOfPair) {
+						if (trimPairInName)
+							trimName(name);
 						output << outputFormat.toString(name, bases, quals, comment);
 					}
 					numReads++;
