@@ -81,10 +81,14 @@ fi
 if [ -n "$MPI" ]
 then
 
-  for mpi in $(seq 1 ${procs})
+  for mpi in 1 2 3 4 6 7 8 12 13 16 20 24 32
   do
+    if [ $mpi -gt $procs ]
+    then
+      break
+    fi
     export OMP_NUM_THREADS=1
-    check $mt $MPI $mpi $FRP
+     check $mt $MPI $mpi $FRP
   done
   
   if ((ismpi)) && mpirun -n $procs -bysocket -bind-to-socket $true

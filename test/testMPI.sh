@@ -1,6 +1,7 @@
 #!/bin/bash
 test=TestMPI
 MPI=""
+procs=$(grep -c ^processor /proc/cpuinfo)
 
 true=$(which true)
 if mpirun $true
@@ -16,8 +17,13 @@ set -e
 set -x
 if [ -n "$MPI" ]
 then
-  for mpi in {1..8}
+  for mpi in 1 2 3 4 6 7 8 12 13 16 20 24 32
   do
+    if [ $mpi -gt $procs ]
+    then
+      break
+    fi
+    export OMP_NUM_THREADS=$(((procs+mpi-1) / mpi))
     $MPI $mpi $test
   done
 fi

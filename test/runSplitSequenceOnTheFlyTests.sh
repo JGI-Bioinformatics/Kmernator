@@ -54,9 +54,13 @@ total=$(grep -c ^@ $IN)
 if [ -n "$MPI" ]
 then
 
-  for mpi in $(seq 1 ${procs})
+  for mpi in 1 2 3 4 6 7 8 12 13 16 20 24 32
   do
-    export OMP_NUM_THREADS=1
+    if [ $mpi -gt $procs ]
+    then
+      break
+    fi
+    export OMP_NUM_THREADS=$(((procs+mpi-1) / mpi))
     rm -f ${TMP}*
     $mt $MPI $mpi $SSOTF --output-file "$TMP-{Uniq}.fastq" $IN
     cat ${TMP}-*.fastq | diff -q - $IN

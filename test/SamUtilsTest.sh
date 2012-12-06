@@ -2,6 +2,7 @@
 
 set -e
 set -x
+procs=$(grep -c ^processor /proc/cpuinfo)
 
 T=$(mktemp -d)
 export TMPDIR=/tmp
@@ -112,10 +113,14 @@ fi
 
 if [ -n "$MPI" ]
 then
-  for mpi in $(seq 1 ${procs})
+  for mpi in 1 2 3 4 6 7 8 12 13 16 20 24 32
   do
-    export OMP_NUM_THREADS=1
-
+    if [ $mpi -gt $procs ]
+    then
+      break
+    fi
+    export OMP_NUM_THREADS=$(((procs+mpi-1)/mpi))
+ 
     $mt $MPI $mpi  ./SamUtilsTest ${test} ${testout} ${testoutsorted}
     $samtools view -h ${testout} > ${testoutsam2}
     $samtools view -h ${testoutsorted} | awk '{print $3" "$4}' > ${testoutsam3}

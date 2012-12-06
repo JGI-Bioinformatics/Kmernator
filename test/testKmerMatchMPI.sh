@@ -26,8 +26,12 @@ set -e
 set -x
 if [ -n "$MPI" ]
 then
-  for mpi in $(seq 1 ${procs})
+  for mpi in 1 2 3 4 6 7 8 12 13 16 20 24 32
   do
+    if [ $mpi -gt $procs ]
+    then
+      break
+    fi
     export OMP_NUM_THREADS=1
     $mt $MPI $mpi $test
   done

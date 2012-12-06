@@ -7,6 +7,8 @@
 
 
 #include <stdio.h>
+#include <algorithm>
+
 #include "config.h"
 #include "Options.h"
 #include "MPIBuffer.h"
@@ -37,7 +39,7 @@ typedef MPIMessageBuffer< TextMessage, TextMessageProcessor > TextMessageBufferB
 class TextMessageProcessor {
 public:
 	long process(TextMessage *msg, MessagePackage &msgPkg) {
-		LOG_DEBUG(4, "TextMessageProcessor::process(): length: " << msg->length << " recvSize: " << msgPkg.size << " msg#: " << msgPkg.bufferCallback->getNumMessages() << " deliver#: " << msgPkg.bufferCallback->getNumDeliveries() << " " << std::string(msg->getText(), msg->length))
+		LOG_DEBUG(4, "TextMessageProcessor::process(): length: " << msg->length << " recvSize: " << msgPkg.size << " msg#: " << msgPkg.bufferCallback->getNumMessages() << " deliver#: " << msgPkg.bufferCallback->getNumDeliveries() << " " << std::string(msg->getText(), std::min(msg->length, 25)))
 				return msg->length;
 	}
 };
@@ -93,29 +95,19 @@ int main(int argc, char **argv)
 		omp_set_num_threads(1);
 
 	int numThreads = omp_get_max_threads();
-	int stdNumThreads = numThreads;
-	if (!MPIMessageBufferBase::isThreadSafe())
-		stdNumThreads = 1;
 
 
 	A2ABufferBase a2a(world, sizeof(TextMessage));
 
-	//RecvTextMessageBuffer *recv[numThreads];
-	//SendTextMessageBuffer *send[numThreads];
+	long unsigned int spamMax = a2a.getBufferSize() - sizeof(TextMessage);
+	int msgSize = std::min(16*1024 - sizeof(TextMessage), spamMax);
+	int msgPerMb = 1024*1024 / msgSize;
 
-#pragma omp parallel num_threads(stdNumThreads)
-	{
-		//int threadId = omp_get_thread_num();
-		//recv[threadId] = new RecvTextMessageBuffer(world, sizeof(TextMessage), threadId);
-		//send[threadId] = new SendTextMessageBuffer(world, sizeof(TextMessage));
-		//send[threadId]->addReceiveAllCallback(recv[threadId]);
-	}
-	int spamMax = MPIOptions::getOptions().getTotalBufferSize() / world.size() / 20;
-
-	char spam[spamMax];
+	LOG_VERBOSE_OPTIONAL(1, world.rank()==0, "Sending messages of size: " << msgSize);
+	char *spam = new char[spamMax];
 
 #pragma omp parallel for
-	for(int i = 0 ; i < spamMax; i++) {
+	for(int i = 0 ; i < (int) spamMax; i++) {
 		spam[i] = 'a' + (i%26);
 	}
 
@@ -123,30 +115,11 @@ int main(int argc, char **argv)
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Send/Recv " << (mb) << "MB per rank");
 	world.barrier();
 	boost::posix_time::ptime start = boost::posix_time::microsec_clock::local_time();
-	int msgSize = 16*1024 - sizeof(TextMessage);
-	int msgPerMb = 1024*1024 / msgSize;
-
-#pragma omp parallel num_threads(stdNumThreads)
-	{
-		//int threadId = omp_get_thread_num();
-		for(int i = 0; i < msgPerMb * mb / stdNumThreads / world.size(); i++) {
-			for(int w=0; w < world.size() ; w++) {
-				//send[threadId]->bufferMessage(w, threadId, msgSize)->set(spam, msgSize);
-			}
-		}
-		// send[threadId]->finalize(threadId);
-		//recv[threadId]->finalize();
-
-		// delete recv[threadId];
-		// delete send[threadId];
-	}
 
 	boost::posix_time::ptime end = boost::posix_time::microsec_clock::local_time();
 	boost::posix_time::time_duration elapsed = end - start;
 
 	double rate = (double) mb  / (double) elapsed.total_milliseconds() * 1000.0;
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "MPIMessagBuffer: " << rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
-
 
 	world.barrier();
 	start = boost::posix_time::microsec_clock::local_time();
@@ -173,7 +146,7 @@ int main(int argc, char **argv)
 	world.barrier();
 	start = boost::posix_time::microsec_clock::local_time();
 
-	for(int i = 0; i < mb*1024*1024 / spamMax / world.size(); i++) {
+	for(int i = 0; i < (int) (mb*1024*1024 / spamMax / world.size()); i++) {
 		for(int w = 0 ; w < world.size(); w++) {
 			inSize[w] = outSize[w] = spamMax;
 			inDisp[w] = outDisp[w] = spamMax * w;
@@ -192,6 +165,7 @@ int main(int argc, char **argv)
 	rate = (double) mb / (double) elapsed.total_milliseconds() * 1000.0;
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "MPI all2all: " << rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
 
+	delete [] spam;
 
 	MPI_Finalize();
 	return 0;

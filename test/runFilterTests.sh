@@ -2,6 +2,7 @@
 
 FR=../apps/FilterReads
 FRP=../apps/FilterReads-P
+procs=$(grep -c ^processor /proc/cpuinfo)
 
 TMP=$(mktemp testXXXXXX)
 export TMPDIR=/tmp
@@ -71,18 +72,25 @@ fi
 
 if [ -n "$MPI" ]
 then
-  for mpi in {1..5}
+  for mpi in 1 2 3 4 6 7 8 12 13 16 20 24 32
   do
+    if [ $mpi -gt $procs ]
+    then
+      break
+    fi
+    export OMP_NUM_THREADS=$(((procs+mpi-1)/mpi))
     check $MPI $mpi $FRP --thread 1
+    rm -f $TMP*
+    check $MPI $mpi $FRP
     rm -f $TMP*
     check $MPI $mpi $FRP --thread 1 --save-kmer-mmap 1
     mv $TMP-mmap $TMP-mmap-saved
     check $MPI $mpi $FRP --thread 1 --load-kmer-mmap $TMP-mmap-saved
     check $FR --load-kmer-mmap $TMP-mmap-saved
     rm -f $TMP*
-    check $FR --thread $thread --save-kmer-mmap 1 
+    check $FR --save-kmer-mmap 1 
     mv $TMP-mmap $TMP-mmap-saved
-    check $MPI $mpi $FRP --thread 1 --load-kmer-mmap $TMP-mmap-saved
+    check $MPI $mpi $FRP --load-kmer-mmap $TMP-mmap-saved
     rm -f $TMP*
   done
 fi
