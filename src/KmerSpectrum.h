@@ -365,18 +365,21 @@ public:
 	}
 	Kmernator::MmapFileVector restoreMmap(string mmapfilename) {
 		LOG_VERBOSE(1, "Loading kmer spectrum from saved mmaps: " + mmapfilename);
+		bool loadedSomething = false;
 		Kmernator::MmapFileVector spectrumMmaps;
 		Kmernator::MmapFile solidMmap = MmapTempFile::openMmap(mmapfilename + "-solid");
 		if (solidMmap.is_open() && solidMmap.size() > 0) {
 			SolidMapType tmpSolid(solidMmap.data());
 			spectrumMmaps.push_back(solidMmap);
 			solid.swap(tmpSolid);
+			loadedSomething = true;
 		}
 		Kmernator::MmapFile weakMmap = MmapTempFile::openMmap(mmapfilename);
 		if (weakMmap.is_open() && weakMmap.size() > 0) {
 			WeakMapType tmpWeak(weakMmap.data());
 			spectrumMmaps.push_back(weakMmap);
 			weak.swap(tmpWeak);
+			loadedSomething = true;
 		}
 		string singletonMmapFile = mmapfilename + "-singleton";
 		Kmernator::MmapFile singleMmap = MmapTempFile::openMmap(singletonMmapFile);
@@ -384,7 +387,10 @@ public:
 			SingletonMapType tmpSingle(singleMmap.data());
 			spectrumMmaps.push_back(singleMmap);
 			singleton.swap(tmpSingle);
+			loadedSomething = true;
 		}
+		if (!loadedSomething)
+			LOG_THROW("Terribly sorry but there were no kmer spectrum mmap files at: " << mmapfilename << "*\n\tCan not continue");
 		return spectrumMmaps;
 	}
 
@@ -2001,7 +2007,7 @@ public:
 							break;
 						thisEditDistance--;
 					}
-					LOG_DEBUG(2, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
+					LOG_DEBUG(3, "Purging Variants of " << it->key().toFasta() << " below " << threshold << " (" << count << ")");
 					purgedKmers += this->_purgeVariants(pointers[threadId], it->key(), variants[threadId], threshold, thisEditDistance);
 
 					if (++processed % 10000 == 0)
