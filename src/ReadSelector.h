@@ -633,7 +633,7 @@ public:
 		if (score <= targetDepth) {
 			return true;
 		} else {
-			long choice = LongRand::rand() % score;
+			long choice = IntRand::rand() % score;
 			if (useLogscale) {
 				return choice <= targetDepth * log((float) score / (float) targetDepth);
 			} else {

@@ -60,7 +60,10 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/tokenizer.hpp>
-
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_01.hpp>
+#include <boost/thread.hpp>
+#include <boost/thread/mutex.hpp>
 
 #include <boost/iostreams/device/file_descriptor.hpp>
 #include <boost/iostreams/stream.hpp>
@@ -136,7 +139,7 @@ public:
 		std::stringstream ss;
 		std::string nameAndComment = name;
 		if (!comment.empty())
-			nameAndComment += " " + comment;
+			nameAndComment += "\t" + comment;
 		switch(_type) {
 		case 0:
 		case 2: ss << "@" << nameAndComment << "\n" << fasta << "\n+\n" << qual << "\n"; break;
@@ -1024,7 +1027,48 @@ public:
 	};
 };
 
-class LongRand {
+template<typename Engine, typename Type>
+class _Rand {
+public:
+	typedef boost::shared_ptr< _Rand  > Instance;
+	typedef boost::unordered_map<boost::thread::id, Instance> InstanceMap;
+	_Rand( Type _seed = 0 ) : impl( _seed ) {	}
+	Type getRand() {
+		return impl();
+	}
+	static Type rand() {
+		return getInstance().getRand();
+	}
+protected:
+	static _Rand &getInstance() {
+		static boost::shared_ptr< InstanceMap > _staticInstanceMapPtr( new InstanceMap() );
+		boost::shared_ptr< InstanceMap > instanceMapPtr = _staticInstanceMapPtr;
+		boost::thread::id id = boost::this_thread::get_id();
+		typename InstanceMap::iterator it;
+		while ((it = instanceMapPtr->find(id)) == instanceMapPtr->end()) {
+			boost::mutex::scoped_lock mylock(getMutex());
+			instanceMapPtr.reset( new InstanceMap(*_staticInstanceMapPtr) );
+			Instance lr = Instance( new _Rand(time(NULL) ^ instanceMapPtr->size() ) );
+			(*instanceMapPtr)[id] = lr;
+			_staticInstanceMapPtr = instanceMapPtr;
+		}
+		return (*it->second);
+	}
+
+	static boost::mutex &getMutex() {
+		static boost::mutex _;
+		return _;
+	}
+private:
+	Engine impl;
+};
+
+typedef _Rand< boost::random::mt19937, uint32_t > IntRand;
+typedef _Rand< boost::random::mt19937_64, uint64_t > LongRand;
+typedef _Rand< boost::random::uniform_01<float>, float > FloatRand;
+typedef _Rand< boost::random::uniform_01<double>, double > DoubleRand;
+
+class LongRandOld {
 public:
 	// THREAD SAFE
 	static unsigned long rand() {

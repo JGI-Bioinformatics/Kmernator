@@ -33,7 +33,7 @@ private:
 		unsigned long unique = 0;
 		if (world.rank() == 0) {
 			unsigned int seed = (unsigned int) (((unsigned long) (MPI_Wtime()*1000)) & 0xffffffff);
-			unique = LongRand::rand(seed);
+			unique = LongRandOld::rand(seed);
 			LOG_DEBUG_OPTIONAL(1, true, "getSharedGlobalUnique(): " << unique);
 		}
 		MPI_Bcast(&unique, 1, MPI_LONG_LONG_INT, 0, world);

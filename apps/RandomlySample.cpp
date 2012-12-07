@@ -100,6 +100,8 @@ typedef OptionsBaseTemplate< _RSOptions > RSOptions;
 typedef std::vector<unsigned long> Positions;
 Positions selectRandomDense(unsigned long numSamples, unsigned long limit) {
 
+	LongRand randomGenerator;
+
 	if (numSamples > limit) {
 		LOG_WARN(1, "Requesting more samples than available.  requested samples: " << numSamples << " available: " << limit);
 		Positions positions;
@@ -115,14 +117,14 @@ Positions selectRandomDense(unsigned long numSamples, unsigned long limit) {
 			positions.insert(i);
 		}
 		while (positions.size() > numSamples) {
-			positions.erase( (unsigned long) (LongRand::rand() % limit) );
+			positions.erase( (unsigned long) (randomGenerator.getRand() % limit) );
 		}
 
 	} else {
 		// select positions to add
 
 		while (positions.size() < numSamples) {
-			positions.insert( (unsigned long) (LongRand::rand() % limit) );
+			positions.insert( (unsigned long) (randomGenerator.getRand() % limit) );
 		}
 	}
 	Positions list(positions.begin(), positions.end());
@@ -136,12 +138,13 @@ Positions selectRandom(unsigned long numSamples, unsigned long limit, unsigned l
 	LOG_DEBUG(1, "selectRandom(" << numSamples << ", " << limit << ", " << minSpacing << ", " << maxEdgeSpacing << ")");
 	Positions positions;
 	positions.reserve(numSamples);
+	LongRand randomGenerator;
 	unsigned long attempts = 0;
 	unsigned long maxAttempts =  (log(numSamples)/log(2)+3)*2;
 	while (positions.size() < numSamples && attempts++ < maxAttempts) {
 		long newSamples = numSamples - positions.size();
 		for(long i = 0; i < newSamples; i++)
-			positions.push_back( LongRand::rand() % limit );
+			positions.push_back( randomGenerator.getRand() % limit );
 		std::sort(positions.begin(), positions.end());
 		unsigned long lastPos = positions[0];
 		std::vector<long> deleteThese;

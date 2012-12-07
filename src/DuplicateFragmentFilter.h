@@ -336,10 +336,10 @@ public:
 					{
 						newReads.append(consensus1);
 					}
-                                } else {
-                                        randomIdx = LongRand::rand() % tmpReadSet1.getSize();
+				} else {
+					randomIdx = LongRand::rand() % tmpReadSet1.getSize();
 					LOG_DEBUG_OPTIONAL(2, true, "Selected " << randomIdx << " out of " << rpw.size() << reads.getRead( reads.getPair((rpw.begin() + randomIdx)->readId).read1 ).getName());
-                                }
+				}
 				affectedCount += rpw.size();
 
 				ReadSetSizeType count = 0;
