@@ -51,7 +51,7 @@
 
 class _ReadSelectorOptions : public OptionsBaseInterface {
 public:
-	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(25), bimodalSigmas(-1.0), kmerScoringType("MEDIAN"), normalizationMethod("RANDOM"), useLogscaleAboveMax(true)  {
+	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(0.85), bimodalSigmas(-1.0), kmerScoringType("MEDIAN"), normalizationMethod("RANDOM"), useLogscaleAboveMax(false)  {
 	}
 	virtual ~_ReadSelectorOptions() {}
 	void _resetDefaults() {
@@ -66,15 +66,15 @@ public:
 
 				("use-logscale-above-max", po::value<bool>()->default_value(useLogscaleAboveMax), "if --max-kmer-output-depth is set, then reads above this threshold will be reduced by the log2 kmer abundance")
 
-				("normalization-method", po::value<std::string>()->default_value(normalizationMethod), "If --max-kmer-output-depth is selected, what algorithm to use (RANDOM, OPTIMAL) (optimal is *very* slow and is not implemented in MPI")
+				("normalization-method", po::value<std::string>()->default_value(normalizationMethod), "If --max-kmer-output-depth is selected, what algorithm to use (RANDOM, OPTIMAL) (optimal is *very* slow and is not implemented in MPI version")
 
 				("partition-by-depth", po::value<int>()->default_value(partitionByDepth), "partition filtered reads by powers-of-two coverage depth (mutually exclusive with max-kmer-depth)")
 
 				("min-passing-in-pair", po::value<int>()->default_value(bothPairs), "1 or 2 reads in a pair must pass filters")
 
-				("remainder-trim", po::value<int>()->default_value(remainderTrim), "if set, a final round letting single reads and lesser trimmed reads will be selected")
+				("min-read-length", po::value<float>()->default_value(minReadLength), "minimum (trimmed) read length of selected reads.  0.0: no minimum - 1.0: full read length, between 0.0 and 1.0, then the fraction of the original read length, >1.0 then the absolute read length")
 
-				("min-read-length", po::value<unsigned int>()->default_value(minReadLength), "minimum (trimmed) read length of selected reads.  0: no minimum, 1: full read length")
+				("remainder-trim", po::value<float>()->default_value(remainderTrim), "if set >=0, a final round letting single reads and lesser trimmed reads will be selected.  Same rules as --min-read-length")
 
 				("kmer-scoring-type", po::value<std::string>()->default_value(kmerScoringType), "How to evaluate a read's score over all its kmers (SUM, MEDIAN, AVG, MIN, MAX)")
 
@@ -83,7 +83,7 @@ public:
 		desc.add(opts);
 
 		expt.add_options()
-				("bimodal-sigmas", po::value<double>()->default_value(bimodalSigmas), "(experimental) Detect bimodal kmer-signatures across reads and trim at transition point if the two means are separated by bimodal-sigmas * stdDev (2.0 to 3.0 suggested).  disabled if < 0.0")
+				("bimodal-sigmas", po::value<float>()->default_value(bimodalSigmas), "(experimental) Detect bimodal kmer-signatures across reads and trim at transition point if the two means are separated by bimodal-sigmas * stdDev (2.0 to 3.0 suggested).  disabled if < 0.0")
 				;
 
 		desc.add(expt);
@@ -96,13 +96,9 @@ public:
 		setOpt("use-logscale-above-max", useLogscaleAboveMax);
 		setOpt("partition-by-depth", partitionByDepth);
 		setOpt("min-passing-in-pair", bothPairs);
-		setOpt("remainder-trim", remainderTrim);
 		// set read length
-		setOpt("min-read-length", getMinReadLength());
-		if (getMinReadLength() == 1) {
-			// key for actual read length
-			getMinReadLength() = MAX_SEQUENCE_LENGTH;
-		}
+		setOpt("min-read-length", minReadLength);
+		setOpt("remainder-trim", remainderTrim);
 		setOpt("kmer-scoring-type", kmerScoringType);
 		if (kmerScoringType != "SUM" && kmerScoringType != "MEDIAN" && kmerScoringType != "AVG" && kmerScoringType != "MIN" && kmerScoringType != "MAX") {
 			setOptionsErrorMsg("Invalid --kmer-scoring-type: " + kmerScoringType);
@@ -143,17 +139,17 @@ public:
 	int &getMinPassingInPair() {
 		return bothPairs;
 	}
-	int &getRemainderTrim() {
-		return remainderTrim;
-	}
 	bool getBothPairs() {
 		return bothPairs == 2;
 	}
-	unsigned int &getMinReadLength()
+	float &getMinReadLength()
 	{
 		return minReadLength;
 	}
-	double &getBimodalSigmas()
+	float &getRemainderTrim() {
+		return remainderTrim;
+	}
+	float &getBimodalSigmas()
 	{
 		return bimodalSigmas;
 	}
@@ -168,15 +164,40 @@ public:
 	}
 
 private:
-	int maxKmerDepth, partitionByDepth, bothPairs, remainderTrim;
-	unsigned int minReadLength;
-	double       bimodalSigmas;
+	int maxKmerDepth, partitionByDepth, bothPairs;
+	float remainderTrim, minReadLength;
+	float bimodalSigmas;
 	std::string kmerScoringType;
 	std::string normalizationMethod;
 	bool useLogscaleAboveMax;
 };
 typedef OptionsBaseTemplate< _ReadSelectorOptions > ReadSelectorOptions;
 
+class ReadSelectorUtil {
+public:
+	typedef Sequence::SequenceLengthType SequenceLengthType;
+	static inline bool passesLength(float length, const Read &read, float minimumLength) {
+		assert(minimumLength >= 0.0);
+		if (length <= 1.0)
+			return false;
+		if (minimumLength <= 1.0) {
+			return read.getLength() * minimumLength <= length;
+		} else {
+			return minimumLength <= length;
+		}
+	}
+	static inline bool passesLength(float length, SequenceLengthType readLength, float minimumLength) {
+		assert(minimumLength >= 0.0);
+		if (length <= 1.0)
+			return false;
+		if (minimumLength <= 1.0) {
+			return readLength * minimumLength <= length;
+		} else {
+			return minimumLength <= length;
+		}
+	}
+
+};
 
 template<typename M>
 class ReadSelector {
@@ -497,19 +518,15 @@ public:
 	bool isPassingRead(ReadSetSizeType readIdx) {
 		return _reads.isValidRead(readIdx);
 	}
-	bool isPassingRead(ReadSetSizeType readIdx, ScoreType minimumScore, SequenceLengthType minimumLength) {
+	bool isPassingRead(ReadSetSizeType readIdx, ScoreType minimumScore, float minimumLength) {
 		if (! isPassingRead(readIdx) )
 			return false;
 		ReadTrimType &trim = _trims[readIdx];
-		if (minimumLength == 1 || minimumLength > _reads.getMaxSequenceLength()) {
-			// use actual length of this sequence
-			minimumLength = _reads.getRead(readIdx).getLength();
-		}
-		bool passed = (trim.isAvailable & (trim.score >= minimumScore) & (trim.trimLength >= minimumLength));
+		bool passed = (trim.isAvailable && (trim.score >= minimumScore) && ReadSelectorUtil::passesLength(trim.trimLength, _reads.getRead(readIdx), minimumLength));
 		LOG_DEBUG(3, "isPassingRead(" << readIdx << " (" << _reads.getRead(readIdx).getName() << "), " << minimumScore << ", " << minimumLength << "): " << trim.toString() << " " << passed);
 		return passed;
 	}
-	bool isPassingPair(const ReadSet::Pair &pair, ScoreType minimumScore, SequenceLengthType minimumLength, bool bothPass) {
+	bool isPassingPair(const ReadSet::Pair &pair, ScoreType minimumScore, float minimumLength, bool bothPass) {
 		bool passed = true;
 		bool r1 = isPassingRead(pair.read1, minimumScore, minimumLength);
 		bool r2 = isPassingRead(pair.read2, minimumScore, minimumLength);
@@ -522,12 +539,12 @@ public:
 	}
 	bool isPairAvailable(const ReadSet::Pair &pair, bool bothPass) {
 		if (isPairedRead(pair) && bothPass)
-			return (isPassingRead(pair.read1) & _trims[pair.read1].isAvailable & isPassingRead(pair.read2) & _trims[pair.read2].isAvailable);
+			return (_trims[pair.read1].isAvailable && _trims[pair.read2].isAvailable && isPassingRead(pair.read1) && isPassingRead(pair.read2));
 		else
-			return ((isPassingRead(pair.read1) & _trims[pair.read1].isAvailable) | (isPassingRead(pair.read2) & _trims[pair.read2].isAvailable));
+			return ((_trims[pair.read1].isAvailable && isPassingRead(pair.read1)) || (_trims[pair.read2].isAvailable && isPassingRead(pair.read2)));
 	}
 
-	int pickAllPassingReads(ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength()) {
+	int pickAllPassingReads(ScoreType minimumScore = 0.0, float minimumLength = ReadSelectorOptions::getOptions().getMinReadLength()) {
 		int picked = 0;
 		for(ReadSetSizeType i = 0; i < _reads.getSize(); i++) {
 			isPassingRead(i, minimumScore, minimumLength) && pickIfNew(i) && picked++;
@@ -536,7 +553,7 @@ public:
 		return picked;
 	}
 
-	ReadSetSizeType pickAllPassingPairs(ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = KmerSizer::getSequenceLength(), bool bothPass = false) {
+	ReadSetSizeType pickAllPassingPairs(ScoreType minimumScore = 0.0, float minimumLength = ReadSelectorOptions::getOptions().getMinReadLength(), bool bothPass = false) {
 		ReadSetSizeType picked = 0;
 		for(ReadSetSizeType i = 0; i < _reads.getPairSize(); i++) {
 			const ReadSet::Pair &pair = _reads.getPair(i);
@@ -616,16 +633,15 @@ public:
 		if (score <= targetDepth) {
 			return true;
 		} else {
+			long choice = LongRand::rand() % score;
 			if (useLogscale) {
-				long choice = LongRand::rand() % score;
 				return choice <= targetDepth * log((float) score / (float) targetDepth);
 			} else {
-				long choice = LongRand::rand() % score;
 				return choice <= targetDepth;
 			}
 		}
 	}
-	ReadSetSizeType pickCoverageNormalizedSubset(long targetDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = ReadSelectorOptions::getOptions().getMinReadLength(), bool byPair = false, bool bothPass = false ) {
+	ReadSetSizeType pickCoverageNormalizedSubset(long targetDepth, ScoreType minimumScore = 0.0, float minimumLength = ReadSelectorOptions::getOptions().getMinReadLength(), bool byPair = false, bool bothPass = false ) {
 		LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "pickCoverageNormalizedSubset(" << targetDepth << ", " << minimumLength << ", " << byPair << ", " << bothPass << ")");
 		ReadSetSizeType picked = 0;
 		int numThreads = omp_get_max_threads();
@@ -700,7 +716,7 @@ public:
 	}
 
 	ReadSetSizeType pickBestCoveringSubsetPairs(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0,
-			SequenceLengthType minimumLength = ReadSelectorOptions::getOptions().getMinReadLength(), bool bothPass = false) {
+			float minimumLength = ReadSelectorOptions::getOptions().getMinReadLength(), bool bothPass = false) {
 		_initPickBestCoveringSubset();
 
 		ReadSetSizeType picked = 0;
@@ -829,7 +845,7 @@ public:
 		return picked;
 	}
 
-	ReadSetSizeType pickBestCoveringSubsetReads(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, SequenceLengthType minimumLength = ReadSelectorOptions::getOptions().getMinReadLength()) {
+	ReadSetSizeType pickBestCoveringSubsetReads(unsigned char maxPickedKmerDepth, ScoreType minimumScore = 0.0, float minimumLength = ReadSelectorOptions::getOptions().getMinReadLength()) {
 		_initPickBestCoveringSubset();
 		ReadSetSizeType picked = 0;
 
@@ -919,8 +935,11 @@ public:
 		if (test.score > best.score) {
 			best = test;
 		}
-		if (Log::isDebug(2))
+		if (Log::isDebug(2)) {
+			if (!trim.label.empty())
+				trim.label += "\t";
 			trim.label += "LS:" + ss.str();
+		}
 
 		if (best.trimLength >= 3 && _bimodalSigmas >= 0.0) {
 			Statistics::MeanStdCount f, s;
@@ -933,21 +952,19 @@ public:
 						+ "/" + boost::lexical_cast<std::string>( (int) s.mean ));
 
 				if (f.mean > s.mean) {
+					assert(end - p >= 0);
 					// remove the second partition from the original trim estimate
-					for(it = p; it != end; it++) {
-						best.trimLength--;
-					}
+					best.trimLength -= end - p;
 					if (!trim.label.empty())
-						trim.label += " ";
+						trim.label += "\t";
 					trim.label += label;
 				} else {
+					assert(p - begin >= 0);
 					// second partition is greater than first, remove the first
-					for(it = begin; it != p ; it++) {
-						best.trimLength--;
-						best.trimOffset++;
-					}
+					best.trimLength -= p - begin;
+					best.trimOffset += p - begin;
 					if (!trim.label.empty())
-						trim.label += " ";
+						trim.label += "\t";
 					trim.label += "Inv" + label;
 				}
 			}
@@ -968,8 +985,8 @@ public:
 		}
 		std::stringstream ss;
 		if (!trim.label.empty())
-			ss << " ";
-		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength << " " << getKmerScoringTypeLabel(_defaultScoringType) << ":" << (int) (trim.score+0.5);
+			ss << "\t";
+		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength << "\t" << getKmerScoringTypeLabel(_defaultScoringType) << ":" << (int) (trim.score+0.5);
 		trim.label += ss.str();
 	}
 
@@ -987,7 +1004,7 @@ public:
 	void scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore, KA &kmers) {
 		getKmersForRead(read, kmers);
 		setKmerValues(kmers, minimumKmerScore);
-		LOG_DEBUG_OPTIONAL(1, true, "Trim and Score: " << read.getName());
+		LOG_DEBUG_OPTIONAL(5, true, "Trim and Score: " << read.getName());
 
 		trimReadByKmers(kmers.beginValue(), kmers.endValue(), markupLength, trim, minimumKmerScore);
 

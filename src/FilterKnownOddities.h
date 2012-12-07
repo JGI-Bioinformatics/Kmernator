@@ -278,8 +278,8 @@ public:
 		SequenceCounts readCounts;
 		SequenceCounts discardedCounts;
 		BaseCounts baseCounts;
-		SequenceLengthType minReadPos;
-		Recorder(const FilterKnownOddities &filter) : omPhiX(NULL), omArtifact(NULL), minReadPos(0) {
+		float minimumReadLength;
+		Recorder(const FilterKnownOddities &filter) : omPhiX(NULL), omArtifact(NULL), minimumReadLength(0) {
 			const ReadSet &reads = filter.getSequences();
 			readCounts.resize(reads.getSize() + 1);
 			discardedCounts.resize(reads.getSize() + 1);
@@ -526,7 +526,7 @@ public:
 					if (isRead1 && results1.value != 0) {
 						Read &read = reads.getRead(readIdx1);
 						SequenceLengthType len = read.getLength();
-						if (wasReference || results1.minAffected == 0 || !PASSES_LENGTH(results1.minAffected, len, recorder.minReadPos)) {
+						if (wasReference || results1.minAffected == 0 || !ReadSelectorUtil::passesLength(results1.minAffected, len, recorder.minimumReadLength)) {
 							recorder.recordDiscard(results1.value, read, os, label1);
 						} else {
 							recorder.recordTrim(results1.value, len - results1.minAffected);
@@ -535,7 +535,7 @@ public:
 					if (isRead2 && results2.value != 0) {
 						Read &read = reads.getRead(readIdx2);
 						SequenceLengthType len = read.getLength();
-						if (wasReference || results2.minAffected == 0 || !PASSES_LENGTH(results2.minAffected, len, recorder.minReadPos)) {
+						if (wasReference || results2.minAffected == 0 || !ReadSelectorUtil::passesLength(results2.minAffected, len, recorder.minimumReadLength)) {
 							recorder.recordDiscard(results2.value, read, os, label2);
 						} else {
 							recorder.recordTrim(results2.value, len - results2.minAffected);
@@ -581,11 +581,8 @@ public:
 			recorder.omArtifact = &_omArtifact;
 		}
 
-		SequenceLengthType &minReadPos = recorder.minReadPos;
-		minReadPos = ReadSelectorOptions::getOptions().getMinReadLength();
-		if (minReadPos != 0 && minReadPos != MAX_SEQUENCE_LENGTH) {
-			minReadPos -= 1;
-		}
+		float &minimumReadLength = recorder.minimumReadLength;
+		minimumReadLength = ReadSelectorOptions::getOptions().getMinReadLength();
 
 		bool byPair = reads.hasPairs();
 		long size = reads.getSize();

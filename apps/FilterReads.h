@@ -169,7 +169,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			maxDepth = minDepth;
 		}
 		// record potentially modified options
-		int oldMinReadLength = ReadSelectorOptions::getOptions().getMinReadLength();
+		float oldMinReadLength = ReadSelectorOptions::getOptions().getMinReadLength();
 		int oldMinPassingInPair = ReadSelectorOptions::getOptions().getMinPassingInPair();
 		bool hasRemainderTrim = false;
 
@@ -211,7 +211,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			if (depth == minDepth) {
 				if ((!hasRemainderTrim)
 					&& isPartitioned
-					&& ReadSelectorOptions::getOptions().getRemainderTrim() > 0
+					&& ReadSelectorOptions::getOptions().getRemainderTrim() > 0.0
 					&& (ReadSelectorOptions::getOptions().getMinPassingInPair() != 1
 						|| ((int) ReadSelectorOptions::getOptions().getMinReadLength()) != ReadSelectorOptions::getOptions().getRemainderTrim()
 						)) {

@@ -46,8 +46,6 @@ namespace po = boost::program_options;
 #include "config.h"
 #include "Log.h"
 
-#define PASSES_LENGTH(length, readLength, minimumLength) ((minimumLength == MAX_SEQUENCE_LENGTH) ? (length == readLength) : (length >= minimumLength))
-
 class GlobalOptions {
 public:
 	static inline bool &isCommentStored() {
