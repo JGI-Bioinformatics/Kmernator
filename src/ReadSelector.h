@@ -504,7 +504,7 @@ public:
 				_storeCounts(readIdx1);
 				_storeCounts(readIdx2);
 			}
-			LOG_DEBUG(3, "Picked " << (readIdx1 != ReadSet::MAX_READ_IDX ? _reads.getRead(readIdx1).getName() : _reads.getRead(readIdx2).getName()));
+			LOG_DEBUG(3, "pickIfNew(): Picked " << (readIdx1 != ReadSet::MAX_READ_IDX ? _reads.getRead(readIdx1).getName() : _reads.getRead(readIdx2).getName()));
 			return true;
 
 		} else {
@@ -675,37 +675,41 @@ public:
 					LOG_DEBUG(4, "Both do not have >0 scores: " << score1 << ", " << score2)
 								continue;
 				}
-				if (score1 > 0 && score2 > 0) {
-					pairedscore = std::min(score1, score2);
-				} else {
-					pairedscore = std::max(score1, score2);
-				}
+				pairedscore = std::max(score1, score2);
 				if (chooseRead(pairedscore, targetDepth, useLogscale)) {
-					LOG_DEBUG(3, "Picked Pair " << _reads.getRead(pair.read1).getName());
+					LOG_DEBUG(3, "pCNS(): Picked Pair " << pairedscore << " " << _reads.getRead(pair.read1).getName());
 					myPicks[omp_get_thread_num()].push_back(pair);
+				} else {
+					LOG_DEBUG(3, "pCNS(): Did not pick pair: " << pairedscore << " , " << score1 << " " << score2);
 				}
 
 			} else {
 				Pair twoReads;
 				LOG_DEBUG(4, "single reads");
 				if (score1 > 0.0 && (chooseRead(score1, targetDepth, useLogscale))) {
-					LOG_DEBUG(3, "Picked Single " << _reads.getRead(pair.read1).getName());
+					LOG_DEBUG(3, "pCNS(): Picked Single " << score1 << " " << _reads.getRead(pair.read1).getName());
 					twoReads.read1 = pair.read1;
+				} else {
+					LOG_DEBUG(3, "pCNS(): Did not pick r1:" << score1);
 				}
 				if (score2 > 0.0 && (chooseRead(score2, targetDepth, useLogscale))) {
-					LOG_DEBUG(3, "Picked Single " << _reads.getRead(pair.read2).getName());
+					LOG_DEBUG(3, "pCNS(): Picked Single " << score2 << " " << _reads.getRead(pair.read2).getName());
 					twoReads.read2 = pair.read2;
+				} else {
+					LOG_DEBUG(3, "pCNS(): Did not pick r2: " << score2);
 				}
+
 				if (twoReads.hasAValidRead())
 					myPicks[omp_get_thread_num()].push_back(twoReads);
 			}
 		}
+		LOG_DEBUG_OPTIONAL(1, true, "Consolidating thread-picked reads");
 		long newPicks = 0;
-		for(int i = 0; i < omp_get_num_threads(); i++) {
+		for(int i = 0; i < numThreads; i++) {
 			newPicks += myPicks[i].size();
 		}
 		_picks.reserve(_picks.size() + newPicks);
-		for(int i = 0; i < omp_get_num_threads(); i++) {
+		for(int i = 0; i < numThreads; i++) {
 			for(PairedIndexType::iterator it = myPicks[i].begin(); it != myPicks[i].end(); it++)
 				if (pickIfNew(*it))
 					picked++;
