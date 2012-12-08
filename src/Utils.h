@@ -1031,7 +1031,7 @@ template<typename Engine, typename Type>
 class _Rand {
 public:
 	typedef boost::shared_ptr< _Rand  > Instance;
-	typedef boost::unordered_map<boost::thread::id, Instance> InstanceMap;
+	typedef std::vector< Instance > Instances;
 	_Rand( Type _seed = 0 ) : impl( _seed ) {	}
 	Type getRand() {
 		return impl();
@@ -1041,18 +1041,22 @@ public:
 	}
 protected:
 	static _Rand &getInstance() {
-		static boost::shared_ptr< InstanceMap > _staticInstanceMapPtr( new InstanceMap() );
-		boost::shared_ptr< InstanceMap > instanceMapPtr = _staticInstanceMapPtr;
-		boost::thread::id id = boost::this_thread::get_id();
-		typename InstanceMap::iterator it;
-		while ((it = instanceMapPtr->find(id)) == instanceMapPtr->end()) {
+		static Instances _staticInstances;
+		unsigned int id = omp_get_thread_num();
+		if (_staticInstances.size() <= id) {
+			// not found, create a new, lock and add to map
 			boost::mutex::scoped_lock mylock(getMutex());
-			instanceMapPtr.reset( new InstanceMap(*_staticInstanceMapPtr) );
-			Instance lr = Instance( new _Rand(time(NULL) ^ instanceMapPtr->size() ) );
-			(*instanceMapPtr)[id] = lr;
-			_staticInstanceMapPtr = instanceMapPtr;
+			if (_staticInstances.size() <= id) {
+				Instances tmp(_staticInstances);
+				tmp.reserve(omp_get_max_threads());
+				for(int i = 0; i < omp_get_max_threads(); i++) {
+					Instance lr( new _Rand(time(NULL) ^ (i+1)) );
+					tmp.push_back(lr);
+				}
+				_staticInstances.swap(tmp);
+			}
 		}
-		return (*it->second);
+		return *_staticInstances[id];
 	}
 
 	static boost::mutex &getMutex() {
