@@ -1,12 +1,23 @@
-INSTALL
+#
+# INSTALL
+#
+# Requirements:
+#
+# cmake >= 2.8
+# g++ >= 4.3.2
+# mpi: MPICH or OpenMPI >= 1.4 (perferably compiled with MPI_THREAD_FUNNELED support: "--enable-opal-multi-threads=yes")
+#
 
-Requirements:
+mkdir build
+cd build
+CFLAGS="-O3 -g -Wall"
+PREFIX="/usr/local" # or wherever you want to install
+cmake .. -DCMAKE_CXX_FLAGS="$CFLAGS" -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_INSTALL_PREFIX=$PREFIX
+make -j && make test 
+make install
 
-cmake >= 2.6.4
-g++ >= 4.3.2
-
-mpi ( OpenMPI >= 1.4 compiled with "--enable-mpi-threads --with-threads=posix" )
-
-
+#
+# see cmake-flags file for configuration recipies on different platform
+#
 
 

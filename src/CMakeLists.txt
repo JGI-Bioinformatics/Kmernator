@@ -65,3 +65,6 @@ add_library( ReadSet ReadSet )
 add_library( Log Log )
 add_dependencies( Log REPLACE_VERSION_H)
 
+FILE(GLOB HeaderFiles *.h)
+INSTALL(FILES ${HeaderFiles} DESTINATION include)
+

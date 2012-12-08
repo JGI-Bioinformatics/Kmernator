@@ -45,8 +45,9 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 *****************
 
-mkdir build
-cd build
-cmake .. -DCMAKE_CXX_FLAGS="-O3 -g -Wall" -DCMAKE_C_FLAGS="-O3 -g -Wall"
-make && make test
+
+
+See INSTALL for instruction on how to build and cmake-flags for platform
+specific hints
+
 

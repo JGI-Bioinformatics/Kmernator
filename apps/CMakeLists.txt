@@ -51,6 +51,7 @@ target_link_libraries( CompareSpectrums
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+install(TARGETS CompareSpectrums DESTINATION bin)
 
 set_source_files_properties( ContigExtender
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
@@ -63,6 +64,7 @@ target_link_libraries( ContigExtender
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+install(TARGETS ContigExtender DESTINATION bin)
 
 
 set_source_files_properties( FilterReads
@@ -76,6 +78,7 @@ target_link_libraries( FilterReads
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+install(TARGETS FilterReads DESTINATION bin)
 
 if( MPI_FOUND )
 
@@ -94,6 +97,7 @@ target_link_libraries( FilterReads-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+install(TARGETS FilterReads-P DESTINATION bin)
 
 set_source_files_properties( EstimateSize-P
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
@@ -110,9 +114,8 @@ target_link_libraries( EstimateSize-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
-
-execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/apps/EstimateSize.R apps/ )
-
+install(TARGETS EstimateSize-P DESTINATION bin)
+install(FILES EstimateSize.R DESTINATION bin)
 
 set_source_files_properties( DistributedNucleatingAssembler
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
@@ -129,6 +132,7 @@ target_link_libraries( DistributedNucleatingAssembler
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+install(TARGETS DistributedNucleatingAssembler DESTINATION bin)
 
 set_source_files_properties( MeraculousCounter
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
@@ -145,6 +149,7 @@ target_link_libraries( MeraculousCounter
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+install(TARGETS MeraculousCounter DESTINATION bin)
 
 set_source_files_properties( BamSort-P
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
@@ -160,6 +165,7 @@ target_link_libraries( BamSort-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+install(TARGETS BamSort-P DESTINATION bin)
 
 set_source_files_properties( MPIBroadcastStream
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
@@ -173,6 +179,7 @@ target_link_libraries( MPIBroadcastStream
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+install(TARGETS MPIBroadcastStream DESTINATION bin)
 
                               
 endif()
@@ -188,6 +195,7 @@ target_link_libraries( TnfDistance
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+install(TARGETS TnfDistance DESTINATION bin)
    
 set_source_files_properties( Fastq2Fasta
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
@@ -199,6 +207,7 @@ target_link_libraries(        Fastq2Fasta
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+install(TARGETS Fastq2Fasta DESTINATION bin)
 
 set_source_files_properties( Fastq2FastaQual
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
@@ -210,6 +219,7 @@ target_link_libraries(        Fastq2FastaQual
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+install(TARGETS Fastq2FastaQual DESTINATION bin)
 
 
 set_source_files_properties( FixPair
@@ -222,6 +232,7 @@ target_link_libraries(        FixPair
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+install(TARGETS FixPair DESTINATION bin)
 
 
 
@@ -242,6 +253,7 @@ target_link_libraries(        SplitSequenceOnTheFly
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+install(TARGETS SplitSequenceOnTheFly DESTINATION bin)
 
 
 endif()
@@ -253,12 +265,15 @@ target_link_libraries(        RandomlySample
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+install(TARGETS RandomlySample DESTINATION bin)
 
 add_executable( pipebuf pipebuf )
 set_source_files_properties( pipebuf PROPERTIES COMPILE_FLAGS "-s -Wall -O6 -fexpensive-optimizations -fomit-frame-pointer -D_GNU_SOURCE=1" )
+install(TARGETS pipebuf DESTINATION bin)
 
 add_executable( FilterAndSortSam FilterAndSortSam )
 set_source_files_properties(FilterAndSortSam
                         PROPERTIES COMPILE_FLAGS " ${CMAKE_C_FLAGS} ")
 target_link_libraries( FilterAndSortSam libbam z)
+install(TARGETS FilterAndSortSam DESTINATION bin)
 
