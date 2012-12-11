@@ -62,9 +62,13 @@ set(Kmernator_VERSION_MAJOR "1")
 set(Kmernator_VERSION_MINOR "0")
 set(Kmernator_VERSION_TAG "0")
 
+set(Kmernator_VERSION_FILE_TEMPLATE ${CMAKE_SOURCE_DIR}/src/version.h.in)
+set(Kmernator_VERSION_FILE ${CMAKE_SOURCE_DIR}/src/version.h)
+
 if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
 
-  execute_process(COMMAND git describe --tags
+  execute_process(COMMAND touch ${Kmernator_VERSION_FILE_TEMPLATE}
+                  COMMAND git describe --tags
                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                   OUTPUT_VARIABLE Kmernator_VERSION_TAG
                   OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -75,7 +79,7 @@ set(Kmernator_VERSION "${Kmernator_VERSION_MAJOR}.${Kmernator_VERSION_MINOR}.${K
 message("Building ${PROJECT_NAME} version ${Kmernator_VERSION}")
 message("BuildType: ${CMAKE_BUILD_TYPE}")
 
-configure_file(${CMAKE_SOURCE_DIR}/src/version.h.in ${CMAKE_SOURCE_DIR}/src/version.h)
+configure_file(${Kmernator_VERSION_FILE_TEMPLATE} ${Kmernator_VERSION_FILE})
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
