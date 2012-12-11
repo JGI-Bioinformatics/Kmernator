@@ -64,22 +64,50 @@ set(Kmernator_VERSION_TAG "0")
 
 set(Kmernator_VERSION_FILE_TEMPLATE ${CMAKE_SOURCE_DIR}/src/version.h.in)
 set(Kmernator_VERSION_FILE ${CMAKE_SOURCE_DIR}/src/version.h)
+set(Kmernator_GIT_VERSION_FILE ${CMAKE_CURRENT_BINARY_DIR}/git-version)
+
+function(git_describe _var)
+  find_package(Git QUIET)
+  execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags
+                  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                  RESULT_VARIABLE res
+                  OUTPUT_VARIABLE out
+                  ERROR_QUIET
+                  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  message("Found Git version: ${out}")
+  set(${_var} "${out}" PARENT_SCOPE)
+endfunction()
 
 if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
+  #git_describe(Kmernator_VERSION_TAG)
+  add_custom_target(GET_GIT_VERSION ALL
+                    COMMAND git describe --tags > ${Kmernator_GIT_VERSION_FILE}
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                    COMMENT "Retrieving git version")
+#  file(READ ${Kmernator_GIT_VERSION_FILE} Kmernator_VERSION_TAG)
 
-  execute_process(COMMAND touch ${Kmernator_VERSION_FILE_TEMPLATE}
-                  COMMAND git describe --tags
-                  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                  OUTPUT_VARIABLE Kmernator_VERSION_TAG
-                  OUTPUT_STRIP_TRAILING_WHITESPACE)
-                    
+else()
+  add_custom_target(GET_GIT_VERSION COMMAND /bin/true)
+  file(WRITE ${Kmernator_GIT_VERSION_FILE} "${Kmernator_VERSION_TAG}")
 endif()
 
-set(Kmernator_VERSION "${Kmernator_VERSION_MAJOR}.${Kmernator_VERSION_MINOR}.${Kmernator_VERSION_TAG}")
-message("Building ${PROJECT_NAME} version ${Kmernator_VERSION}")
-message("BuildType: ${CMAKE_BUILD_TYPE}")
+  add_custom_target(REPLACE_VERSION_H ALL
+                    COMMAND ${CMAKE_COMMAND}
+			-DKmernator_GIT_VERSION_FILE=${Kmernator_GIT_VERSION_FILE} 
+			-DKmernator_VERSION_FILE_TEMPLATE=${Kmernator_VERSION_FILE_TEMPLATE} 
+			-DKmernator_VERSION_FILE=${Kmernator_VERSION_FILE} 
+			-DKmernator_VERSION_MAJOR=${Kmernator_VERSION_MAJOR} 
+			-DKmernator_VERSION_MINOR=${Kmernator_VERSION_MINOR} 
+			-DKmernator_VERSION_TAG=${Kmernator_VERSION_TAG} 
+			-P ${CMAKE_SOURCE_DIR}/makeVersionFile.cmake
+                    COMMENT "re-building version.h")
+  add_dependencies(REPLACE_VERSION_H GET_GIT_VERSION)
 
-configure_file(${Kmernator_VERSION_FILE_TEMPLATE} ${Kmernator_VERSION_FILE})
+#configure_file(${Kmernator_VERSION_FILE_TEMPLATE} ${Kmernator_VERSION_FILE})
+
+#set(Kmernator_VERSION "${Kmernator_VERSION_MAJOR}.${Kmernator_VERSION_MINOR}.${Kmernator_VERSION_TAG}")
+#message("Building ${PROJECT_NAME} version ${Kmernator_VERSION}")
+message("BuildType: ${CMAKE_BUILD_TYPE}")
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
