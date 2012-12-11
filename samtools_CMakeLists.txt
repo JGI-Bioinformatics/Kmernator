@@ -34,7 +34,7 @@ project(Samtools_CMAKE)
 cmake_minimum_required(VERSION 2.6)
 
 set(SAMTOOLS_LIBS bam sam bgzf bam_sort sam_header bam_aux kstring 
-        faidx bam_import bam_pileup razf bam_index knetfile)
+        faidx bam_import bam_pileup razf bam_index)
                                       
 add_library(libbam 
     STATIC ${SAMTOOLS_LIBS})
