@@ -29,42 +29,16 @@
 # PURPOSE.
 #
 
+set(CMAKE_BUILD_TYPE Release)
+project(Samtools_CMAKE)
 cmake_minimum_required(VERSION 2.6)
 
-# compiler flags
-IF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
-  SET(CXX_FLAGS $ENV{CXX_FLAGS})
-ENDIF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
-
-IF(CXX_FLAGS)
-  SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
-ENDIF(CXX_FLAGS)
-
-SET(CMAKE_CXX_FLAGS "-fno-strict-aliasing ${BIT_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
-
-add_library(bam STATIC bam)
-add_library(bgzf STATIC bgzf)
-add_library(kstring STATIC kstring)
-add_library(bam_aux STATIC bam_aux)
-add_library(bam_import STATIC bam_import)
-add_library(sam STATIC sam)
-add_library(bam_index STATIC bam_index)
-add_library(razf STATIC razf)
-add_library(faidx STATIC faidx)
-add_library(bedidx STATIC bedidx)
-add_library(knetfile STATIC knetfile)
-add_library(bam_sort STATIC bam_sort)
-add_library(sam_header STATIC sam_header)
-add_library(bam_reheader STATIC bam_reheader)
-add_library(kprobaln STATIC kprobaln)
-add_library(bam_cat STATIC bam_cat)
-add_library(bam_md STATIC bam_md)
-add_library(bam_pileup STATIC bam_pileup)
-
+set(SAMTOOLS_LIBS bam sam bgzf bam_sort sam_header bam_aux kstring 
+        faidx bam_import bam_pileup razf bam_index knetfile)
+                                      
 add_library(libbam 
-    STATIC 
-        bam sam bgzf bam_sort sam_header bam_aux kstring 
-        faidx bam_import bam_pileup razf bam_index) 
-# kstring   bam_aux bam_import bam_index razf faidx bedidx 
-#knetfile bam_sort sam_header bam_reheader kprobaln bam_cat bam_md 
-#)
+    STATIC ${SAMTOOLS_LIBS})
+set_target_properties(libbam
+                      PROPERTIES COMPILE_FLAGS "-O2 -g -Wall -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE "
+                      )
+        

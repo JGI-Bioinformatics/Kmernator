@@ -27,37 +27,37 @@
 # PURPOSE.
 #
 
-project( Kmernator )
+set(CMAKE_USER_MAKE_RULES_OVERRIDE override.cmake)
+# by default, build the RELEASE version
+if(DEFINED CMAKE_BUILD_TYPE)
+    SET(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE} CACHE STRING "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release.")
+else()
+    SET(CMAKE_BUILD_TYPE Release CACHE STRING "Building the default, release version")
+endif()
+
+project( Kmernator CXX C)
+
+
 cmake_minimum_required(VERSION 2.8)
 enable_testing()
 
-set(KMERNATOR_DEFAULT_VERSION 0.0.1beta)
+set(Kmernator_VERSION_MAJOR 1)
+set(Kmernator_VERSION_MINOR 0)
+set(Kmernator_VERSION_TAG "")
 
 if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
 
-  add_custom_target(GET_GIT_VERSION ALL
-                    COMMAND git describe --tags > ${CMAKE_CURRENT_BINARY_DIR}/git-version
-                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                    COMMENT "Retrieving git version")
-                    
-else()
-
-  add_custom_target(GET_GIT_VERSION ALL
-                    COMMAND echo ${KMERNATOR_DEFAULT_VERSION} > ${CMAKE_CURRENT_BINARY_DIR}/git-version
-                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                    COMMENT "Set version to ${KMERNATOR_DEFAULT_VERSION}")
+  execute_process(COMMAND git describe --tags
+                  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                  OUTPUT_VARIABLE Kmernator_VERSION_TAG
+                  OUTPUT_STRIP_TRAILING_WHITESPACE)
                     
 endif()
    
-add_custom_target(REPLACE_VERSION_H ALL
-                  COMMAND ${CMAKE_SOURCE_DIR}/make_version.pl ${CMAKE_SOURCE_DIR}/version.h ${CMAKE_CURRENT_BINARY_DIR}/git-version 
-                  COMMENT "re-building version.h")
-add_dependencies(REPLACE_VERSION_H GET_GIT_VERSION)
-
-add_custom_target(PRINT_VERSION ALL
-                  COMMAND cat ${CMAKE_CURRENT_BINARY_DIR}/git-version
-                  )
-add_dependencies(PRINT_VERSION GET_GIT_VERSION)
+message("Building ${PROJECT_NAME} version ${Kmernator_VERSION_MAJOR}.${Kmernator_VERSION_MINOR}-${Kmernator_VERSION_TAG}")
+message("BuildType: ${CMAKE_BUILD_TYPE}")
+   
+configure_file(${CMAKE_SOURCE_DIR}/version.h.in ${CMAKE_SOURCE_DIR}/version.h)
                     
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
@@ -83,10 +83,11 @@ endif()
 #
 # OpenMP
 #
-find_package( OpenMP )
+
 if(DISABLE_OPENMP)
   set(OpenMP_CXX_FLAGS "-DDISABLE_OPENMP")
 else()
+  find_package( OpenMP )
   if(OPENMP_FOUND)
      set(OpenMP_CXX_FLAGS "${OpenMP_CXX_FLAGS} -DENABLE_OPENMP")
      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_CXX_FLAGS}") 
@@ -98,10 +99,10 @@ endif()
 #
 # MPI
 #
-find_package( MPI )
 if (DISABLE_MPI)
   set(KMERNATOR_MPI_CXX_FLAGS = "-DDISABLE_MPI")
 else()
+  find_package( MPI )
   if ( MPI_FOUND )
     set(KMERNATOR_MPI_CXX_FLAGS "${KMERNATOR_MPI_CXX_FLAGS} ${MPI_COMPILE_FLAGS} -DENABLE_MPI")
     set(KMERNATOR_MPI_LINK_FLAGS "${KMERNATOR_MPI_LINK_FLAGS} ${MPI_LINK_FLAGS}")
@@ -116,12 +117,11 @@ endif()
 
 set(Boost_USE_STATIC_LIBS   ON)
 set(Boost_USE_MULTITHREADED ON)
-find_package ( Boost 1.41.0 COMPONENTS mpi program_options iostreams thread serialization system)
+find_package ( Boost 1.50.0 COMPONENTS mpi program_options iostreams thread serialization system)
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
   include_directories(${BOOST_ROOT}/libs)
   link_directories(${Boost_LIBRARY_DIRS})
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 else()
   set(BOOST_MAJOR_VER 1)
   set(BOOST_MINOR_VER 50)
@@ -248,6 +248,9 @@ endif()
 include_directories( ${MCT_DIR}/include )
 
 include_directories( src )
+
+SET(CMAKE_CXX_FLAGS "-fno-strict-aliasing ${BIT_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
+
 add_subdirectory( src )
 
 add_subdirectory( test )

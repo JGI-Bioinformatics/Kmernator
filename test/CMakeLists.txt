@@ -32,16 +32,6 @@
 cmake_minimum_required(VERSION 2.6)
 enable_testing()
 
-# compiler flags
-IF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
-  SET(CXX_FLAGS $ENV{CXX_FLAGS})
-ENDIF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
-IF(CXX_FLAGS)
-  SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
-ENDIF(CXX_FLAGS)
-
-SET(CMAKE_CXX_FLAGS "-fno-strict-aliasing ${BIT_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
-
 set_source_files_properties( TwoBitSequenceTest
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )
@@ -63,7 +53,7 @@ target_link_libraries( ReadSetTest Sequence
                                    Kmer
                                    Log
                                    ${KMERNATOR_BOOST_LIBS}
-                                          ${KMERNATOR_BOOST_TEST_LIBS}
+                                   ${KMERNATOR_BOOST_TEST_LIBS}
                                    )
 add_test( ReadSetTest ReadSetTest )
                             

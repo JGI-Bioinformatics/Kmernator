@@ -232,7 +232,7 @@ template<typename So = TrackingDataMinimal4, typename We = TrackingDataMinimal4,
 class KmerSpectrum {
 public:
 
-	static const int VARIANT_EDIT_DISTANCE_EXPONENT = 10;
+	static const int VARIANT_EDIT_DISTANCE_EXPONENT = 20;
 
 	typedef Kmernator::KmerIndexType IndexType;
 
@@ -1798,7 +1798,7 @@ public:
 				numThreads = omp_get_num_threads();
 				reservation *= maxThreads;
 				reservation /= numThreads;
-				LOG_WARN(1, "RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << maxThreads << " vs " << omp_get_num_threads() << " nested:" << omp_get_nested() << " level: " << omp_get_level() << " dynamic: " << omp_get_dynamic());
+				LOG_WARN(1, "RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << maxThreads << " vs " << omp_get_num_threads() << " nested:" << omp_get_nested() << " dynamic: " << omp_get_dynamic());
 			}
 		}
 		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << maxThreads << " over " << store.getSize() << " reads");
@@ -1939,14 +1939,17 @@ public:
 		if (editDistance == 0)
 			return purgedKmers;
 
-		WeakBucketType::permuteBases(kmer, variants, editDistance, true);
+		for (int thisEditDistance = 1 ; thisEditDistance <= editDistance; thisEditDistance++) {
+			double thisThreshold = threshold / (VARIANT_EDIT_DISTANCE_EXPONENT ^ (thisEditDistance-1));
+			WeakBucketType::permuteBases(kmer, variants, thisEditDistance, true);
 
-		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
-			Kmer &varKmer = variants[i];
-			double dummy;
-			if (this->_setPurgeVariant(pointers, varKmer, threshold, dummy)) {
-				LOG_DEBUG(4, "Purged " << dummy << " < " << threshold << " : "  << varKmer.toFasta() << " vs " << kmer.toFasta());
-				purgedKmers++;
+			for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
+				Kmer &varKmer = variants[i];
+				double dummy;
+				if (this->_setPurgeVariant(pointers, varKmer, thisThreshold, dummy)) {
+					LOG_DEBUG(4, "Purged " << dummy << " < " << thisThreshold << " : "  << varKmer.toFasta() << " vs " << kmer.toFasta());
+					purgedKmers++;
+				}
 			}
 		}
 		return purgedKmers;

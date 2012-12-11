@@ -10,9 +10,9 @@
 
 mkdir build
 cd build
-CFLAGS="-O3 -g -Wall"
+BUILD="Release" # or "Debug"
 PREFIX="/usr/local" # or wherever you want to install
-cmake .. -DCMAKE_CXX_FLAGS="$CFLAGS" -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_INSTALL_PREFIX=$PREFIX
+cmake .. -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=$BUILD
 make -j && make test 
 make install
 

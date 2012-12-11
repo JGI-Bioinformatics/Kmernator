@@ -1,0 +1,4 @@
+#define Kmernator_VERSION_MAJOR "@Kmernator_VERSION_MAJOR@"
+#define Kmerntaor_VERSION_MINOR "@Kmernator_VERSION_MINOR@"
+#define Kmernator_VERSION_TAG "@Kmernator_VERSION_TAG@"
+#define VERSION "@Kmernator_VERSION_MAJOR@.@Kmernator_VERSION_MINOR@-@Kmernator_VERSION_TAG@"

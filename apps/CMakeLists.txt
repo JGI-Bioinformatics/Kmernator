@@ -29,17 +29,6 @@
  
 cmake_minimum_required(VERSION 2.6)
  
-
-# compiler flags
-IF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
-  SET(CXX_FLAGS $ENV{CXX_FLAGS})
-ENDIF(ENV{CXX_FLAGS} AND NOT CXX_FLAGS)
-IF(CXX_FLAGS)
-  SET(CMAKE_CXX_FLAGS ${CXX_FLAGS} CACHE STRING "Default compiler flags" FORCE)
-ENDIF(CXX_FLAGS)
-
-SET(CMAKE_CXX_FLAGS "-fno-strict-aliasing ${BIT_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
-
 set_source_files_properties( CompareSpectrums
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                              )
@@ -268,7 +257,7 @@ target_link_libraries(        RandomlySample
 install(TARGETS RandomlySample DESTINATION bin)
 
 add_executable( pipebuf pipebuf )
-set_source_files_properties( pipebuf PROPERTIES COMPILE_FLAGS "-s -Wall -O6 -fexpensive-optimizations -fomit-frame-pointer -D_GNU_SOURCE=1" )
+set_source_files_properties( pipebuf PROPERTIES COMPILE_FLAGS "-D_GNU_SOURCE=1" )
 install(TARGETS pipebuf DESTINATION bin)
 
 add_executable( FilterAndSortSam FilterAndSortSam )
