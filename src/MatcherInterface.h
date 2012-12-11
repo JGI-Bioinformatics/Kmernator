@@ -540,7 +540,7 @@ public:
 		ReadSet::ReadSetSizeType maxReadDepth = MatcherInterfaceOptions::getOptions().getMaxReadDepthMatches();
 
 		#pragma omp parallel for
-		for (ReadSet::ReadSetSizeType localContigIdx = 0; localContigIdx < globalReadSetVector.size(); localContigIdx++) {
+		for (long localContigIdx = 0; localContigIdx < (long) globalReadSetVector.size(); localContigIdx++) {
 			LOG_DEBUG_OPTIONAL(2, true, "exchangeGlobalReads(): contig " << localContigIdx << ", " << globalReadSetVector[localContigIdx].getSize() << " reads");
 			if (screenForOverlap) {
 				if (isPaired)
