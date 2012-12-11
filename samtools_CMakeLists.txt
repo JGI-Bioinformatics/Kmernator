@@ -39,6 +39,6 @@ set(SAMTOOLS_LIBS bam sam bgzf bam_sort sam_header bam_aux kstring
 add_library(libbam 
     STATIC ${SAMTOOLS_LIBS})
 set_target_properties(libbam
-                      PROPERTIES COMPILE_FLAGS "-O2 -g -Wall -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE "
+                      PROPERTIES COMPILE_FLAGS "-O2 -g -Wall -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE "
                       )
         
