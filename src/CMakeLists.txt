@@ -41,7 +41,7 @@
 # royalty-free perpetual license to install, use, modify, prepare derivative 
 # works, incorporate into other computer software, distribute, and sublicense 
 # such enhancements or derivative works thereof, in binary and source code form.
-# 
+#              
 
 set_source_files_properties( TwoBitSequence
                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
@@ -62,11 +62,14 @@ set_source_files_properties( Log
                           
                            
 add_library( TwoBitSequence TwoBitSequence )
+
 add_library( Sequence Sequence TwoBitSequence )
+
 add_library( Kmer Kmer TwoBitSequence)
+
 add_library( ReadSet ReadSet )
+
 add_library( Log Log )
-add_dependencies( Log REPLACE_VERSION_H)
 
 FILE(GLOB HeaderFiles *.h)
 INSTALL(FILES ${HeaderFiles} DESTINATION include)

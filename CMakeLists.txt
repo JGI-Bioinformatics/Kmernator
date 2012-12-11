@@ -58,9 +58,9 @@ project( Kmernator CXX C)
 cmake_minimum_required(VERSION 2.8)
 enable_testing()
 
-set(Kmernator_VERSION_MAJOR 1)
-set(Kmernator_VERSION_MINOR 0)
-set(Kmernator_VERSION_TAG "")
+set(Kmernator_VERSION_MAJOR "1")
+set(Kmernator_VERSION_MINOR "0")
+set(Kmernator_VERSION_TAG "0")
 
 if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
 
@@ -70,12 +70,13 @@ if( EXISTS "${CMAKE_SOURCE_DIR}/.git" )
                   OUTPUT_STRIP_TRAILING_WHITESPACE)
                     
 endif()
-   
-message("Building ${PROJECT_NAME} version ${Kmernator_VERSION_MAJOR}.${Kmernator_VERSION_MINOR}-${Kmernator_VERSION_TAG}")
+
+set(Kmernator_VERSION "${Kmernator_VERSION_MAJOR}.${Kmernator_VERSION_MINOR}.${Kmernator_VERSION_TAG}")
+message("Building ${PROJECT_NAME} version ${Kmernator_VERSION}")
 message("BuildType: ${CMAKE_BUILD_TYPE}")
-   
-configure_file(${CMAKE_SOURCE_DIR}/version.h.in ${CMAKE_SOURCE_DIR}/version.h)
-                    
+
+configure_file(${CMAKE_SOURCE_DIR}/src/version.h.in ${CMAKE_SOURCE_DIR}/src/version.h)
+
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_SHARED_LIBS OFF)
 

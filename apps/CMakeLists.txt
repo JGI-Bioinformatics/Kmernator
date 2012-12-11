@@ -43,7 +43,7 @@
 # such enhancements or derivative works thereof, in binary and source code form.
 # 
  
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8)
  
 set_source_files_properties( CompareSpectrums
                              PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}

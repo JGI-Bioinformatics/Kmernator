@@ -444,7 +444,7 @@ public:
 			}
 
 			if (getVerbose() > 0)
-				LOG_VERBOSE(1, "Starting on " << OptionsBaseInterface::getHostname() << " (" << getpid() <<  ") version: " << VERSION);
+				LOG_VERBOSE(1, "Starting on " << OptionsBaseInterface::getHostname() << " (" << getpid() <<  ") version: " << Kmernator_VERSION);
 
 			bool print = Log::printOptions();
 			if (print) {

@@ -51,7 +51,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #ifndef _KMERNATOR_CONFIG_H
 #define _KMERNATOR_CONFIG_H
 
-#include "../version.h"
+#include "version.h"
 
 #include <vector>
 
