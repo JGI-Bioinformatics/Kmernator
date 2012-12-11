@@ -56,6 +56,7 @@ target_link_libraries( CompareSpectrums
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(CompareSpectrums REPLACE_VERSION_H)
 install(TARGETS CompareSpectrums DESTINATION bin)
 
 set_source_files_properties( ContigExtender
@@ -69,6 +70,7 @@ target_link_libraries( ContigExtender
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(ContigExtender REPLACE_VERSION_H)
 install(TARGETS ContigExtender DESTINATION bin)
 
 
@@ -83,6 +85,7 @@ target_link_libraries( FilterReads
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(FilterReads REPLACE_VERSION_H)
 install(TARGETS FilterReads DESTINATION bin)
 
 if( MPI_FOUND )
@@ -102,6 +105,7 @@ target_link_libraries( FilterReads-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_dependencies(FilterReads-P REPLACE_VERSION_H)
 install(TARGETS FilterReads-P DESTINATION bin)
 
 set_source_files_properties( EstimateSize-P
@@ -119,6 +123,7 @@ target_link_libraries( EstimateSize-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_dependencies(EstimateSize-P REPLACE_VERSION_H)
 install(TARGETS EstimateSize-P DESTINATION bin)
 install(FILES EstimateSize.R DESTINATION bin)
 
@@ -137,6 +142,7 @@ target_link_libraries( DistributedNucleatingAssembler
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_dependencies(DistributedNucleatingAssembler REPLACE_VERSION_H)
 install(TARGETS DistributedNucleatingAssembler DESTINATION bin)
 
 set_source_files_properties( MeraculousCounter
@@ -154,6 +160,7 @@ target_link_libraries( MeraculousCounter
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_dependencies(MeraculousCounter REPLACE_VERSION_H)
 install(TARGETS MeraculousCounter DESTINATION bin)
 
 set_source_files_properties( BamSort-P
@@ -170,6 +177,7 @@ target_link_libraries( BamSort-P
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_dependencies(BamSort-P REPLACE_VERSION_H)
 install(TARGETS BamSort-P DESTINATION bin)
 
 set_source_files_properties( MPIBroadcastStream
@@ -184,6 +192,7 @@ target_link_libraries( MPIBroadcastStream
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_dependencies(MPIBroadcastStream REPLACE_VERSION_H)
 install(TARGETS MPIBroadcastStream DESTINATION bin)
 
                               
@@ -200,6 +209,7 @@ target_link_libraries( TnfDistance
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(TnfDistance REPLACE_VERSION_H)
 install(TARGETS TnfDistance DESTINATION bin)
    
 set_source_files_properties( Fastq2Fasta
@@ -212,6 +222,7 @@ target_link_libraries(        Fastq2Fasta
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(Fastq2Fasta REPLACE_VERSION_H)
 install(TARGETS Fastq2Fasta DESTINATION bin)
 
 set_source_files_properties( Fastq2FastaQual
@@ -224,6 +235,7 @@ target_link_libraries(        Fastq2FastaQual
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(Fastq2FastaQual REPLACE_VERSION_H)
 install(TARGETS Fastq2FastaQual DESTINATION bin)
 
 
@@ -237,6 +249,7 @@ target_link_libraries(        FixPair
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(FixPair REPLACE_VERSION_H)
 install(TARGETS FixPair DESTINATION bin)
 
 
@@ -258,6 +271,7 @@ target_link_libraries(        SplitSequenceOnTheFly
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_dependencies(SplitSequenceOnTheFly REPLACE_VERSION_H)
 install(TARGETS SplitSequenceOnTheFly DESTINATION bin)
 
 
@@ -270,15 +284,18 @@ target_link_libraries(        RandomlySample
                               Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(RandomlySample REPLACE_VERSION_H)
 install(TARGETS RandomlySample DESTINATION bin)
 
 add_executable( pipebuf pipebuf )
 set_source_files_properties( pipebuf PROPERTIES COMPILE_FLAGS "-D_GNU_SOURCE=1" )
+add_dependencies(pipebuf REPLACE_VERSION_H)
 install(TARGETS pipebuf DESTINATION bin)
 
 add_executable( FilterAndSortSam FilterAndSortSam )
 set_source_files_properties(FilterAndSortSam
                         PROPERTIES COMPILE_FLAGS " ${CMAKE_C_FLAGS} ")
 target_link_libraries( FilterAndSortSam libbam z)
+add_dependencies(FilterAndSortSam REPLACE_VERSION_H)
 install(TARGETS FilterAndSortSam DESTINATION bin)
 

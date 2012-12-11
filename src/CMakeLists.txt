@@ -62,14 +62,19 @@ set_source_files_properties( Log
                           
                            
 add_library( TwoBitSequence TwoBitSequence )
+add_dependencies(TwoBitSequence REPLACE_VERSION_H)
 
 add_library( Sequence Sequence TwoBitSequence )
+add_dependencies(Sequence REPLACE_VERSION_H)
 
 add_library( Kmer Kmer TwoBitSequence)
+add_dependencies(Kmer REPLACE_VERSION_H)
 
 add_library( ReadSet ReadSet )
+add_dependencies(ReadSet REPLACE_VERSION_H)
 
 add_library( Log Log ${Kmernator_VERSION_FILE})
+add_dependencies(Log REPLACE_VERSION_H)
 
 FILE(GLOB HeaderFiles *.h)
 INSTALL(FILES ${HeaderFiles} DESTINATION include)
