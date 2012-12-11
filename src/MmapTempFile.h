@@ -3,31 +3,49 @@
 //
 // Author: Rob Egan
 //
-// Copyright 2010 The Regents of the University of California.
-// All rights reserved.
-//
-// The United States Government has rights in this work pursuant
-// to contracts DE-AC03-76SF00098, W-7405-ENG-36 and/or
-// W-7405-ENG-48 between the United States Department of Energy
-// and the University of California.
-//
-// Redistribution and use in source and binary forms are permitted
-// provided that: (1) source distributions retain this entire
-// copyright notice and comment, and (2) distributions including
-// binaries display the following acknowledgement:  "This product
-// includes software developed by the University of California,
-// JGI-PSF and its contributors" in the documentation or other
-// materials provided with the distribution and in all advertising
-// materials mentioning features or use of this software.  Neither the
-// name of the University nor the names of its contributors may be
-// used to endorse or promote products derived from this software
-// without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR
-// IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
-// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE.
-//
+/*****************
+
+Kmernator Copyright (c) 2012, The Regents of the University of California,
+through Lawrence Berkeley National Laboratory (subject to receipt of any
+required approvals from the U.S. Dept. of Energy).  All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+(1) Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
+
+(2) Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+(3) Neither the name of the University of California, Lawrence Berkeley
+National Laboratory, U.S. Dept. of Energy nor the names of its contributors may
+be used to endorse or promote products derived from this software without
+specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+You are under no obligation whatsoever to provide any bug fixes, patches, or
+upgrades to the features, functionality or performance of the source code
+("Enhancements") to anyone; however, if you choose to make your Enhancements
+available either publicly, or directly to Lawrence Berkeley National
+Laboratory, without imposing a separate written license agreement for such
+Enhancements, then you hereby grant the following license: a  non-exclusive,
+royalty-free perpetual license to install, use, modify, prepare derivative
+works, incorporate into other computer software, distribute, and sublicense
+such enhancements or derivative works thereof, in binary and source code form.
+
+*****************/
 
 #ifndef _MMAP_TEMP_FILE_H
 #define _MMAP_TEMP_FILE_H

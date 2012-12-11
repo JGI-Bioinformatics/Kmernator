@@ -1,7 +1,7 @@
 /*
- * Cap3.h
+ * _VelvetOptimizer.h
  *
- *  Created on: Sep 7, 2011
+ *  Created on: Apr 4, 2012
  *      Author: regan
  */
 /*****************
@@ -48,51 +48,47 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 *****************/
 
-#ifndef CAP3_H_
-#define CAP3_H_
+#ifndef VELVET_OPTIMIZER_H_
+#define VELVET_OPTIMIZER_H_
 
 #include "Options.h"
 #include "Utils.h"
 #include "ReadSet.h"
 #include "Kmer.h"
 #include "KmerSpectrum.h"
-#include "Utils.h"
 
-class _Cap3Options : public OptionsBaseInterface {
+class _VelvetOptimizerOptions : public OptionsBaseInterface {
 public:
-	_Cap3Options() : cap3Path() {}
-	virtual ~_Cap3Options() {}
-	std::string &getCap3Path() {
-		return cap3Path;
-	}
+	_VelvetOptimizerOptions() : velvetOptPath() {}
+	virtual ~_VelvetOptimizerOptions() {}
+
 	void _resetDefaults() {
-		Options::getOptions().getMmapInput() = false;
+		Options::getOptions().getMmapInput() = 0;
 	}
-	void _setOptions(po::options_description &desc,	po::positional_options_description &p) {
+	void _setOptions(po::options_description &desc,
+		po::positional_options_description &p) {
 		po::options_description opts("Cap3 Options");
 
 		opts.add_options()
-				("cap3-path", po::value<std::string>()->default_value(cap3Path), "if set, cap3 will be used to extend contigs")
-
+				("velvet-optimizer-path", po::value<std::string>()->default_value(velvetOptPath), "The full path to the executable VelvetOptimizer.pl.  Set this to activate this module")
 				;
-
 		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		setOpt("cap3-path", cap3Path);
-
+		setOpt("velvet-optimizer-path", velvetOptPath);
 		return ret;
 	}
 protected:
-	std::string cap3Path;
+	std::string velvetOptPath;
 };
-typedef OptionsBaseTemplate< _Cap3Options > Cap3Options;
+typedef OptionsBaseTemplate< _VelvetOptimizerOptions > VelvetOptimizerOptions;
 
-class Cap3 {
+class VelvetOptimizer {
 public:
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
-	static const int repeatContig = 1;
+	static const int repeatContig = 4;
+	static const int repeatContigCenter = 4;
 	static const double minOverlapFraction = 0.9;
 	static std::string getNewName(std::string oldName, int deltaLen) {
 		std::string newName;
@@ -138,16 +134,18 @@ public:
 	}
 	static Read extendContig(const Read &oldContig, const ReadSet &_inputReads) {
 		ReadSet inputReads = _inputReads;
-		int status;
 
 		for(int i = 0; i < repeatContig; i++)
 			inputReads.append(oldContig);
 
 		FormatOutput format = FormatOutput::FastaUnmasked();
-		std::string prefix = "/.cap3-assembly";
-		std::string outputDir = Cleanup::makeTempDir(Options::getOptions().getTmpDir(), prefix);
-		LOG_VERBOSE_OPTIONAL(1, !GeneralOptions::getOptions().getKeepTempDir().empty(), "Saving Cap3 working directory for " << oldContig.getName()
-				<< " to " << GeneralOptions::getOptions().getKeepTempDir() << outputDir.substr(outputDir.find(prefix)));
+		std::string outputDir = Options::getOptions().getTmpDir() + UniqueName::generateUniqueName("/.cap3-assembly");
+		int status = mkdir(outputDir.c_str(), 0777);
+
+		if (status != 0) {
+			LOG_WARN(1, "Could not mkdir: " << outputDir << " bailing...");
+			return Read();
+		}
 		std::string outputName = outputDir + "/input" + format.getSuffix();
 		{
 			OfstreamMap ofm(outputName, "");
@@ -164,15 +162,22 @@ public:
 				ReadSet newContig;
 				newContig.appendFastaFile(newContigFile);
 				Read bestRead = selectBestContig(newContig, oldContig);
-				Cleanup::removeTempDir(outputDir);
+				clean(outputDir);
 				return bestRead;
 			}
 		}
 		LOG_WARN(1, "Could not assemble " << oldContig.getName() << " with pool of " << _inputReads.getSize() << " reads: " << FileUtils::dumpFile(log));
 
-		Cleanup::removeTempDir(outputDir);
+		clean(outputDir);
 		return Read();
+	}
+	static void clean(std::string fileDir) {
+		std::string cmd;
+		cmd = "/bin/rm -rf " + fileDir;
+		int status = system(cmd.c_str());
+		if (status != 0)
+			LOG_WARN(1, "Could not clean up directory: " + fileDir);
 	}
 };
 
-#endif /* CAP3_H_ */
+#endif /* VELVET_OPTIMIZER_H_ */
