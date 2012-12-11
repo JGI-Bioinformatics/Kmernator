@@ -69,7 +69,7 @@ add_library( Kmer Kmer TwoBitSequence)
 
 add_library( ReadSet ReadSet )
 
-add_library( Log Log )
+add_library( Log Log ${Kmernator_VERSION_FILE})
 
 FILE(GLOB HeaderFiles *.h)
 INSTALL(FILES ${HeaderFiles} DESTINATION include)
