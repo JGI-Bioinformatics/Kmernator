@@ -31,7 +31,7 @@ public:
 	void insert(const KeyType &key, const ValueType &val) {
 		if (cache.size() >= maxSize)
 			cache.pop_front();
-		cache.insert( make_pair(key, val) );
+		cache.insert( std::make_pair(key, val) );
 	}
 private:
 	Impl cache;
