@@ -193,7 +193,7 @@ int main(int argc, char **argv)
 		SamUtils::splitUnmapped(reads, unmappedReads, false);
 		if (!unmappedReads.empty())
 			needsCollapse = true;
-		LOG_VERBOSE(1, "Purging unmapped read pairs: " << unmappedReads.size());
+		LOG_VERBOSE(1, "Purging unmapped reads: " << unmappedReads.size());
 		if (unmappedReadsFile.compare("/dev/null") == 0) {
 			BamManager::destroyOrRecycleBamVector(unmappedReads);
 		} else {
