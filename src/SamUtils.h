@@ -2159,30 +2159,10 @@ public:
 	// migrated reads will have NULL in reads (use collapseVector to fix)
 	static void splitUnmapped(BamVector &reads, BamVector &unmappedReads,
 			bool onlyUnmappedPairs = false) {
-		if (onlyUnmappedPairs) {
-			int testPairedOrdering = 0;
-			const int MAX_TEST = 1000;
-			for (long i = 0; i < (long) reads.size() - 1; i += 2) {
-				if (testPairedOrdering++ < MAX_TEST) {
-					if (strcmp(bam1_qname(reads[i]), bam1_qname(reads[i + 1]))
-							!= 0) {
-						LOG_WARN(1, "splitUnmapped(): Detected bam not sorted by name.  Aborting by onlyUnmappedPairs");
-						break;
-					}
-				}
-				if ((!isMapped(reads[i])) && (!isMapped(reads[i + 1]))) {
-					unmappedReads.push_back(reads[i]);
-					unmappedReads.push_back(reads[i + 1]);
-					reads[i] = NULL;
-					reads[i + 1] = NULL;
-				}
-			}
-		} else {
-			for (long i = 0; i < (long) reads.size(); i++) {
-				if (reads[i] != NULL && !isMapped(reads[i])) {
-					unmappedReads.push_back(reads[i]);
-					reads[i] = NULL;
-				}
+		for (long i = 0; i < (long) reads.size(); i++) {
+			if (reads[i] != NULL && !isMapped(reads[i]) && (!isPaired(reads[i]) || !onlyUnmappedPairs || !isMateMapped(reads[i]))) {
+				unmappedReads.push_back(reads[i]);
+				reads[i] = NULL;
 			}
 		}
 	}
