@@ -153,6 +153,7 @@ int main(int argc, char **argv)
 
 	unlink(outputBam.c_str());
 
+	LOG_VERBOSE(1, "Reading input files");
 	if (partitions > 1) {
 		std::string myInputFile = inputBams[rank];
 		int color = rank / partitions;
@@ -172,10 +173,12 @@ int main(int argc, char **argv)
 	bool needsCollapse = false;
 	std::string unmappedReadPairFile = BamSortOptions::getOptions().getUnmappedReadPairs();
 	if (!unmappedReadPairFile.empty()) {
+
 		BamVector unmappedReads;
 		SamUtils::splitUnmapped(reads, unmappedReads, true);
 		if (!unmappedReads.empty())
 			needsCollapse = true;
+		LOG_VERBOSE(1, "Purging unmapped read pairs: " << unmappedReads.size());
 		if (unmappedReadPairFile.compare("/dev/null") == 0) {
 			BamManager::destroyOrRecycleBamVector(unmappedReads);
 		} else {
@@ -190,6 +193,7 @@ int main(int argc, char **argv)
 		SamUtils::splitUnmapped(reads, unmappedReads, false);
 		if (!unmappedReads.empty())
 			needsCollapse = true;
+		LOG_VERBOSE(1, "Purging unmapped read pairs: " << unmappedReads.size());
 		if (unmappedReadsFile.compare("/dev/null") == 0) {
 			BamManager::destroyOrRecycleBamVector(unmappedReads);
 		} else {
@@ -198,14 +202,15 @@ int main(int argc, char **argv)
 		assert(unmappedReads.empty());
 	}
 
-	if (needsCollapse)
+	if (needsCollapse) {
+		LOG_DEBUG_OPTIONAL(1, true, "Collapsing read vector");
 		SamUtils::collapseVector(reads);
+	}
 
 	{
 		BamStreamUtils::distributeReadsFinal(world, reads);
 
 		LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
-
 		SamUtils::MPISortBam sortem(world, reads, outputBam, header.get());
 	}
 

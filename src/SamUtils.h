@@ -615,13 +615,14 @@ public:
 				readBamFile(comm, fp, reads, myEnds[i], needsBalance);
 				header.reset(fp->header);
 				closeSamOrBam(fp);
+				LOG_VERBOSE_OPTIONAL(1, true, "Read " << filenames[i] << " total reads: " << reads.size());
 			}
 		}
 
 		// whether or not balance was needed during the reading
 		// re-balance now to improve sorting partition estimates
 		distributeReadsFinal(comm, reads);
-
+		LOG_VERBOSE(1, "Total Reads: " << reads.size());
 		return header;
 	}
 
