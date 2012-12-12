@@ -85,7 +85,7 @@ public:
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("input-file", -1);
-		po::options_description opts("Randomly Sample Options");
+		po::options_description opts("RandomlySample <options> [input-file]\n\tNote: --input-file can either be specified as a positional argument or within the options\n\nRandomly Sample Options");
 		opts.add_options()
 								("by-pair", po::value<bool>()->default_value(byPair), "If set, pairs are sampled, if not set, reads are sampled")
 								("num-samples",  po::value<int>()->default_value(numSamples), "The number of samples to output")

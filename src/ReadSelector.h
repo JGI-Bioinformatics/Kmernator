@@ -69,7 +69,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 class _ReadSelectorOptions : public OptionsBaseInterface {
 public:
-	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(0.85), bimodalSigmas(-1.0), kmerScoringType("MEDIAN"), normalizationMethod("RANDOM"), useLogscaleAboveMax(false)  {
+	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(0.85), bimodalSigmas(-1.0), kmerScoringType("MAX"), normalizationMethod("RANDOM"), useLogscaleAboveMax(false)  {
 	}
 	virtual ~_ReadSelectorOptions() {}
 	void _resetDefaults() {

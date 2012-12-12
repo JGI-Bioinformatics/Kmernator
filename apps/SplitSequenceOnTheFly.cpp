@@ -242,7 +242,7 @@ public:
 
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
-		po::options_description opts("Split Sequence Options");
+		po::options_description opts("SplitSequenceOnTheFly <options> [input-file ...]\n\tNote --input-file can either be specified as a positional argument or within the options\n\nSplit Sequence Options");
 		opts.add_options()
 								("num-files", po::value<int>()->default_value(numFiles), "The number of files to split into N (automatically set under MPI)")
 								("file-num",  po::value<int>()->default_value(fileNum), "The number of the file to output (0-(N-1)) (automatically set under MPI)")

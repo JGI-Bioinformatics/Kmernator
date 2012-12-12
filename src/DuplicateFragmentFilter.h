@@ -57,7 +57,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 class _DuplicateFragmentFilterOptions : public OptionsBaseInterface {
 public:
-	_DuplicateFragmentFilterOptions() : deDupMode(1), deDupSingle(false), deDupConsensus(true), deDupEditDistance(0), deDupStartOffset(0),
+	_DuplicateFragmentFilterOptions() : deDupMode(0), deDupSingle(false), deDupConsensus(true), deDupEditDistance(0), deDupStartOffset(0),
 	deDupLength(24) {}
 	virtual ~_DuplicateFragmentFilterOptions() {}
 

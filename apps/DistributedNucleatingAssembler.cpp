@@ -105,7 +105,7 @@ public:
 	void _setOptions(po::options_description &desc,
 			po::positional_options_description &p) {
 
-		po::options_description opts("Distributed Nucleating Assembly Options");
+		po::options_description opts("DistributedNucleatingAssembly <options> [input-file ...]\n\tNote: --input-file can be specified either as a positional argument or within the options\n\nDistributedNucleatingAssembler Options");
 
 		p.add("input-file", -1);
 

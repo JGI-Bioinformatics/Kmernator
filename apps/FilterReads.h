@@ -92,7 +92,7 @@ public:
 		// set options specific to this program
 		p.add("kmer-size", 1);
 		p.add("input-file", -1);
-		po::options_description opts("General Filtering Options");
+		po::options_description opts("FilterReads <options> [[kmer-size] [input-file ...]]\n\tNote: --kmer-size and --input-file can either be specified as positional argumens at the end or within <options>\n\nGeneral Filtering Options");
 		opts.add_options()
 
 				("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile), "if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)");

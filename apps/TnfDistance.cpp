@@ -98,7 +98,7 @@ public:
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
-		po::options_description opts("Tetra Nucleotide Distance Options");
+		po::options_description opts("TnfDistance <options>\n\nTetra Nucleotide Distance Options");
 
 		opts.add_options()
 
