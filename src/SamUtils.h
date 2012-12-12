@@ -513,31 +513,48 @@ public:
 		long totalFileSize = 0;
 		int countSamFiles = 0;
 
+		// optimization for when many SAM files are called by many ranks
+		std::vector<uint8_t> fileTypes;
+		std::vector<uint64_t> fileSizes;
+		fileTypes.resize(filenames.size(), 0);
+		fileSizes.resize(filenames.size(), 0);
+		for(int i = 0; i < (int) filenames.size(); i++) {
+			if (i % size == rank) {
+				std::string filename = filenames[i];
+				fileSizes[i] = FileUtils::getFileSize(filename);
+				samfile_t *fp = openSamOrBam(filename);
+				fps[i] = fp;
+				if (fp->type == 2) {
+					// this is a SAM
+					fileTypes[i] = 1;
+					myEnds[i] = -1;
+				}
+			}
+		}
+		MPI_Allreduce(MPI_IN_PLACE, &fileTypes[0], fileTypes.size(), MPI_BYTE, MPI_MAX, comm);
+		MPI_Allreduce(MPI_IN_PLACE, &fileSizes[0], fileSizes.size(), MPI_LONG_LONG_INT, MPI_MAX, comm);
+		for(int i = 0; i < (int) filenames.size(); i++) {
+			totalFileSize += fileSizes[i];
+		}
+		long avgFileSize = totalFileSize / filenames.size();
 		for(int i = 0; i < (int) filenames.size(); i++) {
 			std::string filename = filenames[i];
-			long fileSize = 0;
-			if (rank == 0) {
-				fileSize = FileUtils::getFileSize(filename);
-				totalFileSize += fileSize;
-			}
+			long fileSize = fileSizes[i];
 			int64_t ourBoundaries[size];
-			samfile_t *fp = openSamOrBam(filename);
-			if (fp->type == 2) {
+			samfile_t *fp = NULL;
+			if (fileTypes[i] == 1) {
 				// This is a SAM
 				// balance while reading if this file is  significantly different from the running total
-				if (rank == 0 && (fileSize * 0.95 > (totalFileSize / (i+1.0)) || fileSize / 0.95 < (totalFileSize / (i+1.0))))
+				if ((fileSize * 0.95 > avgFileSize || fileSize / 0.95 < avgFileSize))
 					needsBalance = true;
 
-				// only only one rank can read a SAM...
-				if (rank == i % size) {
-					fps[i] = fp;
-					myEnds[i] = -1;
-				} else {
-					header.reset(fp->header);
-					closeSamOrBam(fp);
-				}
 				countSamFiles++;
 				continue; // one rank will read later
+			}
+			if (fps[i] == NULL) {
+				fp = openSamOrBam(filename);
+			} else {
+				fp = fps[i];
 			}
 			if (rank == 0) {
 				if ((fp->type&1)== 1) {
@@ -576,6 +593,7 @@ public:
 			if (myStart == -1) {
 				header.reset(fp->header);
 				closeSamOrBam(fp);
+				fps[i] = NULL;
 			} else {
 				fps[i] = fp;
 				myEnds[i] = myEnd;
