@@ -1059,21 +1059,25 @@ public:
 	}
 protected:
 	static _Rand &getInstance() {
-		static Instances _staticInstances;
+		static Instances _staticInstances = Instances();
 		unsigned int id = omp_get_thread_num();
 		if (_staticInstances.size() <= id) {
 			// not found, create a new, lock and add to map
 			boost::mutex::scoped_lock mylock(getMutex());
 			if (_staticInstances.size() <= id) {
 				Instances tmp(_staticInstances);
-				tmp.reserve(omp_get_max_threads());
-				for(int i = 0; i < omp_get_max_threads(); i++) {
-					Instance lr( new _Rand(time(NULL) ^ (i+1)) );
-					tmp.push_back(lr);
+				tmp.resize(omp_get_num_threads());
+				for(int i = 0; i < (int) tmp.size(); i++) {
+					if (tmp[i].get() == NULL) {
+						Instance lr( new _Rand(time(NULL) ^ (i+1)) );
+						tmp[i] = lr;
+					}
 				}
 				_staticInstances.swap(tmp);
+				LOG_DEBUG_OPTIONAL(1, true, "_Rand::getInstance(): " << id << " " << _staticInstances.size());
 			}
 		}
+		assert(_staticInstances.size() > id && _staticInstances[id].get() != NULL);
 		return *_staticInstances[id];
 	}
 
