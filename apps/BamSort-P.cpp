@@ -208,6 +208,7 @@ int main(int argc, char **argv)
 	}
 
 	{
+		LOG_VERBOSE(1, "Redistributing reads before the sort:" << reads.size());
 		BamStreamUtils::distributeReadsFinal(world, reads);
 
 		LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
