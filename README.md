@@ -65,7 +65,7 @@ specific hints
 ### *The main features of the toolkit incude*:
 
 * A re-usable MPI based C++ header library core for parallel and scalable genomic data
-IO and analysis.
+  IO and analysis.
 
 #### *With implementations of the following applications*:
 
@@ -86,12 +86,12 @@ IO and analysis.
 *TNFDistance*:
 
 *  A tetra-nucleotide clustering algorithm designed to optimally collect short contigs
-  and scaffolds into a bag of genes representing a nearly complete genome.
+   and scaffolds into a bag of genes representing a nearly complete genome.
 
 *SplitSequenceOnTheFly*:
 
 *  A parallel and scalable tool to partition genomic datasets and run arbitrary software
-on each partition without consuming additional disk space.
+   on each partition without consuming additional disk space.
 
 *RandomlySample*:
 
@@ -100,7 +100,7 @@ on each partition without consuming additional disk space.
 *BamSort-P*:
 
 *  A parallel and scalable tool to efficiently sort, and optionally filter, many or large
-  SAM and BAM files.
+   SAM and BAM files.
 
 
 *****************
@@ -119,7 +119,7 @@ on each partition without consuming additional disk space.
 >    a 31-mer only observed once.  Additionally it will normalize
 >    highly abundant and/or redundant reads to an average kmer depth
 >    of 100.  Illumina primer-dimer and long homopolymer regions are 
->   also removed by default
+>    also removed by default
 
     mpirun FilterReads-P --output-file FilteredData \  
       --max-kmer-depth 100 --min-kmer-depth 2 \  
@@ -169,7 +169,9 @@ on each partition without consuming additional disk space.
 >   the unmapped read-pairs (where both are unmapped)
 >   make sure that the total ram of the jobs is >= 2x the total size of the sams
 
-    mpirun BamSort-P --unmapped-read-pairs myassembly-unmapped.fastq.gz \
+    mpirun BamSort-P \  
+       --num-partitions 4 \  # leave out if the index is *not* partitioned
+       --unmapped-read-pairs myassembly-unmapped.fastq.gz \
        myassembly.bam .*of*.p*of*.sam && rm -f .*of*.p*of*.sam
 
 
