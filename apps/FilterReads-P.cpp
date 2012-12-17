@@ -73,9 +73,9 @@ public:
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		ret &= MPIOptions::_parseOptions(vm);
 
 		ret &= FilterReadsBaseOptions::_parseOptions(vm);
+		ret &= MPIOptions::_parseOptions(vm);
 
 		return ret;
 	}
@@ -226,9 +226,7 @@ int main(int argc, char *argv[]) {
 		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
 
 		if (!outputFilename.empty()) {
-			std::string pickOutputFilename = outputFilename;
 			if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(minDepth);
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << minDepth);
 			} else {
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
@@ -245,7 +243,7 @@ int main(int argc, char *argv[]) {
 			// let only one rank at a time write to the files
 			LOG_VERBOSE(1, "Writing Files");
 
-			selectReads(minDepth, reads, selector, pickOutputFilename);
+			selectReads(minDepth, reads, selector, outputFilename);
 		}
 		spectrum.reset();
 		LOG_DEBUG(1, "Finished, waiting for rest of collective");

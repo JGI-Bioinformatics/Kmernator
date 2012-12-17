@@ -172,9 +172,7 @@ int main(int argc, char *argv[]) {
 
 		if (!outputFilename.empty()) {
 
-			std::string pickOutputFilename = outputFilename;
 			if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-				pickOutputFilename += "-MinDepth" + boost::lexical_cast<std::string>(minDepth);
 				LOG_VERBOSE(1, "Trimming reads with minDepth: " << minDepth);
 			} else {
 				LOG_VERBOSE(1, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
@@ -183,7 +181,7 @@ int main(int argc, char *argv[]) {
 			RS selector(reads, spectrum.weak);
 			selector.scoreAndTrimReads(minDepth);
 
-			selectReads(minDepth, reads, selector, pickOutputFilename);
+			selectReads(minDepth, reads, selector, outputFilename);
 		}
 		LOG_DEBUG(1, "Clearing spectrum");
 		spectrum.reset();

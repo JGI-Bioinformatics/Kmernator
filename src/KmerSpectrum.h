@@ -93,7 +93,7 @@ public:
 		saveKmerMmap(false), loadKmerMmap(),
 		buildPartitions(0), kmerSubsample(1),
 		variantSigmas(-1.0), minVariantKmerDepth(512), variantHammingDistance(2),
-		periodicSingletonPurge(0), gcHeatMap(true) {
+		periodicSingletonPurge(0), gcHeatMap(false) {
 	}
 
 	void _resetDefaults() {

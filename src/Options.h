@@ -318,7 +318,7 @@ public:
 	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), keepTempDir(),
 	formatOutput(0), keepReadComment(GlobalOptions::isCommentStored()), buildOutputInMemory(false),
 	minQuality(3),  ignoreQual(false), mmapInput(true), gatheredLogs(true),
-	batchSize(100000), separateOutputs(true)
+	batchSize(100000)
 	{
 		char *tmpPath;
 		tmpPath = getenv ("TMPDIR");
@@ -350,7 +350,6 @@ private:
 	bool mmapInput;
 	bool gatheredLogs;
 	unsigned int batchSize;
-	bool separateOutputs;
 
 public:
 	void _resetOptions() {
@@ -406,8 +405,6 @@ public:
 				("format-output", po::value<unsigned int>()->default_value(formatOutput), "0: fastq, 1: fasta, 2: fastq unmasked, 3: fasta unmasked")
 
 				("keep-read-comment", po::value<bool>()->default_value(keepReadComment), "If set, per-read comment will be preserved")
-
-				("separate-outputs", po::value<bool>()->default_value(separateOutputs), "If set, each input (plus consensus) will generate a new outputfile.  If set false, all input files will be merged into one output file.")
 
 				("build-output-in-memory", po::value<bool>()->default_value(buildOutputInMemory), "if set, all temporary output files will first be stored in memory (faster for MPI applications)")
 
@@ -490,8 +487,6 @@ public:
 			setOpt("gathered-logs", getGatheredLogs(), print);
 
 			setOpt("batch-size", getBatchSize(), print);
-
-			setOpt("separate-outputs", getSeparateOutputs(), print);
 
 		} catch (std::exception& e) {
 			LOG_ERROR(1,"Exception processing options" << std::endl << getDesc() << std::endl << e.what() << std::endl << "Exception processing options!" );
@@ -608,12 +603,6 @@ public:
 	std::string &getOutputFile()
 	{
 		return outputFile;
-	}
-
-
-	bool &getSeparateOutputs()
-	{
-		return separateOutputs;
 	}
 
 

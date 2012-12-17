@@ -69,7 +69,8 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 class _ReadSelectorOptions : public OptionsBaseInterface {
 public:
-	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(0.85), bimodalSigmas(-1.0), kmerScoringType("MAX"), normalizationMethod("RANDOM"), useLogscaleAboveMax(false)  {
+	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(0.85),
+	    bimodalSigmas(-1.0), kmerScoringType("MAX"), normalizationMethod("RANDOM"), useLogscaleAboveMax(false), separateOutputs(true)  {
 	}
 	virtual ~_ReadSelectorOptions() {}
 	void _resetDefaults() {
@@ -79,6 +80,8 @@ public:
 		po::options_description opts("Read Selector Options"), expt("Read Selector (Experimental) Options");
 		opts.add_options()
 				// output read selection
+
+				("separate-outputs", po::value<bool>()->default_value(separateOutputs), "If set, each input (plus consensus) will generate a new outputfile.  If set false, all input files will be merged into one output file.")
 
 				("max-kmer-output-depth", po::value<int>()->default_value(maxKmerDepth), "i.e. targeted read normalization depth.  The maximum number of times a kmer will be output among the selected reads (mutually exclusive with partition-by-depth).  This is not a criteria on the kmer spectrum, just a way to reduce the redundancy of the output.  To get targeted depth, multiply maxKmerOutputDepth by: (readLength - kmerSize - 1) / readLength")
 
@@ -114,6 +117,8 @@ public:
 		setOpt("use-logscale-above-max", useLogscaleAboveMax);
 		setOpt("partition-by-depth", partitionByDepth);
 		setOpt("min-passing-in-pair", bothPairs);
+		setOpt("separate-outputs", separateOutputs);
+
 		// set read length
 		setOpt("min-read-length", minReadLength);
 		setOpt("remainder-trim", remainderTrim);
@@ -180,6 +185,12 @@ public:
 	bool &getUseLogscaleAboveMax() {
 		return useLogscaleAboveMax;
 	}
+	bool &getSeparateOutputs()
+	{
+		return separateOutputs;
+	}
+
+
 
 private:
 	int maxKmerDepth, partitionByDepth, bothPairs;
@@ -188,6 +199,7 @@ private:
 	std::string kmerScoringType;
 	std::string normalizationMethod;
 	bool useLogscaleAboveMax;
+	bool separateOutputs;
 };
 typedef OptionsBaseTemplate< _ReadSelectorOptions > ReadSelectorOptions;
 
@@ -1213,7 +1225,7 @@ public:
 		return os;
 	}
 
-	void writePicks(OFM &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = Options::getOptions().getSeparateOutputs(), FormatOutput format = FormatOutput::getDefault()) const {
+	void writePicks(OFM &ofstreamMap, ReadSetSizeType offset = 0, bool byInputFile = ReadSelectorOptions::getOptions().getSeparateOutputs(), FormatOutput format = FormatOutput::getDefault()) const {
 		_writePicks(ofstreamMap, offset, _picks.size() - offset, byInputFile, format);
 	}
 	void _writePicks(OFM &ofstreamMap, ReadSetSizeType offset, ReadSetSizeType length, bool byInputFile, FormatOutput format = FormatOutput::getDefault()) const {
@@ -1223,7 +1235,7 @@ public:
 			writePick(ofstreamMap, pair.read2, byInputFile, format);
 		}
 	}
-	void writePick(OFM &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = Options::getOptions().getSeparateOutputs(), FormatOutput format = FormatOutput::getDefault()) const {
+	void writePick(OFM &ofstreamMap, ReadSetSizeType readIdx, bool byInputFile = ReadSelectorOptions::getOptions().getSeparateOutputs(), FormatOutput format = FormatOutput::getDefault()) const {
 		if (readIdx == ReadSet::MAX_READ_IDX)
 			return;
 		const ReadTrimType &trim = _trims[ readIdx ];

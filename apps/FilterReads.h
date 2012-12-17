@@ -148,9 +148,13 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 
 	int maximumKmerDepth = ReadSelectorOptions::getOptions().getMaxKmerDepth();
 
+	if (KmerBaseOptions::getOptions().getKmerSize() > 0 && ReadSelectorOptions::getOptions().getSeparateOutputs()) {
+		outputFilename += "-MinDepth" + boost::lexical_cast<std::string>(minDepth);
+	}
 
 	if (maximumKmerDepth > 0) {
-		outputFilename += "-MaxDepth" + boost::lexical_cast<std::string>(maximumKmerDepth);
+		if (ReadSelectorOptions::getOptions().getSeparateOutputs())
+			outputFilename += "-MaxDepth" + boost::lexical_cast<std::string>(maximumKmerDepth);
 		OFM ofmap = selector.getOFM(outputFilename);
 		std::string normalizationMethod = ReadSelectorOptions::getOptions().getNormalizationMethod();
 		if (normalizationMethod == "RANDOM") {
@@ -199,9 +203,9 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 				depth = 0;
 			}
 			string ofname = outputFilename;
-			if (hasRemainderTrim) {
+			if (hasRemainderTrim && ReadSelectorOptions::getOptions().getSeparateOutputs()) {
 				ofname += "-Remainder";
-			} else if (isPartitioned && tmpMinDepth > 0) {
+			} else if (isPartitioned && tmpMinDepth > 0 && ReadSelectorOptions::getOptions().getSeparateOutputs()) {
 				ofname += "-PartitionDepth" + boost::lexical_cast< string >( tmpMinDepth );
 			}
 			OFM ofmap = selector.getOFM(ofname);
