@@ -376,6 +376,7 @@ class Read : public Sequence {
 
 public:
 	typedef boost::shared_ptr< Sequence > ReadPtr;
+	static const char * LABEL_SEP;
 
 private:
 	inline const Read &constThis() const {

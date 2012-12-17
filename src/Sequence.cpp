@@ -687,6 +687,7 @@ Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
 /*------------------------------------ READ ----------------------------------------*/
 
 double Read::qualityToProbability[256];
+const char * Read::LABEL_SEP = "\t";
 
 int Read::initializeQualityToProbability(unsigned char minQualityScore, char startChar) {
 #pragma omp critical (FastqStartChar)
@@ -1012,7 +1013,7 @@ string Read::toFastq(SequenceLengthType trimOffset, SequenceLengthType trimLengt
 		fasta = getFastaNoMarkup(trimOffset, trimLength);
 	else
 		fasta = getFasta(trimOffset, trimLength);
-	return string('@' + getNameAndComment() + (label.length() > 0 ? " " + label : "")
+	return string('@' + getNameAndComment() + (label.length() > 0 ? LABEL_SEP + label : "")
 			+ "\n" + fasta + "\n+\n"
 			+ getQuals(trimOffset, trimLength, true, unmasked) + "\n");
 }
@@ -1022,11 +1023,11 @@ string Read::toFasta(SequenceLengthType trimOffset, SequenceLengthType trimLengt
 		fasta = getFastaNoMarkup(trimOffset, trimLength);
 	else
 		fasta = getFasta(trimOffset, trimLength);
-	return string('>' + getNameAndComment() + (label.length() > 0 ? " " + label : "")
+	return string('>' + getNameAndComment() + (label.length() > 0 ? LABEL_SEP + label : "")
 			+ "\n" + fasta + "\n");
 }
 string Read::toQual(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label) const {
-	return string('>' + getNameAndComment() + (label.length() > 0 ? " " + label : "")
+	return string('>' + getNameAndComment() + (label.length() > 0 ? LABEL_SEP + label : "")
 			+ "\n" + getFormattedQuals(trimOffset, trimLength) + "\n");
 }
 

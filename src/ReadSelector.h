@@ -971,7 +971,7 @@ public:
 		}
 		if (Log::isDebug(2)) {
 			if (!trim.label.empty())
-				trim.label += "\t";
+				trim.label += Read::LABEL_SEP;
 			trim.label += "LS:" + ss.str();
 		}
 
@@ -990,7 +990,7 @@ public:
 					// remove the second partition from the original trim estimate
 					best.trimLength -= end - p;
 					if (!trim.label.empty())
-						trim.label += "\t";
+						trim.label += Read::LABEL_SEP;
 					trim.label += label;
 				} else {
 					assert(p - begin >= 0);
@@ -998,7 +998,7 @@ public:
 					best.trimLength -= p - begin;
 					best.trimOffset += p - begin;
 					if (!trim.label.empty())
-						trim.label += "\t";
+						trim.label += Read::LABEL_SEP;
 					trim.label += "Inv" + label;
 				}
 			}
@@ -1019,8 +1019,8 @@ public:
 		}
 		std::stringstream ss;
 		if (!trim.label.empty())
-			ss << "\t";
-		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength << "\t" << getKmerScoringTypeLabel(_defaultScoringType) << ":" << (int) (trim.score+0.5);
+			ss << Read::LABEL_SEP;
+		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength << Read::Read::LABEL_SEP << getKmerScoringTypeLabel(_defaultScoringType) << ":" << (int) (trim.score+0.5);
 		trim.label += ss.str();
 	}
 

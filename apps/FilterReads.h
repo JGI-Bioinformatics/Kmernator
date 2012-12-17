@@ -148,14 +148,18 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 
 	int maximumKmerDepth = ReadSelectorOptions::getOptions().getMaxKmerDepth();
 
-	if (KmerBaseOptions::getOptions().getKmerSize() > 0 && ReadSelectorOptions::getOptions().getSeparateOutputs()) {
-		outputFilename += "-MinDepth" + boost::lexical_cast<std::string>(minDepth);
+	string suffix;
+	if (ReadSelectorOptions::getOptions().getSeparateOutputs()) {
+		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
+			outputFilename += "-MinDepth" + boost::lexical_cast<std::string>(minDepth);
+		}
+		suffix = FormatOutput::getDefaultSuffix();
 	}
 
 	if (maximumKmerDepth > 0) {
 		if (ReadSelectorOptions::getOptions().getSeparateOutputs())
 			outputFilename += "-MaxDepth" + boost::lexical_cast<std::string>(maximumKmerDepth);
-		OFM ofmap = selector.getOFM(outputFilename);
+		OFM ofmap = selector.getOFM(outputFilename, suffix);
 		std::string normalizationMethod = ReadSelectorOptions::getOptions().getNormalizationMethod();
 		if (normalizationMethod == "RANDOM") {
 			picked += selector.pickCoverageNormalizedSubset(maximumKmerDepth, minDepth, ReadSelectorOptions::getOptions().getMinReadLength(), reads.hasPairs(), ReadSelectorOptions::getOptions().getBothPairs());
@@ -208,7 +212,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 			} else if (isPartitioned && tmpMinDepth > 0 && ReadSelectorOptions::getOptions().getSeparateOutputs()) {
 				ofname += "-PartitionDepth" + boost::lexical_cast< string >( tmpMinDepth );
 			}
-			OFM ofmap = selector.getOFM(ofname);
+			OFM ofmap = selector.getOFM(ofname, suffix);
 			LOG_VERBOSE(1, "Selecting reads over depth: " << tmpMinDepth);
 
 			if (reads.hasPairs()) {
