@@ -140,6 +140,11 @@ int main(int argc, char *argv[]) {
 			if (Log::isVerbose(1))
 				spectrum.printHistograms(Log::Verbose("Kmer Histogram"));
 
+			if (!FilterReadsBaseOptions::getOptions().getHistogramFile().empty()) {
+				ofstream of(FilterReadsBaseOptions::getOptions().getHistogramFile().c_str());
+				spectrum.printHistograms(of);
+			}
+
 			if (KmerSpectrumOptions::getOptions().getVariantSigmas() > 0.0) {
 				spectrum.purgeVariants();
 				if (Log::isVerbose(1)) {

@@ -74,11 +74,14 @@ using namespace std;
 // TODO add outputformat of fasta
 class _FilterReadsBaseOptions : public OptionsBaseInterface {
 public:
-	_FilterReadsBaseOptions() :  sizeHistoryFile("") {}
+	_FilterReadsBaseOptions() :  sizeHistoryFile(""), histogramFile("") {}
 	virtual ~_FilterReadsBaseOptions() {}
 
 	std::string &getSizeHistoryFile() {
 		return sizeHistoryFile;
+	}
+	std::string &getHistogramFile() {
+		return histogramFile;
 	}
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
@@ -95,6 +98,7 @@ public:
 		po::options_description opts("FilterReads <options> [[kmer-size] [input-file ...]]\n\tNote: --kmer-size and --input-file can either be specified as positional argumens at the end or within <options>\n\nGeneral Filtering Options");
 		opts.add_options()
 
+		        ("histogram-file", po::value<std::string>()->default_value(histogramFile), "if set the histogram table will be output to this file")
 				("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile), "if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)");
 
 		desc.add(opts);
@@ -116,6 +120,7 @@ public:
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 		ret &= DuplicateFragmentFilterOptions::_parseOptions(vm);
 
+		setOpt("histogram-file", histogramFile);
 		setOpt("size-history-file", sizeHistoryFile);
 
 		if (Options::getOptions().getOutputFile().empty() && Logger::isMaster())
@@ -132,7 +137,7 @@ public:
 	}
 
 protected:
-	std::string sizeHistoryFile;
+	std::string sizeHistoryFile, histogramFile;
 };
 typedef OptionsBaseTemplate< _FilterReadsBaseOptions > FilterReadsBaseOptions;
 

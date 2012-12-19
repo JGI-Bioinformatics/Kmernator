@@ -193,6 +193,12 @@ int main(int argc, char *argv[]) {
 				std::string hist = spectrum.getHistogram(false);
 				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
 			}
+
+			if (!FilterReadsBaseOptions::getOptions().getHistogramFile().empty()) {
+				ofstream of(FilterReadsBaseOptions::getOptions().getHistogramFile().c_str());
+				spectrum.printHistograms(of);
+			}
+
 		}
 		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 
