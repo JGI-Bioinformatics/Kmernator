@@ -71,6 +71,7 @@ public:
 
 		KmerBaseOptions::getOptions().getKmerSize() = 21;
 		KmerSpectrumOptions::getOptions().getMinKmerQuality() = 0;
+		KmerSpectrumOptions::getOptions().getMinDepth() = 1;
 		GeneralOptions::getOptions().getMinQuality() = 2;
 		MatcherInterfaceOptions::getOptions().getMaxReadMatches() = 10000;
 		MatcherInterfaceOptions::getOptions().getMinOverlap() = KmerSizer::getSequenceLength();

@@ -698,12 +698,12 @@ public:
 	inline bool empty() const {
 		return _size == 0;
 	}
-	void reserve(IndexType size) {
+	void reserve(IndexType size, bool reserveExtra = false) {
 		assert(!isMmaped()); // mmaped can not be modified!
 
 		if (size < _capacity) {
 			IndexType oldSize = _size;
-			resize(size, MAX_INDEX, false);
+			resize(size, MAX_INDEX, reserveExtra);
 			_size = oldSize;
 		}
 	}
@@ -1190,25 +1190,31 @@ public:
 		return isSorted;
 	}
 
+	// sort the elements in the KmerArray
+	// array will be resized.
 	void resort() {
 		if (isSorted())
 			return;
 
-		std::vector< IndexType > sortedIdxes;
-		sortedIdxes.reserve(size());
+		std::vector< IndexType > passingIndexes;
+		passingIndexes.reserve(size());
 
 		for(IndexType i = 0; i < size(); i++)
-			sortedIdxes.push_back(i);
-		std::sort(sortedIdxes.begin(), sortedIdxes.end(), CompareArrayIdx(*this));
+			passingIndexes.push_back(i);
+		resort(passingIndexes);
+	}
+private:
+	void resort(std::vector< IndexType > &passingIndexes) {
+		std::sort(passingIndexes.begin(), passingIndexes.end(), CompareArrayIdx(*this));
 
 		KmerArray s;
-		s.reserve(size());
+		s.reserve(passingIndexes.size());
 
 		for(IndexType i = 0; i < size(); i++)
-			s.append(get(sortedIdxes[i]), valueAt(sortedIdxes[i]));
+			s.append(get(passingIndexes[i]), valueAt(passingIndexes[i]));
 		swap(s);
 	}
-
+public:
 	void swap(IndexType idx1, IndexType idx2) {
 		assert(!isMmaped()); // mmaped can not be modified!
 		if (idx1 == idx2)
@@ -1231,33 +1237,26 @@ public:
 
 	// purge all element where the value is less than minimumCount
 	// assumes that ValueType can be cast into long
+	// resulting in a (potententially smaller) sorted KmerArray
 	IndexType purgeMinCount(long minimumCount) {
 		// scan values that pass, keep list and count
 		IndexType maxSize = size();
-		IndexType passing[maxSize];
-		IndexType passed = 0;
+		std::vector< IndexType > passingIndexes;
+		passingIndexes.reserve(maxSize);
 		IndexType affected;
 
 		ValueType *valuePtr = getValueStart();
 		for(IndexType i = 0; i < maxSize; i++) {
 			if ( minimumCount <= (long) *(valuePtr++) ) {
-				passing[passed++] = i;
+				passingIndexes.push_back( i );
 			}
 		}
-		if (passed == 0) {
+		if (passingIndexes.empty()) {
 			reset(true);
 			affected = maxSize;
-		} else if (passed == maxSize) {
-			affected = 0;
 		} else {
-			affected = maxSize - passed;
-			KmerArray tmp;
-			tmp.reserve(passed);
-			for(IndexType i = 0 ; i < passed ; i++) {
-				ElementType elem = getElement(passing[i]);
-				tmp.append( elem.key(), elem.value() );
-			}
-			swap(tmp);
+			affected = maxSize - passingIndexes.size();
+			resort(passingIndexes);
 		}
 
 		return affected;
@@ -1764,12 +1763,15 @@ public:
 
 	SizeType purgeMinCount(long minimumCount) {
 		SizeType affected = 0;
+		if (minimumCount <= 1)
+			return affected;
 
 		long bucketsSize = getNumBuckets();
 #pragma omp parallel for reduction(+:affected)
 		for(long idx = 0 ; idx < bucketsSize; idx++) {
 			affected += _buckets[idx].purgeMinCount(minimumCount);
 		}
+		_isSorted = true; // purgeMinCount implicitly sorts...
 		return affected;
 	}
 

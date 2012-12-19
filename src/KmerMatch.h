@@ -99,6 +99,7 @@ public:
 	: MatcherInterface(world, target), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {
 		assert(target.isGlobal());
 		_spectrum._buildKmerSpectrumMPI(target, false);
+		_spectrum.purgeMinDepth(KmerSpectrumOptions::getOptions().getMinDepth());
 		_spectrum.optimize(true);
 	}
 	virtual ~KmerMatch() {}
