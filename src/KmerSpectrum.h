@@ -97,7 +97,7 @@ public:
 	}
 
 	void _resetDefaults() {
-		KmerBaseOptions::getOptions().getKmerSize() = 21;
+		KmerBaseOptions::getOptions().getKmerSize() = 23;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// *::_setOptions(desc,p);
