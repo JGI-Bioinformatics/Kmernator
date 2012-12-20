@@ -437,6 +437,8 @@ public:
 				logFileStream.reset( new std::ofstream(getLogFile().c_str(), std::ios_base::out | std::ios_base::ate) );
 				Log::Verbose().setOstream( *logFileStream );
 				Log::Debug().setOstream( *logFileStream );
+				Log::Warn().setOstream( *logFileStream );
+				// Do *NOT* set Log::Error to this stream -- always print to STDERR for that one
 				LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "log-file is: " << getLogFile().c_str());
 			}
 
