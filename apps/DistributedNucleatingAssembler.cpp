@@ -267,11 +267,11 @@ void finishLongContigs(long maxContigLength, ReadSet &changedContigs, ReadSet &f
 
 int main(int argc, char *argv[]) {
 
+	ScopedMPIComm< DistributedNucleatingAssemblerOptions > world(argc, argv);
+
 	try {
 
 		double timing1, timing2;
-
-		ScopedMPIComm< DistributedNucleatingAssemblerOptions > world(argc, argv);
 
 		timing1 = MPI_Wtime();
 
@@ -447,8 +447,12 @@ int main(int argc, char *argv[]) {
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 
+	} catch (std::exception e) {
+		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace() << e.what());
+		world.abort(1);
 	} catch (...) {
 		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
+		world.abort(1);
 	}
 
 	return 0;

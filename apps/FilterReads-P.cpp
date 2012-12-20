@@ -254,8 +254,12 @@ int main(int argc, char *argv[]) {
 		spectrum.reset();
 		LOG_DEBUG(1, "Finished, waiting for rest of collective");
 
+	} catch (std::exception e) {
+		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace() << e.what());
+		world.abort(1);
 	} catch (...) {
 		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
+		world.abort(1);
 	}
 	LOG_DEBUG(2, "Clearing spectrum");
 
