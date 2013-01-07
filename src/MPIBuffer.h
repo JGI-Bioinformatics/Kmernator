@@ -287,6 +287,7 @@ public:
 		for (int threadId = 0; threadId < _numThreads; threadId++)
 			_freeBuffers[threadId].reserve(BUFFER_QUEUE_SOFT_LIMIT
 					* _numWorldThreads + 1);
+		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "MPIMessageBuffer(): " << _numThreads << " threads, " << _bufferSize << " size " << getMessageSize() << " message size");
 	}
 	~MPIMessageBuffer() {
 		for (ThreadedFreeBufferCache::iterator it = _freeBuffers.begin(); it
