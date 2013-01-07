@@ -1683,7 +1683,7 @@ public:
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
 		IndexType idx = isSorted() ? bucket.insertSorted(key,value) : bucket.append(key,value);
 		if (bucket.size() == bucket.capacity()) {
-			LOG_DEBUG_OPTIONAL(1, true, "KmerMap::insert()...resort() " << bucket.size());
+			LOG_DEBUG(5 "KmerMap::insert()...resort() " << bucket.size());
 			bucket.resort(true);
 			idx = bucket.find(key);
 			assert(idx != BucketType::MAX_INDEX);
