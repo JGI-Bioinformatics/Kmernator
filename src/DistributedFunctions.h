@@ -107,7 +107,7 @@ protected:
 
 public:
 	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long buckets = 0, bool separateSingletons = true)
-	: KS(buckets * _world.size(), separateSingletons), world(_world, mpi::comm_duplicate) {
+	: KS(buckets, separateSingletons), world(_world, mpi::comm_duplicate) {
 	}
 	~DistributedKmerSpectrum() {
 	}
@@ -335,6 +335,7 @@ public:
 			}
 			if (isRunningInLoop) {
 				KmerReadUtils kru;
+				long progressCount = 0, progressMark = 1000000 / world.size();
 				for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
 				{
 
@@ -369,12 +370,8 @@ public:
 						}
 					}
 
-					if (loopThreadId == 0 && readIdx % 1000000 == 0) {
-						if (world.rank() == 0) {
-							LOG_VERBOSE_OPTIONAL(1, true, "distributed processing " << (readIdx * world.size()) << " reads");
-						} else {
-							LOG_DEBUG(2, "local processed: " << readIdx << " reads");
-						}
+					if (loopThreadId == 0 && readIdx % progressMark == 0) {
+						LOG_VERBOSE_OPTIONAL(1, progressCount++ % world.size() == world.rank(), "distributed processing " << (readIdx * world.size()) << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
 					}
 				}
 			}

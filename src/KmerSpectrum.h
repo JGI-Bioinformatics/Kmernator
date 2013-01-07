@@ -315,7 +315,7 @@ public:
 	// if singletons are separated use less buckets (but same # as singletons)
 	KmerSpectrum() : solid(), weak(), singleton(), hasSolids(false), hasSingletons(false), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0) {}
 	KmerSpectrum(unsigned long buckets, bool separateSingletons = true):
-		solid(), weak(separateSingletons ? buckets/8 : buckets), singleton(separateSingletons ? buckets/8 : 1),
+		solid(), weak(separateSingletons ? buckets/8 : buckets), singleton(separateSingletons ? buckets : 1),
 		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0)
 	{
 		// apply the minimum quality automatically
