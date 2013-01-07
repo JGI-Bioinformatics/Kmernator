@@ -452,8 +452,6 @@ public:
 
 			setOpt("threads", getMaxThreads(), print);
 
-			validateOMPThreads();
-
 			setOpt2("input-file", getInputFiles());
 			for(FileListType::iterator it = getInputFiles().begin(); it != getInputFiles().end(); it++)
 				if (access(it->c_str(), R_OK) != 0)
@@ -523,18 +521,6 @@ public:
 		}
 		return inputFilePrefixes[fileIdx];
 	}
-
-	void validateOMPThreads() {
-		int maxThreads = omp_get_max_threads();
-		LOG_DEBUG(2, "validating OpenMP threads: " << maxThreads);
-
-		if (getMaxThreads() > maxThreads) {
-			LOG_DEBUG(2, "Reducing the number of threads from " << getMaxThreads() << " to " << maxThreads);
-			getMaxThreads() = maxThreads;
-		}
-		omp_set_num_threads(getMaxThreads());
-	}
-
 
 	unsigned int &getBatchSize()
 	{

@@ -334,9 +334,8 @@ protected:
 
 	// collective
 	void reduceOMPThreads(mpi::communicator &world) {
-		Options::getOptions().validateOMPThreads();
 #ifdef _USE_OPENMP
-		int numThreads = omp_get_max_threads();
+		int numThreads = std::max(omp_get_max_threads(),Options::getOptions().getMaxThreads());
 		numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
 		omp_set_num_threads(numThreads);
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
