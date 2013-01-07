@@ -365,6 +365,9 @@ public:
 
 	typedef Value ValueType;
 	static const IndexType MAX_INDEX = MAX_KMER_INDEX;
+	static const float GROWTH_FACTOR = 1.10;
+	static const IndexType MIN_GROWTH = 16;
+
 	typedef std::vector< KmerArray > Vector;
 
 	class ElementType {
@@ -446,6 +449,7 @@ private:
 	// TODO embed size & capacity into allocation -- save some memory because of padding
 	IndexType _size;
 	IndexType _capacity;
+	IndexType _endSorted;
 
 	// if capacity == MAX_INDEX, this is a constant mmaped instance
 	inline bool isMmaped() const {
@@ -468,20 +472,20 @@ private:
 		return *((Kmer *) _add(_begin, index));
 	}
 
-	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity) {
-		LOG_DEBUG(6, "private KmerArray(" << begin << ", " << size << "," << capacity << "): " << toThis());
+	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity), _endSorted(0) {
+		LOG_DEBUG(6, "private KmerArray(" << begin << ", " << size << "," << capacity << ", " << _endSorted <<"): " << toThis());
 	}
 
 public:
 
 	KmerArray(IndexType size = 0) :
-		_begin(NULL), _size(0), _capacity(0) {
+		_begin(NULL), _size(0), _capacity(0), _endSorted(0) {
 		resize(size);
 		LOG_DEBUG(6, "KmerArray(" << size << "): " << toThis());
 	}
 
 	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false, bool *bools = NULL) :
-		_begin(NULL), _size(0), _capacity(0) {
+		_begin(NULL), _size(0), _capacity(0), _endSorted(0)  {
 		SequenceLengthType kmerSize = KmerSizer::getSequenceLength();
 		assert(kmerSize > 0);
 		if (kmerSize <= length) {
@@ -496,7 +500,7 @@ public:
 	}
 
 	KmerArray(const KmerArray &copy) :
-		_begin(NULL), _size(0), _capacity(0) {
+		_begin(NULL), _size(0), _capacity(0), _endSorted(0)  {
 		*this = copy;
 		LOG_DEBUG(6, "KmerArray(" << copy.toThis() << "):" << toThis());
 	}
@@ -525,6 +529,8 @@ public:
 			_begin = other._begin;
 			_size = other._size;
 			_capacity = other._capacity;
+			_endSorted = other._endSorted;
+			assert(_endSorted <= size());
 			return *this;
 		}
 
@@ -537,12 +543,14 @@ public:
 					"RuntimeError: KmerArray::operator=(): Could not allocate memory in KmerArray operator=()");
 
 		_copyRange(other._begin, other.getValueStart(), 0, 0, _size, false);
+		_endSorted = other._endSorted;
+		assert(_endSorted <= size());
 
 		return *this;
 	}
 
 	// restore a new array from a mmap, allocating new memory
-	KmerArray(const void *src) : _begin(NULL), _size(0), _capacity(0) {
+	KmerArray(const void *src) : _begin(NULL), _size(0), _capacity(0), _endSorted(0) {
 		IndexType *size = (IndexType *) src;
 		resize(*size);
 		void *ptr = ++size;
@@ -551,6 +559,7 @@ public:
 			long kmerSize  = _size * KmerSizer::getByteSize();
 			_copyRange(ptr, (ValueType *) (((char*)ptr)+kmerSize), 0, 0, _size, false);
 		}
+		setLastSorted();
 		LOG_DEBUG(6, "KmerArray(" << src << "): " << toThis());
 	}
 
@@ -577,10 +586,23 @@ public:
 		IndexType xsize = *(size++);
 		const void *ptr = size;
 		KmerArray array(const_cast<void*>(ptr), xsize, MAX_INDEX);
+		array.setLastSorted();
 		return array;
 	}
 
 protected:
+	void setLastSorted() {
+		_endSorted = size() > 0 ? 1: 0;
+		for(IndexType i = 1; i < size(); i++) {
+			if (get(i-1).compare(get(i)) <= 0) {
+				_endSorted++;
+			} else {
+				break;
+			}
+		}
+		LOG_DEBUG(5, "_endSorted = " << _endSorted << ", " << size() << " for " << this);
+		assert(_endSorted <= size());
+	}
 	// never thread safe!
 	const ValueType *getValueStart() const {
 		if (capacity() > 0)
@@ -668,6 +690,7 @@ public:
 			_begin = NULL;
 			_size = 0;
 			_capacity = 0;
+			_endSorted = 0;
 			return;
 		}
 
@@ -683,6 +706,7 @@ public:
 			_capacity = 0;
 		}
 		_size = 0;
+		_endSorted = 0;
 
 	}
 
@@ -808,18 +832,19 @@ public:
 				newBegin = NULL;
 				memChanged = true;
 			}
+			_endSorted = 0;
 		} else if ((size > oldCapacity) || (oldCapacity > size && !reserveExtra)) {
 			// allocate new memory
 			if (reserveExtra)
-				newCapacity = std::max((IndexType) (size * 1.2),
-						(IndexType) (size + 10));
+				newCapacity = std::max((IndexType) (size * GROWTH_FACTOR),
+						(IndexType) (size + MIN_GROWTH));
 			else
 				newCapacity = size;
 
-			newBegin = std::calloc(newCapacity, getElementByteSize());
+			newBegin = std::malloc(newCapacity * getElementByteSize());
 			if (newBegin == NULL) {
 				LOG_ERROR(0, "Attempt to malloc " << newCapacity
-						* getElementByteSize());
+						* getElementByteSize() << " (" << newCapacity << " elements)");
 				LOG_THROW(
 						"RuntimeError: Could not allocate memory in KmerArray _setMemory()");
 			}
@@ -1054,16 +1079,24 @@ public:
 		return kmers;
 	}
 protected:
-	IndexType _find(const Kmer &target) const {
-		for(IndexType i=0; i<_size; i++)
+	IndexType _find(const Kmer &target, IndexType start, IndexType end) const {
+		for(IndexType i=start; i<end; i++) {
 			if (target.compare(get(i)) == 0) {
 				return i;
 			}
+		}
 		return MAX_INDEX;
 	}
 public:
 	IndexType find(const Kmer &target) const {
-		IndexType idx = _find(target);
+		bool targetIsFound;
+		IndexType idx;
+		if (_endSorted >= 16) {
+			idx = _findSorted(target, targetIsFound, 0, _endSorted);
+			if (targetIsFound)
+				return idx;
+		}
+		idx = _find(target, _endSorted >= 16 ? _endSorted : 0, size());
 		return idx;
 	}
 	IndexType find(const Kmer &target, bool &targetIsFound) const {
@@ -1072,21 +1105,27 @@ public:
 		return idx;
 	}
 protected:
-	IndexType _findSorted(const Kmer &target, bool &targetIsFound) const {
+	IndexType _findSorted(const Kmer &target, bool &targetIsFound, IndexType start, IndexType end) const {
 		// binary search
-		IndexType min = 0;
-		IndexType max = size();
-
-		if (max == 0)
+		if (end <= start)
 		{
 			targetIsFound = false;
 			return 0;
 		}
-		max--; // never let mid == size()
+		IndexType min = start;
+		IndexType max = end;
+		assert(min >= 0);
+		assert(min < size());
+		assert(max <= size());
+		assert(max <= _endSorted);
+		assert(max > 0);
+
+		max--; // max must be a valid index... never cross the end boundary
 		IndexType mid;
 		int comp;
 		do {
 			mid = (min+max) / 2;
+			assert(mid < size());
 			comp = target.compare(get(mid));
 			if (comp > 0)
 				min = mid+1;
@@ -1098,9 +1137,11 @@ protected:
 		else
 			targetIsFound = false;
 
-		return mid + (comp>0 && size()>mid?1:0);
+		return mid + (comp>0 && end>mid?1:0);
 	}
-
+	IndexType _findSorted(const Kmer &target, bool &targetIsFound) const {
+		return _findSorted(target, targetIsFound, 0, size());
+	}
 public:
 	IndexType findSorted(const Kmer &target, bool &targetIsFound) const {
 		IndexType idx = _findSorted(target, targetIsFound);
@@ -1141,10 +1182,15 @@ public:
 
 protected:
 	IndexType _insertSorted(const Kmer &target) {
+		assert(isSorted());
 		bool isFound;
 		IndexType idx = findSorted(target, isFound);
-		if (!isFound)
+		if (!isFound) {
 			_insertAt(idx, target);
+			_endSorted++;
+			LOG_DEBUG(5, "_insertSorted(): " << _endSorted << ", " << size());
+			assert(_endSorted <= size());
+		}
 		return idx;
 	}
 	IndexType _insertSorted(const Kmer &target, const Value &value) {
@@ -1172,6 +1218,8 @@ public:
 	void remove(IndexType idx) {
 		assert(!isMmaped()); // mmaped can not be modified!
 		resize(size()-1,idx);
+		if (_endSorted > idx)
+			_endSorted--;
 	}
 
 	class CompareArrayIdx {
@@ -1184,15 +1232,16 @@ public:
 	};
 
 	bool isSorted() const {
-		bool isSorted = true;
-		for(IndexType i = 1; isSorted && i < size(); i++)
-			isSorted &= get(i-1).compare(get(i)) <= 0;
-		return isSorted;
+		return _endSorted == size();
+	}
+
+	IndexType numUnsorted() const {
+		return _endSorted - size();
 	}
 
 	// sort the elements in the KmerArray
-	// array will be resized.
-	void resort() {
+	// array will be resized
+	void resort(bool reserveExtra = false) {
 		if (isSorted())
 			return;
 
@@ -1201,18 +1250,23 @@ public:
 
 		for(IndexType i = 0; i < size(); i++)
 			passingIndexes.push_back(i);
-		resort(passingIndexes);
+		resort(passingIndexes, reserveExtra);
 	}
 private:
-	void resort(std::vector< IndexType > &passingIndexes) {
+	void resort(std::vector< IndexType > &passingIndexes, bool reserveExtra = false) {
 		std::sort(passingIndexes.begin(), passingIndexes.end(), CompareArrayIdx(*this));
 
 		KmerArray s;
-		s.reserve(passingIndexes.size());
+		IndexType passingSize = passingIndexes.size();
+		s.reserve(passingSize + (reserveExtra ? std::max((IndexType) (passingSize * GROWTH_FACTOR + 0.5), (IndexType) (passingSize + MIN_GROWTH)) : 0));
 
-		for(IndexType i = 0; i < size(); i++)
+		for(IndexType i = 0; i < passingSize; i++)
 			s.append(get(passingIndexes[i]), valueAt(passingIndexes[i]));
+
+		s._endSorted = passingSize;
 		swap(s);
+		LOG_DEBUG(5, "resort()" << _endSorted << ", " << size() << ", " << passingSize << " on " << this);
+		assert(_endSorted <= size());
 	}
 public:
 	void swap(IndexType idx1, IndexType idx2) {
@@ -1233,6 +1287,8 @@ public:
 		std::swap(_begin, other._begin);
 		std::swap(_size, other._size);
 		std::swap(_capacity, other._capacity);
+		std::swap(_endSorted, other._endSorted);
+		assert(_endSorted <= size());
 	}
 
 	// purge all element where the value is less than minimumCount
@@ -1347,8 +1403,8 @@ public:
 
 template<typename Value>
 class KmerMap {
-	static const bool defaultSort = false;
 public:
+	static const bool defaultSort = false;
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
 	typedef Kmer::SizeType      SizeType;
@@ -1362,6 +1418,8 @@ public:
 
 	typedef std::vector< BucketType > BucketsVector;
 	typedef typename BucketsVector::iterator BucketsVectorIterator;
+
+	static const IndexType MAX_UNSORTED = 24;
 
 	static IndexType getMinPowerOf2(IndexType minBucketCount) {
 		NumberType powerOf2 = minBucketCount;
@@ -1400,6 +1458,9 @@ public:
 		BUCKET_MASK = powerOf2 - 1;
 		_buckets.resize(powerOf2);
 		_isSorted = defaultSort;
+
+		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "KmerMap(" << bucketCount << "): " << powerOf2);
+
 	}
 	~KmerMap()
 	{
@@ -1621,6 +1682,12 @@ public:
 
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
 		IndexType idx = isSorted() ? bucket.insertSorted(key,value) : bucket.append(key,value);
+		if (bucket.size() == bucket.capacity()) {
+			LOG_DEBUG_OPTIONAL(1, true, "KmerMap::insert()...resort() " << bucket.size());
+			bucket.resort(true);
+			idx = bucket.find(key);
+			assert(idx != BucketType::MAX_INDEX);
+		}
 		ElementType element = bucket.getElement(idx);
 		return element;
 	}
