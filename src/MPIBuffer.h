@@ -64,9 +64,9 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <vector>
 
 // use about 32MB of memory total to batch & queue up messages between communications
-// this is split up across world * thread * thread arrays7
+// this is split up across world * thread * thread arrays
 #define MPI_BUFFER_DEFAULT_SIZE (32 * 1024 * 1024)
-#define MPI_MIN_TRANSMIT_DEFAULT_SIZE 512
+#define MPI_MIN_TRANSMIT_DEFAULT_SIZE 2048
 
 class _MPIOptions : public OptionsBaseInterface {
 public:
@@ -113,13 +113,13 @@ protected:
 	long _syncPoints;
 	long _syncAttempts;
 	double _transitTime;
-	double _threadWaitingTime;
-	double _masterWaitingTime;
+	double _threadWaitingTime, _masterWaitingTime;
+	double _threadProcessTime, _masterProcessTime;
 	double _startTime;
 
 public:
 	MPIMessageBufferBase() :
-		_deliveries(0), _numMessages(0), _sendBytes(0), _recvBytes(0), _syncPoints(0), _syncAttempts(0), _transitTime(0), _threadWaitingTime(0), _masterWaitingTime(0) {
+		_deliveries(0), _numMessages(0), _sendBytes(0), _recvBytes(0), _syncPoints(0), _syncAttempts(0), _transitTime(0), _threadWaitingTime(0), _masterWaitingTime(0), _threadProcessTime(0), _masterProcessTime(0) {
 		_startTime = MPI_Wtime();
 	}
 	virtual ~MPIMessageBufferBase() {
@@ -127,7 +127,7 @@ public:
 				<< " deliveries, " << _numMessages << " messages, "
 				<< _sendBytes << " b sent, " << _recvBytes << " b recv, "
 				<< _syncPoints << " / " << _syncAttempts << " syncs in " << (MPI_Wtime() - _startTime)
-				<< " seconds (" << _transitTime << " transit, " << _threadWaitingTime << " threadWait, " << _masterWaitingTime << " masterWait)");
+				<< " seconds (" << _transitTime << " transit, " << _threadProcessTime << " threadProcess, " << _masterProcessTime << " masterProcess, " << _threadWaitingTime << " threadWait, " << _masterWaitingTime << " masterWait)");
 	}
 	static bool isThreadSafe() {
 		int threadlevel;
@@ -210,6 +210,16 @@ public:
 #pragma omp atomic
 			_threadWaitingTime += wait;
 		}
+	}
+	inline void threadProcess(double duration) {
+		if (omp_get_thread_num() == 0) {
+#pragma omp atomic
+			_masterProcessTime += duration;
+		} else {
+#pragma omp atomic
+			_threadProcessTime += duration;
+		}
+
 	}
 
 };
@@ -357,6 +367,7 @@ public:
 	}
 
 	long processMessagePackage(MessagePackage &messagePackage) {
+		double duration = MPI_Wtime();
 		Buffer msg, start = messagePackage.buffer;
 
 		long count = 0;
@@ -372,6 +383,7 @@ public:
 			this->newMessage();
 			count++;
 		}
+		this->threadProcess(MPI_Wtime() - duration);
 		return count;
 	}
 
