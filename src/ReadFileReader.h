@@ -490,13 +490,14 @@ public:
 			setBuffers();
 		}
 		void setBuffers() {
-			_nameBuffer.assign(omp_get_max_threads(), string());
-			_commentBuffer.assign(omp_get_max_threads(), string());
-			_basesBuffer.assign(omp_get_max_threads(), string());
-			_qualsBuffer.assign(omp_get_max_threads(), string());
-			_lineBuffer.assign(omp_get_max_threads(), string());
-			_isMultiline.assign(omp_get_max_threads(), false);
-			_isGood.assign(omp_get_max_threads(), false);
+			int numThreads = std::max(omp_get_max_threads(), omp_get_num_threads());
+			_nameBuffer.assign(numThreads, string());
+			_commentBuffer.assign(numThreads, string());
+			_basesBuffer.assign(numThreads, string());
+			_qualsBuffer.assign(numThreads, string());
+			_lineBuffer.assign(numThreads, string());
+			_isMultiline.assign(numThreads, false);
+			_isGood.assign(numThreads, false);
 		}
 
 		void resetBuffers() const {
