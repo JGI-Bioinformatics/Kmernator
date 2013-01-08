@@ -452,6 +452,8 @@ public:
 
 			setOpt("threads", getMaxThreads(), print);
 
+			validateOMPThreads();
+
 			setOpt2("input-file", getInputFiles());
 			for(FileListType::iterator it = getInputFiles().begin(); it != getInputFiles().end(); it++)
 				if (access(it->c_str(), R_OK) != 0)
@@ -521,6 +523,19 @@ public:
 		}
 		return inputFilePrefixes[fileIdx];
 	}
+
+	void validateOMPThreads() {
+		omp_set_num_threads(getMaxThreads());
+		if (omp_get_max_threads() != getMaxThreads())
+			LOG_THROW("Could not omp_set_num_threads to " << getMaxThreads());
+#pragma omp parallel
+		{
+			if (omp_get_num_threads() != getMaxThreads()) {
+				LOG_THROW("Could not omp_set_num_threads to " << getMaxThreads() << " in parallel section");
+			}
+		}
+	}
+
 
 	unsigned int &getBatchSize()
 	{

@@ -490,13 +490,13 @@ public:
 			setBuffers();
 		}
 		void setBuffers() {
-			_nameBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
-			_commentBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
-			_basesBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
-			_qualsBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
-			_lineBuffer.assign(OMP_MAX_THREADS_DEFAULT, string());
-			_isMultiline.assign(OMP_MAX_THREADS_DEFAULT, false);
-			_isGood.assign(OMP_MAX_THREADS_DEFAULT, false);
+			_nameBuffer.assign(omp_get_max_threads(), string());
+			_commentBuffer.assign(omp_get_max_threads(), string());
+			_basesBuffer.assign(omp_get_max_threads(), string());
+			_qualsBuffer.assign(omp_get_max_threads(), string());
+			_lineBuffer.assign(omp_get_max_threads(), string());
+			_isMultiline.assign(omp_get_max_threads(), false);
+			_isGood.assign(omp_get_max_threads(), false);
 		}
 
 		void resetBuffers() const {

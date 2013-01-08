@@ -302,7 +302,7 @@ protected:
 
 	Comm initializeWorldAndOptions(int argc, char *argv[]) {
 		int threadProvided;
-		int threadRequest = omp_get_max_threads() == 1 ? MPI_THREAD_SINGLE : MPI_THREAD_FUNNELED;
+		int threadRequest = MPI_THREAD_FUNNELED;
 		MPI_Init_thread(&argc, &argv, threadRequest, &threadProvided);
 		mpi::environment env(argc, argv);
 		Comm comm(new mpi::communicator(MPI_COMM_WORLD, mpi::comm_duplicate));
@@ -310,11 +310,11 @@ protected:
 
 		try {
 			Logger::setWorld(comm.get());
-
 			OptionsTempl::parseOpts(argc, argv);
 
 			if (GeneralOptions::getOptions().getGatheredLogs())
 				Logger::setWorld(comm.get(), Options::getOptions().getDebug() >= 2);
+			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "MPI Thread support: " << threadProvided);
 
 			validateMPIWorld(*comm);
 
@@ -335,9 +335,17 @@ protected:
 	// collective
 	void reduceOMPThreads(mpi::communicator &world) {
 #ifdef _USE_OPENMP
-		int numThreads = std::max(omp_get_max_threads(),Options::getOptions().getMaxThreads());
+		int numThreads = std::min(omp_get_max_threads(),Options::getOptions().getMaxThreads());
 		numThreads = all_reduce(world, numThreads, mpi::minimum<int>());
 		omp_set_num_threads(numThreads);
+		if (omp_get_max_threads() != numThreads)
+			LOG_THROW("Could not omp_set_num_threads to " << numThreads);
+#pragma omp parallel
+		{
+			if (omp_get_num_threads() != numThreads) {
+				LOG_THROW("Could not omp_set_num_threads to " << numThreads << " in parallel section");
+			}
+		}
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "set OpenMP threads to " << numThreads);
 #endif
 	}
@@ -345,12 +353,15 @@ protected:
 	// collective
 	void validateMPIWorld(mpi::communicator &world) {
 		int provided;
-		MPI_Query_thread(&provided);
+		if (MPI_SUCCESS != MPI_Query_thread(&provided))
+			LOG_THROW("Could not run MPI_Query_thread()!");
 #ifdef _USE_OPENMP
+		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Checking MPI for MPI_THREAD_FUNNELED (" << provided << ") support with threads: " << omp_get_max_threads());
 		if (provided != MPI_THREAD_FUNNELED && omp_get_max_threads() > 1) {
-			if (world.rank() == 0)
-				LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_FUNNELED (" << provided << "), reducing OpenMP threads to 1")
-				omp_set_num_threads(1);
+			if (world.rank() == 0) {
+				LOG_WARN(1, "Your version of MPI does not support MPI_THREAD_FUNNELED (" << provided << "), reducing OpenMP threads to 1");
+			}
+			omp_set_num_threads(1);
 		}
 #endif
 		reduceOMPThreads(world);

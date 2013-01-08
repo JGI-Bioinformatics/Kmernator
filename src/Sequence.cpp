@@ -63,14 +63,14 @@ using namespace std;
 char Sequence::FASTQ_START_CHAR = Kmernator::FASTQ_START_CHAR_ILLUMINA;
 
 // thread safe caches
-Sequence::CachedSequencesVector Sequence::threadCacheSequences(OMP_MAX_THREADS_DEFAULT, Sequence::CachedSequences(Sequence::maxCachePerThread));
+Sequence::CachedSequencesVector Sequence::threadCacheSequences(omp_get_max_threads(), Sequence::CachedSequences(Sequence::maxCachePerThread));
 
 // dangling pointer!!
 Sequence::DataPtrListVector *Sequence::preAllocatedDataPtrs = new Sequence::DataPtrListVector();
 
 // static methods of Sequence
 void Sequence::clearCaches() {
-	threadCacheSequences = CachedSequencesVector(OMP_MAX_THREADS_DEFAULT, CachedSequences(Sequence::maxCachePerThread));
+	threadCacheSequences = CachedSequencesVector(omp_get_max_threads(), CachedSequences(Sequence::maxCachePerThread));
 	preAllocatedDataPtrs->reset();
 }
 
