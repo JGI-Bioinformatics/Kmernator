@@ -360,18 +360,18 @@ public:
 							LOG_DEBUG(4, "discarded kmer " << readIdx << "@" << readPos << " " << weight << " " << kmers[readPos].toFasta());
 						} else {
 
-							this->getThreadIds(kmers[readPos], threadDest, numThreads, rankDest, worldSize, true);
+							this->getThreadIds(kmers[readPos], threadDest, loopNumThreads, rankDest, worldSize, true);
 
-							if (rankDest == rank && threadDest == threadId) {
+							if (rankDest == rank && threadDest == loopThreadId) {
 								this->append(pointers, kmers[readPos], v.getWeight(), globalReadIdx, readPos, isSolid, v.getLeft(), v.getRight());
 							} else {
-								msgBuffers->bufferMessage(rankDest, threadDest)->set(globalReadIdx, readPos, v, kmers[readPos]);
+								msgBuffers->bufferMessage(rankDest, numThreads == loopNumThreads ? threadDest : threadDest+1)->set(globalReadIdx, readPos, v, kmers[readPos]);
 							}
 						}
 					}
 
-					if (loopThreadId == 0 && readIdx % progressMark == 0) {
-						LOG_VERBOSE_OPTIONAL(1, progressCount++ % world.size() == world.rank(), "distributed processing " << (readIdx * world.size()) << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
+					if (loopThreadId == 0 &&  progressCount++ % progressMark == 0) {
+						LOG_VERBOSE_OPTIONAL(1, (progressCount-1) % world.size() == world.rank(), "distributed processing " << (readIdx * world.size()) << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
 					}
 				}
 			}
@@ -887,10 +887,13 @@ done when empty cycle is received
 
 				// allow master thread to only handle communications
 				int loopThreadId = threadId, loopNumThreads = numThreads;
-				if (loopNumThreads > 1) {
+				bool isRunningInLoop = true;
+				if (numThreads > 1) {
+					if (loopThreadId == 0)
+						isRunningInLoop = false;
 					loopThreadId--; loopNumThreads--;
 				}
-				if (loopThreadId >= 0) {
+				if (isRunningInLoop) {
 					for(ReadSetSizeType i = loopThreadId ; i < batchSize ; i+=loopNumThreads) {
 
 						ReadSetSizeType readIdx = batchReadIdx + i;
