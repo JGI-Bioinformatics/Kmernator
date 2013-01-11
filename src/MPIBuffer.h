@@ -288,8 +288,8 @@ public:
 		else
 			_numThreads = omp_get_max_threads();
 		_softNumThreads = std::max(_numThreads * 3 / 4, 1);
-		_bufferSize /= (_numThreads * _numThreads);
-		_bufferSize = std::min(std::min(totalBufferSize,MPIOptions::getOptions().getMinTransmitSize()), _bufferSize);
+		_bufferSize /= (_numThreads*_numThreads);
+		_bufferSize = std::max(std::max(messageSize,MPIOptions::getOptions().getMinTransmitSize()/_numThreads), _bufferSize);
 		setSoftMaxBufferSize();
 
 		_numWorldThreads = _worldSize * _numThreads;

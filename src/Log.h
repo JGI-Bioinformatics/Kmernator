@@ -69,6 +69,9 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <ctime>
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <csignal>
+#include <set>
+#include <execinfo.h>
 
 #include "config.h"
 #include <boost/lexical_cast.hpp>
@@ -80,6 +83,7 @@ class Logger
 	std::string _attribute;
 	unsigned int _level;
 	mutable int _thisLevel;
+	static char *reservedBuffer;
 
 	static bool &_debugGather() {
 		static bool _debugGather = false;
@@ -118,9 +122,33 @@ class Logger
 		return std::cerr << "WARNING: Using Logger(" << _attribute << ") when it was explicitly disconnected!" << std::endl;
 	}
 public:
-	Logger(std::ostream &os, std::string attr, unsigned int level) : _os(&os), _attribute(attr), _level(level), _thisLevel(-1) {}
+	Logger(std::ostream &os, std::string attr, unsigned int level) : _os(&os), _attribute(attr), _level(level), _thisLevel(-1) {
+		prepBuffer();
+	}
 	Logger(const Logger &copy) {
 		*this = copy;
+	}
+	~Logger() {
+		releaseBuffer();
+	}
+	static void prepBuffer() {
+		if (reservedBuffer == NULL) {
+			#pragma omp critical
+			{
+				if (reservedBuffer == NULL)
+					reservedBuffer = new char[512*1024];
+			}
+		}
+	}
+	static void releaseBuffer() {
+		if (reservedBuffer != NULL) {
+			#pragma omp critical
+			{
+				if (reservedBuffer != NULL)
+					delete [] reservedBuffer;
+				reservedBuffer = NULL;
+			}
+		}
 	}
 	static bool &getAbortFlag() {
 		static bool _ = false;
@@ -289,9 +317,11 @@ private:
 	static inline Logger &getWarningOstream() {
 		return warningOstream;
 	}
+public:
 	static inline Logger &getErrorOstream() {
 		return errorOstream;
 	}
+private:
 	static inline Logger &_log(Logger &log, std::string &msg, bool bypassmpi = true) {
 #ifdef _USE_MPI
 		if (!bypassmpi)
@@ -383,6 +413,15 @@ public:
 
 };
 
+#define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), level >= 3); }
+#define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), level >= 2); }
+#define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { std::stringstream ss ; ss << log; Log::Warn(ss.str(), true); }
+#define LOG_ERROR(level,   log) if ( Log::isError(level)  ) { std::stringstream ss ; ss << log; Log::Error(ss.str(), true); }
+
+#define LOG_VERBOSE_OPTIONAL(level, test, log) if ( test && Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), true); }
+#define LOG_DEBUG_OPTIONAL(level,   test, log) if ( test && Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), true); }
+
+
 class LoggedException : public std::exception {
 public:
 	LoggedException(std::string msg) throw() : _msg(msg) {}
@@ -399,13 +438,32 @@ private:
 	std::string _msg;
 };
 
-#define LOG_THROW(log) {  std::stringstream ss ; ss << log; Log::Error(ss.str() , true); Logger::getAbortFlag() = true; throw LoggedException(Log::getErrorMessages()); }
-#define LOG_VERBOSE(level, log) if ( Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), level >= 3); }
-#define LOG_DEBUG(level,   log) if ( Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), level >= 2); }
-#define LOG_WARN(level,    log) if ( Log::isWarn(level)   ) { std::stringstream ss ; ss << log; Log::Warn(ss.str(), true); }
-#define LOG_ERROR(level,   log) if ( Log::isError(level)  ) { std::stringstream ss ; ss << log; Log::Error(ss.str(), true); }
+class StackTrace {
+public:
+	static void printStackTrace() {
+		void *array[200];
+		size_t size;
 
-#define LOG_VERBOSE_OPTIONAL(level, test, log) if ( test && Log::isVerbose(level)) { std::stringstream ss ; ss << log; Log::Verbose(ss.str(), true); }
-#define LOG_DEBUG_OPTIONAL(level,   test, log) if ( test && Log::isDebug(level)  ) { std::stringstream ss ; ss << log; Log::Debug(ss.str(), true); }
+		size = backtrace(array, 200);
+		backtrace_symbols_fd(array, size, STDERR_FILENO);
+	}
+	static std::string getStackTrace() {
+		std::stringstream ss;
+		void *array[200];
+		size_t size, i;
+		char **strings;
+
+		size = backtrace(array, 200);
+		strings = backtrace_symbols(array, size);
+
+		for (i = 0; i < size; i++)
+			ss << strings[i] << std::endl;
+
+		free(strings);
+		return ss.str();
+	}
+};
+
+#define LOG_THROW(log) { Logger::getAbortFlag() = true; Logger::releaseBuffer(); std::cerr << "Exception!: " << log << std::endl; StackTrace::printStackTrace(); { std::stringstream ss ; ss << log; Log::Error(ss.str(), true); } throw LoggedException(Log::getErrorMessages()); }
 
 #endif /* LOG_H_ */
