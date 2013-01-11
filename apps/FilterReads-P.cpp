@@ -86,6 +86,8 @@ int main(int argc, char *argv[]) {
 
 	ScopedMPIComm< MPIFilterReadsOptions > world (argc, argv);
 
+	Cleanup::prepare();
+
 	if (ReadSelectorOptions::getOptions().getMaxKmerDepth() > 0 && ReadSelectorOptions::getOptions().getNormalizationMethod() == "OPTIMAL" && world.size() > 1) {
 		if (Logger::isMaster())
 			LOG_WARN(1, "Setting --normalization-method to RANDOM, as Distributed version does not support 'OPTIMAL' option");
@@ -254,11 +256,11 @@ int main(int argc, char *argv[]) {
 		spectrum.reset();
 		LOG_DEBUG(1, "Finished, waiting for rest of collective");
 
-	} catch (std::exception e) {
-		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace() << e.what());
+	} catch (std::exception &e) {
+		LOG_ERROR(1, "FilterReads-P caught an exception!\n\t" << e.what());
 		world.abort(1);
 	} catch (...) {
-		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
+		LOG_ERROR(1, "FilterReads-P caught an error!\n\t");
 		world.abort(1);
 	}
 	LOG_DEBUG(2, "Clearing spectrum");

@@ -142,11 +142,16 @@ int main(int argc, char *argv[]) {
 		spectrum.dumpCounts(outputFilenameBase);
 		outputFilenameBase = outputFilename + ".mergraph.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength()) + ".D" + boost::lexical_cast<std::string>(KmerSpectrumOptions::getOptions().getMinDepth());
 		spectrum.dumpGraphs(outputFilenameBase);
+		world.barrier();
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
+
+	} catch (std::exception &e) {
+		LOG_ERROR(1, "MeraculousCounter threw an exception! Aborting...\n\t" << e.what());
+		world.abort(1);
 	} catch (...) {
-		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
+		LOG_ERROR(1, "MeraculousCounter threw an error!");
+		world.abort(1);
 	}
-	world.barrier();
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 
 	return 0;
 

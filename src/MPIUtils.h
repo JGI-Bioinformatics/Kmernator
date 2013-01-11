@@ -64,6 +64,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "mpi.h"
 #include "Options.h"
 #include "Log.h"
+#include "Utils.h"
 
 
 
@@ -253,6 +254,8 @@ public:
 
 	ScopedMPIComm(int argc, char *argv[]) {
 		_world = initializeWorldAndOptions(argc, argv);
+		getInstance() = _world;
+		Cleanup::addHandler(abortHandler);
 	}
 	~ScopedMPIComm() {
 		if (Logger::getAbortFlag()) {
@@ -298,6 +301,16 @@ public:
 		return _world->split(color, key);
 	}
 
+	static Comm &getInstance() {
+		static Comm _;
+		return _;
+	}
+	static void abortHandler(int param) {
+		if (param != 0) {
+			LOG_WARN(1, "ScopedMPIComm:: Calling MPI Abort: " << param);
+			getInstance()->abort(param);
+		}
+	}
 protected:
 
 	Comm initializeWorldAndOptions(int argc, char *argv[]) {

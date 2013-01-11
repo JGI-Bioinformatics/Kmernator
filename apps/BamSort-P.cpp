@@ -129,96 +129,107 @@ int main(int argc, char **argv)
 {
 	ScopedMPIComm< BamSortOptions > world(argc, argv);
 
-	int rank = world.rank(), size = world.size();
+	Cleanup::prepare();
 
-	BamVector reads;
-	BamHeaderPtr header;
+	try {
 
-	std::string outputBam = BamSortOptions::getOptions().getOutputBam();
-	OptionsBaseInterface::FileListType inputBams = BamSortOptions::getOptions().getInputBams();
-	int partitions = BamSortOptions::getOptions().getNumPartitions();
+		int rank = world.rank(), size = world.size();
 
-	if (partitions > 1) {
-		if (size != (int) inputBams.size()) {
-			if (rank == 0)
-				std::cerr << "The number of files is a mismatch to the job size.  When merging partitions, this is necessary." << BamSortOptions::getDesc() << std::endl;
-			exit(1);
+		BamVector reads;
+		BamHeaderPtr header;
+
+		std::string outputBam = BamSortOptions::getOptions().getOutputBam();
+		OptionsBaseInterface::FileListType inputBams = BamSortOptions::getOptions().getInputBams();
+		int partitions = BamSortOptions::getOptions().getNumPartitions();
+
+		if (partitions > 1) {
+			if (size != (int) inputBams.size()) {
+				if (rank == 0)
+					std::cerr << "The number of files is a mismatch to the job size.  When merging partitions, this is necessary." << BamSortOptions::getDesc() << std::endl;
+				exit(1);
+			}
+			if (size % partitions != 0) {
+				if (rank == 0)
+					std::cerr << "The partitions " << partitions << " is not a factor of the size " << size << BamSortOptions::getDesc() << std::endl;
+				exit(1);
+			}
 		}
-		if (size % partitions != 0) {
-			if (rank == 0)
-				std::cerr << "The partitions " << partitions << " is not a factor of the size " << size << BamSortOptions::getDesc() << std::endl;
-			exit(1);
-		}
-	}
 
-	unlink(outputBam.c_str());
-
-	LOG_VERBOSE(1, "Reading input files");
-	if (partitions > 1) {
-		std::string myInputFile = inputBams[rank];
-		int color = rank / partitions;
-		mpi::communicator partitionWorld = world.split(color);
-		LOG_VERBOSE(1, "Input: " << myInputFile << " split color: " << color << " rank: " << partitionWorld.rank() << " of " << partitionWorld.size());
-		SamUtils::MPIMergeSam mergeSam(partitionWorld, myInputFile, reads);
-
-		if (color == 0)
-			mergeSam.outputMergedHeader(outputBam);
-
-		world.barrier();
-
-	} else {
-		header = BamStreamUtils::readBamFile(world, inputBams, reads);
-	}
-
-	bool needsCollapse = false;
-	std::string unmappedReadPairFile = BamSortOptions::getOptions().getUnmappedReadPairs();
-	if (!unmappedReadPairFile.empty()) {
-
-		BamVector unmappedReads;
-		SamUtils::splitUnmapped(reads, unmappedReads, true);
-		if (!unmappedReads.empty())
-			needsCollapse = true;
-		LOG_VERBOSE(1, "Purging unmapped read pairs: " << unmappedReads.size());
-		if (unmappedReadPairFile.compare("/dev/null") == 0) {
-			BamManager::destroyOrRecycleBamVector(unmappedReads);
+		unlink(outputBam.c_str());
+	
+		LOG_VERBOSE(1, "Reading input files");
+		if (partitions > 1) {
+			std::string myInputFile = inputBams[rank];
+			int color = rank / partitions;
+			mpi::communicator partitionWorld = world.split(color);
+			LOG_VERBOSE(1, "Input: " << myInputFile << " split color: " << color << " rank: " << partitionWorld.rank() << " of " << partitionWorld.size());
+			SamUtils::MPIMergeSam mergeSam(partitionWorld, myInputFile, reads);
+	
+			if (color == 0)
+				mergeSam.outputMergedHeader(outputBam);
+	
+			world.barrier();
+	
 		} else {
-			SamUtils::writeFastqGz(world, unmappedReads, unmappedReadPairFile, true);
+			header = BamStreamUtils::readBamFile(world, inputBams, reads);
 		}
-		assert(unmappedReads.empty());
-	}
-
-	std::string unmappedReadsFile  = BamSortOptions::getOptions().getUnmappedReads();
-	if (!unmappedReadsFile.empty()) {
-		BamVector unmappedReads;
-		SamUtils::splitUnmapped(reads, unmappedReads, false);
-		if (!unmappedReads.empty())
-			needsCollapse = true;
-		LOG_VERBOSE(1, "Purging unmapped reads: " << unmappedReads.size());
-		if (unmappedReadsFile.compare("/dev/null") == 0) {
-			BamManager::destroyOrRecycleBamVector(unmappedReads);
-		} else {
-			SamUtils::writeFastqGz(world, unmappedReads, unmappedReadsFile, true);
+	
+		bool needsCollapse = false;
+		std::string unmappedReadPairFile = BamSortOptions::getOptions().getUnmappedReadPairs();
+		if (!unmappedReadPairFile.empty()) {
+	
+			BamVector unmappedReads;
+			SamUtils::splitUnmapped(reads, unmappedReads, true);
+			if (!unmappedReads.empty())
+				needsCollapse = true;
+			LOG_VERBOSE(1, "Purging unmapped read pairs: " << unmappedReads.size());
+			if (unmappedReadPairFile.compare("/dev/null") == 0) {
+				BamManager::destroyOrRecycleBamVector(unmappedReads);
+			} else {
+				SamUtils::writeFastqGz(world, unmappedReads, unmappedReadPairFile, true);
+			}
+			assert(unmappedReads.empty());
 		}
-		assert(unmappedReads.empty());
+	
+		std::string unmappedReadsFile  = BamSortOptions::getOptions().getUnmappedReads();
+		if (!unmappedReadsFile.empty()) {
+			BamVector unmappedReads;
+			SamUtils::splitUnmapped(reads, unmappedReads, false);
+			if (!unmappedReads.empty())
+				needsCollapse = true;
+			LOG_VERBOSE(1, "Purging unmapped reads: " << unmappedReads.size());
+			if (unmappedReadsFile.compare("/dev/null") == 0) {
+				BamManager::destroyOrRecycleBamVector(unmappedReads);
+			} else {
+				SamUtils::writeFastqGz(world, unmappedReads, unmappedReadsFile, true);
+			}
+			assert(unmappedReads.empty());
+		}
+	
+		if (needsCollapse) {
+			LOG_DEBUG_OPTIONAL(1, true, "Collapsing read vector");
+			SamUtils::collapseVector(reads);
+		}
+	
+		{
+			LOG_VERBOSE(1, "Redistributing reads before the sort:" << reads.size());
+			BamStreamUtils::distributeReadsFinal(world, reads);
+	
+			LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
+			SamUtils::MPISortBam sortem(world, reads, outputBam, header.get());
+		}
+	
+		header.reset();
+	
+		BamManager::clearRecycledReads();
+		LOG_VERBOSE(1, "Finished");
+	
+		return 0;
+	} catch (std::exception &e) {
+		LOG_ERROR(1, "BamSort-P threw an exception! Aborting...\n\t" << e.what());
+		world.abort(1);
+	} catch (...) {
+		LOG_ERROR(1, "BamSort-P threw an error! Aborting...\n");
+		world.abort(1);
 	}
-
-	if (needsCollapse) {
-		LOG_DEBUG_OPTIONAL(1, true, "Collapsing read vector");
-		SamUtils::collapseVector(reads);
-	}
-
-	{
-		LOG_VERBOSE(1, "Redistributing reads before the sort:" << reads.size());
-		BamStreamUtils::distributeReadsFinal(world, reads);
-
-		LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
-		SamUtils::MPISortBam sortem(world, reads, outputBam, header.get());
-	}
-
-	header.reset();
-
-	BamManager::clearRecycledReads();
-	LOG_VERBOSE(1, "Finished");
-
-	return 0;
 }

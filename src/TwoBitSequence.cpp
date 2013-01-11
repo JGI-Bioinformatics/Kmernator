@@ -53,7 +53,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 TwoBitSequenceBase::_TwoBitEncodingPtr *TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(unsigned long size) {
 	C *counterPtr = (C*) malloc( size+sizeof(C) );
 	if (counterPtr == NULL)
-		throw;
+		throw std::bad_alloc();
 	// construct / initialize count
 	*counterPtr = 0;
 

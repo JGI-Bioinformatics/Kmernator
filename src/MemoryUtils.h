@@ -64,8 +64,6 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <unistd.h>
 #include <fstream>
 
-#include <execinfo.h>
-
 #include <boost/unordered_map.hpp>
 #include <boost/pool/pool.hpp>
 #include <boost/shared_ptr.hpp>
@@ -73,26 +71,6 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 #include "config.h"
 
-class StackTrace {
-public:
-	static std::string getStackTrace() {
-		std::stringstream ss;
-
-		void *array[200];
-		size_t size, i;
-		char **strings;
-
-		size = backtrace(array, 200);
-		strings = backtrace_symbols(array, size);
-
-		for (i = 0; i < size; i++)
-			ss << strings[i] << std::endl;
-
-		free(strings);
-
-		return ss.str();
-	}
-};
 
 class PoolManager {
 public:

@@ -60,6 +60,8 @@ int main(int argc, char *argv[]) {
 	if (argc <= 1)
 		LOG_THROW("Invalid: Please specify one or more input files.\nFasta will be output to STDOUT and quals will be output to STDERR");
 
+	Cleanup::prepare();
+
 	ReadSet reads;
 	for(int i = 1 ; i < argc; i++) {
 		reads.appendAnyFile(std::string(argv[i]));

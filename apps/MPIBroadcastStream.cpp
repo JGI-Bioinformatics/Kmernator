@@ -66,30 +66,39 @@ int main(int argc, char **argv)
 	GeneralOptions::getOptions().getDebug() = 0;
 	ScopedMPIComm<> world(argc, argv);
 
-	int rank,size;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &size);
-	if (argc != 3) {
-		if (rank == 0)
-			std::cerr << "Usage: mpirun MPIBroadcastStream input.file output.file[.rank]\n\tThis will create n copies of the input.file\n\n";
-		MPI_Finalize();
-		exit(1);
+	Cleanup::prepare();
+
+	try {
+		int rank,size;
+		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+		MPI_Comm_size(MPI_COMM_WORLD, &size);
+		if (argc != 3) {
+			if (rank == 0)
+				std::cerr << "Usage: mpirun MPIBroadcastStream input.file output.file[.rank]\n\tThis will create n copies of the input.file\n\n";
+			MPI_Finalize();
+			exit(1);
+		}
+
+		std::ifstream ifs(argv[1]);
+		std::string output(argv[2]);
+		output += "." + boost::lexical_cast<std::string>(rank);
+		LOG_VERBOSE(1, "Copying " << argv[1] << " to " << output);
+		{
+			std::ofstream os(output.c_str());
+			int root = 0;
+			BroadcastOstream bcastos(world, root, os);
+	
+			if (rank == root)
+				boost::iostreams::copy(ifs, bcastos);
+		}
+		LOG_VERBOSE_OPTIONAL(1, true, "Done");
+	} catch (std::exception &e) {
+		LOG_ERROR(1, "MPIBroadcastStream threw an exception! Aborting...\n\t" << e.what());
+		world.abort(1);
+	} catch (...) {
+		LOG_ERROR(1, "MPIBroadcastStream threw an error!");
+		world.abort(1);
 	}
-
-	std::ifstream ifs(argv[1]);
-	std::string output(argv[2]);
-	output += "." + boost::lexical_cast<std::string>(rank);
-	LOG_VERBOSE(1, "Copying " << argv[1] << " to " << output);
-	{
-		std::ofstream os(output.c_str());
-		int root = 0;
-		BroadcastOstream bcastos(world, root, os);
-
-		if (rank == root)
-			boost::iostreams::copy(ifs, bcastos);
-	}
-	LOG_VERBOSE_OPTIONAL(1, true, "Done");
-
 
 	return 0;
 }

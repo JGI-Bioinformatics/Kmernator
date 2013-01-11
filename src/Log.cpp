@@ -54,3 +54,6 @@ Logger Log::verboseOstream = Logger( std::cerr, "INFO", 1 );
 Logger Log::debugOstream = Logger( std::cerr, "DEBUG", 0 );
 Logger Log::warningOstream = Logger( std::cerr, "WARNING", 1 );
 Logger Log::errorOstream = Logger( std::cerr, "ERROR", 1 );
+
+
+char * Logger::reservedBuffer = NULL;

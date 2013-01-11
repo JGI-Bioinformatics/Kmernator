@@ -58,7 +58,6 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <cstring>
 #include <cmath>
 #include <memory>
-#include <csignal>
 #include <sys/wait.h>
 
 #include <sys/types.h>
@@ -1230,19 +1229,36 @@ public:
 	}
 };
 
-
 class Cleanup {
 public:
 	typedef std::set< std::string > FileSet;
 	typedef std::set< pid_t > PidSet;
+	typedef void (*Handler)(int);
+	typedef std::vector< Handler > CleanupHandlers;
 
-	static Cleanup &getInstance() {
-		static Cleanup cleanup;
-		return cleanup;
+	static bool &isFatalInProgress() {
+		static bool _ = false;
+		return _;
+	}
+
+	inline static Cleanup &getInstance() {
+		static Cleanup commonInstance;
+		return commonInstance;
+	}
+	static void prepare() {
+		getInstance();
 	}
 	static void cleanup(int param = 0) {
-		if (param != 0)
+		if (param != 0) {
+
+			if (isFatalInProgress())
+				raise(param);
+			isFatalInProgress() = true;
+			Logger::releaseBuffer();
+
+			std::cerr << "Cleanup::cleanup(): Caught signal: " << param << std::endl;
 			LOG_WARN(1, "Cleanup::cleanup(): Caught signal: " << param);
+		}
 		LOG_DEBUG_OPTIONAL(4, true, "Entered Cleanup::cleanup()");
 		getInstance()._clean(param);
 	}
@@ -1312,6 +1328,9 @@ public:
 		}
 	}
 
+	static void addHandler(Handler handler) {
+		getInstance()._addHandler(handler);
+	}
 protected:
 	typedef std::vector< struct sigaction > SigHandlers;
 	static SigHandlers _initHandlers() {
@@ -1369,18 +1388,10 @@ protected:
 		act.sa_flags = SA_NOCLDSTOP | SA_RESTART;
 		sigaction(sig, &act, keepOld ? &getSigHandle(sig) : NULL);
 	}
-	void _clean(int param) {
-		// save this signals next action, and reset the rest.
-		struct sigaction &oact = getSigHandle(param);
-		if (param != 0 && param != SIGTERM) {
-			LOG_VERBOSE_OPTIONAL(1, true, "Sending SIGTERM to master pid: " << getpid());
-			kill(getpid(), SIGTERM);
-		}
-		sleep(2);
-		_unsetSignals();
-		FileSet _copy;
-
-		std::stringstream ss;
+	static void killChildren(int param) {
+		getInstance()._killChildren(param);
+	}
+	void _killChildren(int param) {
 		if (param != 0) {
 			// kill children with same signal
 			if (!children.empty())
@@ -1391,36 +1402,11 @@ protected:
 			}
 		}
 		children.clear();
-
-		if (!tempFiles.empty())
-			ss << "\tUnlinked: ";
-		_copy = tempFiles;
-		for(FileSet::iterator it = _copy.begin(); it != _copy.end(); it++) {
-			ss << *it << " , ";
-			removeTemp(*it);
-		}
-		tempFiles.clear();
-
-		if (!tempDirs.empty())
-			ss << "rm -rf : ";
-		_copy = tempDirs;
-		for(FileSet::iterator it = _copy.begin(); it != _copy.end(); it++) {
-			ss << *it << " , ";
-			removeTempDir(*it);
-		}
-		tempDirs.clear();
-
-		std::string mesg = ss.str();
-		if (param != 0) {
-			LOG_ERROR(1, "Cleaned up after signal: " << param << "... " << mesg);
-			if ( oact.sa_handler != SIG_ERR && oact.sa_handler != SIG_IGN && oact.sa_handler != NULL ) {
-				LOG_DEBUG_OPTIONAL(2, true, "Now running default signal handler" );
-				(oact.sa_handler)( param );
-			}
-		} else {
-			LOG_DEBUG_OPTIONAL(2, true, "Cleanup: " << mesg);
-		}
-
+	}
+	static void waitChildren(int param) {
+		getInstance()._waitChildren(param);
+	}
+	void _waitChildren(int param) {
 		int waitCount = 0;
 		bool childrenLive = true;
 		while (waitCount++ < 3 && childrenLive) {
@@ -1444,20 +1430,78 @@ protected:
 				}
 			}
 		}
+	}
+	static void removeTempdirs(int param) {
+		getInstance()._removeTempdirs(param);
+	}
+	void _removeTempdirs(int param) {
+		FileSet _copy;
+		if (!tempFiles.empty())
+			ss << "\tUnlinked: ";
+		_copy = tempFiles;
+		for(FileSet::iterator it = _copy.begin(); it != _copy.end(); it++) {
+			ss << *it << " , ";
+			removeTemp(*it);
+		}
+		tempFiles.clear();
+
+		if (!tempDirs.empty())
+			ss << "rm -rf : ";
+		_copy = tempDirs;
+		for(FileSet::iterator it = _copy.begin(); it != _copy.end(); it++) {
+			ss << *it << " , ";
+			removeTempDir(*it);
+		}
+		tempDirs.clear();
+	}
+	void _clean(int param) {
+		// save this signals next action, and reset the rest.
+		struct sigaction &oact = getSigHandle(param);
+		if (param != 0 && param != SIGTERM) {
+			LOG_VERBOSE_OPTIONAL(1, true, "Sending SIGTERM to master pid: " << getpid());
+			kill(getpid(), SIGTERM);
+		}
+		sleep(2);
+		_unsetSignals();
+
+		for(CleanupHandlers::iterator it = cleanupHandlers.begin(); it!= cleanupHandlers.end(); it++)
+			(*it)(param);
+
+		std::string mesg = ss.str();
+		if (param != 0) {
+			LOG_ERROR(1, "Cleaned up after signal: " << param << "... " << mesg);
+			if ( oact.sa_handler != SIG_ERR && oact.sa_handler != SIG_IGN && oact.sa_handler != NULL ) {
+				LOG_DEBUG_OPTIONAL(2, true, "Now running default signal handler" );
+				(oact.sa_handler)( param );
+			}
+		} else {
+			LOG_DEBUG_OPTIONAL(2, true, "Cleanup: " << mesg);
+		}
+
 		if (param != 0) {
 			Logger::getAbortFlag() = true;
-			if (param > 0)
-				LOG_THROW("Terminating because of signal " << param);
+			// reset the default and re-raise the signal to terminate
+			_setSignal(param, SIG_DFL, false);
+			raise(param);
 		}
 	}
 
+	void _addHandler(Handler handler) {
+		cleanupHandlers.push_back( handler );
+	}
 	Cleanup() : tempFiles(), tempDirs(), myPid(0), keepTempDir() {
 		myPid = getpid();
 		_setSignals();
+		_addHandler( Cleanup::killChildren );
+		_addHandler( Cleanup::removeTempdirs );
+		_addHandler( Cleanup::waitChildren );
+
 		setKeepTempDir(	GeneralOptions::getOptions().getKeepTempDir() );
 	}
 
 private:
+	CleanupHandlers cleanupHandlers;
+	std::stringstream ss;
 	FileSet tempFiles;
 	FileSet tempDirs;
 	pid_t myPid;

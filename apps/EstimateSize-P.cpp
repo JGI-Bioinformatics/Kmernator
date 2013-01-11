@@ -145,143 +145,154 @@ int main(int argc, char *argv[]) {
 
 	ScopedMPIComm< MPIEstimateSizeOptions > world(argc, argv);
 
-	MemoryUtils::getMemoryUsage();
-	std::string outputFilename = Options::getOptions().getOutputFile();
+	Cleanup::prepare();
 
-	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
+	try {
 
-	long partitions = MPIEstimateSizeOptions::getOptions().getSamplePartitions();
-	double maxFraction = MPIEstimateSizeOptions::getOptions().getMaxSampleFraction();
-	assert(maxFraction < 1.0);
-	double fraction = 0.0;
-	long totalPartitions = (long) partitions / maxFraction;
+		MemoryUtils::getMemoryUsage();
+		std::string outputFilename = Options::getOptions().getOutputFile();
 
-	unsigned long totalReads = 0;
-	unsigned long totalBases = 0;
-	long numBuckets = 0;
-	KS spectrum(world, numBuckets);
-	for (long iter = 0 ; iter < partitions && fraction < maxFraction; iter++) {
-		fraction += (double) 1. / (double) totalPartitions;
+		OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0,  "Starting iteration " << iter << " at " << fraction*100 << "%");
+		long partitions = MPIEstimateSizeOptions::getOptions().getSamplePartitions();
+		double maxFraction = MPIEstimateSizeOptions::getOptions().getMaxSampleFraction();
+		assert(maxFraction < 1.0);
+		double fraction = 0.0;
+		long totalPartitions = (long) partitions / maxFraction;
 
-		ReadSet reads;
-		reads.appendAllFiles(inputs, world.rank()*totalPartitions + iter, world.size()*totalPartitions);
-		setGlobalReadSetOffsets(world, reads);
-
-		unsigned long counts[3], totalCounts[3];
-		unsigned long &readCount = counts[0] = reads.getSize();
-		unsigned long &baseCount = counts[2] = reads.getBaseCount();
-		LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
-
-		mpi::all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[2] << " distributed bases");
-		totalReads += totalCounts[0];
-		totalBases += totalCounts[2];
-
-		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-
-			if (numBuckets == 0) {
-
-				numBuckets = KS::estimateWeakKmerBucketSize(reads) * partitions / KS::getKmerSubsample();
-
-				numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
-				spectrum = KS(world, numBuckets);
-			}
-
-			spectrum.buildKmerSpectrum(reads);
-			spectrum.trackSpectrum(true);
-			LOG_DEBUG_OPTIONAL(1, true, "SizeTracker: " << spectrum.getSizeTracker().toString());
-
-			if (Log::isDebug(1)) {
-				KS::MPIHistogram h = spectrum._getHistogram(false);
-				std::string hist = h.toString();
-				LOG_DEBUG_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
-			}
-		}
-
-	}
-
-	std::string hist = spectrum.getHistogram(false);
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
-
-	KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
-	std::string reducedSizeTrackerFile = outputFilename;
-	if (reducedSizeTrackerFile.empty()) {
-		reducedSizeTrackerFile = UniqueName::generateUniqueName("tmp-estimateSize");
-	}
-	float errorRate = TrackingData::getErrorRate();
-	LOG_DEBUG_OPTIONAL(1, true, "Kmer error rate: " << errorRate);
-	float commonErrorRate = 0.0;
-	MPI_Reduce(&errorRate, &commonErrorRate, 1, MPI_FLOAT, MPI_SUM, 0, world);
-	commonErrorRate /= (float) world.size();
-	if (world.rank() == 0) {
-		{
-			LOG_VERBOSE_OPTIONAL(1, true, "Writing size tracking file to:" << reducedSizeTrackerFile);
-			LOG_DEBUG_OPTIONAL(1, true, "SizeTracker:\n" << reducedSizeTracker.toString());
-			OfstreamMap ofm(reducedSizeTrackerFile, "");
-			ofm.getOfstream("") << reducedSizeTracker.toString();
-		}
-		std::string basePath = FileUtils::getBasePath(argv[0]);
-		std::stringstream cmdss;
-		cmdss << "Rscript " << basePath << "/EstimateSize.R " << reducedSizeTrackerFile; // << " " << (commonErrorRate*1.25);
-		std::string command = cmdss.str();
-
-		if (!FileUtils::getBasePath("Rscript").empty() || basePath.empty()) {
-
-			LOG_DEBUG_OPTIONAL(1, true, "Executing: " << command);
-			IPipestream ipipe(command);
-			double errorRate = 0.0, genomeSize = 0.0;
-			bool readValues = false;
-			while (ipipe.good() && !ipipe.eof()) {
-				std::string line;
-				getline(ipipe, line);
-				LOG_DEBUG_OPTIONAL(2, true, "Read: " << line);
-				if (line.find("errorRate") != std::string::npos) {
-					LOG_DEBUG_OPTIONAL(2, true, "Found headers in: " << line);
-					readValues = true;
-					continue;
+		unsigned long totalReads = 0;
+		unsigned long totalBases = 0;
+		long numBuckets = 0;
+		KS spectrum(world, numBuckets);
+		for (long iter = 0 ; iter < partitions && fraction < maxFraction; iter++) {
+			fraction += (double) 1. / (double) totalPartitions;
+	
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0,  "Starting iteration " << iter << " at " << fraction*100 << "%");
+	
+			ReadSet reads;
+			reads.appendAllFiles(inputs, world.rank()*totalPartitions + iter, world.size()*totalPartitions);
+			setGlobalReadSetOffsets(world, reads);
+	
+			unsigned long counts[3], totalCounts[3];
+			unsigned long &readCount = counts[0] = reads.getSize();
+			unsigned long &baseCount = counts[2] = reads.getBaseCount();
+			LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
+	
+			mpi::all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[2] << " distributed bases");
+			totalReads += totalCounts[0];
+			totalBases += totalCounts[2];
+	
+			if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
+	
+				if (numBuckets == 0) {
+	
+					numBuckets = KS::estimateWeakKmerBucketSize(reads) * partitions / KS::getKmerSubsample();
+	
+					numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
+	
+					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
+					spectrum = KS(world, numBuckets);
 				}
-				if (readValues) {
-					readValues = false;
-					LOG_DEBUG_OPTIONAL(2, true, "Reading errorRate and GenomeSize from " << line);
-					std::stringstream ss;
-					ss << line;
-					ss >> errorRate;
-					ss >> genomeSize;
+	
+				spectrum.buildKmerSpectrum(reads);
+				spectrum.trackSpectrum(true);
+				LOG_DEBUG_OPTIONAL(1, true, "SizeTracker: " << spectrum.getSizeTracker().toString());
+	
+				if (Log::isDebug(1)) {
+					KS::MPIHistogram h = spectrum._getHistogram(false);
+					std::string hist = h.toString();
+					LOG_DEBUG_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
 				}
 			}
-			LOG_VERBOSE_OPTIONAL(1, true, "Estimated Kmer-quality errorRate: " << commonErrorRate);
-			LOG_VERBOSE_OPTIONAL(1, true, "Distributed readCount: " << totalReads);
-			LOG_VERBOSE_OPTIONAL(1, true, "Estimated fractionRead: " << fraction);
-			LOG_VERBOSE_OPTIONAL(1, true, "Estimated errorRate: " << errorRate);
-			LOG_VERBOSE_OPTIONAL(1, true, "Estimated genomeSize: " << genomeSize);
-
-			ipipe.close();
-
-			double totalRawKmers = reducedSizeTracker.getLastElement().rawKmers / fraction;
-			double estimatedUniqueKmers = totalRawKmers * errorRate + genomeSize;
-			LOG_VERBOSE_OPTIONAL(1, true, "Estimated totalRawKmers: " << totalRawKmers);
-			LOG_VERBOSE_OPTIONAL(1, true, "Estimated totalUniqueKmers: " << estimatedUniqueKmers);
-			if (reducedSizeTrackerFile.compare(outputFilename) != 0) {
-				LOG_DEBUG_OPTIONAL(1, true, "Removing temporary size tracking file: " << reducedSizeTrackerFile);
-				unlink(reducedSizeTrackerFile.c_str());
-			}
-		} else {
-			LOG_ERROR(1, "Could not find Rscript or EstimateSize.R.  To get the coefficients, please run '" << command << "'");
+	
 		}
+	
+		std::string hist = spectrum.getHistogram(false);
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
+	
+		KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
+		std::string reducedSizeTrackerFile = outputFilename;
+		if (reducedSizeTrackerFile.empty()) {
+			reducedSizeTrackerFile = UniqueName::generateUniqueName("tmp-estimateSize");
+		}
+		float errorRate = TrackingData::getErrorRate();
+		LOG_DEBUG_OPTIONAL(1, true, "Kmer error rate: " << errorRate);
+		float commonErrorRate = 0.0;
+		MPI_Reduce(&errorRate, &commonErrorRate, 1, MPI_FLOAT, MPI_SUM, 0, world);
+		commonErrorRate /= (float) world.size();
+		if (world.rank() == 0) {
+			{
+				LOG_VERBOSE_OPTIONAL(1, true, "Writing size tracking file to:" << reducedSizeTrackerFile);
+				LOG_DEBUG_OPTIONAL(1, true, "SizeTracker:\n" << reducedSizeTracker.toString());
+				OfstreamMap ofm(reducedSizeTrackerFile, "");
+				ofm.getOfstream("") << reducedSizeTracker.toString();
+			}
+			std::string basePath = FileUtils::getBasePath(argv[0]);
+			std::stringstream cmdss;
+			cmdss << "Rscript " << basePath << "/EstimateSize.R " << reducedSizeTrackerFile; // << " " << (commonErrorRate*1.25);
+			std::string command = cmdss.str();
+	
+			if (!FileUtils::getBasePath("Rscript").empty() || basePath.empty()) {
+	
+				LOG_DEBUG_OPTIONAL(1, true, "Executing: " << command);
+				IPipestream ipipe(command);
+				double errorRate = 0.0, genomeSize = 0.0;
+				bool readValues = false;
+				while (ipipe.good() && !ipipe.eof()) {
+					std::string line;
+					getline(ipipe, line);
+					LOG_DEBUG_OPTIONAL(2, true, "Read: " << line);
+					if (line.find("errorRate") != std::string::npos) {
+						LOG_DEBUG_OPTIONAL(2, true, "Found headers in: " << line);
+						readValues = true;
+						continue;
+					}
+					if (readValues) {
+						readValues = false;
+						LOG_DEBUG_OPTIONAL(2, true, "Reading errorRate and GenomeSize from " << line);
+						std::stringstream ss;
+						ss << line;
+						ss >> errorRate;
+						ss >> genomeSize;
+					}
+				}
+				LOG_VERBOSE_OPTIONAL(1, true, "Estimated Kmer-quality errorRate: " << commonErrorRate);
+				LOG_VERBOSE_OPTIONAL(1, true, "Distributed readCount: " << totalReads);
+				LOG_VERBOSE_OPTIONAL(1, true, "Estimated fractionRead: " << fraction);
+				LOG_VERBOSE_OPTIONAL(1, true, "Estimated errorRate: " << errorRate);
+				LOG_VERBOSE_OPTIONAL(1, true, "Estimated genomeSize: " << genomeSize);
+	
+				ipipe.close();
+	
+				double totalRawKmers = reducedSizeTracker.getLastElement().rawKmers / fraction;
+				double estimatedUniqueKmers = totalRawKmers * errorRate + genomeSize;
+				LOG_VERBOSE_OPTIONAL(1, true, "Estimated totalRawKmers: " << totalRawKmers);
+				LOG_VERBOSE_OPTIONAL(1, true, "Estimated totalUniqueKmers: " << estimatedUniqueKmers);
+				if (reducedSizeTrackerFile.compare(outputFilename) != 0) {
+					LOG_DEBUG_OPTIONAL(1, true, "Removing temporary size tracking file: " << reducedSizeTrackerFile);
+					unlink(reducedSizeTrackerFile.c_str());
+				}
+			} else {
+				LOG_ERROR(1, "Could not find Rscript or EstimateSize.R.  To get the coefficients, please run '" << command << "'");
+			}
+		}
+	
+		LOG_DEBUG(2, "Clearing spectrum");
+		spectrum.reset();
+		LOG_DEBUG(1, "Finished, waiting for rest of collective");
+	
+		world.barrier();
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
+	} catch (std::exception &e) {
+		LOG_ERROR(1, "EstimateSize-P threw an exception!\n\t" << e.what());
+		world.abort(1);
+	} catch (...) {
+		LOG_ERROR(1, "EstimateSize-P threw an error!\n\t");
+		world.abort(1);
 	}
-
-	LOG_DEBUG(2, "Clearing spectrum");
-	spectrum.reset();
-	LOG_DEBUG(1, "Finished, waiting for rest of collective");
-
-	world.barrier();
-	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
-
+	
 	return 0;
 }
 

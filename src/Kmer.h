@@ -843,10 +843,8 @@ public:
 
 			newBegin = std::malloc(newCapacity * getElementByteSize());
 			if (newBegin == NULL) {
-				LOG_ERROR(0, "Attempt to malloc " << newCapacity
+				LOG_THROW("RuntimeError: Could not allocate memory in KmerArray _setMemory(): Attempt to malloc " << newCapacity
 						* getElementByteSize() << " (" << newCapacity << " elements)");
-				LOG_THROW(
-						"RuntimeError: Could not allocate memory in KmerArray _setMemory()");
 			}
 
 			memChanged = true;

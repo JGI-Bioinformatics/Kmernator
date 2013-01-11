@@ -502,6 +502,8 @@ int main(int argc, char *argv[]) {
 
 	ScopedMPIComm< SSOptions > world(argc, argv);
 
+	Cleanup::prepare();
+
 	SSOptions::getOptions().setFileDimensions(world);
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 

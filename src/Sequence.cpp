@@ -230,23 +230,22 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 	bool needMalloc = buffSize > MAX_STACK_SIZE;
 	TwoBitEncoding _stackBuffer[ needMalloc ? 0 : buffSize ];
 	TwoBitEncoding *buffer = _stackBuffer;
-	if (needMalloc) {
-		buffer = new TwoBitEncoding[ buffSize ];
-	}
-
-	if (buffer == NULL)
-		LOG_THROW(
-				"RuntimeError: Could not allocate buffer memory in Sequence::setSequence");
-
-	BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(fasta, buffer);
-	long totalMarkupSize = 0;
-	MarkupElementSizeType markupSizes = TwoBitSequence::getMarkupElementSize(markupBases, totalMarkupSize);
-	if (totalMarkupSize == 0 && markupBases.size() != 0) {
-		// markups exist, but totalMarkupSize will not be stored.
-		// signal for discarded record
-		setFlag(DISCARDED);
-	}
 	try {
+		if (needMalloc) {
+			buffer = new TwoBitEncoding[ buffSize ];
+		}
+
+		if (buffer == NULL)
+			throw std::bad_alloc();
+
+		BaseLocationVectorType markupBases = TwoBitSequence::compressSequence(fasta, buffer);
+		long totalMarkupSize = 0;
+		MarkupElementSizeType markupSizes = TwoBitSequence::getMarkupElementSize(markupBases, totalMarkupSize);
+		if (totalMarkupSize == 0 && markupBases.size() != 0) {
+			// markups exist, but totalMarkupSize will not be stored.
+			// signal for discarded record
+			setFlag(DISCARDED);
+		}
 		unsigned int size =
 				sizeof(SequenceLengthType)
 				+ buffSize
@@ -258,20 +257,22 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 		} else {
 			_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
 		}
-	} catch (...) {
-		LOG_THROW(
-				"RuntimeError: Cannot allocate memory in Sequence::setSequence()");
+		*_getLength() = length;
+		memcpy(_getTwoBitSequence(), buffer, buffSize);
+
+		// free the buffer
+		if (needMalloc)
+			delete [] buffer;
+
+		if (totalMarkupSize > 0)
+			setMarkups(markupSizes, markupBases);
+
+	} catch (std::bad_alloc &e) {
+		LOG_THROW("RuntimeError: Cannot allocate memory in Sequence::setSequence() of " << buffSize << ": " << e.what());
+	} catch (std::exception &e) {
+		LOG_THROW("RuntimeError: Could not set the sequence Sequence::setSequence() of " << buffSize << ": " << e.what());
 	}
 
-	*_getLength() = length;
-	memcpy(_getTwoBitSequence(), buffer, buffSize);
-
-	// free the buffer
-	if (needMalloc)
-		delete [] buffer;
-
-	if (totalMarkupSize > 0)
-		setMarkups(markupSizes, markupBases);
 
 }
 

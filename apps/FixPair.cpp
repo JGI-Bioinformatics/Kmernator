@@ -81,6 +81,8 @@ typedef OptionsBaseTemplate< _FixPair > FixPair;
 int main(int argc, char *argv[]) {
 	FixPair::parseOpts(argc, argv);
 
+	Cleanup::prepare();
+
 	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 	std::string outputFilename = Options::getOptions().getOutputFile();
 	if (outputFilename.empty())

@@ -269,6 +269,8 @@ int main(int argc, char *argv[]) {
 
 	ScopedMPIComm< DistributedNucleatingAssemblerOptions > world(argc, argv);
 
+	Cleanup::prepare();
+
 	try {
 
 		double timing1, timing2;
@@ -398,6 +400,12 @@ int main(int argc, char *argv[]) {
 				contigs = changedContigs;
 			}
 
+			if (world.rank() == 0) {
+				// preserve the final contigs in case of crash
+				unlink(Options::getOptions().getOutputFile().c_str());
+				link(finalContigFile.c_str(), Options::getOptions().getOutputFile().c_str());
+			}
+
 			matcher->recordTime("writeFinalTime", MPI_Wtime());
 
 			if (!Log::isDebug(1) && world.rank() == 0) {
@@ -436,22 +444,26 @@ int main(int argc, char *argv[]) {
 
 		// write final contigs (and any unfinished contigs still remaining)
 		finalContigs.append(contigs);
-		std::string tmpFinalFile = DistributedOfstreamMap::writeGlobalReadSet(world, finalContigs, Options::getOptions().getOutputFile(), "", FormatOutput::Fasta());
+		std::string tmpFinalFile = DistributedOfstreamMap::writeGlobalReadSet(world, finalContigs, Options::getOptions().getOutputFile(), ".tmp", FormatOutput::Fasta());
 		if (world.rank() == 0 && !finalContigFile.empty()) {
 			LOG_DEBUG_OPTIONAL(1, true, "Removing " << finalContigFile);
 			unlink(finalContigFile.c_str());
 		}
 		finalContigFile = tmpFinalFile;
-
+		if (world.rank() == 0) {
+			unlink(Options::getOptions().getOutputFile().c_str());
+			rename(finalContigFile.c_str(), Options::getOptions().getOutputFile().c_str());
+		}
+		finalContigFile = Options::getOptions().getOutputFile();
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Final contigs are in: " << finalContigFile);
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 
-	} catch (std::exception e) {
-		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace() << e.what());
+	} catch (std::exception &e) {
+		LOG_ERROR(1, "DistributedNucleatingAssembler threw an exception! Aborting..." << e.what());
 		world.abort(1);
 	} catch (...) {
-		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
+		LOG_ERROR(1, "DistributedNucleatingAssembler threw an error!" );
 		world.abort(1);
 	}
 

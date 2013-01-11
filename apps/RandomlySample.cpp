@@ -306,6 +306,8 @@ long pickBySeeks(ReadFileReader &rfr, unsigned long numSamples, unsigned long mi
 int main(int argc, char *argv[]) {
 	RSOptions::parseOpts(argc, argv);
 
+	Cleanup::prepare();
+
 	std::srand(static_cast<unsigned>(std::time(0)));
 	OptionsBaseInterface::FileListType inputs = Options::getOptions().getInputFiles();
 	std::string file = inputs[0];
@@ -329,6 +331,5 @@ int main(int argc, char *argv[]) {
 		LOG_WARN(1, "Could not select all samples. " << count << " selected.");
 	}
 	LOG_DEBUG(1, "wrote " << count);
-
 
 }

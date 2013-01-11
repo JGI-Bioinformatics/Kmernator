@@ -470,7 +470,7 @@ public:
 
 			char *sendBuf = (char*) (malloc(totalSend == 0 ? 8 : totalSend));
 			if (sendBuf == NULL)
-				LOG_THROW("Could not allocate totalSend bytes! " << totalSend);
+				LOG_THROW("MatcherInterface::exchangeGlobalReads(): Could not allocate totalSend bytes! " << totalSend);
 
 			char *tmp = sendBuf;
 			for (ReadSet::ReadSetSizeType globalContigIdx = 0; globalContigIdx < globalSize; globalContigIdx++) {

@@ -75,6 +75,8 @@ int main(int argc, char *argv[]) {
 
 	FilterReadsOptions::parseOpts(argc, argv);
 
+	Cleanup::prepare();
+
 	MemoryUtils::getMemoryUsage();
 	std::string outputFilename = Options::getOptions().getOutputFile();
 
@@ -191,10 +193,13 @@ int main(int argc, char *argv[]) {
 		LOG_DEBUG(1, "Clearing spectrum");
 		spectrum.reset();
 
+	} catch (std::exception &e) {
+		LOG_ERROR(1, "FilterReads threw an exception!\n\t" << e.what());
+		return 1;
 	} catch (...) {
-		LOG_ERROR(1, "caught an error!" << StackTrace::getStackTrace());
+		LOG_ERROR(1, "FilterReads threw an error!");
+		return 1;
 	}
-
 
 	LOG_VERBOSE(1, "Finished");
 
