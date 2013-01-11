@@ -438,6 +438,8 @@ public:
 int main(int argc, char *argv[]) {
 	TnfDistanceOptions::parseOpts(argc, argv);
 
+	Cleanup::prepare();
+
 	ReadSet refs;
 	ReadSet reads;
 	KmerSizer::set(4);
