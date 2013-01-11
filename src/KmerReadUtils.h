@@ -60,7 +60,7 @@ private:
 	KmerWeightedExtensions kmers;
 public:
 	KmerReadUtils() {
-		LOG_DEBUG_OPTIONAL(1, true, "KmerReadUtils()" << &kmers);
+		LOG_DEBUG_OPTIONAL(2, true, "KmerReadUtils()" << &kmers);
 	}
 	~KmerReadUtils() {}
 	KmerWeightedExtensions &buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
