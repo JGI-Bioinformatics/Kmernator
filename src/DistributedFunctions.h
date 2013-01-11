@@ -339,6 +339,10 @@ public:
 				for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
 				{
 
+					if (loopThreadId == 0 && progressCount++ % progressMark == 0) {
+						LOG_VERBOSE_OPTIONAL(1, (progressCount-1) % world.size() == world.rank(), "distributed processing " << (readIdx * world.size()) << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
+					}
+
 					const Read &read = store.getRead( readIdx );
 
 					if (read.isDiscarded())
@@ -368,10 +372,6 @@ public:
 								msgBuffers->bufferMessage(rankDest, numThreads == loopNumThreads ? threadDest : threadDest+1)->set(globalReadIdx, readPos, v, kmers[readPos]);
 							}
 						}
-					}
-
-					if (loopThreadId == 0 &&  progressCount++ % progressMark == 0) {
-						LOG_VERBOSE_OPTIONAL(1, (progressCount-1) % world.size() == world.rank(), "distributed processing " << (readIdx * world.size()) << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
 					}
 				}
 			}
