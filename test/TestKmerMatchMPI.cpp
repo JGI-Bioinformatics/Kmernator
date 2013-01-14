@@ -192,12 +192,12 @@ int main(int argc, char **argv)
 	reads.identifyPairs();
 	greads.appendAnyFile("10.fastq", "", world.rank(), world.size());
 	greads.identifyPairs();
-	setGlobalReadSetOffsets(world, greads);
+	setGlobalReadSetConstants(world, greads);
 	reads2.appendAnyFile("1000.fastq");
 	reads2.identifyPairs();
 	greads2.appendAnyFile("1000.fastq", "", world.rank(), world.size());
 	greads2.identifyPairs();
-	setGlobalReadSetOffsets(world, greads2);
+	setGlobalReadSetConstants(world, greads2);
 
 
 	bool passed = true;

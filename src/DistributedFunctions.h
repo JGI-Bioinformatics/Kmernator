@@ -69,7 +69,16 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 
 // collective
-void setGlobalReadSetOffsets(mpi::communicator &world, ReadSet &store) {
+void setGlobalReadSetConstants(mpi::communicator &world, ReadSet &store) {
+	unsigned long counts[3], totalCounts[3];
+	unsigned long &readCount = counts[0] = store.getSize();
+	unsigned long &numPairs  = counts[1] = store.identifyPairs();
+	unsigned long &baseCount = counts[2] = store.getBaseCount();
+	LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases. Pairs + single = " << numPairs);
+
+	mpi::all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
+
 	// share ReadSet sizes for globally unique readIdx calculations
 	ReadSet::ReadSetSizeType readSetSize = store.getSize();
 	ReadSet::ReadSetSizeType readSetSizesInput[world.size()], readSetSizesOutput[world.size()];
@@ -81,6 +90,11 @@ void setGlobalReadSetOffsets(mpi::communicator &world, ReadSet &store) {
 	ReadSet::ReadIdxVector readSizes(readSetSizesOutput, readSetSizesOutput + world.size());
 	store.setGlobalOffsets(world.rank(), readSizes);
 	LOG_DEBUG(2, "globalOffset: " << store.getGlobalOffset(world.rank()) << " of " << store.getGlobalSize());
+
+	uint8_t minFastqStart = Read::FASTQ_START_CHAR;
+	mpi::all_reduce(world, &Read::FASTQ_START_CHAR, 1, &minFastqStart, mpi::minimum<uint8_t>());
+	if (Read::FASTQ_START_CHAR != minFastqStart)
+		store.setFastqStart(minFastqStart);
 }
 
 

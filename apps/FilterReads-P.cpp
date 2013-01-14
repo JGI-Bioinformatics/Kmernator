@@ -109,17 +109,7 @@ int main(int argc, char *argv[]) {
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Identifying Pairs: ");
 
-		unsigned long counts[3], totalCounts[3];
-		unsigned long &readCount = counts[0] = reads.getSize();
-		unsigned long &numPairs  = counts[1] = reads.identifyPairs();
-		unsigned long &baseCount = counts[2] = reads.getBaseCount();
-		LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases ");
-		LOG_VERBOSE(2, "Pairs + single = " << numPairs);
-
-		mpi::all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
-
-		setGlobalReadSetOffsets(world, reads);
+		setGlobalReadSetConstants(world, reads);
 
 		if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
 

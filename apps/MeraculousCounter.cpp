@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
 
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-		setGlobalReadSetOffsets(world, reads);
+		setGlobalReadSetConstants(world, reads);
 		long numBuckets = 0;
 		numBuckets = KS::estimateWeakKmerBucketSize(reads);
 

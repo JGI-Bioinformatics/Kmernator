@@ -164,15 +164,22 @@ private:
 		return false;
 	}
 	inline void _setFastqStart(const Read &read) {
-		if (getSize() < 20000 && read.hasQuals() && Read::FASTQ_START_CHAR != Kmernator::FASTQ_START_CHAR_STD && omp_get_thread_num() == 0) {
+		if (getSize() < 40000 && read.hasQuals() && Read::FASTQ_START_CHAR != Kmernator::FASTQ_START_CHAR_STD) {
 			std::string quals = read.getQuals();
 			std::string::iterator it = std::min_element(quals.begin(), quals.end());
 			if (it != quals.end() && *it < Read::FASTQ_START_CHAR) {
 				if (getSize() > 10000) {
 					Log::Warn() << "detected standard fastq only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
 				}
-				Read::setMinQualityScore(Options::getOptions().getMinQuality(), Kmernator::FASTQ_START_CHAR_STD);
+				__setFastqStart(Kmernator::FASTQ_START_CHAR_STD);
 			}
+		}
+	}
+	void __setFastqStart(int startChar) {
+#pragma omp critical (_setFastqStart)
+		{
+			if (Read::FASTQ_START_CHAR != startChar)
+				Read::setMinQualityScore(Options::getOptions().getMinQuality(), startChar);
 		}
 	}
 
@@ -186,6 +193,7 @@ private:
 public:
 	ReadSet() :
 		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0) {
+		setFastqStart(GeneralOptions::getOptions().getFastqBaseQuality());
 	}
 	ReadSet(const ReadSet &copy)  :
 		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0) {
@@ -229,7 +237,9 @@ public:
 		previousReadName = copy.previousReadName;
 		return *this;
 	}
-
+	void setFastqStart(char fastqStartChar) {
+		__setFastqStart(fastqStartChar);
+	}
 	long getStoreSize() const {
 		// just store numReads, baseCount, maxSeqLength, readSizeCounts & readData
 		if (getSize() == 0)

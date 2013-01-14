@@ -291,7 +291,7 @@ int main(int argc, char *argv[]) {
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files" );
 		reads.appendAllFiles(inputFiles, world.rank(), world.size());
 		reads.identifyPairs();
-		setGlobalReadSetOffsets(world, reads);
+		setGlobalReadSetConstants(world, reads);
 
 		timing2 = MPI_Wtime();
 
@@ -342,7 +342,7 @@ int main(int argc, char *argv[]) {
 
 			matcher->resetTimes("Start Iteration", MPI_Wtime());
 
-			setGlobalReadSetOffsets(world, contigs);
+			setGlobalReadSetConstants(world, contigs);
 
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Contig File: " << contigFile << ". contains " << contigs.getGlobalSize() << " Reads");
 			if (contigs.getGlobalSize() == 0) {
@@ -372,8 +372,8 @@ int main(int argc, char *argv[]) {
 			finishLongContigs(DistributedNucleatingAssemblerOptions::getOptions().getMaxContigLength(), changedContigs, finalContigs);
 
 			LOG_DEBUG(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
-			setGlobalReadSetOffsets(world, changedContigs);
-			setGlobalReadSetOffsets(world, finalContigs);
+			setGlobalReadSetConstants(world, changedContigs);
+			setGlobalReadSetConstants(world, finalContigs);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Changed contigs: " << changedContigs.getGlobalSize() << " finalContigs: " << finalContigs.getGlobalSize());
 
 			std::string oldFinalContigFile = finalContigFile;

@@ -96,7 +96,7 @@ public:
 
 public:
 	Extension() : _base(MAX_EXTENSIONS), _quality(0) {}
-	Extension(char c, int quality) : _base(MAX_EXTENSIONS), _quality((unsigned char) quality) {
+	Extension(char c, unsigned int quality) : _base(MAX_EXTENSIONS), _quality((unsigned char) quality) {
 		switch(c) {
 		case 'A' : case 'a' : _base = A; break;
 		case 'C' : case 'c' : _base = C; break;
@@ -109,7 +109,7 @@ public:
 		if (quality > 255 || quality < 0)
 			LOG_THROW("Invalid Extension quality: " << quality << " type: " << _base << " " << c);
 	}
-	Extension(ExtensionType e, int quality) : _base(e), _quality((unsigned char) quality) {
+	Extension(ExtensionType e, unsigned int quality) : _base(e), _quality((unsigned char) quality) {
 		if (quality > 255 || quality < 0)
 			LOG_THROW("Invalid Extension quality: " << quality << " type: " << _base);
 	}

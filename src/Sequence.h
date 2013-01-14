@@ -63,9 +63,9 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 class Sequence {
 public:
-	static const char REF_QUAL = Kmernator::REF_QUAL;
-	static const char PRINT_REF_QUAL = Kmernator::PRINT_REF_QUAL;
-	static char FASTQ_START_CHAR;
+	static const boost::uint8_t REF_QUAL = Kmernator::REF_QUAL;
+	static const boost::uint8_t PRINT_REF_QUAL = Kmernator::PRINT_REF_QUAL;
+	static boost::uint8_t FASTQ_START_CHAR;
 
 public:
 	typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
@@ -407,7 +407,7 @@ private:
 
 	static int qualityToProbabilityInitialized;
 	static int
-	initializeQualityToProbability(unsigned char minQualityScore = 0, char startChar = Kmernator::FASTQ_START_CHAR_ILLUMINA);
+	initializeQualityToProbability(unsigned char minQualityScore = 0, unsigned int startChar = Kmernator::FASTQ_START_CHAR_DEFAULT);
 
 public:
 
@@ -466,7 +466,7 @@ public:
 	double scoreProbabilityBases(const ProbabilityBases &probs) const;
 
 	static double qualityToProbability[256];
-	static void setMinQualityScore(unsigned char minQualityScore, char startChar = Kmernator::FASTQ_START_CHAR_ILLUMINA);
+	static void setMinQualityScore(unsigned char minQualityScore, unsigned char startChar = GeneralOptions::getOptions().getFastqBaseQuality());
 
 	// format == 0 fastq
 	// format == 1 fasta

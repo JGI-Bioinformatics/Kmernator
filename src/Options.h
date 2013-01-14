@@ -317,7 +317,7 @@ class _GeneralOptions : public OptionsBaseInterface {
 public:
 	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), keepTempDir(),
 	formatOutput(0), keepReadComment(GlobalOptions::isCommentStored()), buildOutputInMemory(false),
-	minQuality(3),  ignoreQual(false), mmapInput(true), gatheredLogs(true),
+	minQuality(3),  fastqBaseQuality(Kmernator::FASTQ_START_CHAR_ILLUMINA), ignoreQual(false), mmapInput(true), gatheredLogs(true),
 	batchSize(100000)
 	{
 		char *tmpPath;
@@ -345,7 +345,7 @@ private:
 	unsigned int formatOutput;
 	bool         keepReadComment;
 	bool         buildOutputInMemory;
-	unsigned int minQuality;
+	unsigned int minQuality, fastqBaseQuality;
 	bool ignoreQual;
 	bool mmapInput;
 	bool gatheredLogs;
@@ -390,6 +390,8 @@ public:
 				("input-file", po::value<FileListType>(), "input file(s)")
 
 				("mmap-input", po::value<bool>()->default_value(mmapInput), "If false, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
+
+				("fastq-base-quality", po::value<unsigned int>()->default_value(fastqBaseQuality), "The base (Phred 64 or Phred 33) of the quality fields of fastq.  Illumina 1.3-1.5 is 64, the standard is 33")
 
 				("ignore-quality", po::value<bool>()->default_value(ignoreQual), "ignore the quality score, to save memory or if they are untrusted")
 
@@ -471,6 +473,12 @@ public:
 			GlobalOptions::isCommentStored() = getKeepReadComment();
 
 			setOpt("build-output-in-memory", getBuildOutputInMemory(), print);
+
+			setOpt("fastq-base-quality", getFastqBaseQuality(), print);
+			if (getFastqBaseQuality() != 64 && getFastqBaseQuality() != 33) {
+				setOptionsErrorMsg("Invalid fastq-base-quality.  It must be 64 or 33: " + boost::lexical_cast<std::string>(getFastqBaseQuality()));
+				ret = false;
+			}
 
 			// set minimum quality score
 			setOpt("min-quality-score", getMinQuality(), print);
@@ -596,6 +604,11 @@ public:
 	unsigned int &getMinQuality()
 	{
 		return minQuality;
+	}
+
+	unsigned int &getFastqBaseQuality()
+	{
+		return fastqBaseQuality;
 	}
 
 	bool &getMmapInput()

@@ -113,7 +113,7 @@ public:
 
 			SequenceLengthType rightBase = i + kmerLen;
 			if (rightBase < fasta.length())
-				right = Extension(fasta[rightBase], quals[rightBase] - Read::FASTQ_START_CHAR);
+				right = Extension(fasta[rightBase], ((unsigned char) quals[rightBase]) - Read::FASTQ_START_CHAR);
 			else
 				right = Extension('X', ExtensionTracking::getMinQuality());
 
@@ -123,7 +123,7 @@ public:
 			else // kmer is reverse complement, so reverse extensions
 				kmers.valueAt(i).setExtensions(right.getReverseComplement(), left.getReverseComplement());
 
-			left = Extension(fasta[i], quals[i] - Read::FASTQ_START_CHAR);
+			left = Extension(fasta[i], ((unsigned char) quals[i]) - Read::FASTQ_START_CHAR);
 		}
 		if (Log::isDebug(5)) {
 			ostream &debug = Log::Debug() << "KmerWeights: idx valueAt toFasta" << std::endl;;

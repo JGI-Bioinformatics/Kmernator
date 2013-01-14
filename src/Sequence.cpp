@@ -60,7 +60,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 using namespace std;
 
 /*----------------------------- SEQUENCE -------------------------------------------*/
-char Sequence::FASTQ_START_CHAR = Kmernator::FASTQ_START_CHAR_ILLUMINA;
+boost::uint8_t Sequence::FASTQ_START_CHAR = Kmernator::FASTQ_START_CHAR_DEFAULT;
 
 // thread safe caches
 Sequence::CachedSequencesVector Sequence::threadCacheSequences(omp_get_max_threads(), Sequence::CachedSequences(Sequence::maxCachePerThread));
@@ -690,11 +690,11 @@ Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
 double Read::qualityToProbability[256];
 const char * Read::LABEL_SEP = "\t";
 
-int Read::initializeQualityToProbability(unsigned char minQualityScore, char startChar) {
+int Read::initializeQualityToProbability(unsigned char minQualityScore, unsigned int startChar) {
 #pragma omp critical (FastqStartChar)
 	{
 		if (startChar != FASTQ_START_CHAR) {
-			LOG_DEBUG_OPTIONAL(1, true, "Switching quality scale for FASTQ (std vs Illumina) to " << (int) startChar);
+			LOG_VERBOSE_OPTIONAL(1, true, "Switching quality scale for FASTQ (std vs Illumina) to " << (int) startChar);
 		}
 		FASTQ_START_CHAR = startChar;
 		for (int i = 0; i < 256; i++) {
@@ -709,9 +709,11 @@ int Read::initializeQualityToProbability(unsigned char minQualityScore, char sta
 	return 1;
 }
 int Read::qualityToProbabilityInitialized =
-		Read::initializeQualityToProbability(0, Kmernator::FASTQ_START_CHAR_ILLUMINA);
+		Read::initializeQualityToProbability(0, Kmernator::FASTQ_START_CHAR_DEFAULT);
 
-void Read::setMinQualityScore(unsigned char minQualityScore, char startChar) {
+void Read::setMinQualityScore(unsigned char minQualityScore, unsigned char startChar) {
+	if (GeneralOptions::getOptions().getFastqBaseQuality() != startChar)
+		GeneralOptions::getOptions().getFastqBaseQuality() = startChar;
 	Read::initializeQualityToProbability(minQualityScore, startChar);
 }
 

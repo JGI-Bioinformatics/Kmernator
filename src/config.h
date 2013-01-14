@@ -130,10 +130,11 @@ const int OMP_MAX_THREADS_DEFAULT = omp_get_max_threads();
 
 namespace Kmernator {
 typedef const char * RecordPtr;
-static const char REF_QUAL = 126;
-static const char FASTQ_START_CHAR_ILLUMINA = 64;
-static const char FASTQ_START_CHAR_STD = 33;
-static const char PRINT_REF_QUAL = REF_QUAL;
+static const boost::uint8_t REF_QUAL = 255;
+static const boost::uint8_t FASTQ_START_CHAR_ILLUMINA = 64;
+static const boost::uint8_t FASTQ_START_CHAR_STD = 33;
+static const boost::uint8_t FASTQ_START_CHAR_DEFAULT = FASTQ_START_CHAR_ILLUMINA;
+static const boost::uint8_t PRINT_REF_QUAL = REF_QUAL;
 
 typedef boost::uint8_t  UI8;
 typedef boost::uint16_t UI16;
