@@ -61,13 +61,16 @@ do
 done
 
 MPI=""
+MPI_OPTS=""
 
 if mpirun /bin/true
 then
-  MPI="mpirun -np"
+  MPI="mpirun"
+  MPI_OPTS="-np"
 elif aprun -n 1 /bin/true
 then
-  MPI="aprun -n"
+  MPI="aprun"
+  MPI_OPTS="-n"
 fi
 
 if [ -n "$MPI" ]
@@ -79,18 +82,18 @@ then
       break
     fi
     export OMP_NUM_THREADS=$(((procs+mpi-1)/mpi))
-    check $MPI $mpi $FRP --min-read-length 25 --thread 1
+    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --thread 1
     rm -f $TMP*
-    check $MPI $mpi $FRP --min-read-length 25
+    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25
     rm -f $TMP*
-    check $MPI $mpi $FRP --min-read-length 25 --thread 1 --save-kmer-mmap 1
+    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --thread 1 --save-kmer-mmap 1
     mv $TMP-mmap $TMP-mmap-saved
-    check $MPI $mpi $FRP --min-read-length 25 --thread 1 --load-kmer-mmap $TMP-mmap-saved
+    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --thread 1 --load-kmer-mmap $TMP-mmap-saved
     check $FR --min-read-length 25 --load-kmer-mmap $TMP-mmap-saved
     rm -f $TMP*
     check $FR --min-read-length 25 --save-kmer-mmap 1 
     mv $TMP-mmap $TMP-mmap-saved
-    check $MPI $mpi $FRP --min-read-length 25 --load-kmer-mmap $TMP-mmap-saved
+    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --load-kmer-mmap $TMP-mmap-saved
     rm -f $TMP*
   done
 fi
