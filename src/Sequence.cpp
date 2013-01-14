@@ -970,7 +970,7 @@ string Read::getQuals(SequenceLengthType trimOffset, SequenceLengthType trimLeng
 			trimLength = len - trimOffset;
 
 		if (trimLength > 1) {
-			if ( (!hasQuals()) || quals[0] == REF_QUAL) {
+			if ( (!hasQuals()) || ((uint8_t) quals[0]) == REF_QUAL) {
 				if (forPrinting)
 					return string(trimLength, PRINT_REF_QUAL);
 				else

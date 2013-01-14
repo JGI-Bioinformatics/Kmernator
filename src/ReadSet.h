@@ -165,9 +165,10 @@ private:
 	}
 	inline void _setFastqStart(const Read &read) {
 		if (getSize() < 40000 && read.hasQuals() && Read::FASTQ_START_CHAR != Kmernator::FASTQ_START_CHAR_STD) {
-			std::string quals = read.getQuals();
-			std::string::iterator it = std::min_element(quals.begin(), quals.end());
-			if (it != quals.end() && *it < Read::FASTQ_START_CHAR) {
+			std::string _quals = read.getQuals();
+			const uint8_t* quals = (const uint8_t*) _quals.c_str();
+			const uint8_t *it = std::min_element(quals, quals + _quals.length());
+			if (it != (quals + _quals.length()) && *it < Read::FASTQ_START_CHAR) {
 				if (getSize() > 10000) {
 					Log::Warn() << "detected standard fastq only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
 				}
