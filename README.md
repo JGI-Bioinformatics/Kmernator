@@ -97,7 +97,7 @@ on each partition without consuming additional disk space.
 
 *  A fast and efficient tool to randomly sample genomic data sets.
 
-*BamSort-P*:
+*BamSort-P*: [Architecture](https://docs.google.com/presentation/d/1IbL3vA8yv8mW6IGWsDTq7T8EOJ-vQthxUPwLFRCWOMk/edit "BamSort-P Architecture")
 
 *  A parallel and scalable tool to efficiently sort, and optionally filter, many or large
   SAM and BAM files.
