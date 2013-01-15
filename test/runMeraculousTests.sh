@@ -113,7 +113,7 @@ then
     socket=
     if ((ismpi)) && ((threads<=procs/2))
     then
-      socket='-bind-to-socket'
+      socket=''
     fi
 
     mpi=$(((procs+threads-1)/threads))

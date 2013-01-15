@@ -53,10 +53,9 @@ then
  
   for threads in $(seq 1 $procs)
   do
-    socket=
     if ((ismpi)) && ((threads<=procs/2))
     then
-      socket='-bind-to-socket'
+      socket=''
     fi
 
     mpi=$(((procs+threads-1)/threads))
