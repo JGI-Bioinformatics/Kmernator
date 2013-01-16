@@ -1337,7 +1337,7 @@ protected:
 		int numSignals = 16;
 		SigHandlers sh;
 		sh.resize(numSignals);
-		for(int sig = 0; sig < numSignals ; sig++) {
+		for(int sig = 1; sig < numSignals ; sig++) {
 			struct sigaction &oact = sh[sig];
 			bzero(&oact, sizeof(oact));
 			sigaction(sig, NULL, &oact);
