@@ -70,6 +70,7 @@ Sequence::DataPtrListVector *Sequence::preAllocatedDataPtrs = new Sequence::Data
 
 // static methods of Sequence
 void Sequence::clearCaches() {
+	assert(!omp_in_parallel());
 	threadCacheSequences = CachedSequencesVector(omp_get_max_threads(), CachedSequences(Sequence::maxCachePerThread));
 	preAllocatedDataPtrs->reset();
 }

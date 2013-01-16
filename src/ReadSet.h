@@ -190,11 +190,20 @@ private:
 	MmapSource mmapFile(string filePath);
 
 	static void addMmaps(MmapSourcePair mmaps);
+	static bool &haveClearedCache() {
+		static bool _ = false;
+		return _;
+	}
 
 public:
 	ReadSet() :
 		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0) {
 		setFastqStart(GeneralOptions::getOptions().getFastqBaseQuality());
+		// this is needed to fix over subscription of threads where the Sequence::threadCacheSequences is undersized
+		if (!omp_in_parallel() && !haveClearedCache()) {
+			Sequence::clearCaches();
+			haveClearedCache() = true;
+		}
 	}
 	ReadSet(const ReadSet &copy)  :
 		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0) {

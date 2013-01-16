@@ -1787,10 +1787,6 @@ public:
 		long numThreads = maxThreads;
 		long batchIdx = 0;
 
-		// allocate a square matrix of buffers: KmerWeightedExtensions[writingThread][readingThread]
-		KmerWeightedExtensions kmerBuffers[ maxThreads ][ maxThreads ];
-		typedef std::pair< ReadSet::ReadSetSizeType, Sequence::SequenceLengthType > ReadPosType;
-		std::vector< ReadPosType > startReadIdx[ maxThreads ][ maxThreads ];
 
 		long size = store.getSize();
 		if (size < batch) {
@@ -1808,20 +1804,32 @@ public:
 			reservation = batch * (kmersPerRead);
 		}
 
-		reservation /= maxThreads;
-
-#pragma omp parallel num_threads(maxThreads)
+#pragma omp parallel num_threads(maxThreads) shared(numThreads,reservation)
 		{
-			if (omp_get_thread_num() == 0 && numThreads != omp_get_num_threads()) {
+#pragma omp single
+			if (numThreads != omp_get_num_threads()) {
 				numThreads = omp_get_num_threads();
-				reservation *= maxThreads;
 				reservation /= numThreads;
-				LOG_WARN(1, "RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << maxThreads << " vs " << omp_get_num_threads() << " nested:" << omp_get_nested() << " dynamic: " << omp_get_dynamic());
+				LOG_WARN(1, "Detected OpenMP thread mis-match, reducing threads to " << numThreads << "... KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << maxThreads << " vs " << omp_get_num_threads() << " nested:" << omp_get_nested() << " dynamic: " << omp_get_dynamic());
 			}
 		}
-		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << maxThreads << " over " << store.getSize() << " reads");
+		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads << " over " << store.getSize() << " reads");
 
-		KmerReadUtils kru[maxThreads];
+#pragma omp barrier
+
+#pragma omp parallel num_threads(numThreads)
+		{
+			if (numThreads != omp_get_num_threads()) {
+				LOG_THROW("RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP()2: thread count mis-match " << numThreads << " vs " << omp_get_num_threads() << " maxThreads: " << maxThreads);
+			}
+		}
+
+		// allocate a square matrix of buffers: KmerWeightedExtensions[writingThread][readingThread]
+		KmerWeightedExtensions kmerBuffers[ numThreads ][ numThreads ];
+		typedef std::pair< ReadSet::ReadSetSizeType, Sequence::SequenceLengthType > ReadPosType;
+		std::vector< ReadPosType > startReadIdx[ numThreads ][ numThreads ];
+
+		KmerReadUtils kru[numThreads];
 		while (batchIdx < (long) store.getSize())
 		{
 			for(int tmpThread1=0; tmpThread1 < numThreads; tmpThread1++)
@@ -1860,7 +1868,7 @@ public:
 #pragma omp parallel num_threads(numThreads)
 			{
 				if (numThreads != omp_get_num_threads()) {
-					LOG_THROW("RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP()2: thread count mis-match " << numThreads << " vs " << omp_get_num_threads());
+					LOG_THROW("RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP()3: thread count mis-match " << numThreads << " vs " << omp_get_num_threads());
 				}
 
 				for(int threads = 0; threads < numThreads; threads++)
