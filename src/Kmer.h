@@ -935,10 +935,10 @@ public:
 #pragma omp parallel for if(numKmers >= 10000)
 		for (long bytes = 0; bytes < numBytes; bytes++) {
 			SequenceLengthType i = bytes * 4;
-			const TwoBitEncoding *ref = twoBit + i / 4;
+			const TwoBitEncoding *ref = twoBit + bytes;
 			for (int bitShift = 0; bitShift < 4 && i + bitShift < numKmers; bitShift++) {
 				TwoBitSequence::shiftLeft(ref, kmers[i + bitShift].get(),
-						KmerSizer::getTwoBitLength(), bitShift, bitShift != 0);
+						KmerSizer::getTwoBitLength(), bitShift, bytes < numBytes-1);
 				TwoBitEncoding *lastByte =
 						kmers[i + bitShift].getTwoBitSequence()
 						+ KmerSizer::getTwoBitLength() - 1;
@@ -1679,13 +1679,19 @@ public:
 	}
 
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
-		IndexType idx = isSorted() ? bucket.insertSorted(key,value) : bucket.append(key,value);
-		if (bucket.size() == bucket.capacity()) {
-			LOG_DEBUG(5, "KmerMap::insert()...resort() " << bucket.size());
-			bucket.resort(true);
-			idx = bucket.find(key);
-			assert(idx != BucketType::MAX_INDEX);
+		IndexType idx;
+		if (isSorted()) {
+			idx = bucket.insertSorted(key,value);
+		} else {
+			idx = bucket.append(key,value);
+			if (bucket.size() == bucket.capacity()) {
+				LOG_DEBUG(5, "KmerMap::insert()...resort() " << bucket.size());
+				bucket.resort(true);
+				idx = bucket.find(key);
+				assert(idx != BucketType::MAX_INDEX);
+			}
 		}
+
 		ElementType element = bucket.getElement(idx);
 		return element;
 	}
