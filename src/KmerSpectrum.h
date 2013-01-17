@@ -1770,6 +1770,7 @@ public:
 		{
 			const Read &read = store.getRead( batchIdx );
 			if ( !read.isDiscarded() ) {
+				LOG_DEBUG(4, "_buildKmerSpectrumSerial(): " << read.getName() << " " << (void*) read.getTwoBitSequence());
 				KmerWeightedExtensions &kmers = kru.buildWeightedKmers(read, true, true);
 
 				append(kmers, batchIdx, isSolid, partIdx, numParts);
@@ -1787,6 +1788,8 @@ public:
 		long numThreads = maxThreads;
 		long batchIdx = 0;
 
+		int oldOmpDynamic = omp_get_dynamic();
+		omp_set_dynamic(0);
 
 		long size = store.getSize();
 		if (size < batch) {
@@ -1795,7 +1798,7 @@ public:
 		long kmersPerRead = store.getMaxSequenceLength() - KmerSizer::getSequenceLength() + 1;
 		batch = std::min( batch, 128*1024*1024 / kmersPerRead / KmerSizer::getByteSize() / maxThreads + 1);
 
-		LOG_DEBUG(1, "buildKmerSpectrumParallel(): batchSize: " << batch);
+		LOG_DEBUG_OPTIONAL(1, true, "buildKmerSpectrumParallel(): batchSize: " << batch);
 		long reservation;
 		if (KmerSizer::getSequenceLength() > store.getMaxSequenceLength()) {
 			LOG_WARN(1, "KmerSize " << KmerSizer::getSequenceLength() << " is larger than your data set: " << store.getMaxSequenceLength());
@@ -1804,25 +1807,33 @@ public:
 			reservation = batch * (kmersPerRead);
 		}
 
-#pragma omp parallel num_threads(maxThreads) shared(numThreads,reservation)
+#pragma omp parallel num_threads(maxThreads) shared(numThreads)
 		{
-#pragma omp single
 			if (numThreads != omp_get_num_threads()) {
-				numThreads = omp_get_num_threads();
-				reservation /= numThreads;
+#pragma omp critical
+				{
+					numThreads = omp_get_num_threads();
+				}
 				LOG_WARN(1, "Detected OpenMP thread mis-match, reducing threads to " << numThreads << "... KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << maxThreads << " vs " << omp_get_num_threads() << " nested:" << omp_get_nested() << " dynamic: " << omp_get_dynamic());
 			}
 		}
-		LOG_DEBUG(1, "Executing parallel buildKmerSpectrum with " << numThreads << " over " << store.getSize() << " reads");
 
-#pragma omp barrier
+		LOG_DEBUG_OPTIONAL(1, true, "Executing parallel buildKmerSpectrum with " << numThreads << " over " << store.getSize() << " reads");
 
+		bool canRunParallel = numThreads > 1;
 #pragma omp parallel num_threads(numThreads)
 		{
 			if (numThreads != omp_get_num_threads()) {
-				LOG_THROW("RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP()2: thread count mis-match " << numThreads << " vs " << omp_get_num_threads() << " maxThreads: " << maxThreads);
+				LOG_WARN(1, "KmerSpectrum::_buildKmerSpectrumParallelOMP()2: thread count mis-match " << numThreads << " vs " << omp_get_num_threads() << " maxThreads: " << maxThreads);
+				canRunParallel = false;
 			}
 		}
+		if (!canRunParallel)
+			numThreads = 1;
+
+		reservation /= numThreads;
+		reservation += numThreads * kmersPerRead;
+		LOG_VERBOSE_OPTIONAL(1, true, "Executing parallel buildKmerSpectrum with adjusted threads: " << numThreads << " batch: " << batch << " reservation: " << reservation);
 
 		// allocate a square matrix of buffers: KmerWeightedExtensions[writingThread][readingThread]
 		KmerWeightedExtensions kmerBuffers[ numThreads ][ numThreads ];
@@ -1830,50 +1841,61 @@ public:
 		std::vector< ReadPosType > startReadIdx[ numThreads ][ numThreads ];
 
 		KmerReadUtils kru[numThreads];
-		while (batchIdx < (long) store.getSize())
+
+#pragma omp parallel num_threads(numThreads) shared(batchIdx)
 		{
-			for(int tmpThread1=0; tmpThread1 < numThreads; tmpThread1++)
+			int threadId = omp_get_thread_num();
+			if (numThreads != omp_get_num_threads()) {
+				if (numThreads < omp_get_num_threads()) {
+					LOG_THROW("RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP()3: thread count mis-match " << numThreads << " vs " << omp_get_num_threads() << " nested:" << omp_get_nested() << " dynamic: " << omp_get_dynamic() << " max: " << maxThreads);
+				} else {
+					LOG_WARN(1, "KmerSpectrum::_buildKmerSpectrumParallelOMP()3: The number of threads was reduced to " << omp_get_num_threads() << " was expecting: " << numThreads);
+					numThreads = omp_get_num_threads();
+				}
+			}
+
+			while (batchIdx < (long) store.getSize())
 			{
+
 				for(int tmpThread2 = 0; tmpThread2 < numThreads; tmpThread2++) {
-					kmerBuffers [ tmpThread1 ][ tmpThread2 ].reset(false);
-					kmerBuffers [ tmpThread1 ][ tmpThread2 ].reserve(reservation);
-					startReadIdx[ tmpThread1 ][ tmpThread2 ].resize(0);
-					startReadIdx[ tmpThread1 ][ tmpThread2 ].reserve(reservation);
+					kmerBuffers [ threadId ][ tmpThread2 ].reset(false);
+					kmerBuffers [ threadId ][ tmpThread2 ].reserve(reservation);
+					startReadIdx[ threadId ][ tmpThread2 ].clear();
+					startReadIdx[ threadId ][ tmpThread2 ].reserve(batch);
 				}
-			}
 
+				for (long i=0; i < batch; i+=numThreads)
+				{
+					long readIdx = batchIdx + i + threadId;
 
-#pragma omp parallel for schedule(guided) num_threads(numThreads)
-			for (long i=0; i < batch; i++)
-			{
-				long readIdx = batchIdx + i;
+					if (readIdx >= size || readIdx >= batchIdx + batch ) {
+						continue;
+					}
+					const Read &read = store.getRead( readIdx );
+					LOG_DEBUG_OPTIONAL(1, true, "Evaluating readid: " << readIdx << " " << read.getName());
+					if (read.isDiscarded())
+						continue;
 
-				if (readIdx >= size ) {
-					continue;
+					KmerWeightedExtensions &kmers = kru[ threadId ].buildWeightedKmers(read, true, true);
+					for (long j = 0; j < numThreads; j++)
+						startReadIdx[ threadId ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ threadId ][j].size()) );
+					for (IndexType j = 0; j < kmers.size(); j++) {
+						int smpThreadId;
+						if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, numParts, true) )
+							kmerBuffers[ threadId ][ smpThreadId ].append(kmers[j], kmers.valueAt(j));
+					}
+
 				}
-				const Read &read = store.getRead( readIdx );
-				if (read.isDiscarded())
-					continue;
 
-				KmerWeightedExtensions &kmers = kru[omp_get_thread_num()].buildWeightedKmers(read, true, true);
-				for (long j = 0; j < numThreads; j++)
-					startReadIdx[ omp_get_thread_num() ][ j ].push_back( ReadPosType(readIdx, kmerBuffers[ omp_get_thread_num() ][j].size()) );
-				for (IndexType j = 0; j < kmers.size(); j++) {
-					int smpThreadId;
-					if ( getSMPThread( kmers[j], smpThreadId, numThreads, partIdx, numParts, true) )
-						kmerBuffers[ omp_get_thread_num() ][ smpThreadId ].append(kmers[j], kmers.valueAt(j));
-				}
-			}
-
-#pragma omp parallel num_threads(numThreads)
-			{
-				if (numThreads != omp_get_num_threads()) {
-					LOG_THROW("RuntimeException: KmerSpectrum::_buildKmerSpectrumParallelOMP()3: thread count mis-match " << numThreads << " vs " << omp_get_num_threads());
-				}
+#pragma omp barrier
 
 				for(int threads = 0; threads < numThreads; threads++)
 				{
-					int threadId = omp_get_thread_num();
+					if(kmerBuffers[threads][threadId].size() > reservation)
+						LOG_WARN(1, "kmerBuffers > reservation: " << kmerBuffers[threads][threadId].size() << " vs " << reservation);
+					//assert((long) kmerBuffers[threads][threadId].size() <= reservation);
+					assert((long) startReadIdx[threads][threadId].size() <= batch);
+
 					unsigned long idxSize = startReadIdx[ threads ][ threadId ].size();
 					for(unsigned long idx = 0; idx < idxSize; idx++)
 					{
@@ -1885,16 +1907,23 @@ public:
 							len = last - startIdx;
 
 							// do not include partIdx or partBitmMask , as getSMPThread() already accounted for partitioning
-							append(kmerBuffers[threads][ threadId ], readPos.first, isSolid, startIdx, len, 0, 1);
+							append(kmerBuffers[ threads ][ threadId ], readPos.first, isSolid, startIdx, len, 0, 1);
 						}
 					}
 				}
+
+#pragma omp single
+				{
+					LOG_VERBOSE_OPTIONAL(1, true, "_buildKmerSpectrumParallel() running single update: " << batchIdx << " batch: " << batch << " total: " << store.getSize());
+					batchIdx += batch;
+					_evaluateBatch(isSolid, batchIdx, purgeEvery, purgeCount);
+				}
+
 			}
 
-			batchIdx += batch;
-			_evaluateBatch(isSolid, batchIdx, purgeEvery, purgeCount);
 		}
 
+		omp_set_dynamic(oldOmpDynamic);
 	}
 
 	virtual void buildKmerSpectrum( const Read &read) {
