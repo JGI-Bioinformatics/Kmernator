@@ -74,7 +74,7 @@ void setGlobalReadSetConstants(mpi::communicator &world, ReadSet &store) {
 	unsigned long &readCount = counts[0] = store.getSize();
 	unsigned long &numPairs  = counts[1] = store.identifyPairs();
 	unsigned long &baseCount = counts[2] = store.getBaseCount();
-	LOG_VERBOSE(2, "loaded " << readCount << " Reads, " << baseCount << " Bases. Pairs + single = " << numPairs);
+	LOG_VERBOSE_GATHER(2, "loaded " << readCount << " Reads, " << baseCount << " Bases. Pairs + single = " << numPairs);
 
 	mpi::all_reduce(world, (unsigned long*) counts, 3, (unsigned long*) totalCounts, std::plus<unsigned long>());
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Loaded " << totalCounts[0] << " distributed reads, " << totalCounts[1] << " distributed pairs, " << totalCounts[2] << " distributed bases");
@@ -174,7 +174,7 @@ public:
 				if (rank == world.rank())
 					mySize = totalMmapSize - myOffset;
 			}
-			LOG_DEBUG(1, "myOffset " << myOffset << " mySize " << mySize << " totalMmapSize " << totalMmapSize);
+			LOG_DEBUG_GATHER(1, "myOffset " << myOffset << " mySize " << mySize << " totalMmapSize " << totalMmapSize);
 			lastRank = rank;
 		}
 
@@ -315,7 +315,7 @@ public:
 
 		long readSetSize = store.getSize();
 
-		LOG_VERBOSE(2, "starting _buildSpectrumMPI with " << omp_get_max_threads() << " threads");
+		LOG_VERBOSE_GATHER(2, "starting _buildSpectrumMPI with " << omp_get_max_threads() << " threads");
 
 		StoreKmerMessageBuffer *msgBuffers;
 
@@ -401,7 +401,7 @@ public:
 
 		LOG_DEBUG(3, "_buildKmerSpectrumMPI() final barrier");
 		world.barrier();
-		LOG_DEBUG(1, "finished _buildKmerSpectrumMPI");
+		LOG_DEBUG_GATHER(1, "finished _buildKmerSpectrumMPI. " << MemoryUtils::getMemoryUsage());
 	}
 
 	SizeTracker reduceSizeTracker(mpi::communicator &world) {
@@ -498,12 +498,12 @@ public:
 
 		// purge low counts
 		if (KmerSpectrumOptions::getOptions().getMinDepth() > 1) {
-			LOG_VERBOSE(2, "Clearing memory from singletons: " << this->singleton.size() );
+			LOG_VERBOSE_GATHER(2, "Clearing memory from singletons: " << this->singleton.size() );
 			LOG_DEBUG(2, MemoryUtils::getMemoryUsage());
 			this->singleton.clear();
 		}
 		if (KmerSpectrumOptions::getOptions().getMinDepth() > 2) {
-			LOG_VERBOSE(2, "Purging low count kmers (< " << KmerSpectrumOptions::getOptions().getMinDepth() << ")");
+			LOG_VERBOSE_GATHER(2, "Purging low count kmers (< " << KmerSpectrumOptions::getOptions().getMinDepth() << ")");
 			LOG_DEBUG(2, MemoryUtils::getMemoryUsage());
 			this->purgeMinDepth(KmerSpectrumOptions::getOptions().getMinDepth());
 		}
@@ -527,7 +527,7 @@ public:
 
 	Kmernator::MmapFileVector writeKmerMaps(string mmapFilename = Options::getOptions().getOutputFile()) {
 		// communicate sizes and allocate permanent file
-		LOG_VERBOSE(2, "Merging partial spectrums" );
+		LOG_VERBOSE_GATHER(2, "Merging partial spectrums" );
 		LOG_DEBUG(3, MemoryUtils::getMemoryUsage() );
 		Kmernator::MmapFileVector ourSpectrum;
 		if (this->hasSolids){
@@ -539,7 +539,7 @@ public:
 			ourSpectrum.push_back(this->writeKmerMap(this->singleton, mmapFilename + "-singleton"));
 		}
 
-		LOG_DEBUG(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
+		LOG_DEBUG_GATHER(1, "Finished merging partial spectrums" << std::endl << MemoryUtils::getMemoryUsage());
 
 		return ourSpectrum;
 	}
@@ -860,7 +860,7 @@ done when empty cycle is received
 		int reserveBB = ((batchSize * maxKmers) / numThreads) + 1;
 		int reserveOffsets = (batchSize / numThreads) + 1;
 
-		LOG_DEBUG(1, "Starting scoreAndTrimReadsMPI - trimming: " << readsSize << " using " << numThreads << " threads");
+		LOG_DEBUG_GATHER(1, "Starting scoreAndTrimReadsMPI - trimming: " << readsSize << " using " << numThreads << " threads");
 
 		KmerValueVectorVector batchBuffer; batchBuffer.resize(numThreads);
 		ReadIdxVector readIndexBuffer[ numThreads ];

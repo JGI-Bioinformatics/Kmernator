@@ -108,6 +108,13 @@ public:
 		return _matchLocal(query);
 	}
 
+	void _addResults(MatchHitSet &mhs, TrackingData::ReadPositionWeightVector &rpwv) {
+		for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
+			ReadSet::ReadSetSizeType globalReadIdx = it->readId;
+			LOG_DEBUG(5, "KmerMatch::matchLocal: globalTarget " << globalReadIdx << "@" << it->position);
+			mhs.insert( globalReadIdx );
+		}
+	}
 	// works on the full copy of the query set
 	MatchResults _matchLocal(ReadSetStream &query) {
 		MatchResults matchResults;
@@ -115,6 +122,7 @@ public:
 		int maxKmersFromEdge = maxPositionsFromEdge - KmerSizer::getSequenceLength() + 1;
 
 		long totalMatches = 0;
+		long maxMatch = 0;
 		ReadSet::ReadSetSizeType contigIdx = 0;
 		while(query.readNext()) {
 			Read read = query.getRead();
@@ -134,27 +142,22 @@ public:
 				KS::WeakElementType element = _spectrum.getIfExistsWeak( kmers[j] );
 				if (element.isValid()) {
 					TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
-					for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
-						ReadSet::ReadSetSizeType globalReadIdx = it->readId;
-						LOG_DEBUG(5, "KmerMatch::matchLocal: localRead " << contigIdx << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
-						matchResults[contigIdx].insert( globalReadIdx );
-					}
-				} else {
+					_addResults(matchResults[contigIdx], rpwv);
+				} else if (_spectrum.hasSingletons) {
 					KS::SingletonElementType element = _spectrum.getIfExistsSingleton( kmers[j] );
 					if (element.isValid()) {
 						TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
-						for(TrackingData::ReadPositionWeightVector::iterator it = rpwv.begin(); it != rpwv.end(); it++) {
-							ReadSet::ReadSetSizeType globalReadIdx = it->readId;
-							LOG_DEBUG(5, "KmerMatch::matchLocal: localRead " << contigIdx << "@" << j << " globalTarget " << globalReadIdx << "@" << it->position << " " << kmers[j].toFasta());
-							matchResults[contigIdx].insert( globalReadIdx );
-						}
+						_addResults(matchResults[contigIdx], rpwv);
 					}
 				}
 			}
 			totalMatches += matchResults[contigIdx].size();
-			LOG_DEBUG_OPTIONAL(1, (int) (contigIdx % (100*getWorld().size())) == (100*getWorld().rank()), "KmerMatch::_matchLocal(): processed " << contigIdx << " with " << matchResults[contigIdx-1].size() << " total: " << totalMatches);
+			if (maxMatch < (long) matchResults[contigIdx].size())
+				maxMatch = matchResults[contigIdx].size();
+			LOG_DEBUG_OPTIONAL(2, (int) (contigIdx % (100*getWorld().size())) == (100*getWorld().rank()), "KmerMatch::_matchLocal(): processed " << contigIdx << " with " << matchResults[contigIdx].size() << " total: " << totalMatches);
 			contigIdx++;
 		}
+		LOG_DEBUG(1, "KmerMatch::_matchLocal(): processed " << contigIdx << " total: " << totalMatches << " max: " << maxMatch<< ". " << MemoryUtils::getMemoryUsage());
 
 		return matchResults;
 	}

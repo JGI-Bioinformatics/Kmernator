@@ -287,12 +287,12 @@ public:
 		bool screenNow = screenForOverhang && !globalQueryFile.empty();
 		ReadSetStream *rss = NULL;
 		if (screenNow) {
-			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "getLocalReads(): will screenForOverhang");
 			rss = new ReadSetStream(globalQueryFile);
 		} else {
-			LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "getLocalReads(): will subsampling matchResults");
 			sampleMatches(matchResults, MatcherInterfaceOptions::getOptions().getMaxReadMatches() * 20);
 		}
+
+		long totalMatches = 0, maxMatches = 0;
 
 		int myRank = _world.rank();
 		MatchReadResults matchReadResults(matchResults.size(), ReadSet());
@@ -318,12 +318,18 @@ public:
 					assert(false); // should not get here
 				}
 			}
+			long size = matchReadResults[i].getSize();
+			totalMatches += size;
+			if (maxMatches < size)
+				maxMatches = size;
 		}
 
 		if (screenNow)
 			delete rss;
 
 		recordTime("returnLocalReads", MPI_Wtime());
+		LOG_DEBUG_GATHER(1, "getLocalReads(): finished. totalMatches: " << totalMatches << ", maxMatches: " << maxMatches << ". " << MemoryUtils::getMemoryUsage());
+
 		return matchReadResults;
 	}
 	// transfers the proper matching localReadSetVector to
@@ -340,7 +346,7 @@ public:
 
 		bool isPaired = MatcherInterfaceOptions::getOptions().getIncludeMate();
 		bool screenForOverlap = MatcherInterfaceOptions::getOptions().getReturnOverlapOnly() && globalQueryFile.empty();
-		LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "exchangeGlobalReads(): will " << (screenForOverlap? " " : "NOT ") << " screenForOverhang");
+		LOG_DEBUG_GATHER(1, "exchangeGlobalReads(): will " << (screenForOverlap? " " : "NOT ") << " screenForOverhang. " << MemoryUtils::getMemoryUsage());
 
 		int myRank = _world.rank();
 
@@ -557,7 +563,7 @@ public:
 			}
 		}
 
-		LOG_DEBUG_OPTIONAL(1, _world.rank() == 0, "exchangeGlobalReads(): Done " << iteration);
+		LOG_DEBUG_GATHER(1, "exchangeGlobalReads(): Done " << iteration << ". " << MemoryUtils::getMemoryUsage());
 
 		return globalReadSetVector;
 	}
@@ -682,6 +688,7 @@ public:
 		int *sendRankCount = new int[numRanks];
 		int *sendRankDispl = new int[numRanks];
 		long totalSendCount = 0;
+		long maxSendCount = 0;
 
 		int *recvCounts = new int[ numRanks * numMatchHitSets ];
 		int *recvRankCount = new int[numRanks];
@@ -696,13 +703,15 @@ public:
 				sendCounts[pos] = rankHitGlobalIndexes[i][j].size();
 				sendRankCount[i] += sendCounts[pos];
 				totalSendCount += sendCounts[pos];
+				if (maxSendCount < sendCounts[pos])
+					maxSendCount = sendCounts[pos];
 			}
 			if(i > 0) {
 				sendRankDispl[i] = sendRankDispl[i-1] + sendRankCount[i-1];
 			}
 		}
 
-		LOG_DEBUG_OPTIONAL(1, true, "exchangeGlobalReadIdxs(): sending: " << totalSendCount << " readIndexes");
+		LOG_DEBUG_GATHER(1, "exchangeGlobalReadIdxs(): sending: " << totalSendCount << " readIndexes, max: " << maxSendCount<< ". " << MemoryUtils::getMemoryUsage());
 
 		MPI_Alltoall(sendCounts, numMatchHitSets, MPI_INT, recvCounts, numMatchHitSets, MPI_INT, _world);
 		// Prepare accounting arrays for alltoallv
@@ -775,16 +784,20 @@ public:
 			assert(tmp == recvBuf + recvRankDispl[i] + recvRankCount[i]);
 		}
 		long totalLocalReads = 0;
+		long maxLocalReads = 0;
 		for(int j = 0; j < numMatchHitSets ; j++) {
-			totalLocalReads += localMatchResults[j].size();
+			long size = localMatchResults[j].size();
+			totalLocalReads += size;
+			if (maxLocalReads < size)
+				maxLocalReads = size;
 		}
-		LOG_DEBUG_OPTIONAL(1, true, "exchangeGlobalReadIdxs(): totalLocalReads: " << totalLocalReads);
 
 		delete [] recvRankDispl;
 		delete [] recvRankCount;
 		delete [] recvCounts;
 		delete [] recvBuf;
 		recordTime("EGRI", MPI_Wtime());
+		LOG_DEBUG_GATHER(1, "exchangeGlobalReadIdxs(): totalLocalReads: " << totalLocalReads << " max: " << maxLocalReads<< ". " << MemoryUtils::getMemoryUsage());
 
 		assert(areAllReadsLocal(localMatchResults));
 		return localMatchResults;

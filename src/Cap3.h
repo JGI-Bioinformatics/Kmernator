@@ -155,7 +155,7 @@ public:
 		}
 		std::string log = outputName + ".log";
 		std::string cmd = Cap3Options::getOptions().getCap3Path() + " " + outputName + " > " + log + " 2>&1";
-		LOG_DEBUG_OPTIONAL(1, true, "Executing: " << cmd);
+		LOG_DEBUG_OPTIONAL(1, true, "Executing (" << inputReads.getSize() << " read pool): " << cmd);
 		status = system(cmd.c_str());
 		if (status == 0) {
 			std::string newContigFile = outputName + ".cap.contigs";

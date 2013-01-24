@@ -82,7 +82,7 @@ int main(int argc, char **argv)
 		std::ifstream ifs(argv[1]);
 		std::string output(argv[2]);
 		output += "." + boost::lexical_cast<std::string>(rank);
-		LOG_VERBOSE(1, "Copying " << argv[1] << " to " << output);
+		LOG_VERBOSE_GATHER(1, "Copying " << argv[1] << " to " << output);
 		{
 			std::ofstream os(output.c_str());
 			int root = 0;

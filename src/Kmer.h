@@ -1457,7 +1457,7 @@ public:
 		_buckets.resize(powerOf2);
 		_isSorted = defaultSort;
 
-		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "KmerMap(" << bucketCount << "): " << powerOf2);
+		LOG_DEBUG_OPTIONAL(3, Logger::isMaster(), "KmerMap(" << bucketCount << "): " << powerOf2);
 
 	}
 	~KmerMap()

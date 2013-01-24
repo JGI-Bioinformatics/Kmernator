@@ -218,7 +218,7 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 				ofname += "-PartitionDepth" + boost::lexical_cast< string >( tmpMinDepth );
 			}
 			OFM ofmap = selector.getOFM(ofname, suffix);
-			LOG_VERBOSE(1, "Selecting reads over depth: " << tmpMinDepth);
+			LOG_VERBOSE_GATHER(1, "Selecting reads over depth: " << tmpMinDepth);
 
 			if (reads.hasPairs()) {
 				LOG_DEBUG(3, "getBothPairs: " << ReadSelectorOptions::getOptions().getBothPairs() << " " << ReadSelectorOptions::getOptions().getMinPassingInPair());
@@ -229,12 +229,12 @@ long selectReads(unsigned int minDepth, ReadSet &reads, _ReadSelector &selector,
 				picked = selector.pickAllPassingReads(tmpMinDepth,
 						ReadSelectorOptions::getOptions().getMinReadLength());
 			}
-			LOG_VERBOSE(2, "At or above coverage: " << tmpMinDepth << " Picked " << picked
+			LOG_VERBOSE_GATHER(2, "At or above coverage: " << tmpMinDepth << " Picked " << picked
 					<< " / " << reads.getSize() << " reads");
-			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 			if (!outputFilename.empty()) {
-				LOG_VERBOSE(1, "Writing " << picked << " reads to output files");
+				LOG_VERBOSE_GATHER(1, "Writing " << picked << " reads to output files");
 				selector.writePicks(ofmap, oldPicked);
 			}
 			oldPicked += picked;

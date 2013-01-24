@@ -177,7 +177,7 @@ bool testMatchesSelf(mpi::communicator &world, ReadSet &q, ReadSet &t) {
 	}
 	if (!passed)
 		LOG_WARN(1, "Failed testMatchesSelf!");
-	LOG_VERBOSE(1, "Done with testMatchesSelf()");
+	LOG_VERBOSE_GATHER(1, "Done with testMatchesSelf()");
 	return passed;
 }
 int main(int argc, char **argv)

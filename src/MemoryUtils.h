@@ -178,7 +178,7 @@ public:
 		sprintf(filename, "/proc/%d/statm", pid);
 		std::fstream statm(filename, std::fstream::in);
 		std::string buffer;
-		statm >> buffer;
+		getline(statm, buffer);
 		statm.close();
 		return std::string("statm: " + buffer);
 	}

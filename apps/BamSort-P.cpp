@@ -157,12 +157,12 @@ int main(int argc, char **argv)
 
 		unlink(outputBam.c_str());
 	
-		LOG_VERBOSE(1, "Reading input files");
+		LOG_VERBOSE_GATHER(1, "Reading input files");
 		if (partitions > 1) {
 			std::string myInputFile = inputBams[rank];
 			int color = rank / partitions;
 			mpi::communicator partitionWorld = world.split(color);
-			LOG_VERBOSE(1, "Input: " << myInputFile << " split color: " << color << " rank: " << partitionWorld.rank() << " of " << partitionWorld.size());
+			LOG_VERBOSE_GATHER(1, "Input: " << myInputFile << " split color: " << color << " rank: " << partitionWorld.rank() << " of " << partitionWorld.size());
 			SamUtils::MPIMergeSam mergeSam(partitionWorld, myInputFile, reads);
 	
 			if (color == 0)
@@ -212,17 +212,17 @@ int main(int argc, char **argv)
 		}
 	
 		{
-			LOG_VERBOSE(1, "Redistributing reads before the sort:" << reads.size());
+			LOG_VERBOSE_GATHER(1, "Redistributing reads before the sort:" << reads.size());
 			BamStreamUtils::distributeReadsFinal(world, reads);
 	
-			LOG_VERBOSE(1, "Sorting myreads: " << reads.size());
+			LOG_VERBOSE_GATHER(1, "Sorting myreads: " << reads.size());
 			SamUtils::MPISortBam sortem(world, reads, outputBam, header.get());
 		}
 	
 		header.reset();
 	
 		BamManager::clearRecycledReads();
-		LOG_VERBOSE(1, "Finished");
+		LOG_VERBOSE_GATHER(1, "Finished");
 	
 		return 0;
 	} catch (std::exception &e) {

@@ -123,7 +123,7 @@ public:
 		_startTime = MPI_Wtime();
 	}
 	virtual ~MPIMessageBufferBase() {
-		LOG_VERBOSE(2, "~MPIMessageBufferBase(): " << _deliveries
+		LOG_VERBOSE_GATHER(2, "~MPIMessageBufferBase(): " << _deliveries
 				<< " deliveries, " << _numMessages << " messages, "
 				<< _sendBytes << " b sent, " << _recvBytes << " b recv, "
 				<< _syncPoints << " / " << _syncAttempts << " syncs in " << (MPI_Wtime() - _startTime)

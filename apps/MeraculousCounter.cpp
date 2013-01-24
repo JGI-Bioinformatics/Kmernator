@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
 		// TODO save memory! read file and build spectrum in 100MB chunks
 		reads.appendAllFiles(inputs, world.rank(), world.size());
 
-		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 		setGlobalReadSetConstants(world, reads);
 		long numBuckets = 0;

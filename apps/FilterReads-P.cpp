@@ -105,39 +105,40 @@ int main(int argc, char *argv[]) {
 
 		reads.appendAllFiles(inputs, world.rank(), world.size());
 
-		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Identifying Pairs: ");
 
 		setGlobalReadSetConstants(world, reads);
+		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 		if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
 
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Preparing artifact filter: ");
 
 			FilterKnownOddities filter;
-			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 			LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Applying sequence artifact filter to Input Files");
 
 			unsigned long filtered = filter.applyFilter(reads);
 
-			LOG_VERBOSE(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
-			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+			LOG_VERBOSE_GATHER(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
+			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 			unsigned long allFiltered;
 			mpi::reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads.");
 
 		}
 
 		if ( DuplicateFragmentFilterOptions::getOptions().getDeDupMode() > 0 && DuplicateFragmentFilterOptions::getOptions().getDeDupEditDistance() >= 0) {
 			if (world.size() == 1) {
-				LOG_VERBOSE(2, "Applying DuplicateFragmentPair Filter to Input Files");
+				LOG_VERBOSE_GATHER(2, "Applying DuplicateFragmentPair Filter to Input Files");
 				unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
 
 				LOG_VERBOSE(2, "filter removed duplicate fragment pair reads: " << duplicateFragments);
-				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+				LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 				unsigned long allDuplicateFragments;
 				mpi::reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
@@ -163,7 +164,7 @@ int main(int argc, char *argv[]) {
 		if (KmerBaseOptions::getOptions().getKmerSize() > 0 && !KmerSpectrumOptions::getOptions().getLoadKmerMmap().empty()) {
 			spectrum.restoreMmap(KmerSpectrumOptions::getOptions().getLoadKmerMmap());
 		} else if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 			spectrum.buildKmerSpectrum(reads);
 			spectrum.optimize();
@@ -208,13 +209,13 @@ int main(int argc, char *argv[]) {
 
 			if (!outputFilename.empty() && KmerSpectrumOptions::getOptions().getSaveKmerMmap() > 0) {
 				spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
-				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+				LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 			}
 
 			if (KmerSpectrumOptions::getOptions().getMinDepth() > 1) {
-				LOG_DEBUG(1, "Clearing singletons from memory");
+				LOG_DEBUG_GATHER(1, "Clearing singletons from memory");
 				spectrum.singleton.clear();
-				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+				LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 			} else {
 				spectrum.optimize(true);
 			}
@@ -239,12 +240,12 @@ int main(int argc, char *argv[]) {
 				OfstreamMap::getDefaultAppend() = true;
 
 			// let only one rank at a time write to the files
-			LOG_VERBOSE(1, "Writing Files");
+			LOG_VERBOSE_GATHER(1, "Writing Files");
 
 			selectReads(minDepth, reads, selector, outputFilename);
 		}
 		spectrum.reset();
-		LOG_DEBUG(1, "Finished, waiting for rest of collective");
+		LOG_DEBUG_GATHER(1, "Finished, waiting for rest of collective");
 
 	} catch (std::exception &e) {
 		LOG_ERROR(1, "FilterReads-P caught an exception!\n\t" << e.what());
