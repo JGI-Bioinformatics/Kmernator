@@ -72,14 +72,17 @@ typedef KmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads > KS2;
 
 class _DistributedNucleatingAssemblerOptions: public OptionsBaseInterface {
 public:
-	_DistributedNucleatingAssemblerOptions(): maxIterations(1000), maxContigLength(3000) {}
+	_DistributedNucleatingAssemblerOptions(): maxIterations(1000), maxContigLength(3000), maxContigsPerBatch(20) {}
 	virtual ~_DistributedNucleatingAssemblerOptions() {}
 
 	int &getMaxIterations() {
-		return maxIterations; // getVarMap()["max-iterations"].as<int> ();
+		return maxIterations;
 	}
 	int &getMaxContigLength() {
-		return maxContigLength; // getVarMap()["max-contig-length"].as<int>();
+		return maxContigLength;
+	}
+	int &getMaxContigsPerBatch() {
+		return maxContigsPerBatch;
 	}
 	void _resetDefaults() {
 		Cap3Options::_resetDefaults();
@@ -155,13 +158,14 @@ public:
 protected:
 	int maxIterations;
 	int maxContigLength;
+	int maxContigsPerBatch;
 
 };
 typedef OptionsBaseTemplate<_DistributedNucleatingAssemblerOptions>
 DistributedNucleatingAssemblerOptions;
 
 
-std::string extendContigsWithCap3(ReadSet & contigs,
+std::string extendContigsWithCap3(const ReadSet & contigs,
 		ReadSet::ReadSetVector &contigReadSet, ReadSet & changedContigs,
 		ReadSet & finalContigs, ReadSet::ReadSetSizeType minimumCoverage) {
 	std::stringstream extendLog;
@@ -265,6 +269,41 @@ void finishLongContigs(long maxContigLength, ReadSet &changedContigs, ReadSet &f
 	changedContigs.swap(keepContigs);
 }
 
+std::string runPartialBatch(mpi::communicator world, boost::shared_ptr< MatcherInterface > &matcher, ReadSet &_contigs, std::string _contigFile, ReadSet & changedContigs,
+		ReadSet & finalContigs, int batchIdx, int maxContigsPerBatch, SequenceLengthType minKmerSize,
+		double minimumCoverage, SequenceLengthType maxKmerSize,
+		SequenceLengthType maxExtend, SequenceLengthType kmerStep) {
+
+	LOG_DEBUG_GATHER(1, "Starting runPartialBatch(" << batchIdx << " of " << _contigs.getSize() << "): " << MemoryUtils::getMemoryUsage());
+
+	ReadSet contigs; // new global contigs file a subset of original
+	std::string extendLog;
+	for(int i = batchIdx; i < (int) _contigs.getSize() && i < batchIdx + maxContigsPerBatch; i++)
+		contigs.append(_contigs.getRead(i));
+
+	setGlobalReadSetConstants(world, contigs);
+        if (contigs.getGlobalSize() == 0)
+		return extendLog;
+
+	std::string contigFile = DistributedOfstreamMap::writeGlobalReadSet(world, contigs, ".tmp-batch.", boost::lexical_cast<std::string>(batchIdx), FormatOutput::Fasta());
+
+	MatcherInterface::MatchReadResults contigReadSet = matcher->match(contigs, contigFile);
+	assert(contigs.getSize() == contigReadSet.size());
+
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, " batch " << contigs.getSize() << ". Matches made");
+
+	if (!Cap3Options::getOptions().getCap3Path().empty()) {
+		extendLog = extendContigsWithCap3(contigs, contigReadSet, changedContigs, finalContigs, minimumCoverage);
+	} else {
+		extendLog = extendContigsWithContigExtender(contigs, contigReadSet,
+				changedContigs, finalContigs,
+				minKmerSize, minimumCoverage, maxKmerSize, maxExtend, kmerStep);
+	}
+
+	unlink(contigFile.c_str());
+
+	return extendLog;
+}
 int main(int argc, char *argv[]) {
 
 	ScopedMPIComm< DistributedNucleatingAssemblerOptions > world(argc, argv);
@@ -296,6 +335,7 @@ int main(int argc, char *argv[]) {
 		timing2 = MPI_Wtime();
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "loaded " << reads.getGlobalSize() << " Reads, (local:" << reads.getSize() << " pair:" << reads.getPairSize() << ") in " << (timing2-timing1) << " seconds" );
+		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 		if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
 
@@ -306,11 +346,12 @@ int main(int argc, char *argv[]) {
 
 			unsigned long filtered = filter.applyFilter(reads);
 
-			LOG_VERBOSE(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
+			LOG_VERBOSE_GATHER(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
+			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
 			unsigned long allFiltered;
 			mpi::reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads ");
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads.");
 
 		}
 
@@ -337,8 +378,12 @@ int main(int argc, char *argv[]) {
 		ReadSet contigs;
 		contigs.appendFastaFile(contigFile, world.rank(), world.size());
 
+		int maxContigsPerBatch = DistributedNucleatingAssemblerOptions::getOptions().getMaxContigsPerBatch();
+
 		short iteration = 0;
 		while (++iteration <= maxIterations) {
+			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+			int batchIdx = 0;
 
 			matcher->resetTimes("Start Iteration", MPI_Wtime());
 
@@ -350,28 +395,23 @@ int main(int argc, char *argv[]) {
 				break;
 			}
 
-			MatcherInterface::MatchReadResults contigReadSet = matcher->match(contigs, contigFile);
-			assert(contigs.getSize() == contigReadSet.size());
-
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << ". Matches made");
-
-			ReadSet changedContigs;
 			std::string extendLog;
+			ReadSet changedContigs;
+			int lastBatch = contigs.getSize();
+			MPI_Allreduce(MPI_IN_PLACE, &lastBatch, 1, MPI_INT, MPI_MAX, world);
+			LOG_DEBUG_OPTIONAL(1, world.rank() == 0, "Iteration: " << iteration << " Last batch is " << lastBatch);
 
-			if (!Cap3Options::getOptions().getCap3Path().empty()) {
-				extendLog = extendContigsWithCap3(contigs, contigReadSet, changedContigs, finalContigs, minimumCoverage);
-			} else {
-				extendLog = extendContigsWithContigExtender(contigs, contigReadSet,
-						changedContigs, finalContigs,
-						minKmerSize, minimumCoverage, maxKmerSize, maxExtend, kmerStep);
+			while (batchIdx < lastBatch) {
+				extendLog += runPartialBatch(world, matcher, contigs, contigFile, changedContigs, finalContigs, batchIdx, maxContigsPerBatch, minKmerSize, minimumCoverage, maxKmerSize, maxExtend, kmerStep);
+				batchIdx += maxContigsPerBatch;
 			}
 
 			matcher->recordTime("extendContigs", MPI_Wtime());
-			LOG_DEBUG(1, (extendLog));
+			LOG_DEBUG_GATHER(1, (extendLog));
 
 			finishLongContigs(DistributedNucleatingAssemblerOptions::getOptions().getMaxContigLength(), changedContigs, finalContigs);
 
-			LOG_DEBUG(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
+			LOG_DEBUG_GATHER(1, "Changed contigs: " << changedContigs.getSize() << " finalContigs: " << finalContigs.getSize());
 			setGlobalReadSetConstants(world, changedContigs);
 			setGlobalReadSetConstants(world, finalContigs);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Changed contigs: " << changedContigs.getGlobalSize() << " finalContigs: " << finalContigs.getGlobalSize());
@@ -428,7 +468,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			matcher->recordTime("finishIteration", MPI_Wtime());
-			LOG_DEBUG(1, matcher->getTimes("") + " " + MemoryUtils::getMemoryUsage());
+			LOG_DEBUG_GATHER(1, matcher->getTimes("") + ". " + MemoryUtils::getMemoryUsage());
 
 		}
 
