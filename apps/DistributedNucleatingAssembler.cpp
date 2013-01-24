@@ -72,7 +72,7 @@ typedef KmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads > KS2;
 
 class _DistributedNucleatingAssemblerOptions: public OptionsBaseInterface {
 public:
-	_DistributedNucleatingAssemblerOptions(): maxIterations(1000), maxContigLength(3000), maxContigsPerBatch(20) {}
+	_DistributedNucleatingAssemblerOptions(): maxIterations(1000), maxContigLength(3000), maxContigsPerBatch(25) {}
 	virtual ~_DistributedNucleatingAssemblerOptions() {}
 
 	int &getMaxIterations() {
@@ -113,9 +113,11 @@ public:
 		p.add("input-file", -1);
 
 		opts.add_options()
-						("max-iterations", po::value<int>()->default_value(maxIterations), "the maximum number of rounds to extend the set of contigs")
+					("max-iterations", po::value<int>()->default_value(maxIterations), "the maximum number of rounds to extend the set of contigs")
 
-						("max-contig-length", po::value<int>()->default_value(maxContigLength), "the maximum size of a contig to continue extending");
+					("max-contigs-per-batch", po::value<int>()->default_value(maxContigsPerBatch), "the maximum number of assemblies (per mpi) to gather reads and execute per batch")
+
+					("max-contig-length", po::value<int>()->default_value(maxContigLength), "the maximum size of a contig to continue extending");
 
 		desc.add(opts);
 
@@ -146,6 +148,7 @@ public:
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
 
 		setOpt("max-iterations", maxIterations);
+		setOpt("max-contigs-per-batch", maxContigsPerBatch);
 		setOpt("max-contig-length", maxContigLength);
 
 		if (Options::getOptions().getOutputFile().empty()) {
