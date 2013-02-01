@@ -188,8 +188,8 @@ target_link_libraries (SamUtilsTest
                             Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
-                              z
                               libbam
+                              z
                               )
 add_test(SamUtilsTest SamUtilsTest.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/SamUtilsTest.sh test/ )

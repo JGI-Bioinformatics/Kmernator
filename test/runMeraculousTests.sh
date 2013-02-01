@@ -13,6 +13,7 @@ then
 fi
 
 ismpi=0
+isaprun=0
 if mpirun $true
 then
   MPI="mpirun"
@@ -28,6 +29,7 @@ then
   MPI="aprun"
   MPI_OPTS="-n"
   procs=$(aprun -B -q uname -n | wc -l)
+  isaprun=1
 fi
 
 
@@ -102,7 +104,8 @@ then
   if ((ismpi)) && $MPI -bysocket -bind-to-socket $true
   then
    MPI_OPTS="-bysocket -bind-to-socket -np"
-  else
+  else if ((ismpi))
+  then
    MPI_OPTS="-np"
   fi
    

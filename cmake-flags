@@ -30,17 +30,33 @@ cmake $Kmernator -DCMAKE_CXX_COMPILER=`which g++-${ver}` -DCMAKE_C_COMPILER=`whi
 
 # for NERSC hopper, using the suggested GNU compiler wrappers (cc and CC)
 # and tricking CMake and Boost to recognize the native MPI compiler:
-module load cmake
+# For GNU on hopper
+module load bzip2
 module swap PrgEnv-pgi PrgEnv-gnu
+module load cmake
 module remove xt-shmem
 module remove iobuf
 mpilib=$(basename $MPICH_DIR/lib/libmpich_gnu*.a); mpilib=${mpilib%.a} ; mpilib2=${mpilib#lib}
 export CFLAGS="-funroll-loops -Wall"
 export CXXFLAGS="$CFLAGS"
+
+# for Intel on hopper
+unset CFLAGS
+unset CXXFLAGS
+module load bzip2
+module swap PrgEnv-pgi PrgEnv-intel
+module load cmake
+module remove xt-shmem
+module remove iobuf
+mpilib=$(basename $MPICH_DIR/lib/libmpich_intel*.a); mpilib=${mpilib%.a} ; mpilib2=${mpilib#lib}
+
+# run cmake && compile
 cmake $Kmernator -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` \
   -DMPI_COMPILER=`which CC` -DMPI_LIBRARY="$mpilib2" \
   -DMPI_INCLUDE_PATH="${MPICH_DIR}/include" \
-  -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>$mpilib ;"
+  -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>$mpilib ;" \
+  -DMPI_EXTRA_LIBRARY="" \
+  && make -j18
 
 
 # for NERSC carver
