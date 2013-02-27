@@ -104,7 +104,7 @@ then
   if ((ismpi)) && $MPI -bysocket -bind-to-socket $true
   then
    MPI_OPTS="-bysocket -bind-to-socket -np"
-  else if ((ismpi))
+  elif ((ismpi))
   then
    MPI_OPTS="-np"
   fi
