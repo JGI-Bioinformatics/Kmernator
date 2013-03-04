@@ -513,6 +513,10 @@ public:
 		long totalFileSize = 0;
 		int countSamFiles = 0;
 
+		// TODO optimize bam metadata reading / opening
+		// each rank can read into the global size of data, reading fewer bams than
+		// there are in total -- not every rank opens every bam
+
 		// optimization for when many SAM files are called by many ranks
 		std::vector<uint8_t> fileTypes;
 		std::vector<uint64_t> fileSizes;
