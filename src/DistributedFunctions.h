@@ -307,13 +307,17 @@ public:
 		assert(store.isGlobal());
 		if (store.getGlobalSize() == 0)
 			return;
+		ReadSetStream rss(store);
+		_buildKmerSpectrumMPI(rss, isSolid, store.getGlobalOffset(world.rank()));
+	}
+	void _buildKmerSpectrumMPI(ReadSetStream &store, bool isSolid, ReadSetSizeType globalReadSetOffset = 0) {
 		int numThreads = omp_get_max_threads();
 		int rank = world.rank();
 		int worldSize = world.size();
 
 		int messageSize = sizeof(StoreKmerMessageHeader) + KmerSizer::getByteSize();
 
-		long readSetSize = store.getSize();
+		// long readSetSize = store.getSize();
 
 		LOG_VERBOSE_GATHER(2, "starting _buildSpectrumMPI with " << omp_get_max_threads() << " threads");
 
@@ -321,11 +325,13 @@ public:
 
 		LOG_DEBUG(2, "building spectrum using " << numThreads << " threads (" << omp_get_max_threads() << ")");
 
-		ReadSetSizeType globalReadSetOffset = store.getGlobalOffset(world.rank());
-		assert( world.rank() == 0 ? (globalReadSetOffset == 0) : (store.getSize() == 0 || globalReadSetOffset > 0) );
+		//ReadSetSizeType globalReadSetOffset = store.getGlobalOffset(world.rank());
+		//assert( world.rank() == 0 ? (globalReadSetOffset == 0) : (store.getSize() == 0 || globalReadSetOffset > 0) );
 		msgBuffers = new StoreKmerMessageBuffer(world, messageSize, StoreKmerMessageHeaderProcessor(*this,isSolid));
 
 		long kmerSubsample = KS::getKmerSubsample();
+		ReadSetSizeType batchReadsSize = 8192;
+		ReadSetSizeType numReads = 0;
 
 		std::stringstream ss;
 #pragma omp parallel num_threads(numThreads)
@@ -347,17 +353,34 @@ public:
 					isRunningInLoop = false;
 				loopThreadId--; loopNumThreads--;
 			}
-			if (isRunningInLoop) {
+			ReadSetSizeType myOffset = 0;
+			while (isRunningInLoop) {
 				KmerReadUtils kru;
 				long progressCount = 0, progressMark = 1000000 / world.size();
-				for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
+				Read batchReads[batchReadsSize];
+				ReadSetSizeType batchReadSetSize = 0;
+#pragma omp critical (readSmallBatch)
 				{
+					batchReadSetSize = 0;
+					while (batchReadSetSize < batchReadsSize && store.hasNext())
+						batchReads[batchReadSetSize++] = store.getRead();
+					myOffset = numReads;
+#pragma omp atomic
+					numReads += batchReadSetSize;
+
+				}
+				if (batchReadSetSize == 0)
+					break;
+				// for(long readIdx = loopThreadId ; readIdx < readSetSize; readIdx+=loopNumThreads)
+				for(ReadSetSizeType batchReadIdx = 0; batchReadIdx < batchReadSetSize ; batchReadIdx++)
+				{
+					ReadSetSizeType readIdx = batchReadIdx + myOffset;
 
 					if (loopThreadId == 0 && progressCount++ % progressMark == 0) {
 						LOG_VERBOSE_OPTIONAL(1, (progressCount-1) % world.size() == world.rank(), "distributed processing " << (readIdx * world.size()) << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
 					}
 
-					const Read &read = store.getRead( readIdx );
+					const Read &read = batchReads[ batchReadIdx ]; // store.getRead( readIdx );
 
 					if (read.isDiscarded())
 						continue;
@@ -395,7 +418,7 @@ public:
 			msgBuffers->finalize();
 
 		} // omp parallel
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed processed " << store.getGlobalSize() << " reads");
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed processed all reads");
 
 		delete msgBuffers;
 
@@ -481,13 +504,20 @@ public:
 		}
 	};
 
-	void buildKmerSpectrum(const ReadSet &store ) {
+
+	void buildKmerSpectrum(const ReadSet &store) {
 		this->buildKmerSpectrum(store, false);
 	}
-
 	void buildKmerSpectrum(const ReadSet &store, bool isSolid) {
+		assert(store.isGlobal());
+		if (store.getGlobalSize() == 0)
+			return;
+		ReadSetStream rss(store);
+		this->buildKmerSpectrum(rss, isSolid, store.getGlobalOffset(world.rank()));
+	}
+	void buildKmerSpectrum(ReadSetStream &rss, bool isSolid, ReadSetSizeType globalOffset = 0) {
 
-		_buildKmerSpectrumMPI(store, isSolid);
+		_buildKmerSpectrumMPI(rss, isSolid, globalOffset);
 
 		if(Log::isVerbose(2)) {
 			std::string hist = getHistogram(isSolid);

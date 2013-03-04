@@ -52,6 +52,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <cstring>
 #include <boost/unordered_map.hpp>
 #include <sys/mman.h>
+#include <deque>
 
 #include "config.h"
 #include "Options.h"
@@ -586,29 +587,6 @@ protected:
 
 };
 
-class ReadSetStream {
-public:
-	ReadSetStream(std::string filename) : reader(filename, true) {}
-	
-	bool readNext() {
-		std::string name, seq, quals, comment;
-		bool ret = reader.nextRead(name, seq, quals,comment);
-		if (ret)
-			currentRead = Read(name,seq,quals,comment);
-		else
-			currentRead = Read();
-		return ret;
-	}
-	Read getRead() {
-		return currentRead;
-	}
-
-protected:
-	Read currentRead;
-	ReadFileReader reader;
-
-};
-
 class ReadIndexScore {
 public:
 	ReadSet::ReadSetSizeType readIndex;
@@ -619,6 +597,75 @@ class KmerReadSetStats {
 public:
 	float kmerScore;
 	std::vector<ReadIndexScore> linkedReads;
+};
+
+
+class ReadSetStream {
+public:
+	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
+	ReadSetStream(const ReadSet &readSet) : _rs(&readSet), _rfr(NULL), _readIdx(0), _rank(0), _size(1) { }
+	ReadSetStream(ReadFileReader &reader) : _rs(NULL), _rfr(&reader), _readIdx(0), _rank(0), _size(1) {}
+	ReadSetStream(std::string filename, int rank = 0, int size = 1) : _rs(NULL), _rfr(NULL), _readIdx(0), _rank(rank), _size(size) {
+		_files.push_back(filename);
+		setNextFile();
+	}
+	ReadSetStream(std::vector<std::string> &files, int rank = 0, int size = 1) : _files(files.begin(), files.end()), _rs(NULL), _rfr(NULL), _readIdx(0), _rank(rank), _size(size)  {
+		setNextFile();
+	}
+
+	bool isReadSet() {
+		return _rs == NULL ? false : true;
+	}
+	bool isReadFileReader() {
+		return _rfr == NULL ? false : true;
+	}
+	bool hasNext() {
+		if (isReadSet()) {
+			_hasNext = _readIdx < _rs->getSize();
+			if (_hasNext)
+				_nextRead = _rs->getRead(_readIdx++);
+		} else if (isReadFileReader()) {
+			_hasNext = _rfr->nextRead(_name, _bases, _quals, _comment);
+			if (_hasNext) {
+				_nextRead = Read(_name, _bases, _quals, _comment);
+				_readIdx++;
+			} else if (setNextFile())
+				return hasNext();
+		} else 
+			_hasNext = false;
+		return _hasNext;
+	}
+	const Read &getRead() {
+		LOG_DEBUG(3, "ReadSetStream::getRead(): " << _nextRead.getName() << " " << getReadCount());
+		return _nextRead;
+	}
+	ReadSetSizeType getReadCount() {
+		return _readIdx;
+	}
+protected:
+	bool setNextFile() {
+		if (_files.empty()) {
+			_rfr = NULL;
+			return false;
+		}
+		LOG_DEBUG(3, "ReadSetStream::setNextFile(): " << _files.front());
+		_rfrptr.reset( new ReadFileReader( _files.front(), true ) );
+		_rfr = _rfrptr.get();
+		_files.pop_front();
+		if (_size != 1)
+			_rfr->seekToPartition(_rank, _size);
+		return true;
+	}
+private:
+	std::deque<std::string> _files;
+	boost::shared_ptr<ReadFileReader> _rfrptr;
+	const ReadSet *_rs;
+	ReadFileReader *_rfr;
+	Read _nextRead;
+	ReadSetSizeType _readIdx;
+	string _name, _bases, _quals, _comment;
+	bool _hasNext;
+	int _rank, _size;
 };
 
 #endif

@@ -124,7 +124,7 @@ public:
 		long totalMatches = 0;
 		long maxMatch = 0;
 		ReadSet::ReadSetSizeType contigIdx = 0;
-		while(query.readNext()) {
+		while(query.hasNext()) {
 			Read read = query.getRead();
 			matchResults.push_back(MatchHitSet());
 

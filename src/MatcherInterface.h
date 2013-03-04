@@ -310,7 +310,7 @@ public:
 			if (screenNow) {
 				if (isPaired)
 					matchReadResults[i].identifyPairs();
-				if (rss->readNext()) {
+				if (rss->hasNext()) {
 					Read contig = rss->getRead();
 					matchReadResults[i] = screenAlignmentsForOverhang(contig, matchReadResults[i], isPaired);
 				} else {

@@ -113,27 +113,20 @@ int main(int argc, char *argv[]) {
 	MemoryUtils::getMemoryUsage();
 	std::string outputFilename = Options::getOptions().getOutputFile();
 
-	ReadSet reads;
 
 	try {
 		OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
 		// TODO save memory! read file and build spectrum in 100MB chunks
-		reads.appendAllFiles(inputs, world.rank(), world.size());
+		ReadSetStream reads(inputs, world.rank(), world.size());
 
 		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
-		setGlobalReadSetConstants(world, reads);
-		long numBuckets = 0;
-		numBuckets = KS::estimateWeakKmerBucketSize(reads);
-
-		numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
-
+		long numBuckets = 32*1024*1024;
 		KS spectrum(world, numBuckets);
 
-		spectrum.buildKmerSpectrum(reads);
+		spectrum.buildKmerSpectrum(reads, false);
 		if (Log::isVerbose(1)) {
 			std::string hist = spectrum.getHistogram(false);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);

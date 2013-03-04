@@ -448,7 +448,7 @@ public:
 
 		unsigned long rawKmers = kmersPerRead * store.getSize();
 		unsigned long targetBuckets = rawKmers / targetKmersPerBucket;
-		unsigned long maxBuckets = 256*1024*1024;
+		unsigned long maxBuckets = 32*1024*1024;
 		unsigned long minBuckets = 128;
 		unsigned long buckets = std::max( std::min(targetBuckets,maxBuckets), minBuckets );
 		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "estimateWeakKmerBucketSize(" << store.getBaseCount() << ", " << targetKmersPerBucket << "): " << buckets);
