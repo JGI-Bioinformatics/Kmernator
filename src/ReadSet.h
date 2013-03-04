@@ -603,14 +603,23 @@ public:
 class ReadSetStream {
 public:
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
-	ReadSetStream(const ReadSet &readSet) : _rs(&readSet), _rfr(NULL), _readIdx(0), _rank(0), _size(1) { }
-	ReadSetStream(ReadFileReader &reader) : _rs(NULL), _rfr(&reader), _readIdx(0), _rank(0), _size(1) {}
+	ReadSetStream(const ReadSet &readSet) : _rs(&readSet), _rfr(NULL), _readIdx(0), _rank(0), _size(1) { 
+		init();
+	}
+	ReadSetStream(ReadFileReader &reader) : _rs(NULL), _rfr(&reader), _readIdx(0), _rank(0), _size(1) {
+		init();
+	}
 	ReadSetStream(std::string filename, int rank = 0, int size = 1) : _rs(NULL), _rfr(NULL), _readIdx(0), _rank(rank), _size(size) {
+		init();
 		_files.push_back(filename);
 		setNextFile();
 	}
 	ReadSetStream(std::vector<std::string> &files, int rank = 0, int size = 1) : _files(files.begin(), files.end()), _rs(NULL), _rfr(NULL), _readIdx(0), _rank(rank), _size(size)  {
+		init();
 		setNextFile();
+	}
+	void init() {
+		Read::setMinQualityScore(GeneralOptions::getOptions().getMinQuality(), GeneralOptions::getOptions().getFastqBaseQuality());
 	}
 
 	bool isReadSet() {
