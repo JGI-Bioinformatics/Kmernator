@@ -1438,19 +1438,20 @@ public:
 	typedef ElementType mapped_type;
 };
 
-template<typename _KeyType, typename _ValueType, typename _BucketType>
+template<typename _KeyType, typename _ValueType, typename _BucketType, typename _Hasher>
 class BucketExposedMap {
 public:
 	typedef _KeyType KeyType;
 	typedef _ValueType ValueType;
 	typedef _BucketType BucketType;
+	typedef _Hasher HasherType;
+
+	typedef	typename BucketType::iterator BucketTypeIterator;
+	typedef typename BucketType::mapped_type ElementType;
 
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
 	typedef Kmer::SizeType      SizeType;
-
-	typedef	typename BucketType::iterator BucketTypeIterator;
-	typedef typename BucketType::mapped_type ElementType;
 
 	typedef std::vector< BucketType > BucketsVector;
 	typedef typename BucketsVector::iterator BucketsVectorIterator;
@@ -1484,6 +1485,11 @@ public:
 		_buckets.resize(powerOf2);
 		LOG_DEBUG_OPTIONAL(3, Logger::isMaster(), "BucketExposedMap(" << bucketCount << "): " << powerOf2);
 	}
+	BucketExposedMap &operator=(const BucketExposedMap &other) {
+		_buckets = other._buckets;
+		BUCKET_MASK = other.BUCKET_MASK;
+		return *this;
+	}
 	virtual ~BucketExposedMap() {
 		clear();
 	}
@@ -1497,12 +1503,6 @@ public:
 			_buckets[i].clear();
 		}
 	}
-	BucketExposedMap &operator=(const BucketExposedMap &other) {
-		_buckets = other._buckets;
-		BUCKET_MASK = other.BUCKET_MASK;
-		return *this;
-	}
-
 	void swap(BucketExposedMap &other) {
 		_buckets.swap(other._buckets);
 		std::swap(BUCKET_MASK, other.BUCKET_MASK);
@@ -1513,6 +1513,100 @@ public:
 	}
 	NumberType getBucketSize() const {
 		return _buckets.size();
+	}
+
+	// Optionally organize buckets by Local thread and Distributed Rank
+	inline int getLocalThreadId(NumberType hash, int numThreads) const {
+		// stripe across all buckets
+		assert(numThreads > 0);
+		if (getBuckets().size() > 0)
+			return (hash & getBucketMask()) % numThreads;
+		else
+			return 0;
+	}
+	inline int getLocalThreadId(const KeyType &key, int numThreads) const {
+		return getLocalThreadId(HasherType()(key), numThreads);
+	}
+	inline int getDistributedThreadId(NumberType hash, NumberType numDistributedThreads) const {
+		// partition in contiguous blocks of 'global' buckets
+		if (getBuckets().size() > 0)
+			return numDistributedThreads * (hash & getBucketMask()) / getBuckets().size();
+		else
+			return 0;
+	}
+	inline int getDistributedThreadId(const KeyType &key, NumberType numDistributedThreads) const {
+		return getDistributedThreadId(HasherType()(key), numDistributedThreads);
+	}
+
+	// optimized to look at both possible thread partitions
+	// if this is the correct distributed thread, return true and set the proper localThread
+	// otherwise return false
+	inline bool getLocalThreadId(NumberType hash, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
+		if (numDistributedThreads == 1 || getDistributedThreadId(hash, numDistributedThreads) == distributedThreadId) {
+			localThreadId = getLocalThreadId(hash, numLocalThreads);
+			return true;
+		} else {
+			return false;
+		}
+	}
+	inline bool getLocalThreadId(const KeyType &key, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
+		NumberType hash = HasherType()(key);
+		return getLocalThreadId(hash, localThreadId, numLocalThreads, distributedThreadId, numDistributedThreads);
+	}
+
+	inline void getThreadIds(const KeyType &key, int &localThreadId, int numLocalThreads, int &distributedThreadId, NumberType numDistributedThreads) const {
+		NumberType hash = HasherType()(key);
+		distributedThreadId = getDistributedThreadId(hash, numDistributedThreads);
+		localThreadId = getLocalThreadId(hash, numLocalThreads);
+	}
+
+	// optimization to move the buckets with pre-allocated memory to the next DMP thread
+	void rotateDMPBuffers(int numThreads) {
+		IndexType block = getBuckets().size() / numThreads;
+		size_t i = 0;
+		// skip to the first non-zero bucket
+		while (i < getBuckets().size() && getBuckets()[i].size() == 0)
+			i++;
+		for(size_t j = i; j < getBuckets().size() - 1 && j < i+block; j++) {
+			getBuckets()[j].swap(getBuckets()[ (j+block) % getBuckets().size() ]);
+		}
+	}
+
+	// Exposed BucketType interface
+
+	inline NumberType getBucketIdx(NumberType hash) const {
+		NumberType bucketIdx = (hash & getBucketMask());
+		return bucketIdx;
+	}
+	inline NumberType getBucketIdx(const KeyType &key) const {
+		return getBucketIdx(HasherType()(key));
+	}
+
+	inline const BucketType &getBucket(NumberType hash) const {
+		NumberType idx = getBucketIdx(hash);
+		return getBuckets()[idx];
+	}
+	inline BucketType &getBucket(NumberType hash) {
+		return const_cast<BucketType &>( _constThis().getBucket(hash) );
+	}
+
+	inline const BucketType &getBucket(const KeyType &key) const {
+		NumberType idx = getBucketIdx(key);
+		return getBucket(idx);
+	}
+	inline BucketType &getBucket(const KeyType &key) {
+		return const_cast<BucketType &>( _constThis().getBucket(key) );
+	}
+	inline const BucketType &getBucketByIdx(IndexType idx) const {
+		return getBuckets()[idx];
+	}
+
+	inline void setNumBuckets(IndexType numBuckets) {
+		getBuckets().clear();
+		getBuckets().resize(numBuckets);
+	}
+	inline IndexType getNumBuckets() const {
+		return getBuckets().size();
 	}
 
 protected:
@@ -1530,13 +1624,16 @@ protected:
 	BucketsVector _buckets;
 	NumberType BUCKET_MASK;
 
+private:
+	inline const BucketExposedMap &_constThis() const {return *this;}
+
 };
 
 template<typename Value>
-class DenseKmerMap : public BucketExposedMap<Kmer, Value, KmerArray<Value> > {
+class DenseKmerMap : public BucketExposedMap<Kmer, Value, KmerArray<Value>, KmerHasher > {
 public:
 
-	typedef BucketExposedMap<Kmer, Value, KmerArray<Value> > Base;
+	typedef BucketExposedMap<Kmer, Value, KmerArray<Value>, KmerHasher > Base;
 	typedef typename Base::NumberType    NumberType;
 	typedef typename Base::IndexType     IndexType;
 	typedef typename Base::SizeType      SizeType;
@@ -1544,6 +1641,7 @@ public:
 	typedef typename Base::KeyType KeyType;
 	typedef typename Base::ValueType ValueType;
 	typedef typename Base::BucketType BucketType;
+	typedef typename Base::HasherType HasherType;
 	typedef	typename Base::BucketTypeIterator BucketTypeIterator;
 	typedef typename Base::ElementType ElementType;
 
@@ -1598,9 +1696,51 @@ protected:
 	Base::getBucketMask;
 
 public:
+
+	void reset(bool releaseMemory = true) {
+		for(size_t i=0; i< getBuckets().size(); i++) {
+			getBuckets()[i].reset(releaseMemory);
+		}
+	}
+	void clear(bool releaseMemory = true) {
+		reset(releaseMemory);
+		if (releaseMemory)
+			getBuckets().resize(0);
+	}
+
+	void swap(DenseKmerMap &other) {
+		Base::swap((Base&) other);
+		std::swap(_isSorted, other._isSorted);
+	}
+
+	// Base LocalThread / DistributedRank methods
+	Base::getLocalThreadId;
+	Base::getDistributedThreadId;
+	Base::getThreadIds;
+	Base::getBucketIdx;
+	Base::getBucket;
+	Base::getBucketByIdx;
+	Base::setNumBuckets;
+	Base::getNumBuckets;
+
+
+	// sorting buckets specificity
 	inline bool isSorted() const {
 		return _isSorted;
 	}
+	void resort() {
+		if (!_isSorted) {
+			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Sorting DenseKmerMaps");
+#pragma omp parallel for
+			for(long i=0; i< (long) getBuckets().size(); i++) {
+				getBuckets()[i].resort();
+			}
+			_isSorted = true;
+		}
+	}
+
+
+	// store/restore specificity
 	const Kmernator::MmapFile store(std::string permanentFile = "") const {
 		long size = getSizeToStore();
 		Kmernator::MmapFile mmap = MmapTempFile::buildNewMmap(size, permanentFile);
@@ -1640,11 +1780,6 @@ public:
 		return map;
 	}
 
-	void swap(DenseKmerMap &other) {
-		Base::swap((Base&) other);
-		std::swap(_isSorted, other._isSorted);
-	}
-
 	static const void _getMmapSizes(const void *src, NumberType &size, NumberType &mask, NumberTypePtr &offsetArray) {
 		NumberType *numbers = (NumberType *) src;
 		size = *(numbers++);
@@ -1663,129 +1798,6 @@ public:
 		return size()*BucketType::getElementByteSize();
 	}
 
-	void reset(bool releaseMemory = true) {
-		for(size_t i=0; i< getBuckets().size(); i++) {
-			getBuckets()[i].reset(releaseMemory);
-		}
-	}
-	void clear(bool releaseMemory = true) {
-		reset(releaseMemory);
-		if (releaseMemory)
-			getBuckets().resize(0);
-	}
-
-	void resort() {
-		if (!_isSorted) {
-			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Sorting DenseKmerMaps");
-#pragma omp parallel for
-			for(long i=0; i< (long) getBuckets().size(); i++) {
-				getBuckets()[i].resort();
-			}
-			_isSorted = true;
-		}
-	}
-
-	void setReadOnlyOptimization() {
-		for(size_t i = 0; i<getBuckets().size(); i++) {
-			getBuckets()[i].setReadOnlyOptimization( );
-		}
-	}
-	void unsetReadOnlyOptimization() {
-		for(size_t i = 0; i<getBuckets().size(); i++) {
-			getBuckets()[i].unsetReadOnlyOptimization();
-		}
-	}
-
-	inline int getLocalThreadId(NumberType hash, int numThreads) const {
-		// stripe across all buckets
-		assert(numThreads > 0);
-		if (getBuckets().size() > 0)
-			return (hash & getBucketMask()) % numThreads;
-		else
-			return 0;
-	}
-	inline int getLocalThreadId(const KeyType &key, int numThreads) const {
-		return getLocalThreadId(key.hash(), numThreads);
-	}
-	inline int getDistributedThreadId(NumberType hash, NumberType numDistributedThreads) const {
-		// partition in contiguous blocks of 'global' buckets
-		if (getBuckets().size() > 0)
-			return numDistributedThreads * (hash & getBucketMask()) / getBuckets().size();
-		else
-			return 0;
-	}
-	inline int getDistributedThreadId(const KeyType &key, NumberType numDistributedThreads) const {
-		return getDistributedThreadId(key.hash(), numDistributedThreads);
-	}
-
-	// optimized to look at both possible thread partitions
-	// if this is the correct distributed thread, return true and set the proper localThread
-	// otherwise return false
-	inline bool getLocalThreadId(NumberType hash, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
-		if (numDistributedThreads == 1 || getDistributedThreadId(hash, numDistributedThreads) == distributedThreadId) {
-			localThreadId = getLocalThreadId(hash, numLocalThreads);
-			return true;
-		} else {
-			return false;
-		}
-	}
-	inline bool getLocalThreadId(const KeyType &key, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
-		NumberType hash = key.hash();
-		return getLocalThreadId(hash, localThreadId, numLocalThreads, distributedThreadId, numDistributedThreads);
-	}
-
-	inline void getThreadIds(const KeyType &key, int &localThreadId, int numLocalThreads, int &distributedThreadId, NumberType numDistributedThreads) const {
-		NumberType hash = key.hash();
-		distributedThreadId = getDistributedThreadId(hash, numDistributedThreads);
-		localThreadId = getLocalThreadId(hash, numLocalThreads);
-	}
-
-	// optimization to move the buckets with pre-allocated memory to the next DMP thread
-	void rotateDMPBuffers(int numThreads) {
-		IndexType block = getBuckets().size() / numThreads;
-		size_t i = 0;
-		// skip to the first non-zero bucket
-		while (i < getBuckets().size() && getBuckets()[i].size() == 0)
-			i++;
-		for(size_t j = i; j < getBuckets().size() - 1 && j < i+block; j++) {
-			getBuckets()[j].swap(getBuckets()[ (j+block) % getBuckets().size() ]);
-		}
-	}
-
-	inline NumberType getBucketIdx(NumberType hash) const {
-		NumberType bucketIdx = (hash & getBucketMask());
-		return bucketIdx;
-	}
-	inline NumberType getBucketIdx(const KeyType &key) const {
-		return getBucketIdx(key.hash());
-	}
-
-	inline const BucketType &getBucket(NumberType hash) const {
-		NumberType idx = getBucketIdx(hash);
-		return getBuckets()[idx];
-	}
-	inline BucketType &getBucket(NumberType hash) {
-		return const_cast<BucketType &>( _constThis().getBucket(hash) );
-	}
-
-	inline const BucketType &getBucket(const KeyType &key) const {
-		NumberType idx = getBucketIdx(key);
-		return getBucket(idx);
-	}
-	inline BucketType &getBucket(const KeyType &key) {
-		return const_cast<BucketType &>( _constThis().getBucket(key) );
-	}
-	inline const BucketType &getBucketByIdx(IndexType idx) const {
-		return getBuckets()[idx];
-	}
-
-	inline void setNumBuckets(IndexType numBuckets) {
-		getBuckets().clear();
-		getBuckets().resize(numBuckets);
-	}
-	inline IndexType getNumBuckets() const {
-		return getBuckets().size();
-	}
 
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
 		IndexType idx;
