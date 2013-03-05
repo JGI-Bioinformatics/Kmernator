@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) {
 
 		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
-		long numBuckets = 32*1024*1024;
+		long numBuckets = 512*1024;
 		KS spectrum(world, numBuckets);
 
 		spectrum.buildKmerSpectrum(reads, false);

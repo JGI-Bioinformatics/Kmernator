@@ -354,8 +354,8 @@ public:
 				loopThreadId--; loopNumThreads--;
 			}
 			ReadSetSizeType myOffset = 0;
+			KmerReadUtils kru;
 			while (isRunningInLoop) {
-				KmerReadUtils kru;
 				long progressCount = 0, progressMark = 1000000 / world.size();
 				Read batchReads[batchReadsSize];
 				ReadSetSizeType batchReadSetSize = 0;

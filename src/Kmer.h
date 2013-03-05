@@ -473,7 +473,6 @@ private:
 	}
 
 	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity), _endSorted(0) {
-		LOG_DEBUG(6, "private KmerArray(" << begin << ", " << size << "," << capacity << ", " << _endSorted <<"): " << toThis());
 	}
 
 public:
@@ -481,7 +480,6 @@ public:
 	KmerArray(IndexType size = 0) :
 		_begin(NULL), _size(0), _capacity(0), _endSorted(0) {
 		resize(size);
-		LOG_DEBUG(6, "KmerArray(" << size << "): " << toThis());
 	}
 
 	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false, bool *bools = NULL) :
@@ -496,13 +494,11 @@ public:
 		} else {
 			resize(0);
 		}
-		LOG_DEBUG(6, "KmerArray(" << twoBit <<"," << length << "," << leastComplement << "," << bools << "):" << toThis());
 	}
 
 	KmerArray(const KmerArray &copy) :
 		_begin(NULL), _size(0), _capacity(0), _endSorted(0)  {
 		*this = copy;
-		LOG_DEBUG(6, "KmerArray(" << copy.toThis() << "):" << toThis());
 	}
 
 	KmerArray copyRange(SequenceLengthType offset, SequenceLengthType length) {
@@ -515,12 +511,10 @@ public:
 	}
 
 	~KmerArray() {
-		LOG_DEBUG(6, "~KmerArray(): " << toThis());
 		reset();
 	}
 
 	KmerArray &operator=(const KmerArray &other) {
-		LOG_DEBUG(6, "KmerArray &operator=(" << other.toThis() << "): " << toThis());
 		
 		if (this == &other)
 			return *this;
@@ -560,7 +554,6 @@ public:
 			_copyRange(ptr, (ValueType *) (((char*)ptr)+kmerSize), 0, 0, _size, false);
 		}
 		setLastSorted();
-		LOG_DEBUG(6, "KmerArray(" << src << "): " << toThis());
 	}
 
 	// store an existing array to a mmap
@@ -915,7 +908,7 @@ public:
 			// free old memory
 			std::free(oldBegin);
 		}
-		LOG_DEBUG(5, "_setMemory(" << this << ", " << size << ", " << idx << ", " << reserveExtra << "): exited. memChanged:" << memChanged << " - " << _begin << " size: " << _size << " capacity: " << _capacity);
+		//LOG_DEBUG(5, "_setMemory(" << this << ", " << size << ", " << idx << ", " << reserveExtra << "): exited. memChanged:" << memChanged << " - " << _begin << " size: " << _size << " capacity: " << _capacity);
 	}
 
 	void build(const TwoBitEncoding *twoBit, SequenceLengthType length,
@@ -1186,7 +1179,6 @@ protected:
 		if (!isFound) {
 			_insertAt(idx, target);
 			_endSorted++;
-			LOG_DEBUG(5, "_insertSorted(): " << _endSorted << ", " << size());
 			assert(_endSorted <= size());
 		}
 		return idx;
@@ -1685,7 +1677,6 @@ public:
 		} else {
 			idx = bucket.append(key,value);
 			if (bucket.size() == bucket.capacity()) {
-				LOG_DEBUG(5, "KmerMap::insert()...resort() " << bucket.size());
 				bucket.resort(true);
 				idx = bucket.find(key);
 				assert(idx != BucketType::MAX_INDEX);

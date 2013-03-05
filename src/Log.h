@@ -102,14 +102,14 @@ class Logger
 		return _rankHeader;
 	}
 
-	inline std::string getThread() const {
+	static inline std::string getThread() {
 #ifdef _USE_OPENMP
 		return " T" + boost::lexical_cast<std::string>( omp_get_thread_num() );
 #else
 		return " T" + boost::lexical_cast<std::string>( syscall(SYS_gettid) ); // gettid() );
 #endif
 	}
-	inline std::string getTime() const {
+	static inline std::string getTime() {
 		time_t rawtime;
 		struct tm *timeinfo;
 		time (&rawtime);
@@ -249,6 +249,9 @@ public:
 	}
 	inline void unsetOstream() {
 		_os = NULL;
+	}
+	inline static std::string getCommonStamp() {
+		return getTime() + " " + getRank() + getThread() + ": ";
 	}
 	inline std::string getStamp(std::string attribLabel = "") const {
 		return getTime() + " " + _attribute + getThisLevel() + attribLabel + getRank() + getThread() + ": ";
@@ -466,6 +469,6 @@ public:
 	}
 };
 
-#define LOG_THROW(log) { Logger::getAbortFlag() = true; Logger::releaseBuffer(); std::cerr << "Exception!: " << log << std::endl; StackTrace::printStackTrace(); { std::stringstream ss ; ss << log; Log::Error(ss.str(), true); } throw LoggedException(Log::getErrorMessages()); }
+#define LOG_THROW(log) { Logger::getAbortFlag() = true; Logger::releaseBuffer(); std::cerr << Logger::getCommonStamp() << "Exception!: " << log << std::endl; StackTrace::printStackTrace(); { std::stringstream ss ; ss << log; Log::Error(ss.str(), true); } throw LoggedException(Log::getErrorMessages()); }
 
 #endif /* LOG_H_ */
