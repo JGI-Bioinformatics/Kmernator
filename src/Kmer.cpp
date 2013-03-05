@@ -52,6 +52,13 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 KmerSizer KmerSizer::singleton;
 
+Kmer::NumberType Kmer::hash() const {
+	return KmerHasher::getHash(this,  getTwoBitLength());
+}
+Kmer::NumberType KmerInstance::hash() const {
+	return KmerHasher::getHash(_data,  getTwoBitLength());
+}
+
 TrackingData::WeightType TrackingData::minimumWeight = 0.01;
 TrackingData::CountType TrackingData::minimumDepth = 10;
 unsigned long TrackingData::discarded = 0;

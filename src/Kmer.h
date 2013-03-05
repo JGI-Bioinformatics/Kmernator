@@ -172,18 +172,21 @@ typedef OptionsBaseTemplate< _KmerBaseOptions > KmerBaseOptions;
 
 #define TEMP_KMER(name)  TwoBitEncoding _stack_##name[KmerSizer::getByteSize()]; Kmer &name = (Kmer &)(_stack_##name);
 
+class KmerHasher;
 class Kmer {
 public:
 	typedef Kmernator::KmerNumberType NumberType;
 	typedef Kmernator::KmerIndexType  IndexType;
 	typedef Kmernator::KmerSizeType   SizeType;
 
+protected:
+	Kmer(); // never construct, just use as cast
+
 private:
 	inline static boost::hash<NumberType> &getHasher() {
 		static boost::hash<NumberType> hasher;
 		return hasher;
 	}
-	Kmer(); // never construct, just use as cast
 
 #ifdef STRICT_MEM_CHECK
 	TwoBitEncoding _someData[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
@@ -338,22 +341,62 @@ public:
 		return Kmer::toNumber(*this);
 	}
 
+	NumberType hash() const;
 
-	inline NumberType hash() const {
+};
 
+class KmerInstance : public Kmer {
+public:
+	KmerInstance() {
+		init();
+	}
+	KmerInstance(const Kmer &copy) {
+		init();
+		*this = copy;
+	}
+	KmerInstance &operator=(const Kmer &other)  {
+		*((Kmer*)this) = other;
+		return *this;
+	}
+	~KmerInstance() {
+		destroy();
+	}
+	inline Kmer *get() {
+		return (Kmer*) _data;
+	}
+	inline const Kmer *get() const {
+		return (Kmer*) _data;
+	}
+	Kmer::NumberType hash() const;
+private:
+	inline void init() {
+	}
+	inline void destroy() {
+	}
+	char _data[16];
+};
+
+class KmerHasher {
+public:
+	typedef Kmernator::KmerNumberType NumberType;
+	static NumberType getHash(const void *ptr, int length) {
 		//		NumberType number = toNumber();
 		//		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
 		uint64_t hash = 0xDEADBEEF;
 		uint32_t *pc, *pb;
 		pc = (uint32_t*) &hash;
 		pb = pc+1;
-		Lookup3::hashlittle2(this, getTwoBitLength(), pc, pb);
+		Lookup3::hashlittle2(ptr, length, pc, pb);
+		//return *pc + (((uint64_t)*pb)<<32);
 		return hash;
-
 	}
-
+	inline NumberType operator()(const Kmer& kmer) {
+		return kmer.hash();
+	}
+	inline NumberType operator()(const KmerInstance& kmer) {
+		return kmer.hash();
+	}
 };
-
 
 template<typename Value>
 class KmerArray {
@@ -1389,27 +1432,28 @@ public:
 
 	ConstIterator begin() const {return ConstIterator(this,0);}
 	ConstIterator end() const {return ConstIterator(this,size());}
+
+	// for compatibility with std interfaces (should refactor eventually)
+	typedef Iterator iterator;
+	typedef ElementType mapped_type;
 };
 
-template<typename Value>
-class KmerMap {
+template<typename _KeyType, typename _ValueType, typename _BucketType>
+class BucketExposedMap {
 public:
-	static const bool defaultSort = false;
+	typedef _KeyType KeyType;
+	typedef _ValueType ValueType;
+	typedef _BucketType BucketType;
+
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
 	typedef Kmer::SizeType      SizeType;
 
-	typedef Kmer KeyType;
-	typedef Value ValueType;
-	typedef NumberType * NumberTypePtr;
-	typedef KmerArray<Value> BucketType;
-	typedef	typename BucketType::Iterator BucketTypeIterator;
-	typedef typename BucketType::ElementType ElementType;
+	typedef	typename BucketType::iterator BucketTypeIterator;
+	typedef typename BucketType::mapped_type ElementType;
 
 	typedef std::vector< BucketType > BucketsVector;
 	typedef typename BucketsVector::iterator BucketsVectorIterator;
-
-	static const IndexType MAX_UNSORTED = 24;
 
 	static IndexType getMinPowerOf2(IndexType minBucketCount) {
 		NumberType powerOf2 = minBucketCount;
@@ -1425,21 +1469,12 @@ public:
 		}
 		return powerOf2;
 	}
-private:
-	BucketsVector _buckets;
-	NumberType BUCKET_MASK;
-	bool _isSorted;
-
-	inline const KmerMap &_constThis() const {return *this;}
 
 public:
-	KmerMap() {
-		BUCKET_MASK=0;
-		_buckets.clear();
-		_isSorted = defaultSort;
+	BucketExposedMap() {
+		clear();
 	}
-	KmerMap(IndexType bucketCount) {
-
+	BucketExposedMap(IndexType bucketCount) {
 		// ensure buckets are a precise powers of two
 		// with at least bucketCount buckets
 		if (bucketCount > MAX_KMER_MAP_BUCKETS)
@@ -1447,34 +1482,122 @@ public:
 		NumberType powerOf2 = getMinPowerOf2(bucketCount);
 		BUCKET_MASK = powerOf2 - 1;
 		_buckets.resize(powerOf2);
+		LOG_DEBUG_OPTIONAL(3, Logger::isMaster(), "BucketExposedMap(" << bucketCount << "): " << powerOf2);
+	}
+	virtual ~BucketExposedMap() {
+		clear();
+	}
+
+	void clear() {
+		_buckets.clear();
+		BUCKET_MASK = 0;
+	}
+	void reset() {
+		for(size_t i=0; i< _buckets.size(); i++) {
+			_buckets[i].clear();
+		}
+	}
+	BucketExposedMap &operator=(const BucketExposedMap &other) {
+		_buckets = other._buckets;
+		BUCKET_MASK = other.BUCKET_MASK;
+		return *this;
+	}
+
+	void swap(BucketExposedMap &other) {
+		_buckets.swap(other._buckets);
+		std::swap(BUCKET_MASK, other.BUCKET_MASK);
+	}
+
+	NumberType getBucketMask() const {
+		return BUCKET_MASK;
+	}
+	NumberType getBucketSize() const {
+		return _buckets.size();
+	}
+
+protected:
+	inline BucketsVector &getBuckets() {
+		return _buckets;
+	}
+	inline const BucketsVector &getBuckets() const {
+		return _buckets;
+	}
+	inline NumberType &getBucketMask() {
+		return BUCKET_MASK;
+	}
+
+protected:
+	BucketsVector _buckets;
+	NumberType BUCKET_MASK;
+
+};
+
+template<typename Value>
+class DenseKmerMap : public BucketExposedMap<Kmer, Value, KmerArray<Value> > {
+public:
+
+	typedef BucketExposedMap<Kmer, Value, KmerArray<Value> > Base;
+	typedef typename Base::NumberType    NumberType;
+	typedef typename Base::IndexType     IndexType;
+	typedef typename Base::SizeType      SizeType;
+
+	typedef typename Base::KeyType KeyType;
+	typedef typename Base::ValueType ValueType;
+	typedef typename Base::BucketType BucketType;
+	typedef	typename Base::BucketTypeIterator BucketTypeIterator;
+	typedef typename Base::ElementType ElementType;
+
+	typedef typename Base::BucketsVector BucketsVector;
+	typedef typename Base::BucketsVectorIterator BucketsVectorIterator;
+
+	typedef NumberType * NumberTypePtr;
+
+public:
+	static const bool defaultSort = false;
+	static const IndexType MAX_UNSORTED = 24;
+
+private:
+	bool _isSorted;
+
+	inline const DenseKmerMap &_constThis() const {return *this;}
+
+public:
+	DenseKmerMap() : Base() {
+		_isSorted = defaultSort;
+	}
+	DenseKmerMap(IndexType bucketCount) : Base(bucketCount) {
+
 		_isSorted = defaultSort;
 
-		LOG_DEBUG_OPTIONAL(3, Logger::isMaster(), "KmerMap(" << bucketCount << "): " << powerOf2);
-
 	}
-	~KmerMap()
+	virtual ~DenseKmerMap()
 	{
 		clear();
 	}
-	KmerMap &operator=(const KmerMap &other) {
-		_buckets = other._buckets;
-		BUCKET_MASK = other.BUCKET_MASK;
+	DenseKmerMap &operator=(const DenseKmerMap &other) {
+		*((Base*)this) = (const Base&) other;
 		_isSorted = other._isSorted;
 		return *this;
 	}
 	// restore new instance from mmap
-	KmerMap(const void *src) {
+	DenseKmerMap(const void *src) {
 		NumberType size(0), *offsetArray;
 		const void *ptr;
-		_getMmapSizes(src, size, BUCKET_MASK, offsetArray);
-		_buckets.resize(size);
+		_getMmapSizes(src, size, getBucketMask(), offsetArray);
+		getBuckets().resize(size);
 		_isSorted = true;
 		for (NumberType idx = 0 ; idx < size ; idx++) {
 			ptr = ((char*)src) + *(offsetArray + idx);
-			_buckets[idx] = BucketType(ptr);
-			_isSorted &= _buckets[idx].isSorted();
+			getBuckets()[idx] = BucketType(ptr);
+			_isSorted &= getBuckets()[idx].isSorted();
 		}
 	}
+
+protected:
+	Base::getBuckets;
+	Base::getBucketMask;
+
+public:
 	inline bool isSorted() const {
 		return _isSorted;
 	}
@@ -1486,40 +1609,39 @@ public:
 	}
 	// store to mmap
 	const void *store(void *dst) const {
-		NumberType size = (NumberType) _buckets.size();
+		NumberType size = (NumberType) getBuckets().size();
 		NumberType *numbers = (NumberType *) dst;
 		*(numbers++) = size;
-		*(numbers++) = BUCKET_MASK;
+		*(numbers++) = getBucketMask();
 		NumberType *offsetArray = numbers;
 		NumberType offset = sizeof(NumberType) * (2+size);
 
 		for(NumberType idx = 0 ; idx < size; idx++) {
 			*(offsetArray++) = offset;
 			void *ptr = ((char*)dst) + offset;
-			const char *newPtr = (const char *) _buckets[idx].store(ptr);
+			const char *newPtr = (const char *) getBuckets()[idx].store(ptr);
 			NumberType newSize = (newPtr - (const char *) ptr);
 			offset += newSize;
 		}
 		return ((char*)dst) + offset;
 	}
-	static const KmerMap restore(const void *src) {
-		KmerMap map;
+	static const DenseKmerMap restore(const void *src) {
+		DenseKmerMap map;
 		NumberType size(0), *offsetArray;
 		const void *ptr;
-		_getMmapSizes(src, size, map.BUCKET_MASK, offsetArray);
-		map._buckets.resize(size);
+		_getMmapSizes(src, size, map.getBucketMask(), offsetArray);
+		map.getBuckets().resize(size);
 		map._isSorted = true;
 		for (NumberType idx = 0 ; idx < size ; idx++) {
 			ptr = ((char*)src) + *(offsetArray + idx);
-			map._buckets[idx] = BucketType::restore(ptr);
-			map._isSorted &= map._buckets[idx].isSorted();
+			map.getBuckets()[idx] = BucketType::restore(ptr);
+			map._isSorted &= map.getBuckets()[idx].isSorted();
 		}
 		return map;
 	}
 
-	void swap(KmerMap &other) {
-		_buckets.swap(other._buckets);
-		std::swap(BUCKET_MASK, other.BUCKET_MASK);
+	void swap(DenseKmerMap &other) {
+		Base::swap((Base&) other);
 		std::swap(_isSorted, other._isSorted);
 	}
 
@@ -1534,56 +1656,51 @@ public:
 				+ getSizeToStoreElements();
 	}
 	SizeType getSizeToStoreCountsAndIndexes() const {
-		return sizeof(NumberType)*(2+_buckets.size())
-				+ _buckets.size()*sizeof(IndexType);
+		return sizeof(NumberType)*(2+getBuckets().size())
+				+ getBuckets().size()*sizeof(IndexType);
 	}
 	SizeType getSizeToStoreElements() const {
 		return size()*BucketType::getElementByteSize();
 	}
-	NumberType getBucketMask() const {
-		return BUCKET_MASK;
-	}
-	NumberType getBucketSize() const {
-		return _buckets.size();
-	}
+
 	void reset(bool releaseMemory = true) {
-		for(size_t i=0; i< _buckets.size(); i++) {
-			_buckets[i].reset(releaseMemory);
+		for(size_t i=0; i< getBuckets().size(); i++) {
+			getBuckets()[i].reset(releaseMemory);
 		}
 	}
 	void clear(bool releaseMemory = true) {
 		reset(releaseMemory);
 		if (releaseMemory)
-			_buckets.resize(0);
+			getBuckets().resize(0);
 	}
 
 	void resort() {
 		if (!_isSorted) {
-			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Sorting KmerMaps");
+			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Sorting DenseKmerMaps");
 #pragma omp parallel for
-			for(long i=0; i< (long) _buckets.size(); i++) {
-				_buckets[i].resort();
+			for(long i=0; i< (long) getBuckets().size(); i++) {
+				getBuckets()[i].resort();
 			}
 			_isSorted = true;
 		}
 	}
 
 	void setReadOnlyOptimization() {
-		for(size_t i = 0; i<_buckets.size(); i++) {
-			_buckets[i].setReadOnlyOptimization( );
+		for(size_t i = 0; i<getBuckets().size(); i++) {
+			getBuckets()[i].setReadOnlyOptimization( );
 		}
 	}
 	void unsetReadOnlyOptimization() {
-		for(size_t i = 0; i<_buckets.size(); i++) {
-			_buckets[i].unsetReadOnlyOptimization();
+		for(size_t i = 0; i<getBuckets().size(); i++) {
+			getBuckets()[i].unsetReadOnlyOptimization();
 		}
 	}
 
 	inline int getLocalThreadId(NumberType hash, int numThreads) const {
 		// stripe across all buckets
 		assert(numThreads > 0);
-		if (_buckets.size() > 0)
-			return (hash & BUCKET_MASK) % numThreads;
+		if (getBuckets().size() > 0)
+			return (hash & getBucketMask()) % numThreads;
 		else
 			return 0;
 	}
@@ -1592,8 +1709,8 @@ public:
 	}
 	inline int getDistributedThreadId(NumberType hash, NumberType numDistributedThreads) const {
 		// partition in contiguous blocks of 'global' buckets
-		if (_buckets.size() > 0)
-			return numDistributedThreads * (hash & BUCKET_MASK) / _buckets.size();
+		if (getBuckets().size() > 0)
+			return numDistributedThreads * (hash & getBucketMask()) / getBuckets().size();
 		else
 			return 0;
 	}
@@ -1625,18 +1742,18 @@ public:
 
 	// optimization to move the buckets with pre-allocated memory to the next DMP thread
 	void rotateDMPBuffers(int numThreads) {
-		IndexType block = _buckets.size() / numThreads;
+		IndexType block = getBuckets().size() / numThreads;
 		size_t i = 0;
 		// skip to the first non-zero bucket
-		while (i < _buckets.size() && _buckets[i].size() == 0)
+		while (i < getBuckets().size() && getBuckets()[i].size() == 0)
 			i++;
-		for(size_t j = i; j < _buckets.size() - 1 && j < i+block; j++) {
-			_buckets[j].swap(_buckets[ (j+block) % _buckets.size() ]);
+		for(size_t j = i; j < getBuckets().size() - 1 && j < i+block; j++) {
+			getBuckets()[j].swap(getBuckets()[ (j+block) % getBuckets().size() ]);
 		}
 	}
 
 	inline NumberType getBucketIdx(NumberType hash) const {
-		NumberType bucketIdx = (hash & BUCKET_MASK);
+		NumberType bucketIdx = (hash & getBucketMask());
 		return bucketIdx;
 	}
 	inline NumberType getBucketIdx(const KeyType &key) const {
@@ -1645,7 +1762,7 @@ public:
 
 	inline const BucketType &getBucket(NumberType hash) const {
 		NumberType idx = getBucketIdx(hash);
-		return _buckets[idx];
+		return getBuckets()[idx];
 	}
 	inline BucketType &getBucket(NumberType hash) {
 		return const_cast<BucketType &>( _constThis().getBucket(hash) );
@@ -1659,15 +1776,15 @@ public:
 		return const_cast<BucketType &>( _constThis().getBucket(key) );
 	}
 	inline const BucketType &getBucketByIdx(IndexType idx) const {
-		return _buckets[idx];
+		return getBuckets()[idx];
 	}
 
 	inline void setNumBuckets(IndexType numBuckets) {
-		_buckets.clear();
-		_buckets.resize(numBuckets);
+		getBuckets().clear();
+		getBuckets().resize(numBuckets);
 	}
 	inline IndexType getNumBuckets() const {
-		return _buckets.size();
+		return getBuckets().size();
 	}
 
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
@@ -1789,10 +1906,10 @@ public:
 	SizeType size() const {
 		SizeType size = 0;
 
-		long bucketSize = _buckets.size();
-#pragma omp parallel for reduction(+:size) if(_buckets.size()>1000000)
+		long bucketSize = getBuckets().size();
+#pragma omp parallel for reduction(+:size) if(getBuckets().size()>1000000)
 		for(long i = 0; i < bucketSize; i++) {
-			size += _buckets[i].size();
+			size += getBuckets()[i].size();
 		}
 		return size;
 	}
@@ -1801,11 +1918,11 @@ public:
 		std::stringstream ss;
 		ss << this << "[";
 		IndexType idx=0;
-		for(; idx<_buckets.size() && idx < 30; idx++) {
-			ss << "bucket:" << idx << ' ' << _buckets[idx].toString() << ", ";
+		for(; idx<getBuckets().size() && idx < 30; idx++) {
+			ss << "bucket:" << idx << ' ' << getBuckets()[idx].toString() << ", ";
 		}
-		if (idx < _buckets.size())
-			ss << " ... " << _buckets.size() - idx << " more ";
+		if (idx < getBuckets().size())
+			ss << " ... " << getBuckets().size() - idx << " more ";
 		ss << "]";
 		return ss.str();
 	}
@@ -1814,11 +1931,11 @@ public:
 	{
 		IndexType biggest = 0;
 		IndexType imax;
-		for(IndexType i = 0; i<_buckets.size(); i++)
-			if (_buckets[i].size() > biggest)
+		for(IndexType i = 0; i<getBuckets().size(); i++)
+			if (getBuckets()[i].size() > biggest)
 			{
 				imax = i;
-				biggest = _buckets[i].size();
+				biggest = getBuckets()[i].size();
 			}
 		return biggest;
 	}
@@ -1831,7 +1948,7 @@ public:
 		long bucketsSize = getNumBuckets();
 #pragma omp parallel for reduction(+:affected)
 		for(long idx = 0 ; idx < bucketsSize; idx++) {
-			affected += _buckets[idx].purgeMinCount(minimumCount);
+			affected += getBuckets()[idx].purgeMinCount(minimumCount);
 		}
 		_isSorted = true; // purgeMinCount implicitly sorts...
 		return affected;
@@ -1865,28 +1982,28 @@ public:
 		return false;
 	}
 
-	// optimized merge for DMP threaded (blocked) KmerMaps
-	void merge(const KmerMap &src) const {
+	// optimized merge for DMP threaded (blocked) DenseKmerMaps
+	void merge(const DenseKmerMap &src) const {
 		if (getNumBuckets() != src.getNumBuckets()) {
-			LOG_THROW("Invalid: Can not merge two KmerMaps of differing sizes!");
+			LOG_THROW("Invalid: Can not merge two DenseKmerMaps of differing sizes!");
 		}
 
 		long bucketsSize = getNumBuckets();
 #pragma omp parallel for
 		for(long idx = 0 ; idx < bucketsSize; idx++) {
-			BucketType &a = const_cast<BucketType&>(_buckets[idx]);
-			BucketType &b = const_cast<BucketType&>(src._buckets[idx]);
+			BucketType &a = const_cast<BucketType&>(getBuckets()[idx]);
+			BucketType &b = const_cast<BucketType&>(src.getBuckets()[idx]);
 
 			if (! _mergeTrivial(a,b) ) {
-				LOG_THROW("Invalid: Expected one bucket to be zero in this optimized method: KmerMap::merge(const KmerMap &src) const");
+				LOG_THROW("Invalid: Expected one bucket to be zero in this optimized method: DenseKmerMap::merge(const DenseKmerMap &src) const");
 			}
 		}
 
 	}
 
-	void mergeAdd(KmerMap &src) {
+	void mergeAdd(DenseKmerMap &src) {
 		if (getNumBuckets() != src.getNumBuckets()) {
-			LOG_THROW("Invalid: Can not merge two KmerMaps of differing sizes!");
+			LOG_THROW("Invalid: Can not merge two DenseKmerMaps of differing sizes!");
 		}
 		BucketType merged;
 		if (!isSorted())
@@ -1898,8 +2015,8 @@ public:
 #pragma omp parallel for private(merged)
 		for(long idx = 0 ; idx < bucketsSize; idx++) {
 			// buckets are sorted so perform a sorted merge by bucket
-			BucketType &a = _buckets[idx];
-			BucketType &b = src._buckets[idx];
+			BucketType &a = getBuckets()[idx];
+			BucketType &b = src.getBuckets()[idx];
 
 			// short circuit if one of the buckets is empty
 			if (_mergeTrivial(a,b))
@@ -1937,11 +2054,11 @@ public:
 	}
 
 	template< typename OtherDataType >
-	void mergePromote(KmerMap &src, KmerMap< OtherDataType > &mergeDest) {
+	void mergePromote(DenseKmerMap &src, DenseKmerMap< OtherDataType > &mergeDest) {
 		// TODO fixme
 		LOG_THROW("Invalid: This method is broken for threaded execution somehow (even with pragmas disabled)");
 		if (getNumBuckets() != src.getNumBuckets()) {
-			LOG_THROW("Invalid: Can not merge two KmerMaps of differing sizes!");
+			LOG_THROW("Invalid: Can not merge two DenseKmerMaps of differing sizes!");
 		}
 		// calculated chunk size to ensure thread safety of merge operation
 		int chunkSize = mergeDest.getNumBuckets() / src.getNumBuckets();
@@ -1957,8 +2074,8 @@ public:
 		//#pragma omp parallel for private(merged) schedule(static, chunkSize)
 		for(long idx = 0 ; idx < bucketsSize; idx++) {
 			// buckets are sorted so perform a sorted merge by bucket
-			BucketType &a = _buckets[idx];
-			BucketType &b = src._buckets[idx];
+			BucketType &a = getBuckets()[idx];
+			BucketType &b = src.getBuckets()[idx];
 			IndexType capacity = std::max(a.size(), b.size());
 			merged.reserve(capacity);
 			IndexType idxA = 0;
@@ -1990,11 +2107,11 @@ public:
 	}
 
 public:
-	class Iterator : public std::iterator<std::forward_iterator_tag, KmerMap>
+	class Iterator : public std::iterator<std::forward_iterator_tag, DenseKmerMap>
 	{
-		friend class KmerMap;
+		friend class DenseKmerMap;
 	private:
-		const KmerMap *_target;
+		const DenseKmerMap *_target;
 		BucketsVectorIterator _iBucket;
 		BucketTypeIterator _iElement;
 		int _rank, _size;
@@ -2003,9 +2120,9 @@ public:
 		Iterator() : _target(NULL), _rank(0), _size(0) {}
 
 		// iterator over rank/size will stripe across the buckets (modulus by size).
-		Iterator(KmerMap *target, int rank = 0, int size = 1):
+		Iterator(DenseKmerMap *target, int rank = 0, int size = 1):
 			_target(target),
-			_iBucket(target->_buckets.begin()),
+			_iBucket(target->getBuckets().begin()),
 			_iElement(),
 			_rank(rank), _size(size)
 		{
@@ -2023,7 +2140,7 @@ public:
 			_size = copy._size;
 		}
 
-		Iterator(KmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1):
+		Iterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1):
 			_target(target),
 			_iBucket(bucketPtr),
 			_iElement(),
@@ -2035,7 +2152,7 @@ public:
 			_moveToNextValidElement();
 		}
 
-		Iterator(KmerMap *target, BucketsVectorIterator bucketPtr, BucketTypeIterator elementPtr, int rank = 0, int size = 1):
+		Iterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr, BucketTypeIterator elementPtr, int rank = 0, int size = 1):
 			_target(target),
 			_iBucket(bucketPtr),
 			_iElement(elementPtr),
@@ -2046,7 +2163,7 @@ public:
 
 	private:
 		inline bool isEnd() const {
-			return _iBucket == _target->_buckets.end();
+			return _iBucket == _target->getBuckets().end();
 		}
 
 		void _moveToNextValidElement() {
@@ -2067,7 +2184,7 @@ public:
 		void _moveToRank() {
 			if (_size == 1)
 				return;
-			if (isEnd() || ((int) _target->_buckets.size() <= _rank)) {
+			if (isEnd() || ((int) _target->getBuckets().size() <= _rank)) {
 				while (!isEnd())
 					++_iBucket;
 				return;
@@ -2111,20 +2228,20 @@ public:
 		BucketType &bucket() {return *_iBucket;}
 		const BucketType &bucket() const {return *_iBucket;}
 
-		IndexType bucketIndex() {return (_iBucket - _target->_buckets.begin());}
-		const IndexType bucketIndex() const {return (_iBucket - _target->_buckets.begin());}
+		IndexType bucketIndex() {return (_iBucket - _target->getBuckets().begin());}
+		const IndexType bucketIndex() const {return (_iBucket - _target->getBuckets().begin());}
 
 	};
 
-	class ConstIterator : public std::iterator<std::forward_iterator_tag, KmerMap>
+	class ConstIterator : public std::iterator<std::forward_iterator_tag, DenseKmerMap>
 	{
 	private:
 		Iterator _iterator;
 	public:
-		ConstIterator(KmerMap *target, int rank = 0, int size = 1) : _iterator(target, rank, size) {}
+		ConstIterator(DenseKmerMap *target, int rank = 0, int size = 1) : _iterator(target, rank, size) {}
 		ConstIterator(const ConstIterator &copy) : _iterator(copy._iterator) {}
-		ConstIterator(KmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1) : _iterator(target,bucketPtr, rank, size) {}
-		ConstIterator(KmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr, int rank = 0, int size = 1): _iterator(target,bucketPtr,elementPtr, rank, size) {}
+		ConstIterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1) : _iterator(target,bucketPtr, rank, size) {}
+		ConstIterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr, int rank = 0, int size = 1): _iterator(target,bucketPtr,elementPtr, rank, size) {}
 		bool operator==(const ConstIterator& other) const {return _iterator == other._iterator;}
 		bool operator!=(const ConstIterator& other) const {return _iterator != other._iterator;}
 		ConstIterator& operator++() {++_iterator; return *this;}
@@ -2138,10 +2255,10 @@ public:
 	};
 
 	Iterator begin(int rank = 0, int size = 1) {return Iterator(this, rank, size);}
-	Iterator end() {return Iterator(this,_buckets.end());}
+	Iterator end() {return Iterator(this,getBuckets().end());}
 
 	ConstIterator begin(int rank = 0, int size = 1) const {return Iterator(this, rank, size);}
-	ConstIterator end() const {return Iterator(this, _buckets.end());}
+	ConstIterator end() const {return Iterator(this, getBuckets().end());}
 
 	Iterator beginThreaded(int rank = omp_get_thread_num(), int size = omp_get_num_threads()) {
 		return begin(rank, size);
@@ -2151,6 +2268,59 @@ public:
 	}
 
 };
+
+#ifndef OLD_KMER_MAP
+template<typename Value>
+class KmerMap : public DenseKmerMap<Value> {
+public:
+	typedef DenseKmerMap<Value> Base;
+	KmerMap(int numBuckets = 0) : Base(numBuckets) {}
+	KmerMap(const void *src) : Base(src) {}
+	KmerMap(const Base &copy) : Base( (const Base&) copy ) {}
+	KmerMap &operator=(const Base &other) {
+		*((Base*)this) = other;
+		return *this;
+	}
+};
+
+#else // NEW_KMER_MAP
+
+#include <boost/unordered_map.hpp>
+
+template<typename Value>
+class KmerMap  {
+public:
+	typedef boost::unordered_map<KmerInstance, Value> BucketType;
+	typedef Value ValueType;
+	typedef	typename BucketType::iterator BucketTypeIterator;
+	typedef typename BucketType::value_type ElementType;
+	typedef Base::value_type ElementType;
+	typedef std::vector< BucketType > BucketsVector;
+	typedef typename BucketsVector::iterator BucketsVectorIterator;
+
+	KmerMap(int bucketCount = 0) {
+		getBuckets().resize(DenseKmerMap::getMinPowerOf2(bucketCount));
+	}
+	KmerMap(const void *src) : Base(src) {
+		LOG_THROW("Unimplemented restore");
+	}
+	KmerMap(const Base &copy) : Base( (const Base&) copy ) {}
+	KmerMap &operator=(const Base &other) {
+		*((Base*)this) = other;
+		return *this;
+	}
+	const bool getValueIfExists(const KeyType &key, ValueType &value) const {
+
+	}
+
+	ElementType getOrSetElement(const KeyType &key, BucketType &bucket, ValueType value) {
+
+	}
+private:
+	BucketsVector getBuckets();
+};
+
+#endif
 
 typedef KmerArray<char> Kmers;
 typedef KmerArray<double> KmerWeights;
