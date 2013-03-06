@@ -460,6 +460,10 @@ public:
 	typedef std::vector< KmerArrayPair > Vector;
 	typedef KmerElementPair<ValueType> BaseElementType;
 
+	class ElementType;
+	class Iterator;
+	class ConstIterator;
+
 	class ElementType : public BaseElementType {
 	private:
 		KmerArrayPair *_array;
@@ -1281,6 +1285,57 @@ public:
 			_endSorted--;
 	}
 
+
+	//
+	// compatibility API with STL interfaces (should refactor eventually)
+	//
+	ConstIterator find(const Kmer &target) const {
+		IndexType idx = findIndex(target);
+		if (idx == MAX_INDEX)
+			return end();
+		else
+			return ConstIterator(this, idx);
+	}
+	Iterator find(const Kmer &target) {
+		IndexType idx = findIndex(target);
+		if (idx == MAX_INDEX)
+			return end();
+		else
+			return Iterator(this, idx);
+	}
+	Iterator erase(Iterator it) {
+		if (it != end()) {
+			Iterator it2 = it;
+			it2++;
+			remove(it.getIndex());
+			return it2;
+		} else
+			return it;
+	}
+	int erase(const Kmer &target) const {
+		IndexType idx = findIndex(target);
+		if (idx == MAX_INDEX)
+			return 0;
+		else
+			remove(idx);
+		return 1;
+	}
+	Iterator insert(BaseElementType &element) {
+		return insert(element.key(), element.value());
+	}
+	Iterator insert(const Kmer &target, const ValueType &value) {
+		IndexType idx;
+		if (isSorted())
+			idx = insertSorted(target, value);
+		else
+			idx = append(target, value);
+		return Iterator(this, idx);
+	}
+
+	typedef Iterator iterator;
+	typedef ConstIterator const_iterator;
+	typedef ElementType mapped_type;
+
 	class CompareArrayIdx {
 		const KmerArrayPair &_kmerArray;
 	public:
@@ -1430,7 +1485,9 @@ public:
 		Iterator operator++(int unused) {Iterator tmp(*this); ++(*this); return tmp;}
 		ElementType &operator*() {return thisElement;}
 		const Kmer &key() {return thisElement.key();}
+		const Kmer &key() const {return thisElement.key();}
 		Value &value() {return thisElement.value();}
+		const Value &value() const {return thisElement.value();}
 		ElementType *operator->() {return &thisElement;}
 		bool isEnd() const {if (_tgt == NULL) { return true; } else { return _idx >= _tgt->size(); }}
 
@@ -1472,52 +1529,6 @@ public:
 	ConstIterator begin() const {return ConstIterator(this,0);}
 	ConstIterator end() const {return ConstIterator(this,size());}
 
-	// compatibility API with STL interfaces (should refactor eventually)
-	ConstIterator find(const Kmer &target) const {
-		IndexType idx = findIndex(target);
-		if (idx == MAX_INDEX)
-			return end();
-		else
-			return ConstIterator(this, idx);
-	}
-	Iterator find(const Kmer &target) {
-		IndexType idx = findIndex(target);
-		if (idx == MAX_INDEX)
-			return end();
-		else
-			return Iterator(this, idx);
-	}
-	Iterator erase(Iterator it) {
-		if (it != end()) {
-			Iterator it2 = it;
-			it2++;
-			remove(it.getIndex());
-			return it2;
-		} else
-			return it;
-	}
-	int erase(const Kmer &target) const {
-		IndexType idx = findIndex(target);
-		if (idx == MAX_INDEX)
-			return 0;
-		else
-			remove(idx);
-		return 1;
-	}
-	Iterator insert(BaseElementType &element) {
-		return insert(element.key(), element.value());
-	}
-	Iterator insert(const Kmer &target, const ValueType &value) {
-		IndexType idx;
-		if (isSorted())
-			idx = insertSorted(target, value);
-		else
-			idx = append(target, value);
-		return Iterator(this, idx);
-	}
-
-	typedef Iterator iterator;
-	typedef ElementType mapped_type;
 };
 
 template<typename _KeyType, typename _ValueType, typename _BucketType, typename _Hasher>
@@ -1539,6 +1550,9 @@ public:
 
 	typedef KmerElementPair<ValueType> BaseElementType;
 	typedef BaseElementType ElementType;
+
+	class Iterator;
+	class ConstIterator;
 
 	static IndexType getMinPowerOf2(IndexType minBucketCount) {
 		NumberType powerOf2 = minBucketCount;
@@ -1730,6 +1744,183 @@ protected:
 		}
 	}
 
+
+public:
+	class Iterator : public std::iterator<std::forward_iterator_tag, BucketExposedMap>
+	{
+		// Provides an iterator that can optionaly partition the buckets by
+		// into rank of size slices, where each rank will interleave responsibility
+		// for a given bucket by modulus of the size.
+		friend class BucketExposedMap;
+	private:
+		const BucketExposedMap *_target;
+		BucketsVectorIterator _iBucket;
+		BucketTypeIterator _iElement;
+		int _rank, _size;
+
+	public:
+		Iterator() : _target(NULL), _rank(0), _size(1) {}
+
+		// iterator over rank/size will stripe across the buckets (modulus by size).
+		Iterator(BucketExposedMap *target, int rank = 0, int size = 1):
+			_target(target),
+			_iBucket(target->getBuckets().begin()),
+			_iElement(),
+			_rank(rank), _size(size)
+		{
+			if (!isEnd())
+				_iElement = _iBucket->begin();
+			_moveToRank();
+			_moveToNextValidElement();
+		}
+
+		Iterator(const Iterator &copy) {
+			*this = copy;
+		}
+
+		Iterator(BucketExposedMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1):
+			_target(target),
+			_iBucket(bucketPtr),
+			_iElement(),
+			_rank(rank), _size(size)
+		{
+			if (!isEnd())
+				_iElement = _iBucket->begin();
+			_moveToRank();
+			_moveToNextValidElement();
+		}
+
+		Iterator(BucketExposedMap *target, BucketsVectorIterator bucketPtr, BucketTypeIterator elementPtr, int rank = 0, int size = 1):
+			_target(target),
+			_iBucket(bucketPtr),
+			_iElement(elementPtr),
+			_rank(rank), _size(size)
+		{
+			_moveToRank();
+		}
+
+		Iterator &operator=(const Iterator &copy) {
+			_target = copy._target;
+			_iBucket = copy._iBucket;
+			_iElement = copy._iElement;
+			_rank = copy._rank;
+			_size = copy._size;
+			return *this;
+		}
+
+	private:
+		inline bool isEnd() const {
+			return _iBucket == _target->getBuckets().end();
+		}
+
+		void _moveToNextValidElement() {
+			while (! isEnd() ) {
+				if (_iElement == _iBucket->end()) {
+					for(int i = 0 ; i < _size; i++) {
+						++_iBucket;
+						if (isEnd())
+							break;
+					}
+					if (isEnd())
+						break;
+					_iElement = _iBucket->begin();
+				} else
+					break;
+			}
+		}
+		void _moveToRank() {
+			if (_size == 1)
+				return;
+			if (isEnd() || ((int) _target->getBuckets().size() <= _rank)) {
+				while (!isEnd())
+					++_iBucket;
+				return;
+			}
+			for(int i = 0 ; i < _rank ; i++) {
+				++_iBucket;
+				if (isEnd())
+					return;
+			}
+			_iElement = _iBucket->begin();
+		}
+
+	public:
+
+		bool operator==(const Iterator& other) const {
+			return _iBucket == other._iBucket
+					&& (isEnd() || _iElement == other._iElement);
+		}
+
+		bool operator!=(const Iterator& other) const {
+			return !(*this == other);
+		}
+
+		Iterator& operator++() {
+			++_iElement;
+			_moveToNextValidElement();
+			return *this;
+		}
+
+		Iterator operator++(int unused) {
+			Iterator tmp(*this); ++(*this); return tmp;
+		}
+
+		ElementType &operator*() {return *_iElement;}
+		const ElementType &operator*() const {return *_iElement;}
+		ElementType *operator->() {return &(*_iElement);}
+		const ElementType *operator->() const {return &(*_iElement);}
+
+		const Kmer &key() const {return _iElement.key();}
+		const Kmer &key() {return _iElement.key();}
+		ValueType &value() {return _iElement.value();}
+		const ValueType &value() const {return _iElement.value();}
+
+		BucketType &bucket() {return *_iBucket;}
+		const BucketType &bucket() const {return *_iBucket;}
+
+		IndexType bucketIndex() {return (_iBucket - _target->getBuckets().begin());}
+		const IndexType bucketIndex() const {return (_iBucket - _target->getBuckets().begin());}
+
+	};
+
+	class ConstIterator : public std::iterator<std::forward_iterator_tag, BucketExposedMap>
+	{
+	private:
+		Iterator _iterator;
+	public:
+		ConstIterator(BucketExposedMap *target, int rank = 0, int size = 1) : _iterator(target, rank, size) {}
+		ConstIterator(const ConstIterator &copy) : _iterator(copy._iterator) {}
+		ConstIterator(BucketExposedMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1) : _iterator(target,bucketPtr, rank, size) {}
+		ConstIterator(BucketExposedMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr, int rank = 0, int size = 1): _iterator(target,bucketPtr,elementPtr, rank, size) {}
+		ConstIterator &operator=(const ConstIterator &copy) { _iterator = copy._iterator; return *this; }
+		bool operator==(const ConstIterator& other) const {return _iterator == other._iterator;}
+		bool operator!=(const ConstIterator& other) const {return _iterator != other._iterator;}
+		ConstIterator& operator++() {++_iterator; return *this;}
+		ConstIterator operator++(int unused) {return ConstIterator(_iterator++);}
+		const ElementType &operator*() const {return _iterator.operator*();}
+		const ElementType *operator->() const {return _iterator.operator->();}
+		const Kmer &key() const {return _iterator.key();}
+		const ValueType &value() const {return _iterator.value();}
+		const BucketType &bucket() const {return _iterator.bucket();}
+		const IndexType bucketIndex() const {return _iterator.bucketIndex();}
+	};
+
+	typedef Iterator iterator;
+	typedef ConstIterator const_iterator;
+
+	Iterator begin(int rank = 0, int size = 1) {return Iterator(this, rank, size);}
+	Iterator end() {return Iterator(this,getBuckets().end());}
+
+	ConstIterator begin(int rank = 0, int size = 1) const {return Iterator(this, rank, size);}
+	ConstIterator end() const {return Iterator(this, getBuckets().end());}
+
+	Iterator beginThreaded(int rank = omp_get_thread_num(), int size = omp_get_num_threads()) {
+		return begin(rank, size);
+	}
+	Iterator endThreaded() {
+		return end();
+	}
+
 protected:
 	BucketsVector _buckets;
 	NumberType BUCKET_MASK;
@@ -1742,6 +1933,8 @@ private:
 template<typename Value>
 class DenseKmerMap : public BucketExposedMap<Kmer, Value, KmerArrayPair<Value>, KmerHasher > {
 public:
+
+	// typedef propagation
 
 	typedef BucketExposedMap<Kmer, Value, KmerArrayPair<Value>, KmerHasher > Base;
 	typedef typename Base::NumberType    NumberType;
@@ -1761,13 +1954,7 @@ public:
 
 	typedef NumberType * NumberTypePtr;
 
-public:
-	static const bool defaultSort = false;
-	static const IndexType MAX_UNSORTED = 24;
-
 private:
-	bool _isSorted;
-
 	inline const DenseKmerMap &_constThis() const {return *this;}
 
 public:
@@ -1788,19 +1975,6 @@ public:
 		_isSorted = other._isSorted;
 		return *this;
 	}
-	// restore new instance from mmap
-	DenseKmerMap(const void *src) {
-		NumberType size(0), *offsetArray;
-		const void *ptr;
-		_getMmapSizes(src, size, getBucketMask(), offsetArray);
-		getBuckets().resize(size);
-		_isSorted = true;
-		for (NumberType idx = 0 ; idx < size ; idx++) {
-			ptr = ((char*)src) + *(offsetArray + idx);
-			getBuckets()[idx] = BucketType(ptr);
-			_isSorted &= getBuckets()[idx].isSorted();
-		}
-	}
 
 protected:
 	Base::getBuckets;
@@ -1810,6 +1984,17 @@ protected:
 	Base::setNumBuckets;
 
 public:
+
+	Base::insert;
+	Base::remove;
+
+	// Base LocalThread / DistributedRank methods
+	Base::getLocalThreadId;
+	Base::getDistributedThreadId;
+	Base::getThreadIds;
+	Base::getBucketIdx;
+	Base::getNumBuckets;
+
 
 	// specific overloading, taking advantage of KmerArrayPair memory release directives
 	void reset(bool releaseMemory = true) {
@@ -1828,14 +2013,23 @@ public:
 		std::swap(_isSorted, other._isSorted);
 	}
 
-	// Base LocalThread / DistributedRank methods
-	Base::getLocalThreadId;
-	Base::getDistributedThreadId;
-	Base::getThreadIds;
-	Base::getBucketIdx;
-	Base::getNumBuckets;
+	// iterators
+	Base::Iterator;
+	Base::ConstIterator;
+	Base::begin;
+	Base::end;
+	Base::beginThreaded;
+	Base::endThreaded;
 
+	// Sorted KmerArrayPair specializations
+public:
+	static const bool defaultSort = false;
+	static const IndexType MAX_UNSORTED = 24;
 
+private:
+	bool _isSorted;
+
+public:
 	// sorting buckets specificity
 	inline bool isSorted() const {
 		return _isSorted;
@@ -1850,8 +2044,49 @@ public:
 			_isSorted = true;
 		}
 	}
+	// insert specificity, using sorted KmerArrayPair
+	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
+		IndexType idx;
+		if (isSorted()) {
+			idx = bucket.insertSorted(key,value);
+		} else {
+			idx = bucket.append(key,value);
+			if (bucket.size() == bucket.capacity()) {
+				bucket.resort(true);
+				idx = bucket.findIndex(key);
+				assert(idx != BucketType::MAX_INDEX);
+			}
+		}
+
+		ElementType element = bucket.getElement(idx);
+		return element;
+	}
+
+	// remove specific, using sorted KmerArrayPair
+	bool remove(const KeyType &key, BucketType &bucket) {
+		bool isFound;
+		IndexType idx = isSorted() ? bucket.findSortedIndex(key, isFound) : bucket.findIndex(key, isFound);
+		if (isFound && idx != BucketType::MAX_INDEX)
+			bucket.remove(idx);
+		return isFound;
+	}
+
 
 	// store/restore specificity
+public:
+	// restore new instance from mmap
+	DenseKmerMap(const void *src) {
+		NumberType size(0), *offsetArray;
+		const void *ptr;
+		_getMmapSizes(src, size, getBucketMask(), offsetArray);
+		getBuckets().resize(size);
+		_isSorted = true;
+		for (NumberType idx = 0 ; idx < size ; idx++) {
+			ptr = ((char*)src) + *(offsetArray + idx);
+			getBuckets()[idx] = BucketType(ptr);
+			_isSorted &= getBuckets()[idx].isSorted();
+		}
+	}
 	const Kmernator::MmapFile store(std::string permanentFile = "") const {
 		long size = getSizeToStore();
 		Kmernator::MmapFile mmap = MmapTempFile::buildNewMmap(size, permanentFile);
@@ -1907,37 +2142,6 @@ public:
 	}
 	SizeType getSizeToStoreElements() const {
 		return size()*BucketType::getElementByteSize();
-	}
-
-
-	Base::insert;
-	Base::remove;
-
-	// insert specificity, using sorted KmerArrayPair
-	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
-		IndexType idx;
-		if (isSorted()) {
-			idx = bucket.insertSorted(key,value);
-		} else {
-			idx = bucket.append(key,value);
-			if (bucket.size() == bucket.capacity()) {
-				bucket.resort(true);
-				idx = bucket.findIndex(key);
-				assert(idx != BucketType::MAX_INDEX);
-			}
-		}
-
-		ElementType element = bucket.getElement(idx);
-		return element;
-	}
-
-	// remove specific, using sorted KmerArrayPair
-	bool remove(const KeyType &key, BucketType &bucket) {
-		bool isFound;
-		IndexType idx = isSorted() ? bucket.findSortedIndex(key, isFound) : bucket.findIndex(key, isFound);
-		if (isFound && idx != BucketType::MAX_INDEX)
-			bucket.remove(idx);
-		return isFound;
 	}
 
 	bool _exists(const KeyType &key, IndexType &existingIdx, const BucketType &bucket) const {
@@ -2228,166 +2432,6 @@ public:
 		src.clear();
 	}
 
-public:
-	class Iterator : public std::iterator<std::forward_iterator_tag, DenseKmerMap>
-	{
-		friend class DenseKmerMap;
-	private:
-		const DenseKmerMap *_target;
-		BucketsVectorIterator _iBucket;
-		BucketTypeIterator _iElement;
-		int _rank, _size;
-
-	public:
-		Iterator() : _target(NULL), _rank(0), _size(0) {}
-
-		// iterator over rank/size will stripe across the buckets (modulus by size).
-		Iterator(DenseKmerMap *target, int rank = 0, int size = 1):
-			_target(target),
-			_iBucket(target->getBuckets().begin()),
-			_iElement(),
-			_rank(rank), _size(size)
-		{
-			if (!isEnd())
-				_iElement = _iBucket->begin();
-			_moveToRank();
-			_moveToNextValidElement();
-		}
-
-		Iterator(const Iterator &copy) {
-			_target = copy._target;
-			_iBucket = copy._iBucket;
-			_iElement = copy._iElement;
-			_rank = copy._rank;
-			_size = copy._size;
-		}
-
-		Iterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1):
-			_target(target),
-			_iBucket(bucketPtr),
-			_iElement(),
-			_rank(rank), _size(size)
-		{
-			if (!isEnd())
-				_iElement = _iBucket->begin();
-			_moveToRank();
-			_moveToNextValidElement();
-		}
-
-		Iterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr, BucketTypeIterator elementPtr, int rank = 0, int size = 1):
-			_target(target),
-			_iBucket(bucketPtr),
-			_iElement(elementPtr),
-			_rank(rank), _size(size)
-		{
-			_moveToRank();
-		}
-
-	private:
-		inline bool isEnd() const {
-			return _iBucket == _target->getBuckets().end();
-		}
-
-		void _moveToNextValidElement() {
-			while (! isEnd() ) {
-				if (_iElement == _iBucket->end()) {
-					for(int i = 0 ; i < _size; i++) {
-						++_iBucket;
-						if (isEnd())
-							break;
-					}
-					if (isEnd())
-						break;
-					_iElement = _iBucket->begin();
-				} else
-					break;
-			}
-		}
-		void _moveToRank() {
-			if (_size == 1)
-				return;
-			if (isEnd() || ((int) _target->getBuckets().size() <= _rank)) {
-				while (!isEnd())
-					++_iBucket;
-				return;
-			}
-			for(int i = 0 ; i < _rank ; i++) {
-				++_iBucket;
-				if (isEnd())
-					return;
-			}
-			_iElement = _iBucket->begin();
-		}
-
-	public:
-
-		bool operator==(const Iterator& other) const
-		{	return _iBucket == other._iBucket && (isEnd() || _iElement == other._iElement);}
-
-		bool operator!=(const Iterator& other) const
-								{	return !(*this == other);}
-
-		Iterator& operator++()
-								{
-			++_iElement;
-			_moveToNextValidElement();
-			return *this;
-								}
-
-		Iterator operator++(int unused)
-								{	Iterator tmp(*this); ++(*this); return tmp;}
-
-		ElementType &operator*() {return *_iElement;}
-		const ElementType &operator*() const {return *_iElement;}
-		ElementType *operator->() {return &(*_iElement);}
-		const ElementType *operator->() const {return &(*_iElement);}
-
-		const Kmer &key() const {return _iElement.key();}
-		const Kmer &key() {return _iElement.key();}
-		Value &value() {return _iElement.value();}
-		const Value &value() const {return _iElement.value();}
-
-		BucketType &bucket() {return *_iBucket;}
-		const BucketType &bucket() const {return *_iBucket;}
-
-		IndexType bucketIndex() {return (_iBucket - _target->getBuckets().begin());}
-		const IndexType bucketIndex() const {return (_iBucket - _target->getBuckets().begin());}
-
-	};
-
-	class ConstIterator : public std::iterator<std::forward_iterator_tag, DenseKmerMap>
-	{
-	private:
-		Iterator _iterator;
-	public:
-		ConstIterator(DenseKmerMap *target, int rank = 0, int size = 1) : _iterator(target, rank, size) {}
-		ConstIterator(const ConstIterator &copy) : _iterator(copy._iterator) {}
-		ConstIterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1) : _iterator(target,bucketPtr, rank, size) {}
-		ConstIterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr, int rank = 0, int size = 1): _iterator(target,bucketPtr,elementPtr, rank, size) {}
-		bool operator==(const ConstIterator& other) const {return _iterator == other._iterator;}
-		bool operator!=(const ConstIterator& other) const {return _iterator != other._iterator;}
-		ConstIterator& operator++() {++_iterator; return *this;}
-		ConstIterator operator++(int unused) {return ConstIterator(_iterator++);}
-		const ElementType &operator*() const {return _iterator.operator*();}
-		const ElementType *operator->() const {return _iterator.operator->();}
-		const Kmer &key() const {return _iterator.key();}
-		const Value &value() const {return _iterator.value();}
-		const BucketType &bucket() const {return _iterator.bucket();}
-		const IndexType bucketIndex() const {return _iterator.bucketIndex();}
-	};
-
-	Iterator begin(int rank = 0, int size = 1) {return Iterator(this, rank, size);}
-	Iterator end() {return Iterator(this,getBuckets().end());}
-
-	ConstIterator begin(int rank = 0, int size = 1) const {return Iterator(this, rank, size);}
-	ConstIterator end() const {return Iterator(this, getBuckets().end());}
-
-	Iterator beginThreaded(int rank = omp_get_thread_num(), int size = omp_get_num_threads()) {
-		return begin(rank, size);
-	}
-	Iterator endThreaded() {
-		return end();
-	}
 
 };
 
