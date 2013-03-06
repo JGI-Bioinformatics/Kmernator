@@ -399,13 +399,13 @@ public:
 };
 
 template<typename Value>
-class KmerElementValuePair {
+class KmerElementPair {
 public:
 	typedef Value ValueType;
-	KmerElementValuePair() : _kmer(NULL), _value(NULL) {}
-	KmerElementValuePair(const Kmer &kmer, ValueType &value): _kmer(&kmer), _value(&value) {}
-	KmerElementValuePair(const KmerElementValuePair &copy) : _kmer(copy._kmer), _value(copy._value) {}
-	KmerElementValuePair &operator=(const KmerElementValuePair &copy) {
+	KmerElementPair() : _kmer(NULL), _value(NULL) {}
+	KmerElementPair(const Kmer &kmer, ValueType &value): _kmer(&kmer), _value(&value) {}
+	KmerElementPair(const KmerElementPair &copy) : _kmer(copy._kmer), _value(copy._value) {}
+	KmerElementPair &operator=(const KmerElementPair &copy) {
 		_kmer = copy._kmer;
 		_value = copy._value;
 		return *this;
@@ -415,13 +415,13 @@ public:
 	virtual inline const Kmer &key() const { assert(isValid()); return *_kmer; }
 	virtual const ValueType &value() const { assert(isValid()); return *_value; }
 	virtual ValueType &value() { assert(isValid()); return *_value; };
-	inline bool operator==(const KmerElementValuePair &other) const {
+	inline bool operator==(const KmerElementPair &other) const {
 		if (isValid() && other.isValid())
 			return value() == other.value() && key() == other.key();
 		else
 			return false;
 	}
-	inline bool operator<(const KmerElementValuePair &other) const {
+	inline bool operator<(const KmerElementPair &other) const {
 		if (isValid() && other.isValid())
 			if (value() == other.value())
 				return key() < other.key();
@@ -430,7 +430,7 @@ public:
 		else
 			return false;
 	}
-	inline bool operator>(const KmerElementValuePair &other) const {
+	inline bool operator>(const KmerElementPair &other) const {
 		if (isValid() && other.isValid())
 			if (value() == other.value())
 				return key() > other.key();
@@ -445,7 +445,7 @@ protected:
 };
 
 template<typename Value>
-class KmerArray {
+class KmerArrayPair {
 
 public:
 	typedef Kmer::NumberType    NumberType;
@@ -457,12 +457,12 @@ public:
 	static const float GROWTH_FACTOR = 1.10;
 	static const IndexType MIN_GROWTH = 16;
 
-	typedef std::vector< KmerArray > Vector;
-	typedef KmerElementValuePair<ValueType> BaseElementType;
+	typedef std::vector< KmerArrayPair > Vector;
+	typedef KmerElementPair<ValueType> BaseElementType;
 
 	class ElementType : public BaseElementType {
 	private:
-		KmerArray *_array;
+		KmerArrayPair *_array;
 		IndexType _idx;
 		inline const ElementType &_constThis() const {return *this;}
 		void setBase() {
@@ -473,13 +473,13 @@ public:
 	public:
 		typedef BaseElementType Base;
 		ElementType() : Base(), _array(NULL), _idx(MAX_INDEX) {	}
-		ElementType(IndexType idx,	KmerArray &array) :
+		ElementType(IndexType idx,	KmerArrayPair &array) :
 			Base(),	_array(&array), _idx(idx) {
 			setBase();
 		}
-		ElementType(IndexType idx, const KmerArray &array) :
+		ElementType(IndexType idx, const KmerArrayPair &array) :
 			// HACK! const_cast ... need ConstElementType
-			Base(), _array(const_cast<KmerArray*>(&array)), _idx(idx) {
+			Base(), _array(const_cast<KmerArrayPair*>(&array)), _idx(idx) {
 			setBase();
 		}
 
@@ -541,17 +541,17 @@ private:
 		return *((Kmer *) _add(_begin, index));
 	}
 
-	KmerArray(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity), _endSorted(0) {
+	KmerArrayPair(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity), _endSorted(0) {
 	}
 
 public:
 
-	KmerArray(IndexType size = 0) :
+	KmerArrayPair(IndexType size = 0) :
 		_begin(NULL), _size(0), _capacity(0), _endSorted(0) {
 		resize(size);
 	}
 
-	KmerArray(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false, bool *bools = NULL) :
+	KmerArrayPair(const TwoBitEncoding *twoBit, SequenceLengthType length, bool leastComplement = false, bool *bools = NULL) :
 		_begin(NULL), _size(0), _capacity(0), _endSorted(0)  {
 		SequenceLengthType kmerSize = KmerSizer::getSequenceLength();
 		assert(kmerSize > 0);
@@ -565,25 +565,25 @@ public:
 		}
 	}
 
-	KmerArray(const KmerArray &copy) :
+	KmerArrayPair(const KmerArrayPair &copy) :
 		_begin(NULL), _size(0), _capacity(0), _endSorted(0)  {
 		*this = copy;
 	}
 
-	KmerArray copyRange(SequenceLengthType offset, SequenceLengthType length) {
+	KmerArrayPair copyRange(SequenceLengthType offset, SequenceLengthType length) {
 		assert(offset+length <= _size);
 		if (offset == 0 && length == _size)
-			return KmerArray(*this);
-		KmerArray splice(length);
+			return KmerArrayPair(*this);
+		KmerArrayPair splice(length);
 		splice._copyRange(_begin, getValueStart(), 0, offset, length, false);
 		return splice;
 	}
 
-	~KmerArray() {
+	~KmerArrayPair() {
 		reset();
 	}
 
-	KmerArray &operator=(const KmerArray &other) {
+	KmerArrayPair &operator=(const KmerArrayPair &other) {
 		
 		if (this == &other)
 			return *this;
@@ -603,7 +603,7 @@ public:
 		}
 		if (_begin == NULL)
 			LOG_THROW(
-					"RuntimeError: KmerArray::operator=(): Could not allocate memory in KmerArray operator=()");
+					"RuntimeError: KmerArrayPair::operator=(): Could not allocate memory in KmerArrayPair operator=()");
 
 		_copyRange(other._begin, other.getValueStart(), 0, 0, _size, false);
 		_endSorted = other._endSorted;
@@ -613,7 +613,7 @@ public:
 	}
 
 	// restore a new array from a mmap, allocating new memory
-	KmerArray(const void *src) : _begin(NULL), _size(0), _capacity(0), _endSorted(0) {
+	KmerArrayPair(const void *src) : _begin(NULL), _size(0), _capacity(0), _endSorted(0) {
 		IndexType *size = (IndexType *) src;
 		resize(*size);
 		void *ptr = ++size;
@@ -643,11 +643,11 @@ public:
 		return sizeof(IndexType) + size * ( KmerSizer::getByteSize() + sizeof(Value) );
 	}
 	// create a new array using existing memory
-	static const KmerArray restore(const void *src) {
+	static const KmerArrayPair restore(const void *src) {
 		const IndexType *size = (const IndexType *) src;
 		IndexType xsize = *(size++);
 		const void *ptr = size;
-		KmerArray array(const_cast<void*>(ptr), xsize, MAX_INDEX);
+		KmerArrayPair array(const_cast<void*>(ptr), xsize, MAX_INDEX);
 		array.setLastSorted();
 		return array;
 	}
@@ -686,7 +686,7 @@ public:
 	const Kmer &operator[](IndexType index) const {
 		if (index >= size())
 			LOG_THROW(
-					"Invalid: Kmer::operator[](): attempt to access index greater than size in KmerArray operator[] const");
+					"Invalid: Kmer::operator[](): attempt to access index greater than size in KmerArrayPair operator[] const");
 		return get(index);
 	}
 
@@ -694,7 +694,7 @@ public:
 	Kmer &operator[](IndexType index) {
 		if (index >= size())
 			LOG_THROW(
-					"Invalid: Kmer::operator[](): attempt to access index greater than size in KmerArray operator[]");
+					"Invalid: Kmer::operator[](): attempt to access index greater than size in KmerArrayPair operator[]");
 		return get(index);
 	}
 
@@ -702,7 +702,7 @@ public:
 	const ValueType &valueAt(IndexType index) const {
 		if (index >= _size) {
 			LOG_THROW(
-					"Invalid: Kmer::valueAt(): attempt to access index greater than size in KmerArray valueAt() const");
+					"Invalid: Kmer::valueAt(): attempt to access index greater than size in KmerArrayPair valueAt() const");
 		}
 		return *(getValueStart() + index);
 	}
@@ -711,7 +711,7 @@ public:
 	ValueType &valueAt(IndexType index) {
 		if (index >= _size) {
 			LOG_THROW(
-					"Invalid: Kmer::valueAt(): attempt to access index greater than size in KmerArray valueAt()");
+					"Invalid: Kmer::valueAt(): attempt to access index greater than size in KmerArrayPair valueAt()");
 		}
 		return *(getValueStart() + index);
 	}
@@ -809,7 +809,7 @@ public:
 
 		if (_begin == NULL && size > 0) {
 			LOG_THROW(
-					"RuntimeError: KmerArray::resize(): Could not allocate memory in KmerArray resize()");
+					"RuntimeError: KmerArrayPair::resize(): Could not allocate memory in KmerArrayPair resize()");
 		}
 
 		if (false && size > oldSize && idx == MAX_INDEX) {
@@ -905,7 +905,7 @@ public:
 
 			newBegin = std::malloc(newCapacity * getElementByteSize());
 			if (newBegin == NULL) {
-				LOG_THROW("RuntimeError: Could not allocate memory in KmerArray _setMemory(): Attempt to malloc " << newCapacity
+				LOG_THROW("RuntimeError: Could not allocate memory in KmerArrayPair _setMemory(): Attempt to malloc " << newCapacity
 						* getElementByteSize() << " (" << newCapacity << " elements)");
 			}
 
@@ -991,7 +991,7 @@ public:
 		if (numKmers != _size)
 			resize(numKmers, MAX_INDEX, _capacity > 0);
 
-		KmerArray &kmers = *this;
+		KmerArrayPair &kmers = *this;
 		long numBytes = (numKmers + 3) / 4;
 
 #pragma omp parallel for if(numKmers >= 10000)
@@ -1046,7 +1046,7 @@ public:
 		}
 		return s;
 	}
-	static void permuteBases(const Kmer &kmer, KmerArray &kmers, short editDistance, bool leastComplement = false) {
+	static void permuteBases(const Kmer &kmer, KmerArrayPair &kmers, short editDistance, bool leastComplement = false) {
 		if ((SequenceLengthType) editDistance > KmerSizer::getSequenceLength())
 			editDistance = KmerSizer::getSequenceLength();
 
@@ -1066,7 +1066,7 @@ public:
 			kmers.resize(offset);
 		}
 	}
-	static SequenceLengthType __permuteBases(const Kmer &kmer, KmerArray &kmers, SequenceLengthType offset, SequenceLengthType startIdx, short editDistance, bool leastComplement = false) {
+	static SequenceLengthType __permuteBases(const Kmer &kmer, KmerArrayPair &kmers, SequenceLengthType offset, SequenceLengthType startIdx, short editDistance, bool leastComplement = false) {
 		if (editDistance == 0) {
 			return offset;
 		} else {
@@ -1085,20 +1085,20 @@ public:
 		}
 		return offset;
 	}
-	// return a KmerArray that has one entry for each possible single-base substitution
-	static KmerArray permuteBases(const Kmer &kmer, bool leastComplement = false) {
-		KmerArray kmers(KmerSizer::getSequenceLength() * 3);
+	// return a KmerArrayPair that has one entry for each possible single-base substitution
+	static KmerArrayPair permuteBases(const Kmer &kmer, bool leastComplement = false) {
+		KmerArrayPair kmers(KmerSizer::getSequenceLength() * 3);
 		_permuteBases(kmer, kmers, leastComplement);
 		return kmers;
 	}
-	static KmerArray permuteBases(const Kmer &kmer, const ValueType defaultValue, bool leastComplement = false) {
-		KmerArray kmers(KmerSizer::getSequenceLength() * 3);
+	static KmerArrayPair permuteBases(const Kmer &kmer, const ValueType defaultValue, bool leastComplement = false) {
+		KmerArrayPair kmers(KmerSizer::getSequenceLength() * 3);
 		_permuteBases(kmer, kmers, leastComplement);
 		for(SequenceLengthType idx = 0; idx < kmers.size(); idx++)
 			kmers.valueAt(idx) = defaultValue;
 		return kmers;
 	}
-	static void _permuteBases(const Kmer &kmer, KmerArray &kmers, bool leastComplement, SequenceLengthType offset = 0) {
+	static void _permuteBases(const Kmer &kmer, KmerArrayPair &kmers, bool leastComplement, SequenceLengthType offset = 0) {
 		TEMP_KMER(tmp);
 		for (SequenceLengthType baseIdx = 0; baseIdx < KmerSizer::getSequenceLength(); baseIdx++) {
 			TwoBitSequence::permuteBase(kmer.getTwoBitSequence(), kmers[offset+baseIdx*3].getTwoBitSequence(), kmers[offset+baseIdx*3+1].getTwoBitSequence(), kmers[offset+baseIdx*3+2].getTwoBitSequence(),
@@ -1113,8 +1113,8 @@ public:
 		}
 	}
 
-	static KmerArray extendKmer(const Kmer &kmer, bool toRight, bool leastComplement = false) {
-		KmerArray kmers(4);
+	static KmerArrayPair extendKmer(const Kmer &kmer, bool toRight, bool leastComplement = false) {
+		KmerArrayPair kmers(4);
 		std::string fasta = kmer.toFasta().substr(toRight ? 1: 0, KmerSizer::getSequenceLength() - 1);
 
 		if (toRight) {
@@ -1212,7 +1212,7 @@ protected:
 	void _insertAt(IndexType idx, const Kmer &target) {
 		assert(!isMmaped()); // mmaped can not be modified!
 		if (idx > size())
-			LOG_THROW("Invalid: attempt to access index greater than size in KmerArray insertAt");
+			LOG_THROW("Invalid: attempt to access index greater than size in KmerArrayPair insertAt");
 		resize(size() + 1, idx);
 		get(idx) = target;
 	}
@@ -1282,9 +1282,9 @@ public:
 	}
 
 	class CompareArrayIdx {
-		const KmerArray &_kmerArray;
+		const KmerArrayPair &_kmerArray;
 	public:
-		CompareArrayIdx(const KmerArray &kmerArray): _kmerArray(kmerArray) {}
+		CompareArrayIdx(const KmerArrayPair &kmerArray): _kmerArray(kmerArray) {}
 		bool operator()(IndexType i, IndexType j) {
 			return _kmerArray.get(i).compare(_kmerArray.get(j)) <= 0;
 		}
@@ -1315,7 +1315,7 @@ private:
 	void resort(std::vector< IndexType > &passingIndexes, bool reserveExtra = false) {
 		std::sort(passingIndexes.begin(), passingIndexes.end(), CompareArrayIdx(*this));
 
-		KmerArray s;
+		KmerArrayPair s;
 		IndexType passingSize = passingIndexes.size();
 		s.reserve(passingSize + (reserveExtra ? std::max((IndexType) (passingSize * GROWTH_FACTOR + 0.5), (IndexType) (passingSize + MIN_GROWTH)) : 0));
 
@@ -1333,7 +1333,7 @@ public:
 		if (idx1 == idx2)
 			return;
 		if (idx1 >= size() || idx2 >= size())
-			LOG_THROW("Invalid: attempt to access index greater than size in KmerArray swap()");
+			LOG_THROW("Invalid: attempt to access index greater than size in KmerArrayPair swap()");
 
 		get(idx1).swap(get(idx2));
 		if (sizeof(ValueType) > 0) {
@@ -1342,7 +1342,7 @@ public:
 			valueAt(idx2) = tmp;
 		}
 	}
-	void swap(KmerArray &other) {
+	void swap(KmerArrayPair &other) {
 		std::swap(_begin, other._begin);
 		std::swap(_size, other._size);
 		std::swap(_capacity, other._capacity);
@@ -1352,7 +1352,7 @@ public:
 
 	// purge all element where the value is less than minimumCount
 	// assumes that ValueType can be cast into long
-	// resulting in a (potententially smaller) sorted KmerArray
+	// resulting in a (potententially smaller) sorted KmerArrayPair
 	IndexType purgeMinCount(long minimumCount) {
 		// scan values that pass, keep list and count
 		IndexType maxSize = size();
@@ -1379,7 +1379,7 @@ public:
 
 	std::string toThis() const {
 		std::stringstream ss;
-		ss << "KmerArray " << this << "={" << _begin << ", " << _size << ", " << _capacity << "}";
+		ss << "KmerArrayPair " << this << "={" << _begin << ", " << _size << ", " << _capacity << "}";
 		return ss.str();
 	}
 
@@ -1397,21 +1397,21 @@ public:
 	}
 
 public:
-	class Iterator : public std::iterator<std::forward_iterator_tag, KmerArray>
+	class Iterator : public std::iterator<std::forward_iterator_tag, KmerArrayPair>
 	{
 	private:
-		KmerArray *_tgt;
+		KmerArrayPair *_tgt;
 		IndexType _idx;
 		ElementType thisElement;
 
 		void setElement() {if ( !isEnd() ) thisElement = _tgt->getElement(_idx);}
 	protected:
-		KmerArray &getKmerArray() {
+		KmerArrayPair &getKmerArray() {
 			assert(_tgt != NULL);
 			return *_tgt;
 		}
 	public:
-		Iterator(KmerArray *target, IndexType idx = 0): _tgt(target), _idx(idx) {
+		Iterator(KmerArrayPair *target, IndexType idx = 0): _tgt(target), _idx(idx) {
 			setElement();
 		}
 		Iterator(const Iterator &copy) {*this = copy;}
@@ -1443,12 +1443,12 @@ public:
 		}
 
 	};
-	class ConstIterator : public std::iterator<std::forward_iterator_tag, KmerArray>
+	class ConstIterator : public std::iterator<std::forward_iterator_tag, KmerArrayPair>
 	{
 	private:
 		Iterator _iterator;
 	public:
-		ConstIterator(KmerArray *target, IndexType idx = 0): _iterator(target,idx) {}
+		ConstIterator(KmerArrayPair *target, IndexType idx = 0): _iterator(target,idx) {}
 		ConstIterator(const ConstIterator &copy) {*this = copy;}
 		ConstIterator() : _iterator() {}
 		ConstIterator& operator=(const ConstIterator& other) {
@@ -1537,7 +1537,7 @@ public:
 	typedef std::vector< BucketType > BucketsVector;
 	typedef typename BucketsVector::iterator BucketsVectorIterator;
 
-	typedef KmerElementValuePair<ValueType> BaseElementType;
+	typedef KmerElementPair<ValueType> BaseElementType;
 	typedef BaseElementType ElementType;
 
 	static IndexType getMinPowerOf2(IndexType minBucketCount) {
@@ -1740,10 +1740,10 @@ private:
 };
 
 template<typename Value>
-class DenseKmerMap : public BucketExposedMap<Kmer, Value, KmerArray<Value>, KmerHasher > {
+class DenseKmerMap : public BucketExposedMap<Kmer, Value, KmerArrayPair<Value>, KmerHasher > {
 public:
 
-	typedef BucketExposedMap<Kmer, Value, KmerArray<Value>, KmerHasher > Base;
+	typedef BucketExposedMap<Kmer, Value, KmerArrayPair<Value>, KmerHasher > Base;
 	typedef typename Base::NumberType    NumberType;
 	typedef typename Base::IndexType     IndexType;
 	typedef typename Base::SizeType      SizeType;
@@ -1811,7 +1811,7 @@ protected:
 
 public:
 
-	// specific overloading, taking advantage of KmerArray memory release directives
+	// specific overloading, taking advantage of KmerArrayPair memory release directives
 	void reset(bool releaseMemory = true) {
 		for(size_t i=0; i< getBuckets().size(); i++) {
 			getBuckets()[i].reset(releaseMemory);
@@ -1913,7 +1913,7 @@ public:
 	Base::insert;
 	Base::remove;
 
-	// insert specificity, using sorted KmerArray
+	// insert specificity, using sorted KmerArrayPair
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
 		IndexType idx;
 		if (isSorted()) {
@@ -1931,7 +1931,7 @@ public:
 		return element;
 	}
 
-	// remove specific, using sorted KmerArray
+	// remove specific, using sorted KmerArrayPair
 	bool remove(const KeyType &key, BucketType &bucket) {
 		bool isFound;
 		IndexType idx = isSorted() ? bucket.findSortedIndex(key, isFound) : bucket.findIndex(key, isFound);
@@ -2444,10 +2444,10 @@ private:
 
 #endif
 
-typedef KmerArray<char> Kmers;
-typedef KmerArray<double> KmerWeights;
-typedef KmerArray<Kmernator::UI32> KmerCounts;
-typedef KmerArray< WeightedExtensionMessagePacket > KmerWeightedExtensions;
+typedef KmerArrayPair<char> Kmers;
+typedef KmerArrayPair<double> KmerWeights;
+typedef KmerArrayPair<Kmernator::UI32> KmerCounts;
+typedef KmerArrayPair< WeightedExtensionMessagePacket > KmerWeightedExtensions;
 
 #endif
 

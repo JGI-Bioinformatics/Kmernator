@@ -91,7 +91,7 @@ int main(int argc, char *argv[]) {
 
 	TrackingDataWithAllReads test;
 	test.track(0.99, true, 1, 2);
-	KmerArray<TrackingDataWithAllReads> test2;
+	KmerArrayPair<TrackingDataWithAllReads> test2;
 	TEMP_KMER(blah);
 	test2.insertAt(0, blah);
 	test2.valueAt(0).track(0.98, true, 2, 3);

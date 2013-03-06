@@ -308,7 +308,7 @@ public:
 	typedef std::vector< PairScore > PairScoreVector;
 	typedef boost::unordered_set< std::string > DuplicateSet;
 	typedef ReadSet::PairedIndexType PairedIndexType;
-	typedef KmerArray<double> KA;
+	typedef KmerArrayPair<double> KA;
 
 protected:
 	const ReadSet &_reads;
