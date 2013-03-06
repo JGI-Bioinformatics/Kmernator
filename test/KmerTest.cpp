@@ -372,7 +372,7 @@ void testKmerArray(SequenceLengthType size) {
 
 	// test find
 	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
-		Kmer::IndexType idx = copy.find(kmersFloat[i]);
+		Kmer::IndexType idx = copy.findIndex(kmersFloat[i]);
 		BOOST_REQUIRE(idx != KmerArray<float>::MAX_INDEX);
 		BOOST_CHECK_EQUAL(kmersFloat[i].toFasta(), copy[idx].toFasta());
 		// duplicates could be present and first one will be found
@@ -509,15 +509,18 @@ void testKmerArray(SequenceLengthType size) {
 
 }
 
+template<typename T>
 class Tester {
 public:
-	KmerMap<float> &kmerF;
-	Tester(KmerMap<float> map) :
+	typedef KmerMap<T> Map;
+	typedef typename KmerMap<T>::ElementType ElementType;
+	Map &kmerF;
+	Tester(Map map) :
 		kmerF(map) {
 
 	}
 
-	void operator()(KmerArray<float>::ElementType &e) {
+	void operator()(ElementType &e) {
 		BOOST_CHECK(kmerF.exists(e.key()));
 		BOOST_CHECK_EQUAL(kmerF[e.key()], e.value());
 	}
@@ -601,7 +604,7 @@ void testKmerMap(SequenceLengthType size) {
 		BOOST_CHECK(i * 3.0 >= kmerP[kmersC[i]].second);
 	}
 
-	std::for_each(kmerF.begin(), kmerF.end(), Tester(kmerF));
+	std::for_each(kmerF.begin(), kmerF.end(), Tester<float>(kmerF));
 
 	Kmer::IndexType count = 0;
 	for (KmerMap<float>::Iterator it = kmerF.begin(); it != kmerF.end(); it++) {

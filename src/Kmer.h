@@ -399,6 +399,52 @@ public:
 };
 
 template<typename Value>
+class KmerElementValuePair {
+public:
+	typedef Value ValueType;
+	KmerElementValuePair() : _kmer(NULL), _value(NULL) {}
+	KmerElementValuePair(const Kmer &kmer, ValueType &value): _kmer(&kmer), _value(&value) {}
+	KmerElementValuePair(const KmerElementValuePair &copy) : _kmer(copy._kmer), _value(copy._value) {}
+	KmerElementValuePair &operator=(const KmerElementValuePair &copy) {
+		_kmer = copy._kmer;
+		_value = copy._value;
+		return *this;
+	}
+	virtual inline bool isValid() const { return _kmer != NULL; }
+	virtual inline void reset() { _kmer = NULL; _value = NULL; }
+	virtual inline const Kmer &key() const { assert(isValid()); return *_kmer; }
+	virtual const ValueType &value() const { assert(isValid()); return *_value; }
+	virtual ValueType &value() { assert(isValid()); return *_value; };
+	inline bool operator==(const KmerElementValuePair &other) const {
+		if (isValid() && other.isValid())
+			return value() == other.value() && key() == other.key();
+		else
+			return false;
+	}
+	inline bool operator<(const KmerElementValuePair &other) const {
+		if (isValid() && other.isValid())
+			if (value() == other.value())
+				return key() < other.key();
+			else
+				return value() < other.value();
+		else
+			return false;
+	}
+	inline bool operator>(const KmerElementValuePair &other) const {
+		if (isValid() && other.isValid())
+			if (value() == other.value())
+				return key() > other.key();
+			else
+				return value() > other.value();
+		else
+			return false;
+	}
+protected:
+	const Kmer *_kmer;
+	ValueType *_value;
+};
+
+template<typename Value>
 class KmerArray {
 
 public:
@@ -412,22 +458,33 @@ public:
 	static const IndexType MIN_GROWTH = 16;
 
 	typedef std::vector< KmerArray > Vector;
+	typedef KmerElementValuePair<ValueType> BaseElementType;
 
-	class ElementType {
+	class ElementType : public BaseElementType {
 	private:
-		const KmerArray *_array;
+		KmerArray *_array;
 		IndexType _idx;
 		inline const ElementType &_constThis() const {return *this;}
+		void setBase() {
+			this->_kmer = &(_array->get(_idx));
+			this->_value = &(_array->valueAt(_idx));
+		}
+
 	public:
-		ElementType() :
-			_array(NULL), _idx(MAX_INDEX) {
+		typedef BaseElementType Base;
+		ElementType() : Base(), _array(NULL), _idx(MAX_INDEX) {	}
+		ElementType(IndexType idx,	KmerArray &array) :
+			Base(),	_array(&array), _idx(idx) {
+			setBase();
 		}
-		ElementType(IndexType idx,
-				const KmerArray &array) :
-					_array(&array), _idx(idx) {
+		ElementType(IndexType idx, const KmerArray &array) :
+			// HACK! const_cast ... need ConstElementType
+			Base(), _array(const_cast<KmerArray*>(&array)), _idx(idx) {
+			setBase();
 		}
+
 		ElementType(const ElementType &copy) :
-			_array(NULL), _idx(MAX_INDEX)  {
+			Base(),	_array(NULL), _idx(MAX_INDEX)  {
 			*this = copy;
 		}
 		~ElementType() {
@@ -435,56 +492,25 @@ public:
 		}
 		ElementType &operator=(const ElementType &copy) {
 			reset();
+			*((Base*)this) = (const Base&) copy;
 			_idx = copy._idx;
 			_array = copy._array;
 			return *this;
 		}
 		void reset() {
+			Base::reset();
 			_idx = MAX_INDEX;
 			_array = NULL;
 		}
 		inline bool isValid() const {
-			return _array != NULL && _idx != MAX_INDEX;
+			return Base::isValid() && _array != NULL && _idx != MAX_INDEX;
 		}
+		Base::key;
+		Base::value;
+		Base::operator==;
+		Base::operator<;
+		Base::operator>;
 
-		const Kmer &key() const {
-			assert(isValid());
-			return _array->get(_idx);
-		}
-		Kmer &key() {
-			return const_cast<Kmer&> (_constThis().key());
-		}
-		const ValueType &value() const {
-			assert(isValid());
-			return _array->valueAt(_idx);
-		}
-		ValueType &value() {
-			return const_cast<ValueType&> (_constThis().value());
-		}
-		inline bool operator==(const ElementType &other) const {
-			if (isValid() && other.isValid())
-				return value() == other.value() && key() == other.key();
-			else
-				return false;
-		}
-		inline bool operator<(const ElementType &other) const {
-			if (isValid() && other.isValid())
-				if (value() == other.value())
-					return key() < other.key();
-				else
-					return value() < other.value();
-			else
-				return false;
-		}
-		inline bool operator>(const ElementType &other) const {
-			if (isValid() && other.isValid())
-				if (value() == other.value())
-					return key() > other.key();
-				else
-					return value() > other.value();
-			else
-				return false;
-		}
 	};
 
 private:
@@ -1113,7 +1139,7 @@ public:
 		return kmers;
 	}
 protected:
-	IndexType _find(const Kmer &target, IndexType start, IndexType end) const {
+	IndexType _findIndex(const Kmer &target, IndexType start, IndexType end) const {
 		for(IndexType i=start; i<end; i++) {
 			if (target.compare(get(i)) == 0) {
 				return i;
@@ -1122,24 +1148,24 @@ protected:
 		return MAX_INDEX;
 	}
 public:
-	IndexType find(const Kmer &target) const {
+	IndexType findIndex(const Kmer &target) const {
 		bool targetIsFound;
 		IndexType idx;
 		if (_endSorted >= 16) {
-			idx = _findSorted(target, targetIsFound, 0, _endSorted);
+			idx = _findSortedIndex(target, targetIsFound, 0, _endSorted);
 			if (targetIsFound)
 				return idx;
 		}
-		idx = _find(target, _endSorted >= 16 ? _endSorted : 0, size());
+		idx = _findIndex(target, _endSorted >= 16 ? _endSorted : 0, size());
 		return idx;
 	}
-	IndexType find(const Kmer &target, bool &targetIsFound) const {
-		IndexType idx = find(target);
+	IndexType findIndex(const Kmer &target, bool &targetIsFound) const {
+		IndexType idx = findIndex(target);
 		targetIsFound = idx != MAX_INDEX;
 		return idx;
 	}
 protected:
-	IndexType _findSorted(const Kmer &target, bool &targetIsFound, IndexType start, IndexType end) const {
+	IndexType _findSortedIndex(const Kmer &target, bool &targetIsFound, IndexType start, IndexType end) const {
 		// binary search
 		if (end <= start)
 		{
@@ -1173,12 +1199,12 @@ protected:
 
 		return mid + (comp>0 && end>mid?1:0);
 	}
-	IndexType _findSorted(const Kmer &target, bool &targetIsFound) const {
-		return _findSorted(target, targetIsFound, 0, size());
+	IndexType _findSortedIndex(const Kmer &target, bool &targetIsFound) const {
+		return _findSortedIndex(target, targetIsFound, 0, size());
 	}
 public:
-	IndexType findSorted(const Kmer &target, bool &targetIsFound) const {
-		IndexType idx = _findSorted(target, targetIsFound);
+	IndexType findSortedIndex(const Kmer &target, bool &targetIsFound) const {
+		IndexType idx = _findSortedIndex(target, targetIsFound);
 		return idx;
 	}
 
@@ -1218,7 +1244,7 @@ protected:
 	IndexType _insertSorted(const Kmer &target) {
 		assert(isSorted());
 		bool isFound;
-		IndexType idx = findSorted(target, isFound);
+		IndexType idx = findSortedIndex(target, isFound);
 		if (!isFound) {
 			_insertAt(idx, target);
 			_endSorted++;
@@ -1244,7 +1270,7 @@ public:
 
 	void remove(const Kmer &target) {
 		bool isFound;
-		IndexType idx = find(target, isFound);
+		IndexType idx = findIndex(target, isFound);
 		if (isFound)
 			remove(idx);
 	}
@@ -1379,7 +1405,11 @@ public:
 		ElementType thisElement;
 
 		void setElement() {if ( !isEnd() ) thisElement = _tgt->getElement(_idx);}
-
+	protected:
+		KmerArray &getKmerArray() {
+			assert(_tgt != NULL);
+			return *_tgt;
+		}
 	public:
 		Iterator(KmerArray *target, IndexType idx = 0): _tgt(target), _idx(idx) {
 			setElement();
@@ -1399,10 +1429,19 @@ public:
 		Iterator& operator++() {if ( !isEnd() ) {++_idx; setElement();} return *this;}
 		Iterator operator++(int unused) {Iterator tmp(*this); ++(*this); return tmp;}
 		ElementType &operator*() {return thisElement;}
-		Kmer &key() {return thisElement.key();}
+		const Kmer &key() {return thisElement.key();}
 		Value &value() {return thisElement.value();}
 		ElementType *operator->() {return &thisElement;}
 		bool isEnd() const {if (_tgt == NULL) { return true; } else { return _idx >= _tgt->size(); }}
+
+		IndexType getIndex() const {
+			assert(_tgt != NULL);
+			return _idx;
+		}
+		ElementType getElement() {
+			return thisElement;
+		}
+
 	};
 	class ConstIterator : public std::iterator<std::forward_iterator_tag, KmerArray>
 	{
@@ -1433,7 +1472,50 @@ public:
 	ConstIterator begin() const {return ConstIterator(this,0);}
 	ConstIterator end() const {return ConstIterator(this,size());}
 
-	// for compatibility with std interfaces (should refactor eventually)
+	// compatibility API with STL interfaces (should refactor eventually)
+	ConstIterator find(const Kmer &target) const {
+		IndexType idx = findIndex(target);
+		if (idx == MAX_INDEX)
+			return end();
+		else
+			return ConstIterator(this, idx);
+	}
+	Iterator find(const Kmer &target) {
+		IndexType idx = findIndex(target);
+		if (idx == MAX_INDEX)
+			return end();
+		else
+			return Iterator(this, idx);
+	}
+	Iterator erase(Iterator it) {
+		if (it != end()) {
+			Iterator it2 = it;
+			it2++;
+			remove(it.getIndex());
+			return it2;
+		} else
+			return it;
+	}
+	int erase(const Kmer &target) const {
+		IndexType idx = findIndex(target);
+		if (idx == MAX_INDEX)
+			return 0;
+		else
+			remove(idx);
+		return 1;
+	}
+	Iterator insert(BaseElementType &element) {
+		return insert(element.key(), element.value());
+	}
+	Iterator insert(const Kmer &target, const ValueType &value) {
+		IndexType idx;
+		if (isSorted())
+			idx = insertSorted(target, value);
+		else
+			idx = append(target, value);
+		return Iterator(this, idx);
+	}
+
 	typedef Iterator iterator;
 	typedef ElementType mapped_type;
 };
@@ -1447,7 +1529,6 @@ public:
 	typedef _Hasher HasherType;
 
 	typedef	typename BucketType::iterator BucketTypeIterator;
-	typedef typename BucketType::mapped_type ElementType;
 
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
@@ -1455,6 +1536,9 @@ public:
 
 	typedef std::vector< BucketType > BucketsVector;
 	typedef typename BucketsVector::iterator BucketsVectorIterator;
+
+	typedef KmerElementValuePair<ValueType> BaseElementType;
+	typedef BaseElementType ElementType;
 
 	static IndexType getMinPowerOf2(IndexType minBucketCount) {
 		NumberType powerOf2 = minBucketCount;
@@ -1494,11 +1578,11 @@ public:
 		clear();
 	}
 
-	void clear() {
+	void clear(bool releaseMemory = true) { // release memory ignored by default
 		_buckets.clear();
 		BUCKET_MASK = 0;
 	}
-	void reset() {
+	void reset(bool releaseMemory = true) { // release memory ignored by default
 		for(size_t i=0; i< _buckets.size(); i++) {
 			_buckets[i].clear();
 		}
@@ -1582,6 +1666,29 @@ public:
 		return getBucketIdx(HasherType()(key));
 	}
 
+	inline IndexType getNumBuckets() const {
+		return getBuckets().size();
+	}
+
+	// insert/add, remove, exists methods
+	ElementType insert(const KeyType &key, const ValueType &value) {
+		return insert(key,value, getBucket(key));
+	}
+
+	bool remove(const KeyType &key) {
+		return remove(key, getBucket(key));
+	}
+
+protected:
+	inline BucketsVector &getBuckets() {
+		return _buckets;
+	}
+	inline const BucketsVector &getBuckets() const {
+		return _buckets;
+	}
+	inline NumberType &getBucketMask() {
+		return BUCKET_MASK;
+	}
 	inline const BucketType &getBucket(NumberType hash) const {
 		NumberType idx = getBucketIdx(hash);
 		return getBuckets()[idx];
@@ -1605,19 +1712,22 @@ public:
 		getBuckets().clear();
 		getBuckets().resize(numBuckets);
 	}
-	inline IndexType getNumBuckets() const {
-		return getBuckets().size();
+
+	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
+		BucketTypeIterator it = bucket.find(key);
+		if (it == bucket.end())
+			it = bucket.insert(key, value);
+		return ElementType(it->key(), it->value());
 	}
 
-protected:
-	inline BucketsVector &getBuckets() {
-		return _buckets;
-	}
-	inline const BucketsVector &getBuckets() const {
-		return _buckets;
-	}
-	inline NumberType &getBucketMask() {
-		return BUCKET_MASK;
+	bool remove(const KeyType &key, BucketType &bucket) {
+		BucketTypeIterator it = bucket.find(key);
+		if (it != bucket.end()) {
+			bucket.erase(it);
+			return true;
+		} else {
+			return false;
+		}
 	}
 
 protected:
@@ -1643,6 +1753,7 @@ public:
 	typedef typename Base::BucketType BucketType;
 	typedef typename Base::HasherType HasherType;
 	typedef	typename Base::BucketTypeIterator BucketTypeIterator;
+	typedef typename Base::BaseElementType BaseElementType;
 	typedef typename Base::ElementType ElementType;
 
 	typedef typename Base::BucketsVector BucketsVector;
@@ -1694,9 +1805,13 @@ public:
 protected:
 	Base::getBuckets;
 	Base::getBucketMask;
+	Base::getBucket;
+	Base::getBucketByIdx;
+	Base::setNumBuckets;
 
 public:
 
+	// specific overloading, taking advantage of KmerArray memory release directives
 	void reset(bool releaseMemory = true) {
 		for(size_t i=0; i< getBuckets().size(); i++) {
 			getBuckets()[i].reset(releaseMemory);
@@ -1718,9 +1833,6 @@ public:
 	Base::getDistributedThreadId;
 	Base::getThreadIds;
 	Base::getBucketIdx;
-	Base::getBucket;
-	Base::getBucketByIdx;
-	Base::setNumBuckets;
 	Base::getNumBuckets;
 
 
@@ -1738,7 +1850,6 @@ public:
 			_isSorted = true;
 		}
 	}
-
 
 	// store/restore specificity
 	const Kmernator::MmapFile store(std::string permanentFile = "") const {
@@ -1799,6 +1910,10 @@ public:
 	}
 
 
+	Base::insert;
+	Base::remove;
+
+	// insert specificity, using sorted KmerArray
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
 		IndexType idx;
 		if (isSorted()) {
@@ -1807,7 +1922,7 @@ public:
 			idx = bucket.append(key,value);
 			if (bucket.size() == bucket.capacity()) {
 				bucket.resort(true);
-				idx = bucket.find(key);
+				idx = bucket.findIndex(key);
 				assert(idx != BucketType::MAX_INDEX);
 			}
 		}
@@ -1815,24 +1930,19 @@ public:
 		ElementType element = bucket.getElement(idx);
 		return element;
 	}
-	ElementType insert(const KeyType &key, const ValueType &value) {
-		return insert(key,value, getBucket(key));
-	}
 
+	// remove specific, using sorted KmerArray
 	bool remove(const KeyType &key, BucketType &bucket) {
 		bool isFound;
-		IndexType idx = isSorted() ? bucket.findSorted(key, isFound) : bucket.find(key, isFound);
+		IndexType idx = isSorted() ? bucket.findSortedIndex(key, isFound) : bucket.findIndex(key, isFound);
 		if (isFound && idx != BucketType::MAX_INDEX)
 			bucket.remove(idx);
 		return isFound;
 	}
-	bool remove(const KeyType &key) {
-		return remove(key, getBucket(key));
-	}
 
 	bool _exists(const KeyType &key, IndexType &existingIdx, const BucketType &bucket) const {
 		bool isFound;
-		existingIdx = isSorted() ? bucket.findSorted(key, isFound) : bucket.find(key, isFound);
+		existingIdx = isSorted() ? bucket.findSortedIndex(key, isFound) : bucket.findIndex(key, isFound);
 		return isFound;
 	}
 	bool _exists(const KeyType &key, IndexType &existingIdx) const {
@@ -1853,7 +1963,7 @@ public:
 	const bool getValueIfExists(const KeyType &key, ValueType &value, const BucketType &bucket) const {
 		bool isFound;
 		IndexType existingIndex;
-		existingIndex = isSorted() ? bucket.findSorted(key, isFound) : bucket.find(key, isFound);
+		existingIndex = isSorted() ? bucket.findSortedIndex(key, isFound) : bucket.findIndex(key, isFound);
 		if (isFound)
 			value = bucket.valueAt(existingIndex);
 		return isFound;
@@ -2232,8 +2342,8 @@ public:
 		ElementType *operator->() {return &(*_iElement);}
 		const ElementType *operator->() const {return &(*_iElement);}
 
-		Kmer &key() {return _iElement.key();}
 		const Kmer &key() const {return _iElement.key();}
+		const Kmer &key() {return _iElement.key();}
 		Value &value() {return _iElement.value();}
 		const Value &value() const {return _iElement.value();}
 
