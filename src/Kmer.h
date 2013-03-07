@@ -410,6 +410,12 @@ public:
 		_value = copy._value;
 		return *this;
 	}
+	static const KmerElementPair getConst() {
+		return KmerElementPair();
+	}
+	static const KmerElementPair getConst(const Kmer &kmer, const ValueType &value) {
+		return KmerElementPair(kmer, const_cast<ValueType&>(value));
+	}
 	virtual inline bool isValid() const { return _kmer != NULL; }
 	virtual inline void reset() { _kmer = NULL; _value = NULL; }
 	virtual inline const Kmer &key() const { assert(isValid()); return *_kmer; }
@@ -655,6 +661,13 @@ public:
 		array.setLastSorted();
 		return array;
 	}
+	// never thread safe!
+	const ValueType *getValueStart() const {
+		if (capacity() > 0)
+			return (ValueType*) _add(_begin, capacity());
+		else
+			return NULL;
+	}
 
 protected:
 	void setLastSorted() {
@@ -668,13 +681,6 @@ protected:
 		}
 		LOG_DEBUG(5, "_endSorted = " << _endSorted << ", " << size() << " for " << this);
 		assert(_endSorted <= size());
-	}
-	// never thread safe!
-	const ValueType *getValueStart() const {
-		if (capacity() > 0)
-			return (ValueType*) _add(_begin, capacity());
-		else
-			return NULL;
 	}
 
 	// never thread safe!
@@ -1366,7 +1372,6 @@ public:
 			passingIndexes.push_back(i);
 		resort(passingIndexes, reserveExtra);
 	}
-private:
 	void resort(std::vector< IndexType > &passingIndexes, bool reserveExtra = false) {
 		std::sort(passingIndexes.begin(), passingIndexes.end(), CompareArrayIdx(*this));
 
@@ -1403,33 +1408,6 @@ public:
 		std::swap(_capacity, other._capacity);
 		std::swap(_endSorted, other._endSorted);
 		assert(_endSorted <= size());
-	}
-
-	// purge all element where the value is less than minimumCount
-	// assumes that ValueType can be cast into long
-	// resulting in a (potententially smaller) sorted KmerArrayPair
-	IndexType purgeMinCount(long minimumCount) {
-		// scan values that pass, keep list and count
-		IndexType maxSize = size();
-		std::vector< IndexType > passingIndexes;
-		passingIndexes.reserve(maxSize);
-		IndexType affected;
-
-		ValueType *valuePtr = getValueStart();
-		for(IndexType i = 0; i < maxSize; i++) {
-			if ( minimumCount <= (long) *(valuePtr++) ) {
-				passingIndexes.push_back( i );
-			}
-		}
-		if (passingIndexes.empty()) {
-			reset(true);
-			affected = maxSize;
-		} else {
-			affected = maxSize - passingIndexes.size();
-			resort(passingIndexes);
-		}
-
-		return affected;
 	}
 
 	std::string toThis() const {
@@ -1505,7 +1483,7 @@ public:
 	private:
 		Iterator _iterator;
 	public:
-		ConstIterator(KmerArrayPair *target, IndexType idx = 0): _iterator(target,idx) {}
+		ConstIterator(const KmerArrayPair *target, IndexType idx = 0): _iterator(const_cast<KmerArrayPair*>( target ),idx) {}
 		ConstIterator(const ConstIterator &copy) {*this = copy;}
 		ConstIterator() : _iterator() {}
 		ConstIterator& operator=(const ConstIterator& other) {
@@ -1540,6 +1518,7 @@ public:
 	typedef _Hasher HasherType;
 
 	typedef	typename BucketType::iterator BucketTypeIterator;
+	typedef typename BucketType::const_iterator ConstBucketTypeIterator;
 
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
@@ -1688,38 +1667,298 @@ public:
 	ElementType insert(const KeyType &key, const ValueType &value) {
 		return insert(key,value, getBucket(key));
 	}
+	ElementType insert(const KeyType &key, const ValueType &value, NumberType hash) {
+		assert(HasherType()(key) == hash);
+		return insert(key,value, getBucket(hash));
+	}
 
 	bool remove(const KeyType &key) {
 		return remove(key, getBucket(key));
 	}
+	bool remove(const KeyType &key, NumberType hash) {
+		assert(HasherType()(key) == hash);
+		return remove(key, getBucket(hash));
+	}
 
-protected:
-	inline BucketsVector &getBuckets() {
-		return _buckets;
+	Iterator find(const KeyType &key) {
+		return find(key, getBucket(key));
+	}
+	Iterator find(const KeyType &key, NumberType hash) {
+		assert(HasherType()(key) == hash);
+		return find(key, getBuckets(hash));
+	}
+
+	ValueType &operator[](const KeyType &key) {
+		NumberType hash = HasherType()(key);
+		BucketType &bucket = getBucket(hash);
+		BucketTypeIterator it = bucket.find(key);
+		if (it != bucket.end()) {
+			return it->value();
+		} else {
+			ValueType value;
+			return insert(key, value, bucket).value();
+		}
+	}
+
+	bool exists(const KeyType &key) const {
+		return exists(key, getBucket(key));
+	}
+	bool exists(const KeyType &key, NumberType hash) const {
+		assert(HasherType()(key) == hash);
+		return exists(key, getBuckets(hash));
+	}
+
+	const bool getValueIfExists(const KeyType &key, ValueType &value) const {
+		return getValueIfExists(key, value, getBucket(key));
+	}
+
+	const bool getValueIfExists(const KeyType &key, ValueType &value, NumberType hash) const {
+		assert(HasherType()(key) == hash);
+		return getValueIfExists(key, value, getBucket(hash));
+	}
+
+	const ElementType getElementIfExists(const KeyType &key) const {
+		return getElementIfExists(key, getBucket(key));
+	}
+	ElementType getElementIfExists(const KeyType &key) {
+		return getElementIfExists(key, getBucket(key));
+	}
+
+	const ElementType getElementIfExists(const KeyType &key, NumberType hash) const {
+		assert(HasherType()(key) == hash);
+		return getElementIfExists(key, getBucket(hash));
+	}
+	ElementType getElementIfExists(const KeyType &key, NumberType hash) {
+		assert(HasherType()(key) == hash);
+		return getElementIfExists(key, getBucket(hash));
+	}
+
+	ElementType getOrSetElement(const KeyType &key, ValueType value) {
+		return getOrSetElement(key, value, getBucket(key));
+	}
+	ElementType getElement(const KeyType &key) {
+		ValueType value = ValueType();
+		return getOrSetElement(key, value);
+	}
+	ElementType getOrSetElement(const KeyType &key, ValueType value, NumberType hash) {
+		assert(HasherType()(key) == hash);
+		return getOrSetElement(key, value, getBucket(hash));
+	}
+	ElementType getElement(const KeyType &key, NumberType hash) {
+		assert(HasherType()(key) == hash);
+		ValueType value = ValueType();
+		return getOrSetElement(key, value);
+	}
+
+	SizeType size() const {
+		SizeType size = 0;
+
+		long bucketSize = getBuckets().size();
+#pragma omp parallel for reduction(+:size) if(getBuckets().size()>1000000)
+		for(long i = 0; i < bucketSize; i++) {
+			size += getBuckets()[i].size();
+		}
+		return size;
+	}
+
+	IndexType maxBucketSize() const	{
+		IndexType biggest = 0;
+		IndexType imax;
+		for(IndexType i = 0; i<getBuckets().size(); i++)
+			if (getBuckets()[i].size() > biggest)
+			{
+				imax = i;
+				biggest = getBuckets()[i].size();
+			}
+		return biggest;
+	}
+
+	std::string toString() const {
+		std::stringstream ss;
+		ss << this << "[";
+		IndexType idx=0;
+		for(; idx<getBuckets().size() && idx < 30; idx++) {
+			ss << "bucket:" << idx << " (" << getBuckets()[idx].size() << "), ";
+		}
+		if (idx < getBuckets().size())
+			ss << " ... " << getBuckets().size() - idx << " more ";
+		ss << "]";
+		return ss.str();
+	}
+
+
+	inline const BucketType &getBucketByIdx(IndexType idx) const {
+		return getBuckets()[idx];
+	}
+	// TODO HACK! use friend class for direct non-const access
+	inline BucketType &getBucketByIdx(IndexType idx) {
+		return getBuckets()[idx];
 	}
 	inline const BucketsVector &getBuckets() const {
 		return _buckets;
-	}
-	inline NumberType &getBucketMask() {
-		return BUCKET_MASK;
 	}
 	inline const BucketType &getBucket(NumberType hash) const {
 		NumberType idx = getBucketIdx(hash);
 		return getBuckets()[idx];
 	}
-	inline BucketType &getBucket(NumberType hash) {
-		return const_cast<BucketType &>( _constThis().getBucket(hash) );
-	}
-
 	inline const BucketType &getBucket(const KeyType &key) const {
 		NumberType idx = getBucketIdx(key);
 		return getBucket(idx);
 	}
+	bool exists(const KeyType &key, const BucketType &bucket) const {
+		return bucket.find(key) != bucket.end();
+	}
+	const bool getValueIfExists(const KeyType &key, ValueType &value, const BucketType &bucket) const {
+		ConstBucketTypeIterator it = bucket.find(key);
+		if (it == bucket.end())
+			return false;
+		else {
+			value = it->value();
+			return true;
+		}
+	}
+	const ElementType getElementIfExists(const KeyType &key, const BucketType &bucket) const {
+		ConstBucketTypeIterator it = bucket.find(key);
+		if (it == bucket.end())
+			return ElementType::getConst();
+		else {
+			return ElementType::getConst(it->key(), it->value());
+		}
+	}
+
+	// optimized merge for DMP threaded (i.e. blocked where only one bucket per map is populated)
+	void mergeStripedBuckets(const BucketExposedMap &src) const {
+		if (getNumBuckets() != src.getNumBuckets()) {
+			LOG_THROW("Invalid: Can not merge two BucketExposedMaps of differing sizes!");
+		}
+
+		long bucketsSize = getNumBuckets();
+		#pragma omp parallel for
+		for(long idx = 0 ; idx < bucketsSize; idx++) {
+			BucketType &a = const_cast<BucketType&> (getBucketByIdx(idx));
+			BucketType &b = const_cast<BucketType&> (src.getBucketByIdx(idx));
+
+			if (! mergeTriviallyInterleavedBuckets(a,b) ) {
+				LOG_THROW("Invalid: Expected one bucket to be zero in this optimized method: DenseKmerMap::merge(const DenseKmerMap &src) const");
+			}
+		}
+	}
+
+	void mergeAdd(BucketExposedMap &src) {
+		if (getNumBuckets() != src.getNumBuckets()) {
+			LOG_THROW("Invalid: Can not merge two BucketExposedMaps of differing sizes!");
+		}
+		BucketType merged;
+
+		long bucketsSize = getNumBuckets();
+
+		#pragma omp parallel for private(merged)
+		for(long idx = 0 ; idx < bucketsSize; idx++) {
+			// buckets are sorted so perform a sorted merge by bucket
+			BucketType &a = getBucketByIdx(idx);
+			BucketType &b = src.getBucketByIdx(idx);
+
+			// short circuit if one of the buckets is empty
+			if (mergeTriviallyInterleavedBuckets(a,b))
+				continue;
+
+			for(Iterator ib = b.begin(); ib != b.end(); ib++) {
+				Iterator ia = a.find(ib->key());
+				if (ia == a.end())
+					a.insert(ib->key(), ib->value());
+				else
+					ia->value() = ia->value + ib->value();
+			}
+			b.reset(true);
+		}
+		src.clear();
+	}
+
+	template< typename OtherBucketExposedMap >
+	void mergePromote(BucketExposedMap &src, OtherBucketExposedMap &mergeDest) {
+		// TODO fixme
+		LOG_THROW("Invalid: This method is broken for threaded execution somehow (even with pragmas disabled)");
+		if (getNumBuckets() != src.getNumBuckets()) {
+			LOG_THROW("Invalid: Can not merge two DenseKmerMaps of differing sizes!");
+		}
+		/*
+		// calculated chunk size to ensure thread safety of merge operation
+		int chunkSize = mergeDest.getNumBuckets() / src.getNumBuckets();
+		if (chunkSize <= 1)
+			chunkSize = 2;
+		BucketType merged;
+		if (! src.isSorted() )
+			src.resort();
+		if (! mergeDest.isSorted() )
+			mergeDest.resort();
+
+		long bucketsSize = getNumBuckets();
+		//#pragma omp parallel for private(merged) schedule(static, chunkSize)
+		for(long idx = 0 ; idx < bucketsSize; idx++) {
+			// buckets are sorted so perform a sorted merge by bucket
+			BucketType &a = getBuckets()[idx];
+			BucketType &b = src.getBuckets()[idx];
+			IndexType capacity = std::max(a.size(), b.size());
+			merged.reserve(capacity);
+			IndexType idxA = 0;
+			IndexType idxB = 0;
+			while (idxA < a.size() || idxB < b.size()) {
+				int cmp = _compare(a, b, idxA, idxB);
+				if (cmp == 0) {
+					mergeDest[ a[idxA] ].add( a.valueAt(idxA) ).add( b.valueAt(idxB) );
+					idxA++; idxB++;
+				} else {
+					if (cmp < 0) {
+						merged.append(a[idxA], a.valueAt(idxA));
+						idxA++;
+					} else {
+						merged.append(b[idxB], b.valueAt(idxB));
+						idxB++;
+					}
+				}
+			}
+
+			a.swap(merged);
+			if (b.capacity() > merged.capacity()) {
+				b.swap(merged);
+			}
+			merged.reset(false);
+			b.reset(true);
+		}
+		src.clear();
+		*/
+	}
+
+
+protected:
+	static bool mergeTriviallyInterleavedBuckets(BucketType &a, BucketType &b) {
+		if (b.size() == 0) {
+			// do nothing.  a is good as is
+			return true;
+		} else if (a.size() == 0) {
+			// swap a and b
+			a.swap(b);
+			return true;
+		}
+		return false;
+	}
+
+
+
+
+protected:
+	inline BucketsVector &getBuckets() {
+		return _buckets;
+	}
+	inline NumberType &getBucketMask() {
+		return BUCKET_MASK;
+	}
+	inline BucketType &getBucket(NumberType hash) {
+		return const_cast<BucketType &>( _constThis().getBucket(hash) );
+	}
+
 	inline BucketType &getBucket(const KeyType &key) {
 		return const_cast<BucketType &>( _constThis().getBucket(key) );
-	}
-	inline const BucketType &getBucketByIdx(IndexType idx) const {
-		return getBuckets()[idx];
 	}
 
 	inline void setNumBuckets(IndexType numBuckets) {
@@ -1743,6 +1982,35 @@ protected:
 			return false;
 		}
 	}
+	bool exists(const KeyType &key, BucketType &bucket) {
+		return bucket.find(key) != bucket.end();
+	}
+	Iterator find(const KeyType &key, BucketType &bucket) {
+		return bucket.find(key);
+	}
+
+	ElementType getElementIfExists(const KeyType &key, BucketType &bucket) {
+		BucketTypeIterator it = bucket.find(key);
+		if (it == bucket.end())
+			return ElementType();
+		else {
+			return ElementType(it->key(), it->value());
+		}
+	}
+
+	ElementType getOrSetElement(const KeyType &key, ValueType value, BucketType &bucket) {
+		BucketTypeIterator it = bucket.find(key);
+		if (it == bucket.end())
+			return insert(key, value, bucket);
+		else
+			return ElementType(it->key(), it->value());
+	}
+	ElementType getElement(const KeyType &key, BucketType &bucket) {
+		ValueType value = ValueType();
+		return getOrSetElement(key, bucket, value);
+	}
+
+
 
 
 public:
@@ -2021,6 +2289,9 @@ public:
 	Base::beginThreaded;
 	Base::endThreaded;
 
+	// other methods
+	Base::size;
+
 	// Sorted KmerArrayPair specializations
 public:
 	static const bool defaultSort = false;
@@ -2044,7 +2315,12 @@ public:
 			_isSorted = true;
 		}
 	}
-	// insert specificity, using sorted KmerArrayPair
+	void _setIsSorted(bool sorted) {
+		_isSorted = sorted;
+	}
+
+protected:
+	// insert specialiazation, using sorted KmerArrayPair
 	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
 		IndexType idx;
 		if (isSorted()) {
@@ -2062,7 +2338,7 @@ public:
 		return element;
 	}
 
-	// remove specific, using sorted KmerArrayPair
+	// remove specialization, using sorted KmerArrayPair
 	bool remove(const KeyType &key, BucketType &bucket) {
 		bool isFound;
 		IndexType idx = isSorted() ? bucket.findSortedIndex(key, isFound) : bucket.findIndex(key, isFound);
@@ -2071,8 +2347,7 @@ public:
 		return isFound;
 	}
 
-
-	// store/restore specificity
+	// store/restore specialiazation
 public:
 	// restore new instance from mmap
 	DenseKmerMap(const void *src) {
@@ -2141,106 +2416,10 @@ public:
 				+ getBuckets().size()*sizeof(IndexType);
 	}
 	SizeType getSizeToStoreElements() const {
-		return size()*BucketType::getElementByteSize();
+		return size()*(KmerSizer::getByteSize() + sizeof(ValueType));
 	}
 
-	bool _exists(const KeyType &key, IndexType &existingIdx, const BucketType &bucket) const {
-		bool isFound;
-		existingIdx = isSorted() ? bucket.findSortedIndex(key, isFound) : bucket.findIndex(key, isFound);
-		return isFound;
-	}
-	bool _exists(const KeyType &key, IndexType &existingIdx) const {
-		return _exists(key,existingIdx, getBucket(key));
-	}
-
-	bool exists(const KeyType &key, const BucketType &bucket) const {
-		IndexType dummy;
-		return _exists(key, dummy, bucket);
-	}
-	bool exists(const KeyType &key) const {
-		return exists(key, getBucket(key));
-	}
-
-	const bool getValueIfExists(const KeyType &key, ValueType &value) const {
-		return getValueIfExists(key, value, getBucket(key));
-	}
-	const bool getValueIfExists(const KeyType &key, ValueType &value, const BucketType &bucket) const {
-		bool isFound;
-		IndexType existingIndex;
-		existingIndex = isSorted() ? bucket.findSortedIndex(key, isFound) : bucket.findIndex(key, isFound);
-		if (isFound)
-			value = bucket.valueAt(existingIndex);
-		return isFound;
-	}
-
-	const ElementType getElementIfExists(const KeyType &key, const BucketType &bucket) const {
-		IndexType existingIdx;
-		ElementType element;
-		if (_exists(key, existingIdx, bucket)) {
-			element = bucket.getElement(existingIdx);
-		}
-		return element;
-	}
-	ElementType getElementIfExists(const KeyType &key, BucketType &bucket) {
-		IndexType existingIdx;
-		ElementType element;
-		if (_exists(key, existingIdx, bucket)) {
-			element = bucket.getElement(existingIdx);
-		}
-		return element;
-	}
-
-	const ElementType getElementIfExists(const KeyType &key) const {
-		return getElementIfExists(key, getBucket(key));
-	}
-	ElementType getElementIfExists(const KeyType &key) {
-		return getElementIfExists(key, getBucket(key));
-	}
-
-	ElementType getOrSetElement(const KeyType &key, BucketType &bucket, ValueType value) {
-		IndexType existingIdx;
-		ElementType element;
-		if (_exists(key, existingIdx, bucket)) {
-			element = bucket.getElement(existingIdx);
-		} else {
-			element = insert(key, value, bucket);
-		}
-		return element;
-	}
-	ElementType getOrSetElement(const KeyType &key, ValueType value) {
-		return getOrSetElement(key, getBucket(key), value);
-	}
-	ElementType getElement(const KeyType &key, BucketType &bucket) {
-		ValueType value = ValueType();
-		return getOrSetElement(key, bucket, value);
-	}
-	ElementType getElement(const KeyType &key) {
-		ValueType value = ValueType();
-		return getOrSetElement(key, value);
-	}
-
-	// not thread safe!
-	ValueType &operator[](const KeyType &key) {
-		BucketType &bucket = getBucket(key);
-		IndexType existingIdx;
-		if (_exists(key, existingIdx, bucket))
-			return bucket.valueAt(existingIdx);
-		else
-			return insert(key, Value(), bucket).value();
-	}
-
-	SizeType size() const {
-		SizeType size = 0;
-
-		long bucketSize = getBuckets().size();
-#pragma omp parallel for reduction(+:size) if(getBuckets().size()>1000000)
-		for(long i = 0; i < bucketSize; i++) {
-			size += getBuckets()[i].size();
-		}
-		return size;
-	}
-
-	std::string toString() const {
+	std::string toStringDetailed() const {
 		std::stringstream ss;
 		ss << this << "[";
 		IndexType idx=0;
@@ -2253,83 +2432,12 @@ public:
 		return ss.str();
 	}
 
-	IndexType maxBucket()
-	{
-		IndexType biggest = 0;
-		IndexType imax;
-		for(IndexType i = 0; i<getBuckets().size(); i++)
-			if (getBuckets()[i].size() > biggest)
-			{
-				imax = i;
-				biggest = getBuckets()[i].size();
-			}
-		return biggest;
-	}
+	Base::mergeTriviallyInterleavedBuckets;
 
-	SizeType purgeMinCount(long minimumCount) {
-		SizeType affected = 0;
-		if (minimumCount <= 1)
-			return affected;
-
-		long bucketsSize = getNumBuckets();
-#pragma omp parallel for reduction(+:affected)
-		for(long idx = 0 ; idx < bucketsSize; idx++) {
-			affected += getBuckets()[idx].purgeMinCount(minimumCount);
-		}
-		_isSorted = true; // purgeMinCount implicitly sorts...
-		return affected;
-	}
-
-private:
-	int _compare(const BucketType &a, const BucketType &b, IndexType &idxA, IndexType &idxB) {
-		int cmp;
-		if (idxA < a.size() && idxB < b.size()) {
-			cmp = a[idxA].compare(b[idxB]);
-		} else {
-			if (idxA < a.size()) {
-				cmp = -1;
-			} else {
-				cmp = 1;
-			}
-		}
-		return cmp;
-	}
-public:
-
-	static bool _mergeTrivial(BucketType &a, BucketType &b) {
-		if (b.size() == 0) {
-			// do nothing.  a is good as is
-			return true;
-		} else if (a.size() == 0) {
-			// swap a and b
-			a.swap(b);
-			return true;
-		}
-		return false;
-	}
-
-	// optimized merge for DMP threaded (blocked) DenseKmerMaps
-	void merge(const DenseKmerMap &src) const {
-		if (getNumBuckets() != src.getNumBuckets()) {
-			LOG_THROW("Invalid: Can not merge two DenseKmerMaps of differing sizes!");
-		}
-
-		long bucketsSize = getNumBuckets();
-#pragma omp parallel for
-		for(long idx = 0 ; idx < bucketsSize; idx++) {
-			BucketType &a = const_cast<BucketType&>(getBuckets()[idx]);
-			BucketType &b = const_cast<BucketType&>(src.getBuckets()[idx]);
-
-			if (! _mergeTrivial(a,b) ) {
-				LOG_THROW("Invalid: Expected one bucket to be zero in this optimized method: DenseKmerMap::merge(const DenseKmerMap &src) const");
-			}
-		}
-
-	}
-
+	// specialized merge for KmerArrayPair
 	void mergeAdd(DenseKmerMap &src) {
 		if (getNumBuckets() != src.getNumBuckets()) {
-			LOG_THROW("Invalid: Can not merge two DenseKmerMaps of differing sizes!");
+			LOG_THROW("Invalid: Can not merge two BucketExposedMaps of differing sizes!");
 		}
 		BucketType merged;
 		if (!isSorted())
@@ -2338,19 +2446,21 @@ public:
 			src.resort();
 
 		long bucketsSize = getNumBuckets();
-#pragma omp parallel for private(merged)
+
+		#pragma omp parallel for private(merged)
 		for(long idx = 0 ; idx < bucketsSize; idx++) {
 			// buckets are sorted so perform a sorted merge by bucket
-			BucketType &a = getBuckets()[idx];
-			BucketType &b = src.getBuckets()[idx];
+			BucketType &a = getBucketByIdx(idx);
+			BucketType &b = src.getBucketByIdx(idx);
 
 			// short circuit if one of the buckets is empty
-			if (_mergeTrivial(a,b))
+			if (mergeTriviallyInterleavedBuckets(a,b))
 				continue;
 
 			IndexType capacity = std::max(a.size(), b.size());
 
 			merged.reserve(capacity);
+
 			IndexType idxA = 0;
 			IndexType idxB = 0;
 			while (idxA < a.size() || idxB < b.size()) {
@@ -2379,57 +2489,19 @@ public:
 		src.clear();
 	}
 
-	template< typename OtherDataType >
-	void mergePromote(DenseKmerMap &src, DenseKmerMap< OtherDataType > &mergeDest) {
-		// TODO fixme
-		LOG_THROW("Invalid: This method is broken for threaded execution somehow (even with pragmas disabled)");
-		if (getNumBuckets() != src.getNumBuckets()) {
-			LOG_THROW("Invalid: Can not merge two DenseKmerMaps of differing sizes!");
-		}
-		// calculated chunk size to ensure thread safety of merge operation
-		int chunkSize = mergeDest.getNumBuckets() / src.getNumBuckets();
-		if (chunkSize <= 1)
-			chunkSize = 2;
-		BucketType merged;
-		if (! src.isSorted() )
-			src.resort();
-		if (! mergeDest.isSorted() )
-			mergeDest.resort();
-
-		long bucketsSize = getNumBuckets();
-		//#pragma omp parallel for private(merged) schedule(static, chunkSize)
-		for(long idx = 0 ; idx < bucketsSize; idx++) {
-			// buckets are sorted so perform a sorted merge by bucket
-			BucketType &a = getBuckets()[idx];
-			BucketType &b = src.getBuckets()[idx];
-			IndexType capacity = std::max(a.size(), b.size());
-			merged.reserve(capacity);
-			IndexType idxA = 0;
-			IndexType idxB = 0;
-			while (idxA < a.size() || idxB < b.size()) {
-				int cmp = _compare(a, b, idxA, idxB);
-				if (cmp == 0) {
-					mergeDest[ a[idxA] ].add( a.valueAt(idxA) ).add( b.valueAt(idxB) );
-					idxA++; idxB++;
-				} else {
-					if (cmp < 0) {
-						merged.append(a[idxA], a.valueAt(idxA));
-						idxA++;
-					} else {
-						merged.append(b[idxB], b.valueAt(idxB));
-						idxB++;
-					}
-				}
+private:
+	int _compare(const BucketType &a, const BucketType &b, IndexType &idxA, IndexType &idxB) {
+		int cmp;
+		if (idxA < a.size() && idxB < b.size()) {
+			cmp = a[idxA].compare(b[idxB]);
+		} else {
+			if (idxA < a.size()) {
+				cmp = -1;
+			} else {
+				cmp = 1;
 			}
-
-			a.swap(merged);
-			if (b.capacity() > merged.capacity()) {
-				b.swap(merged);
-			}
-			merged.reset(false);
-			b.reset(true);
 		}
-		src.clear();
+		return cmp;
 	}
 
 
@@ -2475,13 +2547,7 @@ public:
 		*((Base*)this) = other;
 		return *this;
 	}
-	const bool getValueIfExists(const KeyType &key, ValueType &value) const {
 
-	}
-
-	ElementType getOrSetElement(const KeyType &key, BucketType &bucket, ValueType value) {
-
-	}
 private:
 	BucketsVector getBuckets();
 };
