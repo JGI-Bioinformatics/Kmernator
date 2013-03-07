@@ -53,7 +53,8 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "DistributedFunctions.h"
 
 typedef TrackingDataWithDirection DataType;
-typedef DistributedKmerSpectrum<DataType, DataType> KS;
+typedef KmerMap< DataType > MapType;
+typedef DistributedKmerSpectrum<MapType, MapType> KS;
 typedef DistributedReadSelector<DataType> RS;
 
 class _MPIFilterReadsOptions : public OptionsBaseInterface {

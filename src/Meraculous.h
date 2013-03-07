@@ -76,8 +76,8 @@ public:
 	}
 };
 typedef OptionsBaseTemplate< _MeraculousOptions > MeraculousOptions;
-
-typedef DistributedKmerSpectrum<ExtensionTrackingData, ExtensionTrackingData, ExtensionTrackingDataSingleton> _MeraculousDistributedKmerSpectrum;
+typedef KmerMap< ExtensionTrackingData > MapType;
+typedef DistributedKmerSpectrum<MapType, MapType, MapType> _MeraculousDistributedKmerSpectrum;
 class MeraculousDistributedKmerSpectrum : public _MeraculousDistributedKmerSpectrum {
 public:
 	typedef _MeraculousDistributedKmerSpectrum::WeakMapType WeakMapType;

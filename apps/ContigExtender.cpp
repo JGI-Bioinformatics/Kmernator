@@ -63,7 +63,8 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 using namespace std;
 typedef TrackingDataMinimal4f DataType;
-typedef KmerSpectrum<DataType, DataType> KS;
+typedef KmerMap< DataType > MapType;
+typedef KmerSpectrum<MapType, MapType> KS;
 
 class _ContigExtenderOptions : public OptionsBaseInterface {
 public:

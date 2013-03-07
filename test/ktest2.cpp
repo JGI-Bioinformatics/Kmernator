@@ -49,7 +49,7 @@
 
 using namespace std;
 
-typedef KmerSpectrum<TrackingData, TrackingDataWithAllReads> KS;
+typedef KmerSpectrum< KmerMap< TrackingData>, KmerMap<TrackingDataWithAllReads> > KS;
 
 class _Ktest2Options : public OptionsBaseInterface {
 public:

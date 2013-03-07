@@ -183,7 +183,8 @@ public:
 class KmerAlign {
 public:
 	typedef TrackingDataWithLastRead TD;
-	typedef KmerSpectrum<TD, TD, TD> KS;
+	typedef KmerMap< TD > MapType;
+	typedef KmerSpectrum<MapType, MapType, MapType> KS;
 
 	KmerAlign(const Read &target) : _read(target), _spectrum(target.getLength()) {
 		_spectrum.setSolidOnly();

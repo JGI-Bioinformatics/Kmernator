@@ -158,7 +158,8 @@ class DuplicateFragmentFilter
 public:
 	typedef TrackingData::ReadPositionWeightVector RPW;
 	typedef TrackingDataWithAllReads TD;
-	typedef KmerSpectrum<TD, TD, TD> KS;
+	typedef KmerMap< TD > MapType;
+	typedef KmerSpectrum<MapType, MapType, MapType> KS;
 	typedef KS::Vector KSV;
 	typedef KS::WeakMapType::ElementType KSElementType;
 	typedef std::vector< KSElementType > KSElementVector;

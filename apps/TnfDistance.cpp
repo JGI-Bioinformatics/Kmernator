@@ -64,7 +64,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 using namespace std;
 typedef TrackingDataMinimal4f DataType;
 typedef KmerMap<DataType> KM;
-typedef KmerSpectrum<DataType, DataType> KS;
+typedef KmerSpectrum<KM, KM> KS;
 
 class _TnfDistanceBaseOptions : public OptionsBaseInterface {
 public:

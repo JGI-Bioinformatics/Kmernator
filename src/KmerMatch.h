@@ -93,7 +93,7 @@ typedef OptionsBaseTemplate< _KmerMatchOptions > KmerMatchOptions;
 class KmerMatch : public MatcherInterface {
 public:
 	typedef MatcherInterface::MatchResults MatchResults;
-	typedef DistributedKmerSpectrum< TrackingDataWithAllReads, TrackingDataWithAllReads, TrackingDataSingletonWithReadPosition > KS;
+	typedef DistributedKmerSpectrum< KmerMap< TrackingDataWithAllReads >, KmerMap< TrackingDataWithAllReads >, KmerMap< TrackingDataSingletonWithReadPosition > > KS;
 
 	KmerMatch(mpi::communicator &world, const ReadSet &target)
 	: MatcherInterface(world, target), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {

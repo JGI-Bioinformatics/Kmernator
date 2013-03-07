@@ -50,7 +50,8 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "FilterReads.h"
 
 typedef TrackingDataWithDirection DataType;
-typedef KmerSpectrum<DataType, DataType> KS;
+typedef KmerMap< DataType > MapType;
+typedef KmerSpectrum<MapType, MapType> KS;
 typedef ReadSelector<DataType> RS;
 class _FilterReadsOptions : public OptionsBaseInterface {
 public:

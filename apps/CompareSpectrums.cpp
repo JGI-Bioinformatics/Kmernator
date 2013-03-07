@@ -62,7 +62,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 typedef TrackingDataMinimal4 DataType;
 typedef KmerMap<DataType> KmerSolidMap;
-typedef KmerSpectrum<DataType, DataType> KS;
+typedef KmerSpectrum<KmerSolidMap, KmerSolidMap> KS;
 
 using namespace std;
 

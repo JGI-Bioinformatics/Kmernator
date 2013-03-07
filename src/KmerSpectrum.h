@@ -86,6 +86,7 @@ using namespace boost::accumulators;
 #include "Options.h"
 #include "Log.h"
 
+
 class _KmerSpectrumOptions;
 class _KmerSpectrumOptions : public OptionsBaseInterface {
 public:
@@ -246,7 +247,7 @@ private:
 typedef OptionsBaseTemplate< _KmerSpectrumOptions > KmerSpectrumOptions;
 
 
-template<typename So = TrackingDataMinimal4, typename We = TrackingDataMinimal4, typename Si = TrackingDataSingleton>
+template<typename So = DenseKmerMap< TrackingDataMinimal4 >, typename We = DenseKmerMap< TrackingDataMinimal4 >, typename Si = DenseKmerMap< TrackingDataSingleton> >
 class KmerSpectrum {
 public:
 
@@ -261,16 +262,15 @@ public:
 	typedef std::vector<DoublePairType> DoublePairVectorType;
 	typedef DoublePairVectorType MeanVectorType;
 
-	typedef So SolidDataType;
-	typedef We WeakDataType;
-	typedef Si SingletonDataType;
+	typedef So SolidMapType;
+	typedef typename SolidMapType::ValueType	SolidDataType;
+	typedef We WeakMapType;
+	typedef typename WeakMapType::ValueType WeakDataType;
+	typedef Si SingletonMapType;
+	typedef typename SingletonMapType::ValueType SingletonDataType;
 
 	typedef	typename WeakDataType::ReadPositionWeightVector WeakReadPositionWeightVector;
 	typedef typename WeakDataType::ReadPositionWeightVector::iterator WeakReadPositionWeightVectorIterator;
-
-	typedef KmerMap<SolidDataType> SolidMapType;
-	typedef KmerMap<WeakDataType> WeakMapType;
-	typedef KmerMap<SingletonDataType> SingletonMapType;
 
 	typedef TrackingData::WeightType WeightType;
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
@@ -278,7 +278,7 @@ public:
 
 	typedef typename SolidMapType::Iterator SolidIterator;
 	typedef typename SolidMapType::ElementType SolidElementType;
-	typedef typename SolidMapType::BucketType SolieBucketType;
+	typedef typename SolidMapType::BucketType SolidBucketType;
 	typedef typename WeakMapType::Iterator WeakIterator;
 	typedef typename WeakMapType::ElementType WeakElementType;
 	typedef typename WeakMapType::BucketType WeakBucketType;
@@ -1663,8 +1663,8 @@ public:
 
 	void purgeMinDepth(long minimumCount, bool purgeSolidsToo = false) {
 		if (hasSolids && purgeSolidsToo)
-			solid.purgeMinCount(minimumCount);
-		weak.purgeMinCount(minimumCount);
+			PurgeUtils< SolidMapType >::purgeMinCount(solid, minimumCount);
+		PurgeUtils< WeakMapType >::purgeMinCount(weak, minimumCount);
 		if (hasSingletons && minimumCount > 1)
 			singleton.clear(false);
 	}
@@ -1730,10 +1730,10 @@ public:
 		// restore and merge
 		for (NumberType partIdx = 0; partIdx < numParts; partIdx++) {
 			const WeakMapType tmpWMap = WeakMapType::restore( mmaps[partIdx].data() ) ;
-			constWeak.merge( tmpWMap );
+			constWeak.mergeStripedBuckets( tmpWMap );
 			if (mmaps[partIdx+numParts].is_open()) {
 				const SingletonMapType tmpSMap = SingletonMapType::restore( mmaps[partIdx+numParts].data() );
-				constSingleton.merge( tmpSMap );
+				constSingleton.mergeStripedBuckets( tmpSMap );
 			}
 		}
 		weak.swap( const_cast<WeakMapType&>(constWeak) );
@@ -2446,6 +2446,81 @@ public:
 		if (minimumCount > 1)
 			vec[0].purgeMinDepth(minimumCount);
 	}
+
+	template<typename _BucketExposedMap>
+	class PurgeUtils {
+	public:
+
+		typedef _BucketExposedMap BEM;
+		typedef typename BEM::ValueType ValueType;
+		typedef typename BEM::BucketType BucketType;
+		typedef typename BucketType::iterator BucketTypeIterator;
+		typedef KmerArrayPair<ValueType> KAP;
+		typedef DenseKmerMap<ValueType> DKM;
+		typedef typename BEM::IndexType IndexType;
+		typedef typename BEM::SizeType  SizeType;
+
+		// purge all element where the value is less than minimumCount
+		// assumes that ValueType can be cast into long
+		// resulting in a (potentially smaller) sorted dataset
+		static IndexType purgeMinCount(BucketType &bucket, long minimumCount) {
+			if (typeid(BucketType) == typeid(KAP)) {
+				// specific algorithm for KmerArrayPair type
+
+				// scan values that pass, keep list and count
+				KAP &kmerArray = (KAP&) bucket;
+				IndexType maxSize = kmerArray.size();
+				std::vector< IndexType > passingIndexes;
+				passingIndexes.reserve(maxSize);
+				IndexType affected;
+
+				const ValueType *valuePtr = ((const KAP&)kmerArray).getValueStart();
+				for(IndexType i = 0; i < maxSize; i++) {
+					if ( minimumCount <= (long) *(valuePtr++) ) {
+						passingIndexes.push_back( i );
+					}
+				}
+				if (passingIndexes.empty()) {
+					kmerArray.reset(true);
+					affected = maxSize;
+				} else {
+					affected = maxSize - passingIndexes.size();
+					kmerArray.resort(passingIndexes);
+				}
+
+				return affected;
+			}
+
+			// else generic algorithm
+			long newSize = 0;
+			for(BucketTypeIterator it = bucket.begin(); it != bucket.end(); it++)
+				if (minimumCount >= (long) it->value())
+					newSize++;
+			if (newSize == bucket.size())
+				return 0;
+			BucketType newBucket;
+			newBucket.reserve(newSize);
+			for(BucketTypeIterator it = bucket.begin(); it != bucket.end(); it++)
+				if (minimumCount >= (long) it->value())
+					newBucket.insert(it->key(), it->value());
+			IndexType affected = bucket.size() - newSize;
+			std::swap(newBucket, bucket);
+			return affected;
+		}
+
+		static SizeType purgeMinCount(BEM &map, long minimumCount) {
+			SizeType affected = 0;
+			#pragma omp parallel for reduction(+:affected)
+			for(int i = 0; i < (int) map.getBucketSize(); i++) {
+				affected += purgeMinCount( map.getBucketByIdx(i), minimumCount);
+			}
+			if (typeid(BEM) == typeid(DKM))
+				map._setIsSorted(true); // purgeMinCount implicitly sorts KmerArrayPair...
+			return affected;
+		}
+
+	};
+
 };
 
 #endif

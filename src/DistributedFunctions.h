@@ -98,7 +98,7 @@ void setGlobalReadSetConstants(mpi::communicator &world, ReadSet &store) {
 }
 
 
-template<typename So, typename We, typename Si = TrackingDataSingleton>
+template<typename So, typename We, typename Si = KmerMap< TrackingDataSingleton> >
 class DistributedKmerSpectrum : public KmerSpectrum<So, We, Si>
 {
 public:
