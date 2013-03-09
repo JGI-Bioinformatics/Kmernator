@@ -291,6 +291,17 @@ public:
 		KS::mergeVector(ksv, 1);
 	}
 
+	class CompareByValue {
+	public:
+		int operator()(KSElementType a, KSElementType b) {
+			if (a.value() == b.value())
+				return 0;
+			else if (a.value() < b.value())
+				return -1;
+			else
+				return 1;
+		}
+	};
 	// TODO make useWeights an Option::
 	static void _mergeNodesWithinEditDistance(KS &ks, unsigned int cutoffThreshold, unsigned int editDistance) {
 		// TODO honor edit distance > 1
@@ -312,7 +323,7 @@ public:
 			if (threadId == 0)
 				LOG_VERBOSE(2, "Sorting all nodes >= " << cutoffThreshold << " count: " << elems.size() << " " << MemoryUtils::getMemoryUsage());
 
-			std::sort(elems.begin(), elems.end());
+			std::sort(elems.begin(), elems.end(), CompareByValue());
 
 
 			if (threadId == 0)

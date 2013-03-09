@@ -345,6 +345,7 @@ public:
 
 };
 
+#define MAX_KMER_INSTANCE_BYTES 128
 class KmerInstance : public Kmer {
 public:
 	KmerInstance() {
@@ -361,6 +362,10 @@ public:
 	~KmerInstance() {
 		destroy();
 	}
+	// cast operator
+	operator Kmer*() {
+		return get();
+	}
 	inline Kmer *get() {
 		return (Kmer*) _data;
 	}
@@ -373,7 +378,7 @@ private:
 	}
 	inline void destroy() {
 	}
-	char _data[16];
+	char _data[MAX_KMER_INSTANCE_BYTES];
 };
 
 class KmerHasher {
@@ -402,52 +407,44 @@ template<typename Value>
 class KmerElementPair {
 public:
 	typedef Value ValueType;
-	KmerElementPair() : _kmer(NULL), _value(NULL) {}
-	KmerElementPair(const Kmer &kmer, ValueType &value): _kmer(&kmer), _value(&value) {}
-	KmerElementPair(const KmerElementPair &copy) : _kmer(copy._kmer), _value(copy._value) {}
+	typedef typename std::pair<const Kmer*, ValueType*> Base;
+	typedef typename Base::first_type _KmerType;
+	typedef typename Base::second_type _ValueType;
+	typedef typename std::pair<const Kmer&, ValueType&> BaseRef;
+
+	KmerElementPair() : first(NULL), second(NULL) {}
+	KmerElementPair(const Base &pair) : first(pair.first), second(pair.second) {}
+	KmerElementPair(const BaseRef &pair): first(&pair.first), second(&pair.second) {}
+	KmerElementPair(const Kmer &kmer, ValueType &value) : first(&kmer), second(&value) {}
+	KmerElementPair(const KmerElementPair &copy) : first(copy.first), second(copy.second) {}
 	KmerElementPair &operator=(const KmerElementPair &copy) {
-		_kmer = copy._kmer;
-		_value = copy._value;
+		first = copy.first;
+		second = copy.second;
 		return *this;
 	}
+	KmerElementPair &operator=(const Base &copy) {
+		first = copy.first;
+		second = copy.second;
+		return *this;
+	}
+
+	virtual inline bool isValid() const { return first != NULL; }
+	virtual inline void reset() { first = NULL; second = NULL; }
+
+	virtual inline const Kmer &key() const { assert(isValid()); return *first; }
+	virtual const ValueType &value() const { assert(isValid()); return *second; }
+	virtual ValueType &value() { assert(isValid()); return *second; };
+
 	static const KmerElementPair getConst() {
 		return KmerElementPair();
 	}
 	static const KmerElementPair getConst(const Kmer &kmer, const ValueType &value) {
 		return KmerElementPair(kmer, const_cast<ValueType&>(value));
 	}
-	virtual inline bool isValid() const { return _kmer != NULL; }
-	virtual inline void reset() { _kmer = NULL; _value = NULL; }
-	virtual inline const Kmer &key() const { assert(isValid()); return *_kmer; }
-	virtual const ValueType &value() const { assert(isValid()); return *_value; }
-	virtual ValueType &value() { assert(isValid()); return *_value; };
-	inline bool operator==(const KmerElementPair &other) const {
-		if (isValid() && other.isValid())
-			return value() == other.value() && key() == other.key();
-		else
-			return false;
-	}
-	inline bool operator<(const KmerElementPair &other) const {
-		if (isValid() && other.isValid())
-			if (value() == other.value())
-				return key() < other.key();
-			else
-				return value() < other.value();
-		else
-			return false;
-	}
-	inline bool operator>(const KmerElementPair &other) const {
-		if (isValid() && other.isValid())
-			if (value() == other.value())
-				return key() > other.key();
-			else
-				return value() > other.value();
-		else
-			return false;
-	}
 protected:
-	const Kmer *_kmer;
-	ValueType *_value;
+	_KmerType first;
+	_ValueType second;
+
 };
 
 template<typename Value>
@@ -475,22 +472,23 @@ public:
 		KmerArrayPair *_array;
 		IndexType _idx;
 		inline const ElementType &_constThis() const {return *this;}
-		void setBase() {
-			this->_kmer = &(_array->get(_idx));
-			this->_value = &(_array->valueAt(_idx));
+
+		static const Kmer &getKmer(KmerArrayPair &kmerArray, IndexType index) {
+			return kmerArray.get(index);
+		}
+		static ValueType &getValue(KmerArrayPair &kmerArray, IndexType index) {
+			return kmerArray.valueAt(index);
 		}
 
 	public:
 		typedef BaseElementType Base;
 		ElementType() : Base(), _array(NULL), _idx(MAX_INDEX) {	}
 		ElementType(IndexType idx,	KmerArrayPair &array) :
-			Base(),	_array(&array), _idx(idx) {
-			setBase();
+			Base(getKmer(array,idx), getValue(array,idx)),	_array(&array), _idx(idx) {
 		}
 		ElementType(IndexType idx, const KmerArrayPair &array) :
 			// HACK! const_cast ... need ConstElementType
-			Base(), _array(const_cast<KmerArrayPair*>(&array)), _idx(idx) {
-			setBase();
+			Base(getKmer(array,idx), getValue(array,idx)), _array(const_cast<KmerArrayPair*>(&array)), _idx(idx) {
 		}
 
 		ElementType(const ElementType &copy) :
@@ -517,9 +515,7 @@ public:
 		}
 		Base::key;
 		Base::value;
-		Base::operator==;
-		Base::operator<;
-		Base::operator>;
+		Base::getConst;
 
 	};
 
@@ -1444,6 +1440,10 @@ public:
 			return *_tgt;
 		}
 	public:
+		typedef const Kmer key_type;
+		typedef ElementType value_type;
+		typedef typename ElementType::ValueType mapped_type;
+
 		Iterator(KmerArrayPair *target, IndexType idx = 0): _tgt(target), _idx(idx) {
 			setElement();
 		}
@@ -1483,6 +1483,10 @@ public:
 	private:
 		Iterator _iterator;
 	public:
+		typedef const Kmer key_type;
+		typedef const ElementType value_type;
+		typedef typename ElementType::ValueType mapped_type;
+
 		ConstIterator(const KmerArrayPair *target, IndexType idx = 0): _iterator(const_cast<KmerArrayPair*>( target ),idx) {}
 		ConstIterator(const ConstIterator &copy) {*this = copy;}
 		ConstIterator() : _iterator() {}
@@ -1517,7 +1521,7 @@ public:
 	typedef _BucketType BucketType;
 	typedef _Hasher HasherType;
 
-	typedef	typename BucketType::iterator BucketTypeIterator;
+	typedef typename BucketType::iterator BucketTypeIterator;
 	typedef typename BucketType::const_iterator ConstBucketTypeIterator;
 
 	typedef Kmer::NumberType    NumberType;
@@ -2140,7 +2144,7 @@ public:
 
 		const Kmer &key() const {return _iElement.key();}
 		const Kmer &key() {return _iElement.key();}
-		ValueType &value() {return _iElement.value();}
+		ValueType &value() { return _iElement.value();}
 		const ValueType &value() const {return _iElement.value();}
 
 		BucketType &bucket() {return *_iBucket;}

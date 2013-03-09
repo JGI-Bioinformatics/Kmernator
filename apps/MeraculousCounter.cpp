@@ -118,7 +118,6 @@ int main(int argc, char *argv[]) {
 		OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
 
-		// TODO save memory! read file and build spectrum in 100MB chunks
 		ReadSetStream reads(inputs, world.rank(), world.size());
 
 		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());

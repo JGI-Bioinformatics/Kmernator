@@ -76,7 +76,9 @@ public:
 	}
 };
 typedef OptionsBaseTemplate< _MeraculousOptions > MeraculousOptions;
-typedef KmerMap< ExtensionTrackingData > MapType;
+typedef ExtensionTrackingData DataType;
+//typedef BucketExposedMap<KmerInstance, DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher>, KmerHasher > MapType;
+typedef KmerMap< DataType > MapType;
 typedef DistributedKmerSpectrum<MapType, MapType, MapType> _MeraculousDistributedKmerSpectrum;
 class MeraculousDistributedKmerSpectrum : public _MeraculousDistributedKmerSpectrum {
 public:

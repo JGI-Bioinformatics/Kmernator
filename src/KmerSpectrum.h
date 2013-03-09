@@ -2515,7 +2515,7 @@ public:
 				affected += purgeMinCount( map.getBucketByIdx(i), minimumCount);
 			}
 			if (typeid(BEM) == typeid(DKM))
-				map._setIsSorted(true); // purgeMinCount implicitly sorts KmerArrayPair...
+				((DKM&)map)._setIsSorted(true); // purgeMinCount implicitly sorts KmerArrayPair...
 			return affected;
 		}
 
