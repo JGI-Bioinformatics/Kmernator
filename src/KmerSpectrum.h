@@ -415,7 +415,7 @@ public:
 	void prepareSolids() {
 		if (!hasSolids) {
 			solid.clear(true);
-			solid = SolidMapType(weak.getBucketSize());
+			solid = SolidMapType(weak.getNumBuckets());
 			hasSolids = true;
 		}
 	}
@@ -1724,21 +1724,23 @@ public:
 		LOG_VERBOSE(2, "Merging partial spectrums" );
 		LOG_DEBUG(2, MemoryUtils::getMemoryUsage() );
 
-		const WeakMapType constWeak(weak.getNumBuckets());
-		const SingletonMapType constSingleton(singleton.getNumBuckets());
+		WeakMapType _weak(weak.getNumBuckets());
+		SingletonMapType _singleton(singleton.getNumBuckets());
 
 		// restore and merge
 		for (NumberType partIdx = 0; partIdx < numParts; partIdx++) {
 			const WeakMapType tmpWMap = WeakMapType::restore( mmaps[partIdx].data() ) ;
-			constWeak.mergeStripedBuckets( tmpWMap );
+			WeakMapType &_tmpWMap = const_cast<WeakMapType&>(tmpWMap);
+			_weak.mergeStripedBuckets( _tmpWMap );
 			if (mmaps[partIdx+numParts].is_open()) {
 				const SingletonMapType tmpSMap = SingletonMapType::restore( mmaps[partIdx+numParts].data() );
-				constSingleton.mergeStripedBuckets( tmpSMap );
+				SingletonMapType &_tmpSMap = const_cast<SingletonMapType&>(tmpSMap);
+				_singleton.mergeStripedBuckets( _tmpSMap );
 			}
 		}
-		weak.swap( const_cast<WeakMapType&>(constWeak) );
+		weak.swap( _weak );
 		if (KmerSpectrumOptions::getOptions().getMinDepth() <= 1)
-			singleton.swap( const_cast<SingletonMapType&>( constSingleton) );
+			singleton.swap( _singleton );
 
 		LOG_VERBOSE(2, "Finished merging partial spectrums\n" << MemoryUtils::getMemoryUsage());
 
@@ -2511,7 +2513,7 @@ public:
 		static SizeType purgeMinCount(BEM &map, long minimumCount) {
 			SizeType affected = 0;
 			#pragma omp parallel for reduction(+:affected)
-			for(int i = 0; i < (int) map.getBucketSize(); i++) {
+			for(int i = 0; i < (int) map.getNumBuckets(); i++) {
 				affected += purgeMinCount( map.getBucketByIdx(i), minimumCount);
 			}
 			if (typeid(BEM) == typeid(DKM))

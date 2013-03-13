@@ -77,8 +77,81 @@ public:
 };
 typedef OptionsBaseTemplate< _MeraculousOptions > MeraculousOptions;
 typedef ExtensionTrackingData DataType;
+
+template<typename Value>
+class KmerMap2 : public BucketExposedMapLogic< KmerInstance, Value, boost::unordered_map<KmerInstance, Value>, KmerHasher >{
+public:
+	typedef Kmer::NumberType    NumberType;
+	typedef Kmer::IndexType     IndexType;
+	typedef Kmer::SizeType      SizeType;
+
+	typedef boost::unordered_map<KmerInstance, Value> BucketType;
+	typedef BucketExposedMapLogic< KmerInstance, Value, boost::unordered_map<KmerInstance, Value>, KmerHasher > BEML;
+	typedef Value ValueType;
+	typedef	typename BucketType::iterator BucketTypeIterator;
+	typedef typename BucketType::value_type BucketElementType;
+	typedef std::vector< BucketType > BucketsVector;
+	typedef typename BucketsVector::iterator BucketsVectorIterator;
+	typedef typename BucketsVector::const_iterator ConstBucketsVectorIterator;
+	typedef IteratorOfMapIterators< BucketsVectorIterator > IofMI;
+	typedef KmerPairIteratorWrapper< IofMI, Value> Iterator;
+	typedef typename Iterator::value_type ElementType;
+
+	KmerMap2(int bucketCount = 1024) {
+		_buckets.resize(bucketCount);
+	}
+	KmerMap2(const void *src) {
+		LOG_THROW("Unimplemented restore");
+	}
+	KmerMap2(const KmerMap2 &copy) {
+		*this = copy;
+	}
+	KmerMap2 &operator=(const KmerMap2 &copy) {
+		_buckets.resize(copy._buckets.size());
+		for(int i = 0; i < _buckets.size(); i++) {
+			_buckets[i].clear();
+			_buckets[i].insert(copy._buckets[i].begin(), copy._buckets[i].end());
+		}
+		return *this;
+	}
+	long size() const {
+		long size = 0;
+		for(ConstBucketsVectorIterator it = _buckets.begin(); it != _buckets.end(); it++)
+			size += it->size();
+		return size;
+	}
+	bool empty() const {
+		for(ConstBucketsVectorIterator it = _buckets.begin(); it != _buckets.end(); it++)
+			if (! it->empty() )
+				return false;
+		return true;
+	}
+	void clear(bool releaseMemory = true) {
+		if (releaseMemory)
+			_buckets.clear();
+		else {
+			for(BucketsVectorIterator it = _buckets.begin(); it != _buckets.end(); it++)
+				it->clear();
+		}
+	}
+	std::string toString() {
+		return "TODO implement toString()";
+	}
+
+	Iterator begin() { return Iterator( IofMI( _buckets.begin(), _buckets.end()) ); }
+	Iterator end() { return Iterator( IofMI::getEnd(_buckets) ); }
+
+protected:
+private:
+	BucketsVector _buckets;
+};
+
 //typedef BucketExposedMap<KmerInstance, DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher>, KmerHasher > MapType;
 typedef KmerMap< DataType > MapType;
+//typedef KmerMap2<DataType> MapType;
+
+
+
 typedef DistributedKmerSpectrum<MapType, MapType, MapType> _MeraculousDistributedKmerSpectrum;
 class MeraculousDistributedKmerSpectrum : public _MeraculousDistributedKmerSpectrum {
 public:
