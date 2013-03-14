@@ -64,6 +64,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/cstdint.hpp>
+#include <boost/type_traits.hpp>
 
 #include "config.h"
 #include "Options.h"
@@ -466,12 +467,12 @@ public:
 		return *this;
 	}
 
-	virtual inline bool isValid() const { return _kmer != NULL; }
-	virtual inline void reset() { _kmer = NULL; _value = NULL; }
+	inline bool isValid() const { return _kmer != NULL; }
+	inline void reset() { _kmer = NULL; _value = NULL; }
 
-	virtual inline const Kmer &key() const { assert(isValid()); return *_kmer; }
-	virtual const ValueType &value() const { assert(isValid()); return *_value; }
-	virtual ValueType &value() { assert(isValid()); return *_value; };
+	inline const Kmer &key() const { assert(isValid()); return *_kmer; }
+	const ValueType &value() const { assert(isValid()); return *_value; }
+	ValueType &value() { assert(isValid()); return *_value; };
 
 	static const KmerElementPair getConst() {
 		return KmerElementPair();
@@ -493,13 +494,15 @@ public:
 	typedef typename BaseValueType::key_type BaseIteratorKeyType;
 	typedef typename BaseValueType::value_type BaseIteratorValueType;
 	typedef typename BaseValueType::mapped_type BaseIteratorMappedType;
+	typedef BaseIteratorKeyType key_type;
 	typedef BaseIteratorValueType value_type;
 	typedef BaseIteratorMappedType mapped_type;
 
-	IteratorOfMapIterators() : _begin(), _end(), _it() {}
-	IteratorOfMapIterators(Base begin, Base end) : _begin(begin), _end(end), _it() {
-		if (_begin != _end)
-			_it = _begin->begin();
+	IteratorOfMapIterators() : _begin(), _end(), _it(), _rank(0), _size(1) {}
+	IteratorOfMapIterators(Base begin, Base end, int rank = 0, int size = 1) :
+		_begin(begin), _end(end), _it(), _rank(rank), _size(size) {
+		assert(_rank < _size && _size > 0);
+		incrBucket(_rank); // step to first bucket for this rank
 		setNextValid();
 	}
 	IteratorOfMapIterators(const IteratorOfMapIterators &copy) {
@@ -509,11 +512,18 @@ public:
 		_begin = copy._begin;
 		_end = copy._end;
 		_it = copy._it;
+		_rank = copy._rank;
+		_size = copy._size;
 		return *this;
 	}
 
 	bool operator==(const IteratorOfMapIterators &other) const {
-		return _it == other._it && _begin == other._begin && _end == other._end;
+		if (other._begin == other._end)
+			return _begin == _end;
+		else if (_begin == _end)
+			return false;
+		else
+			return _it == other._it && _begin == other._begin && _end == other._end;
 	}
 	bool operator!=(const IteratorOfMapIterators &other) const {
 		return !operator==(other);
@@ -530,10 +540,8 @@ public:
 	BaseIteratorValueType *operator->() { return &(*_it); }
 
 	template<typename Container>
-	static IteratorOfMapIterators getEnd(Container &cont) {
-		IteratorOfMapIterators tmp;
-		tmp._begin = tmp._end = cont.end();
-		return tmp;
+	static IteratorOfMapIterators getEnd(Container &cont, int rank = 0, int size = 1) {
+		return IteratorOfMapIterators(cont.end(), cont.end(), rank, size);
 	}
 
 protected:
@@ -542,13 +550,19 @@ protected:
 		++_it;
 		setNextValid();
 	}
+	void incrBucket(int num) {
+		for(int i = 0 ; i < num; i++) {
+			if (_begin != _end)
+				++_begin;
+		}
+		if (_begin != _end)
+			_it = _begin->begin();
+	}
 	// jumps _it to next non-empty BaseIterator
 	void setNextValid() {
 		while (_begin != _end) {
 			if (_it == _begin->end()) {
-				++_begin;
-				if (_begin != _end)
-					_it = _begin->begin();
+				incrBucket(_size); // step to next bucket for this rank
 			} else
 				break;
 		}
@@ -557,97 +571,10 @@ protected:
 private:
 	Base _begin, _end;
 	BaseIterator _it;
+	int _rank, _size;
 
 };
 
-template<typename Iterator, typename Value>
-class KmerPairIteratorWrapper {
-public:
-	typedef Iterator Base;
-	typedef KmerElementPair<Value> KEP;
-	typedef typename KEP::BaseRef BaseRef;
-	typedef std::auto_ptr< BaseRef > BaseRefPtr;
-	//typedef BaseRef value_type;
-	typedef KmerElementPair<Value> value_type;
-	typedef Value mapped_type;
-	
-
-	KmerPairIteratorWrapper() : _iter() {}
-	KmerPairIteratorWrapper(const Base &iter): _iter(iter) {	}
-	KmerPairIteratorWrapper(const KmerPairIteratorWrapper &copy): _iter(copy._iter) {	}
-	~KmerPairIteratorWrapper() {
-	}
-	KmerPairIteratorWrapper &operator=(const Base &copy) {
-		_iter = copy;
-		brptr.reset();
-		return *this;
-	}
-
-	// cast operators
-	operator Base&() {
-		return _iter;
-	}
-	operator const Base&() const {
-		return _iter;
-	}
-	bool operator==(const Base &other) const { return _iter == other; }
-	bool operator!=(const Base &other) const { return _iter != other; }
-	KmerPairIteratorWrapper &operator++() { _iter++; brptr.reset(); return *this; }
-	KmerPairIteratorWrapper operator++(int unused) { KmerPairIteratorWrapper tmp(*this); ++(*this); return tmp; }
-	BaseRef &operator*() { setRefs(); return *brptr; }
-	BaseRef *operator->() { setRefs(); return brptr.get(); }
-
-	virtual inline const Kmer &key() { return _iter->first; }
-	virtual Value &value() { return _iter->second; };
-private:
-	Base _iter;
-	// WARNING: only instantiate when required to dereference
-	mutable BaseRefPtr brptr;
-	void setRefs() {
-		if (brptr.get() == NULL)
-			brptr.reset(new BaseRef(key(), value()));
-	}
-
-};
-
-template<typename Iterator>
-class ConstKmerPairIteratorWrapper {
-public:
-	typedef Iterator Base;
-	typedef typename Base::key_type key_type;
-	typedef typename Base::value_type value_type;
-	typedef typename Base::mapped_type mapped_type;
-	typedef KmerElementPair<mapped_type> KEP;
-	typedef typename KEP::ConstBaseRef ConstBaseRef;
-	typedef typename std::auto_ptr<ConstBaseRef > ConstBaseRefPtr;
-
-	ConstKmerPairIteratorWrapper() : _iter() {}
-	ConstKmerPairIteratorWrapper(Base &iter): _iter(iter) { }
-	~ConstKmerPairIteratorWrapper() {
-	}
-	ConstKmerPairIteratorWrapper &operator=(Base &copy) {
-		_iter = copy;
-		cbrptr.reset();
-		return *this;
-	}
-
-	bool operator==(const Base &other) const { return _iter == other; }
-	bool operator!=(const Base &other) const { return _iter != other; }
-	ConstKmerPairIteratorWrapper &operator++() { _iter++; return *this; }
-	ConstBaseRef &operator*() const { setRefs(); return *cbrptr; }
-	ConstBaseRef *operator->() const { setRefs(); return cbrptr.get(); }
-
-	virtual inline const Kmer &key() const { return _iter->first; }
-	virtual const mapped_type &value() const { return _iter->second; }
-private:
-	Base _iter;
-	 // WARNING: only instantiate when required to dereference
-	mutable ConstBaseRefPtr cbrptr;
-	void setRefs() const {
-		if (cbrptr.get() == NULL)
-			cbrptr.reset(new ConstBaseRef(key(), value()));
-	}
-};
 
 template<typename Value>
 class KmerArrayPair {
@@ -665,7 +592,6 @@ public:
 	typedef std::vector< KmerArrayPair > Vector;
 	typedef KmerElementPair<ValueType> BaseElementType;
 
-	class ElementType;
 	class Iterator;
 	class ConstIterator;
 
@@ -1524,7 +1450,7 @@ public:
 			remove(idx);
 		return 1;
 	}
-	Iterator insert(BaseElementType &element) {
+	Iterator insert(Iterator hint, BaseElementType element) {
 		return insert(element.key(), element.value());
 	}
 	Iterator insert(const Kmer &target, const ValueType &value) {
@@ -1536,9 +1462,15 @@ public:
 		return Iterator(this, idx);
 	}
 
+	void clear(bool releaseMemory = true) {
+		reset(releaseMemory);
+	}
+	// for STL compatibility
+	typedef Kmer& key_type;
+	typedef BaseElementType value_type;
+	typedef ValueType mapped_type;
 	typedef Iterator iterator;
 	typedef ConstIterator const_iterator;
-	typedef ElementType mapped_type;
 
 	class CompareArrayIdx {
 		const KmerArrayPair &_kmerArray;
@@ -1715,6 +1647,123 @@ public:
 
 };
 
+template<typename Iterator, typename Value>
+class KmerPairIteratorWrapper {
+public:
+	typedef Iterator Base;
+	typedef KmerElementPair<Value> KEP;
+	typedef typename KEP::BaseRef BaseRef;
+	typedef std::auto_ptr< BaseRef > BaseRefPtr;
+	typedef Kmer& key_type;
+	typedef KmerElementPair<Value> value_type;
+	typedef Value mapped_type;
+	typedef typename KmerArrayPair<Value>::Iterator KAPI;
+
+	KmerPairIteratorWrapper() : _iter() {}
+	KmerPairIteratorWrapper(const Base &iter): _iter(iter) {	}
+	KmerPairIteratorWrapper(const KmerPairIteratorWrapper &copy): _iter(copy._iter) {	}
+	~KmerPairIteratorWrapper() {
+	}
+	KmerPairIteratorWrapper &operator=(const Base &copy) {
+		_iter = copy;
+		brptr.reset();
+		return *this;
+	}
+	KmerPairIteratorWrapper &operator=(const KmerPairIteratorWrapper &copy) {
+		_iter = copy._iter;
+		brptr.reset();
+		return *this;
+	}
+
+	// cast operators
+	operator Base&() {
+		return _iter;
+	}
+	operator const Base&() const {
+		return _iter;
+	}
+	bool operator==(const Base &other) const { return _iter == other; }
+	bool operator!=(const Base &other) const { return _iter != other; }
+	KmerPairIteratorWrapper &operator++() { _iter++; brptr.reset(); return *this; }
+	KmerPairIteratorWrapper operator++(int unused) { KmerPairIteratorWrapper tmp(*this); ++(*this); return tmp; }
+	BaseRef &operator*() { setRefs(); return *brptr; }
+	BaseRef *operator->() { setRefs(); return brptr.get(); }
+
+	inline const Kmer &key() {
+		return _iter->first;
+	}
+	Value &value() {
+		return _iter->second;
+	}
+private:
+	Base _iter;
+	// WARNING: only instantiate when required to dereference
+	mutable BaseRefPtr brptr;
+	void setRefs() {
+		if (brptr.get() == NULL)
+			brptr.reset(new BaseRef(key(), value()));
+	}
+
+};
+template<typename Value>
+class KmerPairIteratorWrapper<typename KmerArrayPair<Value>::Iterator, Value> {
+public:
+	typedef typename KmerArrayPair<Value>::Iterator Base;
+	typedef KmerElementPair<Value> KEP;
+	typedef typename KEP::BaseRef BaseRef;
+	typedef std::auto_ptr< BaseRef > BaseRefPtr;
+	typedef Kmer& key_type;
+	typedef KmerElementPair<Value> value_type;
+	typedef Value mapped_type;
+
+	KmerPairIteratorWrapper() : _iter() {}
+	KmerPairIteratorWrapper(const Base &iter): _iter(iter) {	}
+	KmerPairIteratorWrapper(const KmerPairIteratorWrapper &copy): _iter(copy._iter) {	}
+	~KmerPairIteratorWrapper() {
+	}
+	KmerPairIteratorWrapper &operator=(const Base &copy) {
+		_iter = copy;
+		brptr.reset();
+		return *this;
+	}
+	KmerPairIteratorWrapper &operator=(const KmerPairIteratorWrapper &copy) {
+		_iter = copy._iter;
+		brptr.reset();
+		return *this;
+	}
+
+	// cast operators
+	operator Base&() {
+		return _iter;
+	}
+	operator const Base&() const {
+		return _iter;
+	}
+	bool operator==(const Base &other) const { return _iter == other; }
+	bool operator!=(const Base &other) const { return _iter != other; }
+	KmerPairIteratorWrapper &operator++() { _iter++; brptr.reset(); return *this; }
+	KmerPairIteratorWrapper operator++(int unused) { KmerPairIteratorWrapper tmp(*this); ++(*this); return tmp; }
+	BaseRef &operator*() { setRefs(); return *brptr; }
+	BaseRef *operator->() { setRefs(); return brptr.get(); }
+
+	inline const Kmer &key() {
+		return _iter.key();
+	}
+	Value &value() {
+		return _iter.value();
+	}
+private:
+	Base _iter;
+	// WARNING: only instantiate when required to dereference
+	mutable BaseRefPtr brptr;
+	void setRefs() {
+		if (brptr.get() == NULL)
+			brptr.reset(new BaseRef(key(), value()));
+	}
+
+};
+
+
 template<typename _KeyType, typename _ValueType, typename _BucketType, typename _Hasher>
 class BucketExposedMapLogic {
 public:
@@ -1722,10 +1771,36 @@ public:
 	typedef _ValueType ValueType;
 	typedef _BucketType BucketType;
 	typedef _Hasher HasherType;
+
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
 	typedef Kmer::SizeType      SizeType;
+
+	typedef typename BucketType::iterator BaseBucketTypeIterator;
+	typedef typename BucketType::const_iterator ConstBaseBucketTypeIterator;
+	typedef typename BucketType::value_type BaseBucketTypeElementType;
+
 	typedef std::vector< BucketType > BucketsVector;
+	typedef BucketsVector BaseBucketsVector;
+	typedef typename BucketsVector::iterator BaseBucketsVectorIterator;
+	typedef typename BucketsVector::const_iterator ConstBaseBucketsVectorIterator;
+
+	typedef IteratorOfMapIterators< BaseBucketsVectorIterator > IofMI;
+	typedef KmerPairIteratorWrapper< IofMI, ValueType> Iterator;
+	typedef KmerPairIteratorWrapper< BaseBucketsVectorIterator, ValueType > BucketsVectorIterator;
+	typedef KmerPairIteratorWrapper< BaseBucketTypeIterator, ValueType > BucketTypeIterator;
+
+	typedef IteratorOfMapIterators< ConstBaseBucketsVectorIterator > ConstIofMI;
+	typedef KmerPairIteratorWrapper< ConstIofMI, ValueType> ConstIterator;
+	typedef KmerPairIteratorWrapper< ConstBaseBucketsVectorIterator, ValueType > ConstBucketsVectorIterator;
+	typedef KmerPairIteratorWrapper< ConstBaseBucketTypeIterator, ValueType > ConstBucketTypeIterator;
+
+	// for STL compatibility
+	typedef Iterator iterator;
+	typedef ConstIterator const_iterator;
+	typedef typename Iterator::key_type key_type;
+	typedef typename Iterator::value_type value_type;
+	typedef typename Iterator::mapped_type mapped_type;
 
 	static IndexType getMinPowerOf2(IndexType minBucketCount) {
 		NumberType powerOf2 = minBucketCount;
@@ -1758,7 +1833,12 @@ public:
 		return *this;
 	}
 	void clear(bool releaseMemory = true) { // release memory ignored by default
-		_buckets.clear();
+		if (releaseMemory)
+			_buckets.clear();
+		else {
+			for(BaseBucketsVectorIterator it = _buckets.begin(); it != _buckets.end(); it++)
+				it->clear();
+		}
 		BUCKET_MASK = 0;
 	}
 	void reset(bool releaseMemory = true) { // release memory ignored by default
@@ -1839,10 +1919,10 @@ public:
 	SizeType size() const {
 		SizeType size = 0;
 
-		long bucketSize = getBuckets().size();
+		long bucketSize = _buckets.size();
 #pragma omp parallel for reduction(+:size) if(getBuckets().size()>1000000)
 		for(long i = 0; i < bucketSize; i++) {
-			size += getBuckets()[i].size();
+			size += _buckets[i].size();
 		}
 		return size;
 	}
@@ -1850,16 +1930,21 @@ public:
 	IndexType maxBucketSize() const	{
 		IndexType biggest = 0;
 		IndexType imax;
-		for(IndexType i = 0; i<getBuckets().size(); i++)
-			if (getBuckets()[i].size() > biggest)
+		for(IndexType i = 0; i<_buckets.size(); i++)
+			if (_buckets[i].size() > biggest)
 			{
 				imax = i;
-				biggest = getBuckets()[i].size();
+				biggest = _buckets[i].size();
 			}
 		return biggest;
 	}
+	bool empty() const {
+		for(ConstBaseBucketsVectorIterator it = _buckets.begin(); it != _buckets.end(); it++)
+			if (! it->empty() )
+				return false;
+		return true;
+	}
 
-protected:
 	inline BucketsVector &getBuckets() { return _buckets; }
 	inline const BucketsVector &getBuckets() const { return _buckets; }
 	inline BucketType &getBucketByIdx(IndexType index) {
@@ -1887,6 +1972,25 @@ protected:
 		NumberType idx = getBucketIdx(key);
 		return getBucketByIdx(idx);
 	}
+
+	std::string toString() {
+		return "TODO implement toString()";
+	}
+
+
+	Iterator begin(int rank = 0, int size = 1) { return Iterator( IofMI( _buckets.begin(), _buckets.end(), rank, size) ); }
+	Iterator end() { return Iterator( IofMI::getEnd(_buckets) ); }
+
+	ConstIterator begin(int rank = 0, int size = 1) const { return ConstIterator( IofMI( _buckets.begin(), _buckets.end(), rank, size) ); }
+	ConstIterator end() const { return ConstIterator( IofMI::getEnd(_buckets) ); }
+
+	Iterator beginThreaded(int rank = omp_get_thread_num(), int size = omp_get_num_threads()) {
+		return begin(rank, size);
+	}
+	Iterator endThreaded() {
+		return end();
+	}
+
 private:
 	BucketsVector _buckets;
 	NumberType BUCKET_MASK;
@@ -1900,6 +2004,32 @@ public:
 	typedef typename BEML::BucketType BucketType;
 	typedef typename BEML::HasherType HasherType;
 
+	typedef Kmer::NumberType    NumberType;
+	typedef Kmer::IndexType     IndexType;
+	typedef Kmer::SizeType      SizeType;
+
+	typedef typename BEML::Iterator Iterator;
+	typedef typename BEML::ConstIterator ConstIterator;
+	typedef typename BEML::key_type key_type;
+	typedef typename BEML::value_type value_type;
+	typedef typename BEML::mapped_type mapped_type;
+
+	typedef typename BEML::BaseBucketsVector BaseBucketsVector;
+	typedef typename BEML::BaseBucketsVectorIterator BaseBucketsVectorIterator;
+
+	typedef typename BEML::BaseBucketTypeIterator BaseBucketTypeIterator;
+	typedef typename BEML::BaseBucketTypeElementType BaseBucketTypeElementType;
+
+	typedef typename BEML::BucketTypeIterator BucketTypeIterator;
+	typedef typename BEML::ConstBucketTypeIterator ConstBucketTypeIterator;
+
+	typedef typename BEML::BucketsVector BucketsVector;
+	typedef typename BEML::BucketsVectorIterator BucketsVectorIterator;
+
+
+	typedef KmerElementPair<ValueType> BaseElementType;
+	typedef BaseElementType ElementType;
+
 	BEML::getMinPowerOf2;
 	BEML::clear;
 	BEML::reset;
@@ -1910,28 +2040,15 @@ public:
 	BEML::getLocalThreadId;
 	BEML::getDistributedThreadId;
 
-protected:
 	BEML::getBuckets;
 	BEML::getBucket;
 	BEML::getBucketByIdx;
 
-public:
+	BEML::begin;
+	BEML::end;
+	BEML::beginThreaded;
+	BEML::endThreaded;
 
-	typedef typename BucketType::iterator BucketTypeIterator;
-	typedef typename BucketType::const_iterator ConstBucketTypeIterator;
-
-	typedef Kmer::NumberType    NumberType;
-	typedef Kmer::IndexType     IndexType;
-	typedef Kmer::SizeType      SizeType;
-
-	typedef std::vector< BucketType > BucketsVector;
-	typedef typename BucketsVector::iterator BucketsVectorIterator;
-
-	typedef KmerElementPair<ValueType> BaseElementType;
-	typedef BaseElementType ElementType;
-
-	class Iterator;
-	class ConstIterator;
 
 
 public:
@@ -1965,7 +2082,7 @@ public:
 
 	// insert/add, remove, exists methods
 	ElementType insert(const KeyType &key, const ValueType &value) {
-		return insert(key,value, getBucket(key));
+		return insert(key, value, getBucket(key));
 	}
 	ElementType insert(const KeyType &key, const ValueType &value, NumberType hash) {
 		assert(HasherType()(key) == hash);
@@ -2207,25 +2324,20 @@ protected:
 
 
 protected:
-//	inline BucketType &getBucket(NumberType hash) {
-//		return const_cast<BucketType &>( _constThis().getBucket(hash) );
-//	}
 
-//	inline BucketType &getBucket(const KeyType &key) {
-//		return const_cast<BucketType &>( _constThis().getBucket(key) );
-//	}
-
-	ElementType insert(const KeyType &key, const ValueType &value, BucketType &bucket) {
+	ElementType insert(const KeyType &key, ValueType value, BucketType &bucket) {
 		BucketTypeIterator it = bucket.find(key);
-		if (it == bucket.end())
-			it = bucket.insert(key, value);
+		if (it == bucket.end()) {
+			BaseBucketTypeElementType elem(key,value);
+			it = bucket.insert((BaseBucketTypeIterator)it, elem);
+		}
 		return ElementType(it->key(), it->value());
 	}
 
 	bool remove(const KeyType &key, BucketType &bucket) {
 		BucketTypeIterator it = bucket.find(key);
 		if (it != bucket.end()) {
-			bucket.erase(it);
+			bucket.erase((BaseBucketTypeIterator)it);
 			return true;
 		} else {
 			return false;
@@ -2259,27 +2371,120 @@ protected:
 		return getOrSetElement(key, bucket, value);
 	}
 
+protected:
+	BucketsVector _buckets;
+	NumberType BUCKET_MASK;
 
+private:
+	inline const BucketExposedMap &_constThis() const {return *this;}
 
+};
+
+template<typename Value>
+class DenseKmerMap : public BucketExposedMap<Kmer, Value, KmerArrayPair<Value>, KmerHasher > {
+public:
+
+	// typedef propagation
+
+	typedef BucketExposedMap<Kmer, Value, KmerArrayPair<Value>, KmerHasher > Base;
+	typedef typename Kmer::NumberType    NumberType;
+	typedef typename Kmer::IndexType     IndexType;
+	typedef typename Kmer::SizeType      SizeType;
+
+	typedef typename Base::KeyType KeyType;
+	typedef typename Base::ValueType ValueType;
+	typedef typename Base::BucketType BucketType;
+	typedef typename Base::HasherType HasherType;
+	typedef	typename Base::BucketTypeIterator BucketTypeIterator;
+	typedef typename Base::BaseElementType BaseElementType;
+	typedef typename Base::ElementType ElementType;
+
+	typedef typename Base::BaseBucketsVector BaseBucketsVector;
+	typedef typename Base::BaseBucketsVectorIterator BaseBucketsVectorIterator;
+
+	typedef typename Base::BucketsVector BucketsVector;
+	typedef typename Base::BucketsVectorIterator BucketsVectorIterator;
+
+	typedef typename Base::BaseBucketTypeIterator BaseBucketTypeIterator;
+
+	typedef NumberType * NumberTypePtr;
+
+private:
+	inline const DenseKmerMap &_constThis() const {return *this;}
 
 public:
-	class Iterator : public std::iterator<std::forward_iterator_tag, BucketExposedMap>
+	DenseKmerMap() : Base() {
+		_isSorted = defaultSort;
+	}
+	DenseKmerMap(IndexType bucketCount) : Base(bucketCount) {
+
+		_isSorted = defaultSort;
+
+	}
+	virtual ~DenseKmerMap()
+	{
+		clear();
+	}
+	DenseKmerMap &operator=(const DenseKmerMap &other) {
+		*((Base*)this) = (const Base&) other;
+		_isSorted = other._isSorted;
+		return *this;
+	}
+
+protected:
+	Base::getBuckets;
+	Base::getBucketMask;
+	Base::getBucket;
+	Base::getBucketByIdx;
+
+public:
+
+	Base::insert;
+	Base::remove;
+
+	// Base LocalThread / DistributedRank methods
+	Base::getLocalThreadId;
+	Base::getDistributedThreadId;
+	Base::getThreadIds;
+	Base::getBucketIdx;
+	Base::getNumBuckets;
+
+
+	// specific overloading, taking advantage of KmerArrayPair memory release directives
+	void reset(bool releaseMemory = true) {
+		for(size_t i=0; i< getBuckets().size(); i++) {
+			getBuckets()[i].reset(releaseMemory);
+		}
+	}
+	void clear(bool releaseMemory = true) {
+		reset(releaseMemory);
+		if (releaseMemory)
+			getBuckets().resize(0);
+	}
+
+	void swap(DenseKmerMap &other) {
+		Base::swap((Base&) other);
+		std::swap(_isSorted, other._isSorted);
+	}
+
+public:
+	class Iterator : public std::iterator<std::forward_iterator_tag, DenseKmerMap>
 	{
 		// Provides an iterator that can optionaly partition the buckets by
 		// into rank of size slices, where each rank will interleave responsibility
 		// for a given bucket by modulus of the size.
-		friend class BucketExposedMap;
+		friend class DenseKmerMap;
 	private:
-		const BucketExposedMap *_target;
-		BucketsVectorIterator _iBucket;
-		BucketTypeIterator _iElement;
+		const DenseKmerMap *_target;
+		BaseBucketsVectorIterator _iBucket;
+		BaseBucketTypeIterator _iElement;
 		int _rank, _size;
 
 	public:
 		Iterator() : _target(NULL), _rank(0), _size(1) {}
 
 		// iterator over rank/size will stripe across the buckets (modulus by size).
-		Iterator(BucketExposedMap *target, int rank = 0, int size = 1):
+		Iterator(DenseKmerMap *target, int rank = 0, int size = 1):
 			_target(target),
 			_iBucket(target->getBuckets().begin()),
 			_iElement(),
@@ -2295,7 +2500,7 @@ public:
 			*this = copy;
 		}
 
-		Iterator(BucketExposedMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1):
+		Iterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1):
 			_target(target),
 			_iBucket(bucketPtr),
 			_iElement(),
@@ -2307,7 +2512,7 @@ public:
 			_moveToNextValidElement();
 		}
 
-		Iterator(BucketExposedMap *target, BucketsVectorIterator bucketPtr, BucketTypeIterator elementPtr, int rank = 0, int size = 1):
+		Iterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr, BucketTypeIterator elementPtr, int rank = 0, int size = 1):
 			_target(target),
 			_iBucket(bucketPtr),
 			_iElement(elementPtr),
@@ -2400,15 +2605,15 @@ public:
 
 	};
 
-	class ConstIterator : public std::iterator<std::forward_iterator_tag, BucketExposedMap>
+	class ConstIterator : public std::iterator<std::forward_iterator_tag, DenseKmerMap>
 	{
 	private:
 		Iterator _iterator;
 	public:
-		ConstIterator(BucketExposedMap *target, int rank = 0, int size = 1) : _iterator(target, rank, size) {}
+		ConstIterator(DenseKmerMap *target, int rank = 0, int size = 1) : _iterator(target, rank, size) {}
 		ConstIterator(const ConstIterator &copy) : _iterator(copy._iterator) {}
-		ConstIterator(BucketExposedMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1) : _iterator(target,bucketPtr, rank, size) {}
-		ConstIterator(BucketExposedMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr, int rank = 0, int size = 1): _iterator(target,bucketPtr,elementPtr, rank, size) {}
+		ConstIterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr, int rank = 0, int size = 1) : _iterator(target,bucketPtr, rank, size) {}
+		ConstIterator(DenseKmerMap *target, BucketsVectorIterator bucketPtr,BucketTypeIterator elementPtr, int rank = 0, int size = 1): _iterator(target,bucketPtr,elementPtr, rank, size) {}
 		ConstIterator &operator=(const ConstIterator &copy) { _iterator = copy._iterator; return *this; }
 		bool operator==(const ConstIterator& other) const {return _iterator == other._iterator;}
 		bool operator!=(const ConstIterator& other) const {return _iterator != other._iterator;}
@@ -2437,98 +2642,7 @@ public:
 	Iterator endThreaded() {
 		return end();
 	}
-
-protected:
-	BucketsVector _buckets;
-	NumberType BUCKET_MASK;
-
-private:
-	inline const BucketExposedMap &_constThis() const {return *this;}
-
-};
-
-template<typename Value>
-class DenseKmerMap : public BucketExposedMap<Kmer, Value, KmerArrayPair<Value>, KmerHasher > {
-public:
-
-	// typedef propagation
-
-	typedef BucketExposedMap<Kmer, Value, KmerArrayPair<Value>, KmerHasher > Base;
-	typedef typename Kmer::NumberType    NumberType;
-	typedef typename Kmer::IndexType     IndexType;
-	typedef typename Kmer::SizeType      SizeType;
-
-	typedef typename Base::KeyType KeyType;
-	typedef typename Base::ValueType ValueType;
-	typedef typename Base::BucketType BucketType;
-	typedef typename Base::HasherType HasherType;
-	typedef	typename Base::BucketTypeIterator BucketTypeIterator;
-	typedef typename Base::BaseElementType BaseElementType;
-	typedef typename Base::ElementType ElementType;
-
-	typedef typename Base::BucketsVector BucketsVector;
-	typedef typename Base::BucketsVectorIterator BucketsVectorIterator;
-
-	typedef NumberType * NumberTypePtr;
-
-private:
-	inline const DenseKmerMap &_constThis() const {return *this;}
-
-public:
-	DenseKmerMap() : Base() {
-		_isSorted = defaultSort;
-	}
-	DenseKmerMap(IndexType bucketCount) : Base(bucketCount) {
-
-		_isSorted = defaultSort;
-
-	}
-	virtual ~DenseKmerMap()
-	{
-		clear();
-	}
-	DenseKmerMap &operator=(const DenseKmerMap &other) {
-		*((Base*)this) = (const Base&) other;
-		_isSorted = other._isSorted;
-		return *this;
-	}
-
-protected:
-	Base::getBuckets;
-	Base::getBucketMask;
-	Base::getBucket;
-	Base::getBucketByIdx;
-
-public:
-
-	Base::insert;
-	Base::remove;
-
-	// Base LocalThread / DistributedRank methods
-	Base::getLocalThreadId;
-	Base::getDistributedThreadId;
-	Base::getThreadIds;
-	Base::getBucketIdx;
-	Base::getNumBuckets;
-
-
-	// specific overloading, taking advantage of KmerArrayPair memory release directives
-	void reset(bool releaseMemory = true) {
-		for(size_t i=0; i< getBuckets().size(); i++) {
-			getBuckets()[i].reset(releaseMemory);
-		}
-	}
-	void clear(bool releaseMemory = true) {
-		reset(releaseMemory);
-		if (releaseMemory)
-			getBuckets().resize(0);
-	}
-
-	void swap(DenseKmerMap &other) {
-		Base::swap((Base&) other);
-		std::swap(_isSorted, other._isSorted);
-	}
-
+/*
 	// iterators
 	Base::Iterator;
 	Base::ConstIterator;
@@ -2536,6 +2650,7 @@ public:
 	Base::end;
 	Base::beginThreaded;
 	Base::endThreaded;
+*/
 
 	// other methods
 	Base::size;
@@ -2766,9 +2881,8 @@ public:
 		*((Base*)this) = other;
 		return *this;
 	}
+	typedef typename Base::BucketType BucketType;
 };
-
-#include <boost/unordered_map.hpp>
 
 
 typedef KmerArrayPair<char> Kmers;
