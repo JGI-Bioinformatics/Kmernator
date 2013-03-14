@@ -247,6 +247,70 @@ private:
 typedef OptionsBaseTemplate< _KmerSpectrumOptions > KmerSpectrumOptions;
 
 
+namespace PurgeUtilsDetail {
+
+	typedef Kmer::IndexType IndexType;
+
+	template<typename _BucketType, typename Value>
+	class PurgeUtilsHelper {
+	public:
+		typedef typename _BucketType::iterator BaseBucketTypeIterator;
+		typedef typename _BucketType::value_type value_type;
+		static IndexType purgeMinCountByBucket(_BucketType &bucket, long minimumCount) {
+			// generic algorithm
+			long newSize = 0;
+			for(BaseBucketTypeIterator it = bucket.begin(); it != bucket.end(); it++)
+				if (minimumCount >= (long) it->second)
+					newSize++;
+			if (newSize == (long) bucket.size())
+				return 0;
+			_BucketType newBucket;
+			newBucket.reserve(newSize);
+			for(BaseBucketTypeIterator it = bucket.begin(); it != bucket.end(); it++)
+				if (minimumCount >= (long) it->second)
+					newBucket.insert(newBucket.end(), value_type(it->first, it->second));
+			IndexType affected = bucket.size() - newSize;
+			std::swap(newBucket, bucket);
+			return affected;
+		}
+	};
+
+	template<typename Value>
+	class PurgeUtilsHelper< KmerArrayPair<Value>, Value > {
+	public:
+		typedef KmerArrayPair<Value> KAP;
+		static IndexType purgeMinCountByBucket(KAP &bucket, long minimumCount) {
+			// specific algorithm for KmerArrayPair type
+
+			// scan values that pass, keep list and count
+			KAP &kmerArray = (KAP&) bucket;
+			IndexType maxSize = kmerArray.size();
+			std::vector< IndexType > passingIndexes;
+			passingIndexes.reserve(maxSize);
+			IndexType affected;
+
+			const Value *valuePtr = ((const KAP&)kmerArray).getValueStart();
+			for(IndexType i = 0; i < maxSize; i++) {
+				if ( minimumCount <= (long) *(valuePtr++) ) {
+					passingIndexes.push_back( i );
+				}
+			}
+			if (passingIndexes.empty()) {
+				kmerArray.reset(true);
+				affected = maxSize;
+			} else {
+				affected = maxSize - passingIndexes.size();
+				kmerArray.resort(passingIndexes);
+			}
+
+			return affected;
+		}
+	};
+
+
+};
+
+
 template<typename So = DenseKmerMap< TrackingDataMinimal4 >, typename We = DenseKmerMap< TrackingDataMinimal4 >, typename Si = DenseKmerMap< TrackingDataSingleton> >
 class KmerSpectrum {
 public:
@@ -279,12 +343,15 @@ public:
 	typedef typename SolidMapType::Iterator SolidIterator;
 	typedef typename SolidMapType::ElementType SolidElementType;
 	typedef typename SolidMapType::BucketType SolidBucketType;
+	typedef typename SolidMapType::ValueType SolidValueType;
 	typedef typename WeakMapType::Iterator WeakIterator;
 	typedef typename WeakMapType::ElementType WeakElementType;
 	typedef typename WeakMapType::BucketType WeakBucketType;
+	typedef typename WeakMapType::ValueType WeakValueType;
 	typedef typename SingletonMapType::Iterator SingletonIterator;
 	typedef typename SingletonMapType::ElementType SingletonElementType;
 	typedef typename SingletonMapType::BucketType SingletonBucketType;
+	typedef typename SingletonMapType::ValueType SingletonValueType;
 
 	typedef std::vector< KmerSpectrum > Vector;
 
@@ -2468,66 +2535,17 @@ public:
 		// assumes that ValueType can be cast into long
 		// resulting in a (potentially smaller) sorted dataset
 
-		static IndexType purgeMinCountByBucket(BucketType &bucket, long minimumCount) {
-			// generic algorithm
-			long newSize = 0;
-			for(BaseBucketTypeIterator it = bucket.begin(); it != bucket.end(); it++)
-				if (minimumCount >= (long) it->value())
-					newSize++;
-			if (newSize == (long) bucket.size())
-				return 0;
-			BucketType newBucket;
-			newBucket.reserve(newSize);
-			for(BaseBucketTypeIterator it = bucket.begin(); it != bucket.end(); it++)
-				if (minimumCount >= (long) it->value())
-					newBucket.insert(newBucket.end(), value_type(it->key(), it->value()));
-			IndexType affected = bucket.size() - newSize;
-			std::swap(newBucket, bucket);
-			return affected;
-		}
-		/*
-		static IndexType purgeMinCountByBucket(KAP &bucket, long minimumCount) {
-			// specific algorithm for KmerArrayPair type
-
-			// scan values that pass, keep list and count
-			KAP &kmerArray = (KAP&) bucket;
-			IndexType maxSize = kmerArray.size();
-			std::vector< IndexType > passingIndexes;
-			passingIndexes.reserve(maxSize);
-			IndexType affected;
-
-			const ValueType *valuePtr = ((const KAP&)kmerArray).getValueStart();
-			for(IndexType i = 0; i < maxSize; i++) {
-				if ( minimumCount <= (long) *(valuePtr++) ) {
-					passingIndexes.push_back( i );
-				}
-			}
-			if (passingIndexes.empty()) {
-				kmerArray.reset(true);
-				affected = maxSize;
-			} else {
-				affected = maxSize - passingIndexes.size();
-				kmerArray.resort(passingIndexes);
-			}
-
-			return affected;
-
-		}
-		*/
 
 		static SizeType purgeMinCount(BEM &map, long minimumCount) {
 			SizeType affected = 0;
 			#pragma omp parallel for reduction(+:affected)
 			for(int i = 0; i < (int) map.getNumBuckets(); i++) {
-				affected += purgeMinCountByBucket( map.getBucketByIdx(i), minimumCount);
+				affected += PurgeUtilsDetail::PurgeUtilsHelper<BucketType, ValueType>::purgeMinCountByBucket( map.getBucketByIdx(i), minimumCount);
 			}
-			if (typeid(BEM) == typeid(DKM))
-				((DKM&)map)._setIsSorted(true); // purgeMinCount implicitly sorts KmerArrayPair...
 			return affected;
 		}
 
 	};
-
 };
 
 #endif

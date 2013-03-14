@@ -80,15 +80,14 @@ typedef ExtensionTrackingData DataType;
 
 
 #include <boost/unordered_map.hpp>
-template<typename Value>
-class KmerMap2 : public BucketExposedMap< KmerInstance, Value, boost::unordered_map<KmerInstance, Value, KmerHasher>, KmerHasher >{
+template<typename Value, typename BucketType>
+class KmerMap2 : public BucketExposedMap< KmerInstance, Value, BucketType, KmerHasher >{
 public:
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
 	typedef Kmer::SizeType      SizeType;
 
-	typedef boost::unordered_map<KmerInstance, Value> BucketType;
-	typedef BucketExposedMap< KmerInstance, Value, boost::unordered_map<KmerInstance, Value, KmerHasher>, KmerHasher > BEM;
+	typedef BucketExposedMap< KmerInstance, Value, BucketType, KmerHasher > BEM;
 	typedef Value ValueType;
 	//typedef	typename BucketType::iterator BucketTypeIterator;
 	//typedef typename BucketType::value_type BucketElementType;
@@ -126,7 +125,7 @@ private:
 
 //typedef BucketExposedMap<KmerInstance, DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher>, KmerHasher > MapType;
 typedef KmerMap< DataType > MapType;
-//typedef KmerMap2<DataType> MapType;
+//typedef KmerMap2<DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher> > MapType;
 
 
 

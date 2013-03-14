@@ -412,7 +412,7 @@ public:
 	typedef typename std::pair<const Kmer&, const ValueType&> ConstBaseRef;
 
 	KmerElementBaseRef(const Kmer &kmer, ValueType & value) : BaseRef(kmer, value) {}
-	KmerElementBaseRef(BaseRef &base): BaseRef(base) {}
+	KmerElementBaseRef(BaseRef base): BaseRef(base) {}
 
 	// cast to Base operators
 	operator BaseRef&() { return (BaseRef&) *this; }
@@ -434,8 +434,8 @@ public:
 	operator ConstBaseRef&() { return (ConstBaseRef&) *this; }
 	operator ConstBaseRef*() { return (ConstBaseRef*) this; }
 
-	ConstKmerElementBaseRef(const Kmer &kmer, ValueType & value) : ConstBaseRef(kmer, value) {}
-	ConstKmerElementBaseRef(BaseRef &base) : BaseRef(base) {}
+	ConstKmerElementBaseRef(const Kmer &kmer, const ValueType & value) : ConstBaseRef(kmer, value) {}
+	ConstKmerElementBaseRef(BaseRef base) : BaseRef(base) {}
 	virtual inline const Kmer &key() const { return this->first; }
 	virtual const ValueType &value() const { return this->second; }
 };
@@ -1705,6 +1705,9 @@ private:
 	}
 
 };
+
+// need this specialization for KmerArrayPair which does not have a std::pair
+// as the return type of the dereferenced iterator..
 template<typename Value>
 class KmerPairIteratorWrapper<typename KmerArrayPair<Value>::Iterator, Value> {
 public:
@@ -1763,6 +1766,124 @@ private:
 
 };
 
+template<typename Iterator, typename Value>
+class ConstKmerPairIteratorWrapper {
+public:
+	typedef Iterator Base;
+	typedef KmerElementPair<Value> KEP;
+	typedef typename KEP::ConstBaseRef BaseRef;
+	typedef std::auto_ptr< BaseRef > BaseRefPtr;
+	typedef Kmer& key_type;
+	typedef KmerElementPair<Value> value_type;
+	typedef Value mapped_type;
+	typedef typename KmerArrayPair<Value>::Iterator KAPI;
+
+	ConstKmerPairIteratorWrapper() : _iter() {}
+	ConstKmerPairIteratorWrapper(const Base &iter): _iter(iter) {	}
+	ConstKmerPairIteratorWrapper(const ConstKmerPairIteratorWrapper &copy): _iter(copy._iter) {	}
+	~ConstKmerPairIteratorWrapper() {
+	}
+	ConstKmerPairIteratorWrapper &operator=(const Base &copy) {
+		_iter = copy;
+		brptr.reset();
+		return *this;
+	}
+	ConstKmerPairIteratorWrapper &operator=(const ConstKmerPairIteratorWrapper &copy) {
+		_iter = copy._iter;
+		brptr.reset();
+		return *this;
+	}
+
+	// cast operators
+	operator Base&() {
+		return _iter;
+	}
+	operator const Base&() const {
+		return _iter;
+	}
+	bool operator==(const Base &other) const { return _iter == other; }
+	bool operator!=(const Base &other) const { return _iter != other; }
+	ConstKmerPairIteratorWrapper &operator++() { _iter++; brptr.reset(); return *this; }
+	ConstKmerPairIteratorWrapper operator++(int unused) { ConstKmerPairIteratorWrapper tmp(*this); ++(*this); return tmp; }
+	BaseRef &operator*() { setRefs(); return *brptr; }
+	BaseRef *operator->() { setRefs(); return brptr.get(); }
+
+	inline const Kmer &key() {
+		return _iter->first;
+	}
+	const Value &value() {
+		return _iter->second;
+	}
+private:
+	Base _iter;
+	// WARNING: only instantiate when required to dereference
+	mutable BaseRefPtr brptr;
+	void setRefs() {
+		if (brptr.get() == NULL)
+			brptr.reset(new BaseRef(key(), value()));
+	}
+
+};
+
+// need this specialization for KmerArrayPair which does not have a std::pair
+// as the return type of the dereferenced iterator..
+template<typename Value>
+class ConstKmerPairIteratorWrapper<typename KmerArrayPair<Value>::ConstIterator, Value> {
+public:
+	typedef const typename KmerArrayPair<Value>::ConstIterator Base;
+	typedef KmerElementPair<Value> KEP;
+	typedef typename KEP::ConstBaseRef BaseRef;
+	typedef std::auto_ptr< BaseRef > BaseRefPtr;
+	typedef Kmer& key_type;
+	typedef KmerElementPair<Value> value_type;
+	typedef Value mapped_type;
+
+	ConstKmerPairIteratorWrapper() : _iter() {}
+	ConstKmerPairIteratorWrapper(const Base &iter): _iter(iter) {	}
+	ConstKmerPairIteratorWrapper(const ConstKmerPairIteratorWrapper &copy): _iter(copy._iter) {	}
+	~ConstKmerPairIteratorWrapper() {
+	}
+	ConstKmerPairIteratorWrapper &operator=(const Base &copy) {
+		_iter = copy;
+		brptr.reset();
+		return *this;
+	}
+	ConstKmerPairIteratorWrapper &operator=(const ConstKmerPairIteratorWrapper &copy) {
+		_iter = copy._iter;
+		brptr.reset();
+		return *this;
+	}
+
+	// cast operators
+	operator Base&() {
+		return _iter;
+	}
+	operator const Base&() const {
+		return _iter;
+	}
+	bool operator==(const Base &other) const { return _iter == other; }
+	bool operator!=(const Base &other) const { return _iter != other; }
+	ConstKmerPairIteratorWrapper &operator++() { _iter++; brptr.reset(); return *this; }
+	ConstKmerPairIteratorWrapper operator++(int unused) { ConstKmerPairIteratorWrapper tmp(*this); ++(*this); return tmp; }
+	BaseRef &operator*() { setRefs(); return *brptr; }
+	BaseRef *operator->() { setRefs(); return brptr.get(); }
+
+	inline const Kmer &key() {
+		return _iter.key();
+	}
+	const Value &value() {
+		return _iter.value();
+	}
+private:
+	Base _iter;
+	// WARNING: only instantiate when required to dereference
+	mutable BaseRefPtr brptr;
+	void setRefs() {
+		if (brptr.get() == NULL)
+			brptr.reset(new BaseRef(key(), value()));
+	}
+
+};
 
 template<typename _KeyType, typename _ValueType, typename _BucketType, typename _Hasher>
 class BucketExposedMapLogic {
@@ -1791,9 +1912,9 @@ public:
 	typedef KmerPairIteratorWrapper< BaseBucketTypeIterator, ValueType > BucketTypeIterator;
 
 	typedef IteratorOfMapIterators< ConstBaseBucketsVectorIterator > ConstIofMI;
-	typedef KmerPairIteratorWrapper< ConstIofMI, ValueType> ConstIterator;
-	typedef KmerPairIteratorWrapper< ConstBaseBucketsVectorIterator, ValueType > ConstBucketsVectorIterator;
-	typedef KmerPairIteratorWrapper< ConstBaseBucketTypeIterator, ValueType > ConstBucketTypeIterator;
+	typedef ConstKmerPairIteratorWrapper< ConstIofMI, ValueType> ConstIterator;
+	typedef ConstKmerPairIteratorWrapper< ConstBaseBucketsVectorIterator, ValueType > ConstBucketsVectorIterator;
+	typedef ConstKmerPairIteratorWrapper< ConstBaseBucketTypeIterator, ValueType > ConstBucketTypeIterator;
 
 	// for STL compatibility
 	typedef Iterator iterator;

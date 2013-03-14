@@ -113,6 +113,7 @@ public:
 	typedef typename KS::DataPointers DataPointers;
 	typedef typename KS::WeakElementType WeakElementType;
 	typedef typename KS::WeakBucketType WeakBucketType;
+	typedef typename KS::WeakValueType WeakValueType;
 	typedef typename KS::SizeTracker SizeTracker;
 	typedef typename SizeTracker::Elements SizeTrackerElements;
 
@@ -692,7 +693,7 @@ public:
 		if (editDistance == 0)
 			return 0;
 
-		WeakBucketType::permuteBases(kmer, variants, editDistance, true);
+		KmerArrayPair<WeakValueType>::permuteBases(kmer, variants, editDistance, true);
 
 		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
 			int rankDest, threadDest;
