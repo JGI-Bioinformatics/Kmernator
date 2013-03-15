@@ -79,54 +79,12 @@ typedef OptionsBaseTemplate< _MeraculousOptions > MeraculousOptions;
 typedef ExtensionTrackingData DataType;
 
 
-#include <boost/unordered_map.hpp>
-template<typename Value, typename BucketType>
-class KmerMap2 : public BucketExposedMap< KmerInstance, Value, BucketType, KmerHasher >{
-public:
-	typedef Kmer::NumberType    NumberType;
-	typedef Kmer::IndexType     IndexType;
-	typedef Kmer::SizeType      SizeType;
-
-	typedef BucketExposedMap< KmerInstance, Value, BucketType, KmerHasher > BEM;
-	typedef Value ValueType;
-	//typedef	typename BucketType::iterator BucketTypeIterator;
-	//typedef typename BucketType::value_type BucketElementType;
-	//typedef std::vector< BucketType > BucketsVector;
-	//typedef typename BucketsVector::iterator BucketsVectorIterator;
-	//typedef typename BucketsVector::const_iterator ConstBucketsVectorIterator;
-	typedef typename BEM::Iterator Iterator;
-	//typedef typename Iterator::value_type ElementType;
-
-	BEM::getBuckets;
-	BEM::getBucketByIdx;
-
-	KmerMap2(int bucketCount = 1024) {
-		getBuckets().resize(bucketCount);
-	}
-	KmerMap2(const void *src) {
-		LOG_THROW("Unimplemented restore");
-	}
-	KmerMap2(const KmerMap2 &copy) {
-		*this = copy;
-	}
-	KmerMap2 &operator=(const KmerMap2 &copy) {
-		getBuckets().resize(copy.getBuckets().size());
-		for(int i = 0; i < (int) getBuckets().size(); i++) {
-			getBucketByIdx(i).clear();
-			getBucketByIdx(i).insert(copy.getBucketByIdx(i).begin(), copy.getBucketByIdx(i).end());
-		}
-		return *this;
-	}
-
-
-protected:
-private:
-};
 
 //typedef BucketExposedMap<KmerInstance, DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher>, KmerHasher > MapType;
-//typedef KmerMap< DataType > MapType;
-typedef KmerMap2<DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher> > MapType;
+typedef KmerMap< DataType > DefaultMapType;
+typedef KmerMapBoost< DataType > BoostMapType;
 
+typedef DefaultMapType MapType;
 
 
 typedef DistributedKmerSpectrum<MapType, MapType, MapType> _MeraculousDistributedKmerSpectrum;

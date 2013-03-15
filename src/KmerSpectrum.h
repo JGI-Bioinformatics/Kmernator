@@ -311,7 +311,7 @@ namespace PurgeUtilsDetail {
 };
 
 
-template<typename So = DenseKmerMap< TrackingDataMinimal4 >, typename We = DenseKmerMap< TrackingDataMinimal4 >, typename Si = DenseKmerMap< TrackingDataSingleton> >
+template<typename So = KmerMapByKmerArrayPair< TrackingDataMinimal4 >, typename We = KmerMapByKmerArrayPair< TrackingDataMinimal4 >, typename Si = KmerMapByKmerArrayPair< TrackingDataSingleton> >
 class KmerSpectrum {
 public:
 
@@ -2530,7 +2530,6 @@ public:
 		typedef typename BEM::BucketTypeIterator BucketTypeIterator;
 		typedef typename BEM::BaseBucketTypeIterator BaseBucketTypeIterator;
 		typedef KmerArrayPair<ValueType> KAP;
-		typedef DenseKmerMap<ValueType> DKM;
 		typedef typename BEM::IndexType IndexType;
 		typedef typename BEM::SizeType  SizeType;
 		typedef typename BucketType::value_type value_type;
