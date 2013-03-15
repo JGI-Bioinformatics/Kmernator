@@ -124,8 +124,8 @@ private:
 };
 
 //typedef BucketExposedMap<KmerInstance, DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher>, KmerHasher > MapType;
-typedef KmerMap< DataType > MapType;
-//typedef KmerMap2<DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher> > MapType;
+//typedef KmerMap< DataType > MapType;
+typedef KmerMap2<DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher> > MapType;
 
 
 

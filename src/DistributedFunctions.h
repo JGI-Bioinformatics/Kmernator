@@ -116,6 +116,7 @@ public:
 	typedef typename KS::WeakValueType WeakValueType;
 	typedef typename KS::SizeTracker SizeTracker;
 	typedef typename SizeTracker::Elements SizeTrackerElements;
+	typedef typename KS::WeakKAP WeakKAP;
 
 protected:
 	mpi::communicator world;
@@ -687,13 +688,13 @@ public:
 		return allRemaining;
 	}
 	// recursively purge kmers within editdistance
-	long _purgeVariants(DataPointers &pointers, const Kmer &kmer, WeakBucketType &variants, double threshold, short editDistance) {
+	long _purgeVariants(DataPointers &pointers, const Kmer &kmer, WeakKAP &variants, double threshold, short editDistance) {
 		int rank = world.rank();
 		int worldSize = world.size();
 		if (editDistance == 0)
 			return 0;
 
-		KmerArrayPair<WeakValueType>::permuteBases(kmer, variants, editDistance, true);
+		variants.permuteBases(kmer, variants, editDistance, true);
 
 		for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
 			int rankDest, threadDest;

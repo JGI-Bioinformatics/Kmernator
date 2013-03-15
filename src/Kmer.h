@@ -170,40 +170,46 @@ private:
 };
 typedef OptionsBaseTemplate< _KmerBaseOptions > KmerBaseOptions;
 
+class Kmer;
+class KmerInstance;
+
+class KmerHasher {
+public:
+	typedef Kmernator::KmerNumberType NumberType;
+	static NumberType getHash(const void *ptr, int length) {
+		//		NumberType number = toNumber();
+		//		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
+		uint64_t hash = 0xDEADBEEF;
+		uint32_t *pc, *pb;
+		pc = (uint32_t*) &hash;
+		pb = pc+1;
+		Lookup3::hashlittle2(ptr, length, pc, pb);
+		//return *pc + (((uint64_t)*pb)<<32);
+		return hash;
+	}
+	NumberType operator()(const Kmer& kmer) const;
+	NumberType operator()(const KmerInstance& kmer) const;
+};
 
 #define TEMP_KMER(name)  TwoBitEncoding _stack_##name[KmerSizer::getByteSize()]; Kmer &name = (Kmer &)(_stack_##name);
-
-class KmerHasher;
 class Kmer {
 public:
 	typedef Kmernator::KmerNumberType NumberType;
 	typedef Kmernator::KmerIndexType  IndexType;
 	typedef Kmernator::KmerSizeType   SizeType;
 
-protected:
-	Kmer(); // never construct, just use as cast
-
-private:
-	inline static boost::hash<NumberType> &getHasher() {
-		static boost::hash<NumberType> hasher;
+	inline static KmerHasher &getHasher() {
+		static KmerHasher hasher;
 		return hasher;
 	}
+	Kmer &operator=(const Kmer &other) {
+		if (this == &other)
+			return *this;
 
-#ifdef STRICT_MEM_CHECK
-	TwoBitEncoding _someData[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
-public:
-	const void *_data() const {return _someData;}
-	void *_data() {return _someData;}
-#else
-	// No data for you!!!
-public:
-	const void *_data() const {
-		return this;
+		set(other);
+		return *this;
 	}
-	void *_data() {
-		return this;
-	}
-#endif
+
 	// safely returns lowbits 64-bit numeric version of any sized kmer
 	static NumberType toNumber(const Kmer &kmer) {
 		NumberType val;
@@ -234,30 +240,20 @@ public:
 		}
 		return val;
 	}
-
-public:
-
-	Kmer(const Kmer &copy) {
-		*this = copy;
-	}
-
 	inline int compare(const Kmer &other) const {
-		return memcmp(_data(), other._data(), getTwoBitLength());
+		return memcmp((const void*) getTwoBitSequence(), (const void*) other.getTwoBitSequence(), getTwoBitLength());
 	}
-
-	Kmer &operator=(const Kmer &other) {
-		if (this == &other)
-			return *this;
-
-		memcpy(_data(), other._data(), getTwoBitLength());
-		return *this;
+	inline SequenceLengthType getTwoBitLength() const {
+		return KmerSizer::getTwoBitLength();
 	}
-
-	inline Kmer *get() {
-		return this;
+	inline SequenceLengthType getByteSize() const {
+		return KmerSizer::getByteSize();
 	}
-	inline const Kmer *get() const {
-		return this;
+	inline SequenceLengthType getLength() const {
+		return KmerSizer::getSequenceLength();
+	}
+	inline SequenceLengthType getGC() const {
+		return TwoBitSequence::getGC(getTwoBitSequence(), getLength());
 	}
 	inline bool operator ==(const Kmer &other) const {
 		return compare(other) == 0;
@@ -278,6 +274,52 @@ public:
 		return compare(other) >= 0;
 	}
 
+
+	void buildReverseComplement(Kmer &output) const {
+		TwoBitSequence::reverseComplement(getTwoBitSequence(),
+				output.getTwoBitSequence(), getLength());
+	}
+
+	// returns true if this is the least complement, false otherwise (output is least)
+	bool buildLeastComplement(Kmer &output) const {
+		buildReverseComplement(output);
+		if (*this <= output) {
+			output.set(*this);
+			return true;
+		} else {
+			return false;
+		}
+	}
+	void set(const Kmer &copy) {
+		memcpy(getTwoBitSequence(), copy.getTwoBitSequence(), getTwoBitLength());
+	}
+
+	std::string toFasta() const {
+		const TwoBitEncoding *tmp = this->getTwoBitSequence();
+		return TwoBitSequence::getFasta(tmp, 0, getLength());
+	}
+	std::string toFastaFull() const {
+		return TwoBitSequence::getFasta(getTwoBitSequence(), 0, getTwoBitLength() * 4);
+	}
+
+	inline NumberType hash() const { return getHasher()(*this); }
+
+	TwoBitEncoding *getTwoBitSequence() {
+		return (TwoBitEncoding *) _data();
+	}
+	const TwoBitEncoding *getTwoBitSequence() const {
+		return (const TwoBitEncoding *) _data();
+	}
+	void set(std::string fasta, bool leastComplement = false) {
+		assert(fasta.length() == KmerSizer::getSequenceLength());
+		if (leastComplement) {
+			TEMP_KMER(temp);
+			TwoBitSequence::compressSequence(fasta, temp.getTwoBitSequence());
+			temp.buildLeastComplement(*this);
+		} else {
+			TwoBitSequence::compressSequence(fasta, this->getTwoBitSequence());
+		}
+	}
 	void swap(Kmer &other) {
 		TEMP_KMER(temp);
 		temp = other;
@@ -285,11 +327,80 @@ public:
 		*this = temp;
 	}
 
-	inline TwoBitEncoding *getTwoBitSequence() {
-		return (TwoBitEncoding *) _data();
+protected:
+	Kmer(); // never construct, just use as cast
+
+#ifdef STRICT_MEM_CHECK
+	TwoBitEncoding _someData[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
+	const void *_data() const {return _someData;}
+	void *_data() {return _someData;}
+#else
+	// No data for you!!!
+	const void *_data() const {
+		return this;
 	}
-	inline const TwoBitEncoding *getTwoBitSequence() const {
-		return (const TwoBitEncoding *) _data();
+	void *_data() {
+		return this;
+	}
+#endif
+
+};
+
+#define MAX_KMER_INSTANCE_BYTES 128
+class KmerInstance {
+public:
+	typedef Kmer Base;
+	typedef Kmernator::KmerNumberType NumberType;
+	typedef Kmernator::KmerIndexType  IndexType;
+	typedef Kmernator::KmerSizeType   SizeType;
+
+	inline static KmerHasher &getHasher() {
+		return Kmer::getHasher();
+	}
+	KmerInstance() {
+		init();
+	}
+	KmerInstance(const Kmer &copy) {
+		init();
+		*this = copy;
+	}
+	KmerInstance(const KmerInstance &copy) {
+		init();
+		*this = copy;
+	}
+	KmerInstance &operator=(const Kmer &other)  {
+		memcpy(_data, other.getTwoBitSequence(), getByteSize());
+		return *this;
+	}
+	KmerInstance &operator=(const KmerInstance &other) {
+		if (this == &other)
+			return *this;
+		memcpy(_data, other._data, getByteSize());
+		return *this;
+	}
+	~KmerInstance() {
+		destroy();
+	}
+
+	// cast operator
+	operator Kmer*() {
+		return (Kmer*) getTwoBitSequence();
+	}
+	operator Kmer&() {
+		return *((Kmer*) getTwoBitSequence());
+	}
+	operator const Kmer*() const {
+		return (Kmer*) getTwoBitSequence();
+	}
+	operator const Kmer&() const {
+		return *((Kmer*) getTwoBitSequence());
+	}
+
+	inline int compare(const Kmer &other) const {
+		return memcmp((const void*) getTwoBitSequence(), (const void*) other.getTwoBitSequence(), getTwoBitLength());
+	}
+	inline int compare(const KmerInstance &other) const {
+		return memcmp((const void*) getTwoBitSequence(), (const void*) other.getTwoBitSequence(), getTwoBitLength());
 	}
 	inline SequenceLengthType getTwoBitLength() const {
 		return KmerSizer::getTwoBitLength();
@@ -303,105 +414,105 @@ public:
 	inline SequenceLengthType getGC() const {
 		return TwoBitSequence::getGC(getTwoBitSequence(), getLength());
 	}
+	inline bool operator ==(const Kmer &other) const {
+		return compare(other) == 0;
+	}
+	inline bool operator ==(const KmerInstance &other) const {
+		return compare(other) == 0;
+	}
+	inline bool operator !=(const Kmer &other) const {
+		return compare(other) != 0;
+	}
+	inline bool operator !=(const KmerInstance &other) const {
+		return compare(other) != 0;
+	}
+	inline bool operator <(const Kmer &other) const {
+		return compare(other) < 0;
+	}
+	inline bool operator <(const KmerInstance &other) const {
+		return compare(other) < 0;
+	}
+	inline bool operator <=(const Kmer &other) const {
+		return compare(other) <= 0;
+	}
+	inline bool operator <=(const KmerInstance &other) const {
+		return compare(other) <= 0;
+	}
+	inline bool operator >(const Kmer &other) const {
+		return compare(other) > 0;
+	}
+	inline bool operator >(const KmerInstance &other) const {
+		return compare(other) > 0;
+	}
+	inline bool operator >=(const Kmer &other) const {
+		return compare(other) >= 0;
+	}
+	inline bool operator >=(const KmerInstance &other) const {
+		return compare(other) >= 0;
+	}
+
 
 	void buildReverseComplement(Kmer &output) const {
 		TwoBitSequence::reverseComplement(getTwoBitSequence(),
 				output.getTwoBitSequence(), getLength());
 	}
-
-	void set(std::string fasta, bool leastComplement = false) {
-		assert(fasta.length() == KmerSizer::getSequenceLength());
-		if (leastComplement) {
-			TEMP_KMER(temp);
-			TwoBitSequence::compressSequence(fasta, temp.getTwoBitSequence());
-			temp.buildLeastComplement(*this);
-		} else {
-			TwoBitSequence::compressSequence(fasta, this->getTwoBitSequence());
-		}
+	void buildReverseComplement(KmerInstance &output) const {
+		buildReverseComplement((Kmer&)output);
 	}
 
 	// returns true if this is the least complement, false otherwise (output is least)
 	bool buildLeastComplement(Kmer &output) const {
 		buildReverseComplement(output);
 		if (*this <= output) {
-			output = *this;
+			output.set(*this);
 			return true;
 		} else {
 			return false;
 		}
 	}
+	bool buildLeastComplement(KmerInstance &output) const {
+		return buildLeastComplement((Kmer&) output);
+	}
+	void set(const Kmer &copy) {
+		memcpy(getTwoBitSequence(), copy.getTwoBitSequence(), getTwoBitLength());
+	}
+	void set(const KmerInstance &copy) {
+		memcpy(getTwoBitSequence(), copy.getTwoBitSequence(), getTwoBitLength());
+	}
 
 	std::string toFasta() const {
-		return TwoBitSequence::getFasta(getTwoBitSequence(), 0, getLength());
+		const TwoBitEncoding *tmp = this->getTwoBitSequence();
+		return TwoBitSequence::getFasta(tmp, 0, getLength());
 	}
 	std::string toFastaFull() const {
-		return TwoBitSequence::getFasta(getTwoBitSequence(), 0, getTwoBitLength()
-				* 4);
-	}
-	inline NumberType toNumber() const {
-		return Kmer::toNumber(*this);
+		return TwoBitSequence::getFasta(getTwoBitSequence(), 0, getTwoBitLength() * 4);
 	}
 
-	NumberType hash() const;
+	TwoBitEncoding *getTwoBitSequence() {
+		return (TwoBitEncoding *) _data;
+	}
+	const TwoBitEncoding *getTwoBitSequence() const {
+		return (const TwoBitEncoding *) _data;
+	}
 
-};
+	void set(std::string fasta, bool leastComplement = false) {
+		assert(fasta.length() == KmerSizer::getSequenceLength());
+		if (leastComplement) {
+			KmerInstance temp;
+			TwoBitSequence::compressSequence(fasta, temp.getTwoBitSequence());
+			temp.buildLeastComplement(*this);
+		} else {
+			TwoBitSequence::compressSequence(fasta, this->getTwoBitSequence());
+		}
+	}
+	inline NumberType hash() const { return getHasher()(*this); }
 
-#define MAX_KMER_INSTANCE_BYTES 128
-class KmerInstance : public Kmer {
-public:
-	KmerInstance() {
-		init();
-	}
-	KmerInstance(const Kmer &copy) {
-		init();
-		*this = copy;
-	}
-	KmerInstance &operator=(const Kmer &other)  {
-		*((Kmer*)this) = other;
-		return *this;
-	}
-	~KmerInstance() {
-		destroy();
-	}
-	// cast operator
-	operator Kmer*() {
-		return get();
-	}
-	inline Kmer *get() {
-		return (Kmer*) _data;
-	}
-	inline const Kmer *get() const {
-		return (Kmer*) _data;
-	}
-	Kmer::NumberType hash() const;
 private:
 	inline void init() {
 	}
 	inline void destroy() {
 	}
 	char _data[MAX_KMER_INSTANCE_BYTES];
-};
-
-class KmerHasher {
-public:
-	typedef Kmernator::KmerNumberType NumberType;
-	static NumberType getHash(const void *ptr, int length) {
-		//		NumberType number = toNumber();
-		//		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
-		uint64_t hash = 0xDEADBEEF;
-		uint32_t *pc, *pb;
-		pc = (uint32_t*) &hash;
-		pb = pc+1;
-		Lookup3::hashlittle2(ptr, length, pc, pb);
-		//return *pc + (((uint64_t)*pb)<<32);
-		return hash;
-	}
-	inline NumberType operator()(const Kmer& kmer) {
-		return kmer.hash();
-	}
-	inline NumberType operator()(const KmerInstance& kmer) {
-		return kmer.hash();
-	}
 };
 
 template<typename Value>
@@ -1133,7 +1244,7 @@ public:
 			SequenceLengthType i = bytes * 4;
 			const TwoBitEncoding *ref = twoBit + bytes;
 			for (int bitShift = 0; bitShift < 4 && i + bitShift < numKmers; bitShift++) {
-				TwoBitSequence::shiftLeft(ref, kmers[i + bitShift].get(),
+				TwoBitSequence::shiftLeft(ref, kmers[i + bitShift].getTwoBitSequence(),
 						KmerSizer::getTwoBitLength(), bitShift, bytes < numBytes-1);
 				TwoBitEncoding *lastByte =
 						kmers[i + bitShift].getTwoBitSequence()
@@ -1938,11 +2049,12 @@ public:
 		return powerOf2;
 	}
 
-	BucketExposedMapLogic(int bucketCount = 0) {
+	BucketExposedMapLogic(int bucketCount = 1) {
 		// ensure buckets are a precise powers of two
 		// with at least bucketCount buckets
 		if (bucketCount > MAX_KMER_MAP_BUCKETS)
 			bucketCount = MAX_KMER_MAP_BUCKETS;
+		if (bucketCount < 1) bucketCount = 1;
 		NumberType powerOf2 = getMinPowerOf2(bucketCount);
 		BUCKET_MASK = powerOf2 - 1;
 		_buckets.resize(powerOf2);
@@ -1954,13 +2066,14 @@ public:
 		return *this;
 	}
 	void clear(bool releaseMemory = true) { // release memory ignored by default
-		if (releaseMemory)
+		if (releaseMemory) {
 			_buckets.clear();
-		else {
+			_buckets.resize(1);
+			BUCKET_MASK = 0;
+		} else {
 			for(BaseBucketsVectorIterator it = _buckets.begin(); it != _buckets.end(); it++)
 				it->clear();
 		}
-		BUCKET_MASK = 0;
 	}
 	void reset(bool releaseMemory = true) { // release memory ignored by default
 		for(size_t i=0; i< _buckets.size(); i++) {
@@ -2074,8 +2187,8 @@ public:
 	}
 	inline const BucketType &getBucketByIdx(IndexType index) const {
 		assert(index < _buckets.size());
-                return _buckets[index];
-        }
+	        return _buckets[index];
+	}
 
 	inline BucketType &getBucket(NumberType hash) {
 		NumberType idx = getBucketIdx(hash);
@@ -2552,14 +2665,10 @@ public:
 		return *this;
 	}
 
-protected:
 	Base::getBuckets;
 	Base::getBucketMask;
 	Base::getBucket;
 	Base::getBucketByIdx;
-
-public:
-
 	Base::insert;
 	Base::remove;
 
@@ -2579,8 +2688,10 @@ public:
 	}
 	void clear(bool releaseMemory = true) {
 		reset(releaseMemory);
-		if (releaseMemory)
-			getBuckets().resize(0);
+		if (releaseMemory) {
+			getBuckets().resize(1);
+			getBucketMask() = 0;
+		}
 	}
 
 	void swap(DenseKmerMap &other) {

@@ -125,9 +125,9 @@ void testKmerPtr(SequenceLengthType size)
 	unsigned char bitshift = size % 4;
 	kmerBytesJump = (size+3) /4;
 	//verify initial conditions
-	BOOST_CHECK( kptr1.get() == kmer1);
-	BOOST_CHECK( kptr2.get() == kmer2);
-	BOOST_CHECK( kptr3.get() == kmer3);
+	BOOST_CHECK( kptr1.getTwoBitSequence() == kmer1);
+	BOOST_CHECK( kptr2.getTwoBitSequence() == kmer2);
+	BOOST_CHECK( kptr3.getTwoBitSequence() == kmer3);
 
 	BOOST_CHECK( kptr1 == *&kptr1);
 	BOOST_CHECK( kptr2 == *&kptr2);
@@ -150,8 +150,8 @@ void testKmerPtr(SequenceLengthType size)
 	// Do not want to support theses...
 	/*
 	 Kmer *a_ptr = kmer1;
-	 Kmer *b_ptr = (Kmer *)b.get();
-	 Kmer *c_ptr = (Kmer *)c.get();//(Kmer *)((void *)&(*c));
+	 Kmer *b_ptr = (Kmer *)b.getTwoBitSequence();
+	 Kmer *c_ptr = (Kmer *)c.getTwoBitSequence();//(Kmer *)((void *)&(*c));
 	 BOOST_CHECK( a_ptr == kmer1 );
 	 BOOST_CHECK( b_ptr == kmer2 );
 	 BOOST_CHECK( c_ptr == kmer3 );
@@ -242,9 +242,9 @@ void testKmerPtr(SequenceLengthType size)
 	 */
 	// and original have not changed...
 	a++; b++; c++;
-	BOOST_CHECK( kptr1.get() == kmer1);
-	BOOST_CHECK( kptr2.get() == kmer2);
-	BOOST_CHECK( kptr3.get() == kmer3);
+	BOOST_CHECK( kptr1.getTwoBitSequence() == kmer1);
+	BOOST_CHECK( kptr2.getTwoBitSequence() == kmer2);
+	BOOST_CHECK( kptr3.getTwoBitSequence() == kmer3);
 }
 #endif
 
@@ -268,19 +268,19 @@ void testKmerArray(SequenceLengthType size) {
 
 	if (size == 1) {
 		for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
-			char *ch = (char*) kmersC[i].get();
+			char *ch = (char*) kmersC[i].getTwoBitSequence();
 			BOOST_CHECK_EQUAL(*ch & 0x3f, 0x00);
 		}
 	}
 	if (size == 2) {
 		for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
-			char *ch = (char*) kmersC[i].get();
+			char *ch = (char*) kmersC[i].getTwoBitSequence();
 			BOOST_CHECK_EQUAL(*ch & 0x0f, 0x00);
 		}
 	}
 	if (size == 3) {
 		for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
-			char *ch = (char*) kmersC[i].get();
+			char *ch = (char*) kmersC[i].getTwoBitSequence();
 			BOOST_CHECK_EQUAL(*ch & 0x03, 0x00);
 		}
 	}
@@ -315,11 +315,11 @@ void testKmerArray(SequenceLengthType size) {
 	// test KmerArray assignment
 
 	void *mem1, *mem2;
-	mem1 = kmersFloat[0].get();
+	mem1 = kmersFloat[0].getTwoBitSequence();
 	KmerArrayPair<float> copy = kmersFloat;
 	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
-	BOOST_CHECK_EQUAL(mem1, (void*) kmersFloat[0].get());
-	mem2 = copy[0].get();
+	BOOST_CHECK_EQUAL(mem1, (void*) kmersFloat[0].getTwoBitSequence());
+	mem2 = copy[0].getTwoBitSequence();
 	BOOST_CHECK(mem1 != mem2);
 
 	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
@@ -332,7 +332,7 @@ void testKmerArray(SequenceLengthType size) {
 	// test resize and []
 	unsigned long oldSize = copy.size();
 	copy.resize(oldSize + 1);
-	mem1 = copy[0].get();
+	mem1 = copy[0].getTwoBitSequence();
 	BOOST_CHECK(mem1 != mem2);
 
 	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size() + 1);
@@ -347,7 +347,7 @@ void testKmerArray(SequenceLengthType size) {
 	BOOST_CHECK_EQUAL(kmersFloat[0].toFasta(), copy[oldSize].toFasta());
 	copy.valueAt(oldSize) = oldSize * 2.0;
 	BOOST_CHECK_EQUAL(oldSize * 2.0, copy.valueAt(oldSize));
-	BOOST_CHECK(copy[oldSize].get() != kmersFloat[0].get());
+	BOOST_CHECK(copy[oldSize].getTwoBitSequence() != kmersFloat[0].getTwoBitSequence());
 
 	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {
 		float &valRef = copy.valueAt(i);
@@ -360,7 +360,7 @@ void testKmerArray(SequenceLengthType size) {
 
 	// now reduce
 	copy.resize(oldSize);
-	mem2 = copy[0].get();
+	mem2 = copy[0].getTwoBitSequence();
 
 	BOOST_CHECK_EQUAL(copy.size(), kmersFloat.size());
 	for (Kmer::IndexType i = 0; i < kmersFloat.size(); i++) {

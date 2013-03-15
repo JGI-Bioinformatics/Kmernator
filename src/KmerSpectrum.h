@@ -353,6 +353,10 @@ public:
 	typedef typename SingletonMapType::BucketType SingletonBucketType;
 	typedef typename SingletonMapType::ValueType SingletonValueType;
 
+	typedef KmerArrayPair< SolidValueType > SolidKAP;
+	typedef KmerArrayPair< WeakValueType > WeakKAP;
+	typedef KmerArrayPair< SingletonValueType > SingletonKAP;
+
 	typedef std::vector< KmerSpectrum > Vector;
 
 	typedef Kmer::NumberType NumberType;
@@ -2057,7 +2061,7 @@ public:
 	}
 
 	// recursively purge kmers within edit distance and below threshold
-	virtual long _purgeVariants(DataPointers &pointers, const Kmer &kmer, WeakBucketType &variants, double threshold, short editDistance) {
+	virtual long _purgeVariants(DataPointers &pointers, const Kmer &kmer, WeakKAP &variants, double threshold, short editDistance) {
 		long purgedKmers = 0;
 
 		if (editDistance == 0)
@@ -2065,7 +2069,7 @@ public:
 
 		for (int thisEditDistance = 1 ; thisEditDistance <= editDistance; thisEditDistance++) {
 			double thisThreshold = threshold / (VARIANT_EDIT_DISTANCE_EXPONENT ^ (thisEditDistance-1));
-			WeakBucketType::permuteBases(kmer, variants, thisEditDistance, true);
+			variants.permuteBases(kmer, variants, thisEditDistance, true);
 
 			for(SequenceLengthType i = 0 ; i < variants.size(); i++) {
 				Kmer &varKmer = variants[i];
@@ -2109,7 +2113,7 @@ public:
 		this->_preVariants(variantSigmas, minVariantKmerDepth);
 		LOG_DEBUG(1, "Purging with " << numThreads << " threads");
 		std::vector<DataPointers> pointers(numThreads, DataPointers(*this));
-		std::vector<WeakBucketType> variants(numThreads);
+		std::vector<WeakKAP> variants(numThreads);
 
 		// sweep through all kmers above minVariantKmerDepth
 		long remaining = 1;
