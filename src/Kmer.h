@@ -64,7 +64,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/cstdint.hpp>
-#include <boost/type_traits.hpp>
+#include <boost/thread.hpp>
 
 #include "config.h"
 #include "Options.h"
@@ -176,20 +176,75 @@ class KmerInstance;
 class KmerHasher {
 public:
 	typedef Kmernator::KmerNumberType NumberType;
+	static NumberType toNumber(const void *ptr, int len) {
+		NumberType val;
+		if (len >= 8) {
+			boost::uint64_t *x = (boost::uint64_t *) ptr;
+			val = (NumberType) *x;
+			if (len > 8)
+				val += toNumber(++x, len-8);
+		} else if (len >=4) {
+			val = (NumberType) *((boost::uint32_t *) ptr);
+		} else if (len >=2) {
+			val = (NumberType) *((boost::uint16_t *) ptr);
+		} else {
+			val = (NumberType) *((boost::uint8_t *)  ptr);
+		}
+		return val;
+	};
 	static NumberType getHash(const void *ptr, int length) {
 		//		NumberType number = toNumber();
 		//		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
 		uint64_t hash = 0xDEADBEEF;
+		NumberType val = toNumber(ptr, length);
+		MicroCache &mc = getThreadCache();
+		if (mc.isCached(ptr,length,val,hash))
+			return hash;
 		uint32_t *pc, *pb;
 		pc = (uint32_t*) &hash;
 		pb = pc+1;
 		Lookup3::hashlittle2(ptr, length, pc, pb);
 		//return *pc + (((uint64_t)*pb)<<32);
-LOG_DEBUG(1, "Hash: " << hash << " for " << ptr);
+		mc.set(ptr,length,val,hash);
 		return hash;
 	}
 	NumberType operator()(const Kmer& kmer) const;
 	NumberType operator()(const KmerInstance& kmer) const;
+protected:
+	class MicroCache {
+	public:
+		MicroCache() {
+			reset();
+		}
+		void reset() {
+			_ptr = NULL;
+			_len = _val = _hash = 0;
+		}
+		bool isCached(const void *ptr, int len, NumberType val, NumberType &hash) {
+			if (ptr == _ptr && _len == len && _val == val) {
+				hash = _hash;
+				return true;
+			}
+			return false;
+		}
+		void set(const void *ptr, int len, NumberType val, const NumberType &hash) {
+			_ptr = ptr;
+			_len = len;
+			_val = val;
+			_hash = hash;
+		}
+	private:
+		const void *_ptr;
+		NumberType  _val, _hash;
+		int _len;
+	};
+	static MicroCache &getThreadCache() {
+		static boost::thread_specific_ptr<MicroCache> ptr;
+		if (ptr.get() == NULL)
+			ptr.reset(new MicroCache());
+		return *ptr;
+	}
+
 };
 
 #define TEMP_KMER(name)  TwoBitEncoding _stack_##name[KmerSizer::getByteSize()]; Kmer &name = (Kmer &)(_stack_##name);
@@ -210,37 +265,11 @@ public:
 		set(other);
 		return *this;
 	}
+	static NumberType toNumber(const Kmer &kmer) {
+		return KmerHasher::toNumber(kmer.getTwoBitSequence(), KmerSizer::getTwoBitLength());
+	}
 
 	// safely returns lowbits 64-bit numeric version of any sized kmer
-	static NumberType toNumber(const Kmer &kmer) {
-		NumberType val;
-		switch (KmerSizer::getTwoBitLength()) {
-		case 1:
-			val = (NumberType) *((boost::uint8_t *) kmer.getTwoBitSequence());
-			break;
-		case 2:
-			val = (NumberType) *((boost::uint16_t *) kmer.getTwoBitSequence());
-			break;
-		case 3:
-			val = (((NumberType) *((boost::uint16_t *) kmer.getTwoBitSequence())))| (((NumberType) *((boost::uint8_t *) (kmer.getTwoBitSequence() + 2))) << 16);
-			break;
-		case 4:
-			val = (NumberType) *((boost::uint32_t *) kmer.getTwoBitSequence());
-			break;
-		case 5:
-			val = (((NumberType) *((boost::uint32_t *) kmer.getTwoBitSequence()))) | (((NumberType) *((boost::uint8_t *) (kmer.getTwoBitSequence() + 4))) << 32);
-			break;
-		case 6:
-			val = (((NumberType) *((boost::uint32_t *) kmer.getTwoBitSequence()))) | (((NumberType) *((boost::uint16_t *) (kmer.getTwoBitSequence() + 4))) << 32);
-			break;
-		case 7:
-			val = (((NumberType) *((boost::uint32_t *) kmer.getTwoBitSequence()))) | (((NumberType) *((boost::uint16_t *) (kmer.getTwoBitSequence() + 4))) << 32) | (((NumberType) *((boost::uint8_t *) (kmer.getTwoBitSequence() + 6))) << 48);
-			break;
-		default:
-			val = (NumberType) *((boost::uint64_t *) kmer.getTwoBitSequence());
-		}
-		return val;
-	}
 	inline int compare(const Kmer &other) const {
 		return memcmp((const void*) getTwoBitSequence(), (const void*) other.getTwoBitSequence(), getTwoBitLength());
 	}
