@@ -176,6 +176,8 @@ class KmerInstance;
 class KmerHasher {
 public:
 	typedef Kmernator::KmerNumberType NumberType;
+
+	// safely returns 64-bit numeric version of any sized kmer
 	static NumberType toNumber(const void *ptr, int len) {
 		NumberType val;
 		if (len >= 8) {
@@ -193,20 +195,28 @@ public:
 		return val;
 	};
 	static NumberType getHash(const void *ptr, int length) {
+		// initialize it so something tasty
+		uint64_t hash = 0xDEADBEEF;
+
+		// Old hash algorithm, gave poor distribution, if I remember correctly
 		//		NumberType number = toNumber();
 		//		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
-		uint64_t hash = 0xDEADBEEF;
-		NumberType val = toNumber(ptr, length);
-		MicroCache &mc = getThreadCache();
-		if (mc.isCached(ptr,length,val,hash))
-			return hash;
+
+		// Presently the act of caching the last hash takes longer than calculating it again
+		//		NumberType val = toNumber(ptr, length);
+		//		MicroCache &mc = getThreadCache();
+		//		if (mc.isCached(ptr,length,val,hash))
+		//			return hash;
+
 		uint32_t *pc, *pb;
 		pc = (uint32_t*) &hash;
 		pb = pc+1;
 		Lookup3::hashlittle2(ptr, length, pc, pb);
-		//return *pc + (((uint64_t)*pb)<<32);
-		mc.set(ptr,length,val,hash);
-		return hash;
+
+		// Do not cache it
+		//		mc.set(ptr,length,val,hash);
+
+		return hash; // The same thing as the recommended mixing: return *pc + (((uint64_t)*pb)<<32);
 	}
 	NumberType operator()(const Kmer& kmer) const;
 	NumberType operator()(const KmerInstance& kmer) const;
@@ -265,8 +275,9 @@ public:
 		set(other);
 		return *this;
 	}
+	// return just the low bits of the kmer
 	static NumberType toNumber(const Kmer &kmer) {
-		return KmerHasher::toNumber(kmer.getTwoBitSequence(), KmerSizer::getTwoBitLength());
+		return KmerHasher::toNumber(kmer.getTwoBitSequence(), std::min((SequenceLengthType)8, KmerSizer::getTwoBitLength()));
 	}
 
 	// safely returns lowbits 64-bit numeric version of any sized kmer
