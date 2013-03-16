@@ -379,7 +379,7 @@ public:
 					ReadSetSizeType readIdx = batchReadIdx + myOffset;
 
 					if (loopThreadId == 0 && progressCount++ % progressMark == 0) {
-						LOG_VERBOSE_OPTIONAL(1, (progressCount-1) % world.size() == world.rank(), "distributed processing " << (readIdx * world.size()) << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
+						LOG_VERBOSE_OPTIONAL(1, (progressCount-1) % world.size() == world.rank(), "distributed processing " << (readIdx * world.size()) << " reads. ");
 					}
 
 					const Read &read = batchReads[ batchReadIdx ]; // store.getRead( readIdx );
@@ -420,7 +420,7 @@ public:
 			msgBuffers->finalize();
 
 		} // omp parallel
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed processed all reads");
+		LOG_VERBOSE(1, "Processed " << numReads << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
 
 		delete msgBuffers;
 

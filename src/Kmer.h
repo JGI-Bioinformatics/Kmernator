@@ -3156,7 +3156,9 @@ public:
 	BEM::getBucketByIdx;
 
 	KmerMapBySTLMap(int bucketCount = 0) {
-		this->resizeBuckets(bucketCount);
+		// ignore bucket hint count.  Allocate enough to distribute
+		// across a typical number of threads.
+		this->resizeBuckets(bucketCount == 0 ? 0 : 1024);
 	}
 	KmerMapBySTLMap(const void *src) {
 		LOG_THROW("Unimplemented restore");
@@ -3183,7 +3185,7 @@ template<typename Value>
 class KmerMapBoost : public KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, KmerHasher> > {
 public:
 	typedef KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, KmerHasher> > Base;
-	KmerMapBoost(int numBuckets = 0) : Base(numBuckets) {}
+	KmerMapBoost(int ignored = 0) : Base(ignored) {}
 	KmerMapBoost(const void *src) : Base(src) {}
 	KmerMapBoost(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMapBoost &operator=(const Base &other) {
