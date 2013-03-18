@@ -90,7 +90,7 @@ using namespace boost::accumulators;
 class _KmerSpectrumOptions;
 class _KmerSpectrumOptions : public OptionsBaseInterface {
 public:
-	_KmerSpectrumOptions() : minKmerQuality(0.10), minDepth(2), kmersPerBucket(64),
+	_KmerSpectrumOptions() : minKmerQuality(0.10), minDepth(2), estimatedDepth(20.), estimatedErrorRate(0.10),
 		saveKmerMmap(false), loadKmerMmap(),
 		buildPartitions(0), kmerSubsample(1),
 		variantSigmas(-1.0), minVariantKmerDepth(512), variantHammingDistance(2),
@@ -111,7 +111,9 @@ public:
 
 				("min-depth", po::value<unsigned int>()->default_value(minDepth), "minimum depth for a solid kmer")
 
-				("kmers-per-bucket", po::value<unsigned int>()->default_value(kmersPerBucket), "number of kmers to target per hash-bucket.  Lesser will use more memory, larger will be slower")
+				("estimated-depth", po::value<double>()->default_value(estimatedDepth), "estimated kmer depth of the data set (used to pre-allocate initial amount of memory")
+
+				("estimated-error-rate", po::value<double>()->default_value(estimatedErrorRate), "estimated kmer error-rate (used to pre-allocate singleton-kmer data structures)")
 
 				("save-kmer-mmap", po::value<bool>()->default_value(saveKmerMmap), "If set, creates a memory map of the kmer spectrum for later use")
 
@@ -153,7 +155,8 @@ public:
 		// set minimum depth
 		setOpt("min-depth", getMinDepth());
 
-		setOpt("kmers-per-bucket", getKmersPerBucket());
+		setOpt("estimated-depth", getEstimatedDepth());
+		setOpt("estimated-error-rate", getEstimatedErrorRate());
 
 		setOpt("save-kmer-mmap", getSaveKmerMmap());
 
@@ -186,9 +189,15 @@ public:
 	{
 		return minDepth;
 	}
-	unsigned int &getKmersPerBucket() {
-		return kmersPerBucket;
+
+	double &getEstimatedDepth() {
+		return estimatedDepth;
 	}
+
+	double &getEstimatedErrorRate() {
+		return estimatedErrorRate;
+	}
+
 	bool &getSaveKmerMmap()
 	{
 		return saveKmerMmap;
@@ -234,7 +243,8 @@ private:
 private:
 	double minKmerQuality;
 	unsigned int minDepth;
-	unsigned int kmersPerBucket;
+	double estimatedDepth;
+	double estimatedErrorRate;
 	bool saveKmerMmap;
 	std::string loadKmerMmap;
 	unsigned int buildPartitions;
@@ -385,8 +395,8 @@ private:
 public:
 	// if singletons are separated use less buckets (but same # as singletons)
 	KmerSpectrum() : solid(), weak(), singleton(), hasSolids(false), hasSingletons(false), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0) {}
-	KmerSpectrum(unsigned long buckets, bool separateSingletons = true):
-		solid(), weak(separateSingletons ? buckets/8 : buckets), singleton(separateSingletons ? buckets : 1),
+	KmerSpectrum(unsigned long estimatedRawKmers, bool separateSingletons = true):
+		solid(), weak((int) (estimatedRawKmers / KmerSpectrumOptions::getOptions().getEstimatedDepth())), singleton(separateSingletons ? estimatedRawKmers * KmerSpectrumOptions::getOptions().getEstimatedErrorRate() : 1),
 		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0)
 	{
 		// apply the minimum quality automatically
@@ -433,10 +443,10 @@ public:
 	}
 
 	void optimize(bool singletonsToo = false) {
-		solid.resort();
-		weak.resort();
+		solid.optimize();
+		weak.optimize();
 		if (singletonsToo)
-			singleton.resort();
+			singleton.optimize();
 	}
 
 	Kmernator::MmapFileVector storeMmap(string mmapFilename){
@@ -508,7 +518,32 @@ public:
 		singletonKmers = 0;
 	}
 
-	static unsigned long estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = KmerSpectrumOptions::getOptions().getKmersPerBucket()) {
+	static unsigned long estimateRawKmers( std::string filename ) {
+		unsigned long fileSize = FileUtils::getFileSize( filename );
+		ReadFileReader rfr(filename, false);
+		int numBases = 0;
+		int numReads;
+		std::string name, bases, quals, comment;
+		for(numReads = 0; numReads < 5000; numReads++) {
+			if (rfr.nextRead(name, bases, quals, comment))
+				numBases += bases.length();
+		}
+		double bytesPerRead = rfr.getPos() / numReads;
+		double basesPerRead = numBases / numReads;
+		double kmersPerRead = std::max(2., basesPerRead - KmerSizer::getSequenceLength() + 1);
+		double readsPerFile = fileSize / bytesPerRead;
+		unsigned long rawKmers = (unsigned long) (readsPerFile * kmersPerRead);
+		LOG_DEBUG_OPTIONAL(1, true, "estimateRawKmers(" << filename << "): " << rawKmers);
+		return rawKmers;
+	}
+	static unsigned long estimateRawKmers( std::vector<std::string> filenames ) {
+		unsigned long rawKmers = 0;
+		for(int i = 0; i < filenames.size(); i++)
+			rawKmers += estimateRawKmers(filenames[i]);
+		LOG_DEBUG_OPTIONAL(1, true, "estimateRawKmers( filenames ): " << rawKmers);
+		return rawKmers;
+	}
+	static unsigned long estimateRawKmers( const ReadSet &store ) {
 		unsigned long baseCount = store.getBaseCount();
 		if (baseCount == 0 || store.getSize() == 0)
 			return 128;
@@ -516,8 +551,14 @@ public:
 		unsigned long kmersPerRead = (avgSequenceLength - KmerSizer::getSequenceLength() + 1);
 		if (KmerSizer::getSequenceLength() > avgSequenceLength)
 			kmersPerRead = 1;
-
 		unsigned long rawKmers = kmersPerRead * store.getSize();
+		LOG_DEBUG_OPTIONAL(1, true, "estimateRawKmers( " << store.getSize() << " reads): " << rawKmers);
+		return rawKmers;
+	}
+	// deprecated
+	static unsigned long _estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = KmerBaseOptions::getOptions().getKmersPerBucket()) {
+
+		unsigned long rawKmers = estimateRawKmers(store);
 		unsigned long targetBuckets = rawKmers / targetKmersPerBucket;
 		unsigned long maxBuckets = 32*1024*1024;
 		unsigned long minBuckets = 128;

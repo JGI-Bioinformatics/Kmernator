@@ -122,8 +122,7 @@ int main(int argc, char *argv[]) {
 
 		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 
-		long numBuckets = 512*1024;
-		KS spectrum(world, numBuckets);
+		KS spectrum(world, KS::estimateRawKmers(world, inputs));
 
 		spectrum.buildKmerSpectrum(reads, false);
 		if (Log::isVerbose(1)) {

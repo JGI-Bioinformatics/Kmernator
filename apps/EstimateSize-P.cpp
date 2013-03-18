@@ -164,8 +164,8 @@ int main(int argc, char *argv[]) {
 
 		unsigned long totalReads = 0;
 		unsigned long totalBases = 0;
-		long numBuckets = 0;
-		KS spectrum(world, numBuckets);
+		long rawKmers = 0;
+		KS spectrum(world, 0);
 		for (long iter = 0 ; iter < partitions && fraction < maxFraction; iter++) {
 			fraction += (double) 1. / (double) totalPartitions;
 	
@@ -183,16 +183,11 @@ int main(int argc, char *argv[]) {
 	
 			if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 	
-				if (numBuckets == 0) {
-	
-					numBuckets = KS::estimateWeakKmerBucketSize(reads) * partitions / KS::getKmerSubsample();
-	
-					numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-	
-					LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
-					spectrum = KS(world, numBuckets);
+				// lazy allocate
+				if (rawKmers == 0) {
+					rawKmers = KS::estimateRawKmers(world, inputs);
+					spectrum = KS(world, rawKmers);
 				}
-	
 				spectrum.buildKmerSpectrum(reads);
 				spectrum.trackSpectrum(true);
 				LOG_DEBUG_OPTIONAL(1, true, "SizeTracker: " << spectrum.getSizeTracker().toString());

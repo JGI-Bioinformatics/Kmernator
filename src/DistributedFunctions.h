@@ -122,8 +122,8 @@ protected:
 	mpi::communicator world;
 
 public:
-	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long buckets = 0, bool separateSingletons = true)
-	: KS(buckets, separateSingletons), world(_world, mpi::comm_duplicate) {
+	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long estimatedRawKmers = 0, bool separateSingletons = true)
+	: KS(estimatedRawKmers, separateSingletons), world(_world, mpi::comm_duplicate) {
 	}
 	~DistributedKmerSpectrum() {
 	}
@@ -135,6 +135,27 @@ public:
 	mpi::communicator &getWorld() {
 		return world;
 	}
+	KS::estimateRawKmers;
+
+	static unsigned long estimateRawKmers(mpi::communicator &world, std::vector<std::string> filenames ) {
+		unsigned long estimatedKmers = 0;
+		for (int i = world.rank(); i < (int) filenames.size() && i < (int) world.size(); i += world.size())
+			estimatedKmers += KS::estimateRawKmers(filenames[i]);
+		estimatedKmers /= world.size();
+
+		estimatedKmers = mpi::all_reduce(world, estimatedKmers, std::plus<unsigned long>());
+		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "estimateRawKmers(world, files): " << estimatedKmers);
+		return estimatedKmers;
+	}
+	static unsigned long estimateRawKmers(mpi::communicator &world, const ReadSet &store ) {
+		unsigned long estimatedKmers = estimateRawKmers(store);
+		estimatedKmers /= world.size();
+
+		estimatedKmers = mpi::all_reduce(world, estimatedKmers, std::plus<unsigned long>());
+		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "estimateRawKmers(world, reads): " << estimatedKmers);
+		return estimatedKmers;
+	}
+
 	template<typename D>
 	MmapFile writeKmerMap(D &kmerMap, std::string filepath) {
 		MmapFile mmap;

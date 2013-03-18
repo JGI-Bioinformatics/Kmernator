@@ -118,7 +118,7 @@ const int OMP_MAX_THREADS_DEFAULT = omp_get_max_threads();
 		if (_VAR_needMalloc) delete [] _VAR;
 
 #ifndef MAX_KMER_MAP_BUCKETS
-#define MAX_KMER_MAP_BUCKETS 33554432
+#define MAX_KMER_MAP_BUCKETS 67108864
 #endif
 
 #ifndef DEBUG

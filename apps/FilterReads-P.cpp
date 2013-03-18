@@ -152,15 +152,13 @@ int main(int argc, char *argv[]) {
 
 		}
 
-		long numBuckets = 0;
+		long rawKmers = 0;
 		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 
-			numBuckets = KS::estimateWeakKmerBucketSize(reads);
+			rawKmers = KS::estimateRawKmers(world, reads);
 
-			numBuckets = all_reduce(world, numBuckets, mpi::maximum<int>());
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "targeting " << numBuckets << " buckets for reads");
 		}
-		KS spectrum(world, numBuckets);
+		KS spectrum(world, rawKmers);
 		Kmernator::MmapFileVector spectrumMmaps;
 		if (KmerBaseOptions::getOptions().getKmerSize() > 0 && !KmerSpectrumOptions::getOptions().getLoadKmerMmap().empty()) {
 			spectrum.restoreMmap(KmerSpectrumOptions::getOptions().getLoadKmerMmap());

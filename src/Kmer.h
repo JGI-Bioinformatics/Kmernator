@@ -132,7 +132,8 @@ public:
 // this is the ONLY options class that is okay to extend, as there are no member variables
 class _KmerBaseOptions : public OptionsBaseInterface {
 public:
-	_KmerBaseOptions(SequenceLengthType defaultKmerSize = KmerSizer::getSequenceLength()) : kmerSize(defaultKmerSize) {
+	_KmerBaseOptions(SequenceLengthType defaultKmerSize = KmerSizer::getSequenceLength())
+	: kmerSize(defaultKmerSize), kmersPerBucket(64) {
 	}
 	~_KmerBaseOptions() {}
 	void _resetOptions() {
@@ -144,7 +145,10 @@ public:
 
 		opts.add_options()
 
-						("kmer-size", po::value<SequenceLengthType>()->default_value(kmerSize), "kmer size.  A size of 0 will skip k-mer calculations");
+			("kmer-size", po::value<SequenceLengthType>()->default_value(kmerSize), "kmer size.  A size of 0 will skip k-mer calculations")
+
+			("kmers-per-bucket", po::value<unsigned int>()->default_value(kmersPerBucket), "number of kmers to target per hash-bucket.  Lesser will use more memory, larger will be slower");
+
 
 		desc.add(opts);
 	}
@@ -156,6 +160,8 @@ public:
 			ret = false;
 		}
 		setOpt("kmer-size", kmerSize);
+		setOpt("kmers-per-bucket", getKmersPerBucket());
+
 		KmerSizer::set(kmerSize);
 
 		return ret;
@@ -164,8 +170,12 @@ public:
 	{
 		return kmerSize;
 	}
+	unsigned int &getKmersPerBucket() {
+		return kmersPerBucket;
+	}
 private:
 	SequenceLengthType kmerSize;
+	unsigned int kmersPerBucket;
 
 };
 typedef OptionsBaseTemplate< _KmerBaseOptions > KmerBaseOptions;
@@ -738,8 +748,9 @@ public:
 
 	typedef Value ValueType;
 	static const IndexType MAX_INDEX = MAX_KMER_INDEX;
-	static const float GROWTH_FACTOR = 1.10;
-	static const IndexType MIN_GROWTH = 16;
+	static const float GROWTH_FACTOR = 1.5;
+	static const IndexType MIN_GROWTH = 24;
+	static const IndexType MAX_UNSORTED = MIN_GROWTH;
 
 	typedef std::vector< KmerArrayPair > Vector;
 	typedef KmerElementPair<ValueType> BaseElementType;
@@ -1437,7 +1448,7 @@ public:
 	IndexType findIndex(const Kmer &target) const {
 		bool targetIsFound;
 		IndexType idx;
-		if (_endSorted >= 16) {
+		if (_endSorted >= 8) {
 			idx = _findSortedIndex(target, targetIsFound, 0, _endSorted);
 			if (targetIsFound)
 				return idx;
@@ -1637,8 +1648,12 @@ public:
 		return _endSorted == size();
 	}
 
-	IndexType numUnsorted() const {
+	IndexType getNumUnsorted() const {
 		return _endSorted - size();
+	}
+
+	IndexType getNumSorted() const {
+		return _endSorted;
 	}
 
 	// sort the elements in the KmerArray
@@ -1659,7 +1674,9 @@ public:
 
 		KmerArrayPair s;
 		IndexType passingSize = passingIndexes.size();
-		s.reserve(passingSize + (reserveExtra ? std::max((IndexType) (passingSize * GROWTH_FACTOR + 0.5), (IndexType) (passingSize + MIN_GROWTH)) : 0));
+		IndexType newSize = passingSize + (reserveExtra ? std::max((IndexType) (passingSize * GROWTH_FACTOR + 0.5), (IndexType) (passingSize + MIN_GROWTH)) : 0);
+		newSize = std::max(newSize, _capacity);
+		s.reserve(newSize);
 
 		for(IndexType i = 0; i < passingSize; i++)
 			s.append(get(passingIndexes[i]), valueAt(passingIndexes[i]));
@@ -2090,29 +2107,32 @@ public:
 		return powerOf2;
 	}
 
-	BucketExposedMapLogic(int bucketCount = 1) {
+	BucketExposedMapLogic(int numBuckets = 0, int elementsPerBucket = 0) {
 		// ensure buckets are a precise powers of two
 		// with at least bucketCount buckets
-		if (bucketCount > MAX_KMER_MAP_BUCKETS)
-			bucketCount = MAX_KMER_MAP_BUCKETS;
-		if (bucketCount < 1) bucketCount = 1;
-		resizeBuckets(bucketCount);
+		resizeBuckets(numBuckets, elementsPerBucket);
 	}
 	BucketExposedMapLogic &operator=(const BucketExposedMapLogic &copy) {
 		_buckets = copy._buckets;
 		BUCKET_MASK = copy.BUCKET_MASK;
 		return *this;
 	}
-	void resizeBuckets(int bucketCount) {
+	void resizeBuckets(int bucketCount, int elementsPerBucket) {
+		if (bucketCount > MAX_KMER_MAP_BUCKETS)
+			bucketCount = MAX_KMER_MAP_BUCKETS;
 		NumberType powerOf2 = getMinPowerOf2(bucketCount);
-                BUCKET_MASK = powerOf2 - 1;
-                _buckets.resize(powerOf2);
-		LOG_DEBUG_OPTIONAL(3, Logger::isMaster(), "BucketExposedMap::resizeBuckets(" << bucketCount << "): " << powerOf2);
+        BUCKET_MASK = powerOf2 - 1;
+        _buckets.resize(powerOf2);
+        if (elementsPerBucket > 16) {
+        	for(int i = 0; i < (int) powerOf2; i++)
+        		_buckets[i].reserve(elementsPerBucket);
+        } // else lazy allocate the buckets.
+		LOG_VERBOSE_OPTIONAL(1, bucketCount > 0 && Logger::isMaster(), "BucketExposedMap::resizeBuckets(" << bucketCount << " ): " << powerOf2 << " of " << elementsPerBucket);
 	}
 	void clear(bool releaseMemory = true) { // release memory ignored by default
 		if (releaseMemory) {
 			_buckets.clear();
-			resizeBuckets(1);
+			resizeBuckets(0,0);
 		} else {
 			for(BaseBucketsVectorIterator it = _buckets.begin(); it != _buckets.end(); it++)
 				it->clear();
@@ -2329,10 +2349,10 @@ public:
 
 
 public:
-	BucketExposedMap() : BEML(0) {
+	BucketExposedMap() : BEML() {
 		clear();
 	}
-	BucketExposedMap(IndexType bucketCount) : BEML(bucketCount) {
+	BucketExposedMap(int numBuckets, int elementsPerBucket = 0) : BEML(numBuckets, elementsPerBucket) {
 	}
 	BucketExposedMap &operator=(const BucketExposedMap &other) {
 		(BEML&)*this = (BEML&) other;
@@ -2458,6 +2478,7 @@ public:
 		return ss.str();
 	}
 
+	virtual void optimize() {}
 
 	bool exists(const KeyType &key, const BucketType &bucket) const {
 		return bucket.find(key) != bucket.end();
@@ -2493,7 +2514,7 @@ public:
 			BucketType &b = src.getBucketByIdx(idx);
 
 			if (! mergeTriviallyInterleavedBuckets(a,b) ) {
-				LOG_THROW("Invalid: Expected one bucket to be zero in this optimized method: DenseKmerMap::merge(const DenseKmerMap &src) const");
+				LOG_THROW("Invalid: Expected one bucket to be zero in this optimized method: KmerMapByKmerArrayPair::merge(const KmerMapByKmerArrayPair &src) const");
 			}
 		}
 	}
@@ -2533,7 +2554,7 @@ public:
 		// TODO fixme
 		LOG_THROW("Invalid: This method is broken for threaded execution somehow (even with pragmas disabled)");
 		if (getNumBuckets() != src.getNumBuckets()) {
-			LOG_THROW("Invalid: Can not merge two DenseKmerMaps of differing sizes!");
+			LOG_THROW("Invalid: Can not merge two KmerMapByKmerArrayPair of differing sizes!");
 		}
 		/*
 		// calculated chunk size to ensure thread safety of merge operation
@@ -2693,10 +2714,8 @@ public:
 	KmerMapByKmerArrayPair() : Base() {
 		_isSorted = defaultSort;
 	}
-	KmerMapByKmerArrayPair(IndexType bucketCount) : Base(bucketCount) {
-
+	KmerMapByKmerArrayPair(long estimatedRawKmers) : Base(estimatedRawKmers / KmerBaseOptions::getOptions().getKmersPerBucket() + 1, KmerBaseOptions::getOptions().getKmersPerBucket()) {
 		_isSorted = defaultSort;
-
 	}
 	virtual ~KmerMapByKmerArrayPair()
 	{
@@ -2707,7 +2726,6 @@ public:
 		_isSorted = other._isSorted;
 		return *this;
 	}
-
 	Base::getBuckets;
 	Base::getBucketMask;
 	Base::getBucket;
@@ -2732,7 +2750,7 @@ public:
 	void clear(bool releaseMemory = true) {
 		reset(releaseMemory);
 		if (releaseMemory) {
-			this->resizeBuckets(1);
+			this->resizeBuckets(0,0);
 		}
 	}
 
@@ -2942,9 +2960,12 @@ public:
 	inline bool isSorted() const {
 		return _isSorted;
 	}
+	void optimize() {
+		resort();
+	}
 	void resort() {
 		if (!_isSorted) {
-			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Sorting DenseKmerMaps");
+			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Sorting KmerMapByKmerArrayPair");
 #pragma omp parallel for
 			for(long i=0; i< (long) getBuckets().size(); i++) {
 				getBuckets()[i].resort();
@@ -2964,8 +2985,8 @@ protected:
 			idx = bucket.insertSorted(key,value);
 		} else {
 			idx = bucket.append(key,value);
-			if (bucket.size() == bucket.capacity()) {
-				bucket.resort(true);
+			if (bucket.getNumUnsorted() >= bucket.MAX_UNSORTED || bucket.size() == bucket.capacity()) {
+				bucket.resort( bucket.capacity() - bucket.size() < bucket.MIN_GROWTH / 2 );
 				idx = bucket.findIndex(key);
 				assert(idx != BucketType::MAX_INDEX);
 			}
@@ -3153,23 +3174,20 @@ public:
 	typedef Kmer::IndexType     IndexType;
 	typedef Kmer::SizeType      SizeType;
 
-	typedef BucketExposedMap< KmerInstance, Value, BucketType, KmerHasher > BEM;
+	typedef BucketExposedMap< KmerInstance, Value, BucketType, KmerHasher > Base;
 	typedef Value ValueType;
 	//typedef	typename BucketType::iterator BucketTypeIterator;
 	//typedef typename BucketType::value_type BucketElementType;
 	//typedef std::vector< BucketType > BucketsVector;
 	//typedef typename BucketsVector::iterator BucketsVectorIterator;
 	//typedef typename BucketsVector::const_iterator ConstBucketsVectorIterator;
-	typedef typename BEM::Iterator Iterator;
+	typedef typename Base::Iterator Iterator;
 	//typedef typename Iterator::value_type ElementType;
 
-	BEM::getBuckets;
-	BEM::getBucketByIdx;
-
-	KmerMapBySTLMap(int bucketCount = 0) {
-		// ignore bucket hint count.  Allocate enough to distribute
-		// across a typical number of threads.
-		this->resizeBuckets(bucketCount == 0 ? 0 : 1024);
+	Base::getBuckets;
+	Base::getBucketByIdx;
+	KmerMapBySTLMap() : Base() {}
+	KmerMapBySTLMap(long estimatedRawKmers) : Base(omp_get_max_threads(), estimatedRawKmers / omp_get_max_threads()) {
 	}
 	KmerMapBySTLMap(const void *src) {
 		LOG_THROW("Unimplemented restore");
@@ -3196,7 +3214,8 @@ template<typename Value>
 class KmerMapBoost : public KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, KmerHasher> > {
 public:
 	typedef KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, KmerHasher> > Base;
-	KmerMapBoost(int ignored = 0) : Base(ignored) {}
+	KmerMapBoost() : Base() {}
+	KmerMapBoost(long estimatedRawKmers) : Base(estimatedRawKmers) {}
 	KmerMapBoost(const void *src) : Base(src) {}
 	KmerMapBoost(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMapBoost &operator=(const Base &other) {
@@ -3206,11 +3225,30 @@ public:
 	typedef typename Base::BucketType BucketType;
 };
 
+#include <sparsehash/sparse_hash_map>
+template<typename Value>
+class KmerMapGoogleSparse : public KmerMapBySTLMap<Value, google::sparse_hash_map<KmerInstance, Value, KmerHasher> > {
+public:
+	typedef KmerMapBySTLMap<Value, google::sparse_hash_map<KmerInstance, Value, KmerHasher> > Base;
+	KmerMapGoogleSparse(): Base() {}
+	KmerMapGoogleSparse(long estimatedRawKmers): Base(estimatedRawKmers) {}
+	KmerMapGoogleSparse(const void *src) : Base(src) {}
+	KmerMapGoogleSparse(const Base &copy) : Base( (const Base&) copy ) {}
+	KmerMapGoogleSparse &operator=(const Base &other) {
+		*((Base*)this) = other;
+		return *this;
+	}
+	typedef typename Base::BucketType BucketType;
+
+};
+
+
 template<typename Value>
 class KmerMap : public KmerMapByKmerArrayPair<Value> {
 public:
 	typedef KmerMapByKmerArrayPair<Value> Base;
-	KmerMap(int numBuckets = 0) : Base(numBuckets) {}
+	KmerMap(): Base() {}
+	KmerMap(long estimatedRawKmers) : Base(estimatedRawKmers) {}
 	KmerMap(const void *src) : Base(src) {}
 	KmerMap(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMap &operator=(const Base &other) {

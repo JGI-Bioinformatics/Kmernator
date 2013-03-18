@@ -194,13 +194,11 @@ int main(int argc, char *argv[]) {
 	LOG_VERBOSE(1, " loaded " << readSet2.getSize() << " Reads, "
 			<< readSet2.getBaseCount() << " Bases ");
 
-	long buckets = std::max(KS::estimateWeakKmerBucketSize(readSet1),
-			KS::estimateWeakKmerBucketSize(readSet2)) * 64;
+	long estimatedRawKmers = std::max(KS::estimateRawKmers(readSet1),
+			KS::estimateRawKmers(readSet2));
 
-	LOG_DEBUG(1, "Estimated bucket size: " << buckets );
-
-	KS ks1(buckets);
-	KS ks2(buckets);
+	KS ks1(estimatedRawKmers);
+	KS ks2(estimatedRawKmers);
 	ks1.setSolidOnly();
 	ks2.setSolidOnly();
 

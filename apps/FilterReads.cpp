@@ -122,10 +122,10 @@ int main(int argc, char *argv[]) {
 			spectrum.restoreMmap(KmerSpectrumOptions::getOptions().getLoadKmerMmap());
 		} else if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 
-			long numBuckets = KS::estimateWeakKmerBucketSize(reads);
-			LOG_DEBUG(1, "targeting " << numBuckets << " buckets for reads ");
+			long rawKmers = KS::estimateRawKmers(reads);
+			LOG_DEBUG(1, "targeting " << rawKmers << " raw kmers for reads ");
 
-			spectrum = KS(numBuckets);
+			spectrum = KS(rawKmers);
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 			spectrumMmaps = spectrum.buildKmerSpectrumInParts(reads, KmerSpectrumOptions::getOptions().getBuildPartitions(), outputFilename.empty() ? "" : outputFilename + "-mmap");

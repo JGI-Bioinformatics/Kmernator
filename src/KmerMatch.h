@@ -96,7 +96,7 @@ public:
 	typedef DistributedKmerSpectrum< KmerMap< TrackingDataWithAllReads >, KmerMap< TrackingDataWithAllReads >, KmerMap< TrackingDataSingletonWithReadPosition > > KS;
 
 	KmerMatch(mpi::communicator &world, const ReadSet &target)
-	: MatcherInterface(world, target), _spectrum(world, KS::estimateWeakKmerBucketSize(target)) {
+	: MatcherInterface(world, target), _spectrum(world, KS::estimateRawKmers(target)) {
 		assert(target.isGlobal());
 		_spectrum._buildKmerSpectrumMPI(target, false);
 		_spectrum.purgeMinDepth(KmerSpectrumOptions::getOptions().getMinDepth());

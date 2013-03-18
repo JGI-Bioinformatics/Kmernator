@@ -101,9 +101,9 @@ int main(int argc, char *argv[]) {
 			<< refReads.getBaseCount() << " Bases " << endl;
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	unsigned long numBuckets = KS::estimateWeakKmerBucketSize(refReads, 256);
-	cerr << "targeting " << numBuckets << " buckets for reference " << endl;
-	KS refSpectrum(numBuckets);
+	unsigned long rawKmers = KS::estimateRawKmers(refReads);
+	cerr << "targeting " << rawKmers << " raw kmers for reference " << endl;
+	KS refSpectrum(rawKmers);
 	refSpectrum.buildKmerSpectrum(refReads, true);
 	TrackingData::resetGlobalCounters();
 	cerr << MemoryUtils::getMemoryUsage() << endl;
@@ -127,10 +127,10 @@ int main(int argc, char *argv[]) {
 	}
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
-	numBuckets = KS::estimateWeakKmerBucketSize(reads, 64);
-	cerr << "targeting " << numBuckets << " buckets for reads " << endl;
+	rawKmers = KS::estimateRawKmers(reads);
+	cerr << "targeting " << rawKmers << " raw kmers for reads " << endl;
 
-	KS spectrum(numBuckets);
+	KS spectrum(rawKmers);
 	cerr << MemoryUtils::getMemoryUsage() << endl;
 
 
