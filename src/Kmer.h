@@ -750,8 +750,8 @@ public:
 	typedef Value ValueType;
 	static const IndexType MAX_INDEX = MAX_KMER_INDEX;
 	static const float GROWTH_FACTOR = 1.5;
-	static const IndexType MIN_GROWTH = 24;
-	static const IndexType MAX_UNSORTED = MIN_GROWTH;
+	static const IndexType MIN_GROWTH = 48;
+	static const IndexType MAX_UNSORTED = 16;
 
 	typedef std::vector< KmerArrayPair > Vector;
 	typedef KmerElementPair<ValueType> BaseElementType;
@@ -3273,9 +3273,21 @@ public:
 
 #include <sparsehash/sparse_hash_map>
 template<typename Value>
-class KmerMapGoogleSparse : public KmerMapBySTLMap<Value, google::sparse_hash_map<KmerInstance, Value, KmerHasher> > {
+class GSHWrapper : public google::sparse_hash_map<KmerInstance, Value, KmerHasher> {
 public:
-	typedef KmerMapBySTLMap<Value, google::sparse_hash_map<KmerInstance, Value, KmerHasher> > Base;
+	typedef google::sparse_hash_map<KmerInstance, Value, KmerHasher> Base;
+	typedef typename Base::mapped_type mapped_type;
+	typedef typename Base::iterator iterator;
+	typedef typename Base::size_type size_type;
+	GSHWrapper(size_type n = 0): Base(n) {}
+	void reserve(size_type n) { this->resize(n); }
+	void erase(iterator pos) { pos->second = mapped_type(); }
+
+};
+template<typename Value>
+class KmerMapGoogleSparse : public KmerMapBySTLMap<Value, GSHWrapper<Value> > {
+public:
+	typedef KmerMapBySTLMap<Value, GSHWrapper<Value> > Base;
 	KmerMapGoogleSparse(): Base() {}
 	KmerMapGoogleSparse(long estimatedRawKmers): Base(estimatedRawKmers) {}
 	KmerMapGoogleSparse(const void *src) : Base(src) {}
@@ -3285,6 +3297,7 @@ public:
 		return *this;
 	}
 	typedef typename Base::BucketType BucketType;
+
 
 };
 
