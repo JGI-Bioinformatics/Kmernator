@@ -402,10 +402,10 @@ public:
 	static WeightType maxWeightedCount;
 	static bool useWeightedByDefault;
 
-
-	protected:
+protected:
 	CountType count;
 	WeightType weightedCount;
+
 
 	public:
 	TrackingData() :
@@ -503,6 +503,8 @@ class TrackingDataWithDirection: public TrackingData {
 public:
 
 protected:
+	TrackingData::count;
+	TrackingData::weightedCount;
 	CountType directionBias;
 
 public:
@@ -552,6 +554,9 @@ class TrackingDataWithLastRead: public TrackingDataWithDirection {
 public:
 
 protected:
+	TrackingDataWithDirection::count;
+	TrackingDataWithDirection::weightedCount;
+	TrackingDataWithDirection::directionBias;
 	ReadPosition readPosition;
 
 public:
@@ -619,6 +624,10 @@ protected:
 
 public:
 	TrackingDataSingleton() : _weight(0) {}
+	TrackingDataSingleton &operator=(const TrackingDataSingleton &other) {
+		_weight = other._weight;
+		return *this;
+	}
 	void reset() {
 		TrackingData::resetForGlobals(getCount());
 		_weight = 0;
@@ -691,6 +700,10 @@ protected:
 public:
 	TrackingDataSingletonWithReadPosition() :
 		instance(0, 0, 0.0) {
+	}
+	TrackingDataSingletonWithReadPosition &operator=(const TrackingDataSingletonWithReadPosition &other) {
+		instance = other.instance;
+		return *this;
 	}
 
 	void reset() {
@@ -781,7 +794,6 @@ public:
 	TrackingDataWithAllReads() :
 		instances(new ReadPositionWeightVector()), directionBias(0), weightedCount(0.0) {
 	}
-
 	void reset() {
 		TrackingData::resetForGlobals(getCount());
 		instances->clear();
@@ -868,10 +880,14 @@ public:
 		<< ((double) getWeightedCount() / (double) getCount());
 		return ss.str();
 	}
+	void swap(TrackingDataWithAllReads &other) {
+		instances.swap(other.instances);
+		std::swap(directionBias, other.directionBias);
+		std::swap(weightedCount, other.weightedCount);
+	}
 	TrackingDataWithAllReads &operator=(const TrackingDataWithAllReads &copy) {
 		this->reset();
 		return add(copy);
-		return *this;
 	}
 	template<typename U>
 	TrackingDataWithAllReads &operator=(const U &other) {
@@ -904,6 +920,10 @@ public:
 };
 
 class TrackingDataSingletonWithReadPositionAndExtension : public TrackingDataSingletonWithReadPosition {
+protected:
+	TrackingDataSingletonWithReadPosition::instance;
+	ExtensionMessagePacket _extensionMsgPacket;
+
 public:
 	TrackingDataSingletonWithReadPositionAndExtension() : TrackingDataSingletonWithReadPosition(), _extensionMsgPacket() {}
 	TrackingDataSingletonWithReadPositionAndExtension(const TrackingDataSingletonWithReadPositionAndExtension &copy) {
@@ -930,10 +950,14 @@ public:
 		return extTrack;
 	}
 
-private:
-	ExtensionMessagePacket _extensionMsgPacket;
 };
 class TrackingDataWithAllReadsAndExtensions : public TrackingDataWithAllReads {
+protected:
+	TrackingDataWithAllReads::instances;
+	TrackingDataWithAllReads::directionBias;
+	TrackingDataWithAllReads::weightedCount;
+	ExtensionTracking _extensionTracking;
+
 public:
 	TrackingDataWithAllReadsAndExtensions() : TrackingDataWithAllReads(), _extensionTracking() {}
 	TrackingDataWithAllReadsAndExtensions(const TrackingDataWithAllReadsAndExtensions &copy) {
@@ -969,8 +993,6 @@ public:
 		return *this;
 	}
 
-private:
-	ExtensionTracking _extensionTracking;
 };
 
 std::ostream &operator<<(std::ostream &stream, TrackingData &ob);

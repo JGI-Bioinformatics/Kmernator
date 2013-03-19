@@ -65,6 +65,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <boost/shared_ptr.hpp>
 #include <boost/cstdint.hpp>
 #include <boost/thread.hpp>
+#include <boost/lockfree/queue.hpp>
 
 #include "config.h"
 #include "Options.h"
@@ -1672,17 +1673,19 @@ public:
 	void resort(std::vector< IndexType > &passingIndexes, bool reserveExtra = false) {
 		std::sort(passingIndexes.begin(), passingIndexes.end(), CompareArrayIdx(*this));
 
-		KmerArrayPair s;
+		KAPPtr s = popTmp();
+		s->clear(false);
 		IndexType passingSize = passingIndexes.size();
 		IndexType newSize = passingSize + (reserveExtra ? std::max((IndexType) (passingSize * GROWTH_FACTOR + 0.5), (IndexType) (passingSize + MIN_GROWTH)) : 0);
 		newSize = std::max(newSize, _capacity);
-		s.reserve(newSize);
+		s->reserve(newSize);
 
 		for(IndexType i = 0; i < passingSize; i++)
-			s.append(get(passingIndexes[i]), valueAt(passingIndexes[i]));
+			s->append(get(passingIndexes[i]), valueAt(passingIndexes[i]));
 
-		s._endSorted = passingSize;
-		swap(s);
+		s->_endSorted = passingSize;
+		swap(*s);
+		pushTmp(s);
 		LOG_DEBUG(5, "resort()" << _endSorted << ", " << size() << ", " << passingSize << " on " << this);
 		assert(_endSorted <= size());
 	}
@@ -1814,7 +1817,55 @@ public:
 	ConstIterator begin() const {return ConstIterator(this,0);}
 	ConstIterator end() const {return ConstIterator(this,size());}
 
+public:
+	// temporary cache to accelerate reuse of memory
+	typedef std::auto_ptr< KmerArrayPair > KAPPtr;
+	static KAPPtr popTmp() {
+		KmerArrayPair *tmp;
+		if (!getTmpQueue().pop(tmp)) {
+			tmp = new KmerArrayPair();
+		}
+		return KAPPtr(tmp);
+	}
+	static bool pushTmp(KAPPtr tmp) {
+		if (tmp.get() == NULL)
+			return false;
+		KmerArrayPair *_tmp = tmp.release();
+		if (getTmpQueue().bounded_push(_tmp)) {
+			return true;
+		} else {
+			delete _tmp;
+			return false;
+		}
+	}
+	static void clearTmp() {
+		KmerArrayPair *tmp;
+		while (getTmpQueue().pop(tmp))
+			if (tmp != NULL)
+				delete tmp;
+	}
+	static void initTmp() {
+		getTmpQueue();
+	}
+private:
+	typedef boost::lockfree::queue< KmerArrayPair *, boost::lockfree::fixed_sized<true> > KAPPtrQueue;
+	typedef std::auto_ptr< KAPPtrQueue > KAPPtrQueuePtr;
+	static KAPPtrQueuePtr tmpQueue;
+	static KAPPtrQueue &getTmpQueue() {
+		if (tmpQueue.get() == NULL) {
+			tmpQueue.reset( new KAPPtrQueue(64) );
+			assert(tmpQueue.get() != NULL);
+			assert(tmpQueue->empty());
+			KmerArrayPair *x = NULL;
+			assert(!tmpQueue->pop(x));
+			assert(x == NULL);
+		}
+		return *tmpQueue;
+	}
 };
+
+template<typename Value>
+typename KmerArrayPair<Value>::KAPPtrQueuePtr KmerArrayPair<Value>::tmpQueue;
 
 template<typename Iterator, typename Value>
 class KmerPairIteratorWrapper {
@@ -2684,7 +2735,8 @@ public:
 
 	// typedef propagation
 
-	typedef BucketExposedMap<Kmer, Value, KmerArrayPair<Value>, KmerHasher > Base;
+	typedef KmerArrayPair<Value> KAP;
+	typedef BucketExposedMap<Kmer, Value, KAP, KmerHasher > Base;
 	typedef typename Kmer::NumberType    NumberType;
 	typedef typename Kmer::IndexType     IndexType;
 	typedef typename Kmer::SizeType      SizeType;
@@ -2713,13 +2765,16 @@ private:
 public:
 	KmerMapByKmerArrayPair() : Base() {
 		_isSorted = defaultSort;
+		KAP::initTmp();
 	}
 	KmerMapByKmerArrayPair(long estimatedRawKmers) : Base(estimatedRawKmers / KmerBaseOptions::getOptions().getKmersPerBucket() + 1, KmerBaseOptions::getOptions().getKmersPerBucket()) {
 		_isSorted = defaultSort;
+		KAP::initTmp();
 	}
 	virtual ~KmerMapByKmerArrayPair()
 	{
 		clear();
+		KAP::clearTmp();
 	}
 	KmerMapByKmerArrayPair &operator=(const KmerMapByKmerArrayPair &other) {
 		*((Base*)this) = (const Base&) other;
@@ -2934,15 +2989,6 @@ public:
 	Iterator endThreaded() {
 		return end();
 	}
-/*
-	// iterators
-	Base::Iterator;
-	Base::ConstIterator;
-	Base::begin;
-	Base::end;
-	Base::beginThreaded;
-	Base::endThreaded;
-*/
 
 	// other methods
 	Base::size;
