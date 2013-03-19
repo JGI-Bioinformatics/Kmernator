@@ -136,6 +136,7 @@ private:
 	static void initGCTable();
 	static void initShiftLeftMatrix();
 	static void initUncompressSequenceLookupTable();
+	static void initCompressSequenceLookupTable();
 
 public:
 	static TwoBitEncoding bitMasks[8];
@@ -144,10 +145,14 @@ public:
 	static SequenceLengthType  gcCount[256];
 	static TwoBitEncoding shiftLeftMatrix[3][65536];
 	static char uncompressSequenceLookupTable[256][4];
+	static unsigned char compressSequenceLookupTable[128];
 
+	static const unsigned char END_OF_TWO_BIT_SEQUENCE = 254;
+	static const unsigned char INVALID_BASE = 255;
 public:
 	static char uncompressBase(unsigned int v);
 	static unsigned char compressBase(char base);
+	static unsigned char compressBase_slower(char base);
 
 	// NULL for out is okay to just get markups
 	static BaseLocationVectorType compressSequence(const char *bases,TwoBitEncoding *out);

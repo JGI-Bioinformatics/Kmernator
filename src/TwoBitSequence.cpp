@@ -111,7 +111,18 @@ char TwoBitSequence::uncompressBase(unsigned int v) {
 	return bases[v];
 }
 
+unsigned char TwoBitSequence::compressSequenceLookupTable[128];
+void TwoBitSequence::initCompressSequenceLookupTable() {
+	for(int base = 0; base < 128; base++) {
+		unsigned char compressedBase = compressBase_slower((char) base);
+		compressSequenceLookupTable[(unsigned char) base] = compressedBase;
+	}
+}
 unsigned char TwoBitSequence::compressBase(char base) {
+	assert((unsigned char) base < 128 && (unsigned char) base >= 0);
+	return compressSequenceLookupTable[(unsigned char) base];
+}
+unsigned char TwoBitSequence::compressBase_slower(char base) {
 	switch (base) {
 	case 'A':
 	case 'a':
@@ -126,9 +137,9 @@ unsigned char TwoBitSequence::compressBase(char base) {
 	case 't':
 		return 3;
 	case '\0':
-		return 254;
+		return END_OF_TWO_BIT_SEQUENCE;
 	default:
-		return 255;
+		return INVALID_BASE;
 	}
 }
 
@@ -142,6 +153,7 @@ TwoBitSequence::TwoBitSequence() {
 	TwoBitSequence::initGCTable();
 	TwoBitSequence::initShiftLeftMatrix();
 	TwoBitSequence::initUncompressSequenceLookupTable();
+	TwoBitSequence::initCompressSequenceLookupTable();
 }
 
 /* initialize reverse complement table
@@ -235,10 +247,10 @@ BaseLocationVectorType TwoBitSequence::compressSequence(const char *bases,
 		TwoBitEncoding c = 0;
 		for (int i = 6; i >= 0 && *bases; i -= 2) {
 			TwoBitEncoding cbase = compressBase(bases[offset]);
-			if (cbase == 254)
+			if (cbase == END_OF_TWO_BIT_SEQUENCE)
 				break;
 
-			if (cbase == 255) {
+			if (cbase == INVALID_BASE) {
 				char base = bases[offset];
 				// translate . to N
 				if (base == '.')

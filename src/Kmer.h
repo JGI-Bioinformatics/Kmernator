@@ -78,10 +78,6 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 using namespace TwoBitSequenceBase;
 
-#ifndef MAX_KMER_SIZE
-#define MAX_KMER_SIZE 1024
-#endif
-
 typedef boost::shared_ptr<TwoBitEncoding> KmerSharedPtr;
 
 class KmerSizer {
@@ -134,7 +130,7 @@ public:
 class _KmerBaseOptions : public OptionsBaseInterface {
 public:
 	_KmerBaseOptions(SequenceLengthType defaultKmerSize = KmerSizer::getSequenceLength())
-	: kmerSize(defaultKmerSize), kmersPerBucket(64) {
+	: kmerSize(defaultKmerSize), kmersPerBucket(32) {
 	}
 	~_KmerBaseOptions() {}
 	void _resetOptions() {
@@ -382,11 +378,6 @@ public:
 protected:
 	Kmer(); // never construct, just use as cast
 
-#ifdef STRICT_MEM_CHECK
-	TwoBitEncoding _someData[MAX_KMER_SIZE]; // need somedata to hold a pointer and a large amount to avoid memory warnings
-	const void *_data() const {return _someData;}
-	void *_data() {return _someData;}
-#else
 	// No data for you!!!
 	const void *_data() const {
 		return this;
@@ -394,11 +385,10 @@ protected:
 	void *_data() {
 		return this;
 	}
-#endif
 
 };
 
-#define MAX_KMER_INSTANCE_BYTES 128
+#define MAX_KMER_INSTANCE_BYTES 24
 class KmerInstance {
 public:
 	typedef Kmer Base;
@@ -2996,7 +2986,6 @@ public:
 	// Sorted KmerArrayPair specializations
 public:
 	static const bool defaultSort = false;
-	static const IndexType MAX_UNSORTED = 24;
 
 private:
 	bool _isSorted;
@@ -3261,7 +3250,7 @@ class KmerMapBoost : public KmerMapBySTLMap<Value, boost::unordered_map<KmerInst
 public:
 	typedef KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, KmerHasher> > Base;
 	KmerMapBoost() : Base() {}
-	KmerMapBoost(long estimatedRawKmers) : Base(estimatedRawKmers) {}
+	KmerMapBoost(long estimatedRawKmers) : Base(4*estimatedRawKmers) {} // allocate 4x the buckets we think we need...
 	KmerMapBoost(const void *src) : Base(src) {}
 	KmerMapBoost(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMapBoost &operator=(const Base &other) {
@@ -3289,7 +3278,7 @@ class KmerMapGoogleSparse : public KmerMapBySTLMap<Value, GSHWrapper<Value> > {
 public:
 	typedef KmerMapBySTLMap<Value, GSHWrapper<Value> > Base;
 	KmerMapGoogleSparse(): Base() {}
-	KmerMapGoogleSparse(long estimatedRawKmers): Base(estimatedRawKmers) {}
+	KmerMapGoogleSparse(long estimatedRawKmers): Base(8*estimatedRawKmers) {} // allocate 8x the buckets we think we need
 	KmerMapGoogleSparse(const void *src) : Base(src) {}
 	KmerMapGoogleSparse(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMapGoogleSparse &operator=(const Base &other) {
@@ -3297,15 +3286,15 @@ public:
 		return *this;
 	}
 	typedef typename Base::BucketType BucketType;
-
-
 };
 
 
 template<typename Value>
 class KmerMap : public KmerMapByKmerArrayPair<Value> {
+//class KmerMap : public KmerMapBySTLMap<Value, GSHWrapper<Value> > {
 public:
 	typedef KmerMapByKmerArrayPair<Value> Base;
+//	typedef KmerMapBySTLMap<Value, GSHWrapper<Value> > Base;
 	KmerMap(): Base() {}
 	KmerMap(long estimatedRawKmers) : Base(estimatedRawKmers) {}
 	KmerMap(const void *src) : Base(src) {}

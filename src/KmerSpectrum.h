@@ -90,7 +90,7 @@ using namespace boost::accumulators;
 class _KmerSpectrumOptions;
 class _KmerSpectrumOptions : public OptionsBaseInterface {
 public:
-	_KmerSpectrumOptions() : minKmerQuality(0.10), minDepth(2), estimatedDepth(20.), estimatedErrorRate(0.10),
+	_KmerSpectrumOptions() : minKmerQuality(0.10), minDepth(2), estimatedDepth(20.), estimatedErrorRate(0.35),
 		saveKmerMmap(false), loadKmerMmap(),
 		buildPartitions(0), kmerSubsample(1),
 		variantSigmas(-1.0), minVariantKmerDepth(512), variantHammingDistance(2),
