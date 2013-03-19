@@ -2364,7 +2364,6 @@ public:
 	typedef typename BEML::BucketsVector BucketsVector;
 	typedef typename BEML::BucketsVectorIterator BucketsVectorIterator;
 
-
 	typedef KmerElementPair<ValueType> BaseElementType;
 	typedef BaseElementType ElementType;
 
@@ -3269,7 +3268,9 @@ public:
 	typedef typename Base::iterator iterator;
 	typedef typename Base::size_type size_type;
 	GSHWrapper(size_type n = 0): Base(n) {}
+	// GSH has no reserve method, but resize acts the same
 	void reserve(size_type n) { this->resize(n); }
+	// erase is not supported by GSH without a deleted_key...
 	void erase(iterator pos) { pos->second = mapped_type(); }
 
 };

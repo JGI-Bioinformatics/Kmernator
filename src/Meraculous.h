@@ -82,10 +82,12 @@ typedef ExtensionTrackingDataSingleton SingletonDataType;
 
 
 //typedef BucketExposedMap<KmerInstance, DataType, boost::unordered_map<KmerInstance, DataType, KmerHasher>, KmerHasher > MapType;
-typedef KmerMap< DataType > DefaultMapType;
-typedef KmerMap< SingletonDataType > SDefaultMapType;
+//typedef KmerMap< DataType > DefaultMapType;
+//typedef KmerMap< SingletonDataType > SDefaultMapType;
 //typedef KmerMapBoost< DataType > DefaultMapType;
 //typedef KmerMapBoost< SingletonDataType > SDefaultMapType;
+typedef KmerMapGoogleSparse< DataType > DefaultMapType;
+typedef KmerMapGoogleSparse< SingletonDataType > SDefaultMapType;
 
 typedef DefaultMapType MapType;
 typedef SDefaultMapType SMapType;

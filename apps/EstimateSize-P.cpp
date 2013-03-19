@@ -66,10 +66,9 @@ using namespace std;
 
 #include "DistributedFunctions.h"
 
-typedef TrackingDataWithDirection DataType;
-typedef KmerMap< DataType > MapType;
-typedef DistributedKmerSpectrum<MapType, MapType> KS;
-typedef DistributedReadSelector<DataType> RS;
+typedef TrackingDataMinimal1 DataType;
+typedef KmerMapGoogleSparse< DataType > MapType;
+typedef DistributedKmerSpectrum<MapType, MapType, MapType> KS;
 
 class _MPIEstimateSizeOptions: public OptionsBaseInterface {
 public:

@@ -65,11 +65,11 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 using namespace std;
 typedef TrackingDataMinimal4f DataType;
-typedef KmerMap< DataType > MapType;
+typedef KmerMapGoogleSparse< DataType > MapType;
 typedef KmerSpectrum<MapType, MapType> KS;
 
-typedef KmerMap< TrackingDataWithAllReads > MapType2;
-typedef KmerSpectrum< MapType2, MapType2 > KS2;
+typedef KmerMapGoogleSparse< TrackingDataWithAllReads > MapType2;
+typedef KmerSpectrum< MapType2, MapType2, TrackingDataSingletonWithReadPosition > KS2;
 
 
 class _DistributedNucleatingAssemblerOptions: public OptionsBaseInterface {

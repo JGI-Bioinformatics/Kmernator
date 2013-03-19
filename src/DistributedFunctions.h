@@ -741,13 +741,13 @@ public:
 
 
 
-template<typename M>
-class DistributedReadSelector : public ReadSelector<M>
+template<typename Map>
+class DistributedReadSelector : public ReadSelector<Map>
 {
 public:
-	typedef ReadSelector<M> RS;
-	typedef M DataType;
-	typedef typename RS::KMType KMType;
+	typedef ReadSelector<Map> RS;
+	typedef Map KMType;
+	typedef typename RS::DataType DataType;
 	typedef typename RS::ScoreType ScoreType;
 	typedef typename RS::ReadSetSizeType ReadSetSizeType;
 	typedef typename RS::ReadTrimType ReadTrimType;

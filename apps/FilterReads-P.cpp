@@ -53,9 +53,11 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "DistributedFunctions.h"
 
 typedef TrackingDataWithDirection DataType;
-typedef KmerMap< DataType > MapType;
-typedef DistributedKmerSpectrum<MapType, MapType> KS;
-typedef DistributedReadSelector<DataType> RS;
+typedef TrackingDataSingleton SDataType;
+typedef KmerMapGoogleSparse< DataType > MapType;
+typedef KmerMapGoogleSparse< SDataType > SMapType;
+typedef DistributedKmerSpectrum<MapType, MapType, SMapType> KS;
+typedef DistributedReadSelector< MapType > RS;
 
 class _MPIFilterReadsOptions : public OptionsBaseInterface {
 public:
@@ -78,6 +80,12 @@ public:
 		ret &= FilterReadsBaseOptions::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
 
+		if (KmerSpectrumOptions::getOptions().getSaveKmerMmap() || !KmerSpectrumOptions::getOptions().getLoadKmerMmap().empty()) {
+			if (Logger::isMaster())
+				LOG_WARN(1, "FilterReads-P can no longer load and save the kmer-map to disk.");
+			KmerSpectrumOptions::getOptions().getSaveKmerMmap() = false;
+			KmerSpectrumOptions::getOptions().getLoadKmerMmap().clear();
+		}
 		return ret;
 	}
 };
@@ -205,12 +213,13 @@ int main(int argc, char *argv[]) {
 				world.barrier();
 
 			}
-
+/*
+ * TODO Reimplement the ability to store and restore GoogleSparse maps...
 			if (!outputFilename.empty() && KmerSpectrumOptions::getOptions().getSaveKmerMmap() > 0) {
 				spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
 				LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
 			}
-
+*/
 			if (KmerSpectrumOptions::getOptions().getMinDepth() > 1) {
 				LOG_DEBUG_GATHER(1, "Clearing singletons from memory");
 				spectrum.singleton.clear();

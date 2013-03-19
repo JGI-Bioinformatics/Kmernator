@@ -229,7 +229,7 @@ public:
 
 };
 
-template<typename M>
+template<typename Map>
 class ReadSelector {
 public:
 	typedef Sequence::SequenceLengthType SequenceLengthType;
@@ -295,13 +295,12 @@ public:
 			}
 		}
 	};
-	typedef M DataType;
+	typedef Map KMType;
+	typedef typename KMType::ValueType DataType;
 	typedef typename DataType::ReadPositionWeightVector ReadPositionWeightVector;
-	typedef KmerMap<DataType> KMType;
-	typedef KmerMap<unsigned char> KmerCountMap;
+	typedef KmerMapGoogleSparse<unsigned char> KmerCountMap;
 	typedef typename KMType::ConstIterator KMIterator;
 	typedef typename KMType::ElementType ElementType;
-	typedef KmerMap<unsigned short> KMCacheType;
 	typedef std::vector< ReadTrimType > ReadTrimVector;
 	typedef typename ReadSet::ReadIdxVector ReadIdxVector;
 	typedef ReadIdxVector PicksVector;

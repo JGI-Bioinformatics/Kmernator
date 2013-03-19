@@ -509,39 +509,25 @@ void testKmerArray(SequenceLengthType size) {
 
 }
 
-template<typename T>
+template<typename Map>
 class Tester {
 public:
-	typedef KmerMap<T> Map;
-	typedef typename KmerMap<T>::ElementType ElementType;
+
 	Map &kmerF;
 	Tester(Map map) :
 		kmerF(map) {
 
 	}
-
-	void operator()(ElementType &e) {
+	template<typename U>
+	void operator()(U &e) {
 		BOOST_CHECK(kmerF.exists(e.key()));
 		BOOST_CHECK_EQUAL(kmerF[e.key()], e.value());
 	}
 };
 
-void testKmerMap(SequenceLengthType size) {
-	std::string
-	A("ACGTCGTAACGTCGTA"),
-	B("TACGACGTTACGACGT"),
-	C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
-	SET_KMERS(A.c_str(), B.c_str(), C.c_str());
-	KmerSizer::set(size);
-
-	// test KmerMap construction, destruction
-	// test insert, find, delete
-
-	KmerArrayPair<char> kmersC(twoBit3, C.length());
-
-	KmerMap<float> kmerF(4);
-	typedef std::pair<unsigned short, float> Pair;
-	KmerMap<Pair> kmerP(8);
+template<typename MapV, typename MapPairV>
+void initTestKmerMap(MapV &kmerF, MapPairV &kmerP, const KmerArrayPair<char> &kmersC) {
+	typedef typename MapPairV::mapped_type Pair;
 
 	for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
 		kmerF[kmersC[i]] = i * 2.0;
@@ -554,8 +540,31 @@ void testKmerMap(SequenceLengthType size) {
 		//BOOST_MESSAGE ( kmerF.toString() );
 	}
 
+}
+template<typename MapV, typename MapPairV>
+void testStore(SequenceLengthType size) {
+
+	std::string
+	A("ACGTCGTAACGTCGTA"),
+	B("TACGACGTTACGACGT"),
+	C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+	SET_KMERS(A.c_str(), B.c_str(), C.c_str());
+	KmerSizer::set(size);
+
+	// test KmerMap construction, destruction
+	// test insert, find, delete
+
+	KmerArrayPair<char> kmersC(twoBit3, C.length());
 	Kmer::IndexType s = kmersC.size();
 	BOOST_CHECK_EQUAL(s, kmersC.size());
+
+
+	typedef typename MapV::Iterator MapVIterator;
+	MapV kmerF(4);
+	MapPairV kmerP(8);
+
+
+	initTestKmerMap(kmerF, kmerP, kmersC);
 
 	Kmernator::MmapFile mmapF = kmerF.store();
 	BOOST_CHECK(mmapF.is_open());
@@ -566,11 +575,11 @@ void testKmerMap(SequenceLengthType size) {
 
 	{
 
-		KmerMap<float> kmf = KmerMap<float>::restore(mmapF.data());
-		KmerMap<Pair>  kmp = KmerMap<Pair>::restore(mmapP.data());
+		MapV kmf = MapV::restore(mmapF.data());
+		MapPairV  kmp = MapPairV::restore(mmapP.data());
 
-		KmerMap<float> kcf(mmapF.data());
-		KmerMap<Pair>  kcp(mmapP.data());
+		MapV kcf(mmapF.data());
+		MapPairV  kcp(mmapP.data());
 
 		for (Kmer::IndexType i = 0; i < kmersC.size(); i++) {
 			Kmer &kmer = kmersC[i];
@@ -582,6 +591,30 @@ void testKmerMap(SequenceLengthType size) {
 			BOOST_CHECK_EQUAL( kmerP[kmer].second, kcp[kmer].second );
 		}
 	}
+
+}
+template<typename MapV, typename MapPairV>
+void testKmerMap(SequenceLengthType size) {
+	std::string
+	A("ACGTCGTAACGTCGTA"),
+	B("TACGACGTTACGACGT"),
+	C("AAAACCCCGGGGTTTTTACGTCGTAGTACTACGAAAACCCCGGGGTTTTACGTCGTAGTACTACG");
+	SET_KMERS(A.c_str(), B.c_str(), C.c_str());
+	KmerSizer::set(size);
+
+	// test KmerMap construction, destruction
+	// test insert, find, delete
+
+	KmerArrayPair<char> kmersC(twoBit3, C.length());
+	Kmer::IndexType s = kmersC.size();
+	BOOST_CHECK_EQUAL(s, kmersC.size());
+
+	typedef typename MapPairV::mapped_type Pair;
+	typedef typename MapV::Iterator MapVIterator;
+	MapV kmerF(4);
+	MapPairV kmerP(8);
+
+	initTestKmerMap(kmerF, kmerP, kmersC);
 
 	kmerF.clear();
 	kmerP.clear();
@@ -604,10 +637,10 @@ void testKmerMap(SequenceLengthType size) {
 		BOOST_CHECK(i * 3.0 >= kmerP[kmersC[i]].second);
 	}
 
-	std::for_each(kmerF.begin(), kmerF.end(), Tester<float>(kmerF));
+	std::for_each(kmerF.begin(), kmerF.end(), Tester< MapV >(kmerF));
 
 	Kmer::IndexType count = 0;
-	for (KmerMap<float>::Iterator it = kmerF.begin(); it != kmerF.end(); it++) {
+	for (MapVIterator it = kmerF.begin(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
 		count++;
@@ -619,7 +652,7 @@ void testKmerMap(SequenceLengthType size) {
 
 	countThread = 0;
 #pragma omp parallel num_threads(1) reduction(+: countThread)
-	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+	for(MapVIterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
 		countThread++;
@@ -628,7 +661,7 @@ void testKmerMap(SequenceLengthType size) {
 
 	countThread = 0;
 #pragma omp parallel num_threads(2) reduction(+: countThread)
-	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+	for(MapVIterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
 		countThread++;
@@ -637,7 +670,7 @@ void testKmerMap(SequenceLengthType size) {
 
 	countThread = 0;
 #pragma omp parallel num_threads(3) reduction(+: countThread)
-	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+	for(MapVIterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
 		countThread++;
@@ -646,7 +679,7 @@ void testKmerMap(SequenceLengthType size) {
 
 	countThread = 0;
 #pragma omp parallel num_threads(4) reduction(+: countThread)
-	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+	for(MapVIterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
 		countThread++;
@@ -655,7 +688,7 @@ void testKmerMap(SequenceLengthType size) {
 
 	countThread = 0;
 #pragma omp parallel num_threads(7) reduction(+: countThread)
-	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+	for(MapVIterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
 		countThread++;
@@ -664,7 +697,7 @@ void testKmerMap(SequenceLengthType size) {
 
 	countThread = 0;
 #pragma omp parallel num_threads(31) reduction(+: countThread)
-	for(KmerMap<float>::Iterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
+	for(MapVIterator it = kmerF.beginThreaded(); it != kmerF.end(); it++) {
 		BOOST_CHECK(kmerF.exists(it->key()));
 		BOOST_CHECK_EQUAL(kmerF[it->key()], it->value());
 		countThread++;
@@ -699,17 +732,64 @@ BOOST_AUTO_TEST_CASE( KmerSetTest )
 	testKmerArray(11);
 	testKmerArray(12);
 
-	testKmerMap(1);
-	testKmerMap(2);
-	testKmerMap(3);
-	testKmerMap(4);
-	testKmerMap(5);
-	testKmerMap(6);
-	testKmerMap(7);
-	testKmerMap(8);
-	testKmerMap(9);
-	testKmerMap(10);
-	testKmerMap(11);
-	testKmerMap(12);
+	{
+	typedef KmerMapByKmerArrayPair<float> M1;
+	typedef KmerMapByKmerArrayPair< std::pair<unsigned int, float> > MP;
+	testKmerMap<M1,MP>(1);
+	testKmerMap<M1,MP>(2);
+	testKmerMap<M1,MP>(3);
+	testKmerMap<M1,MP>(5);
+	testKmerMap<M1,MP>(6);
+	testKmerMap<M1,MP>(7);
+	testKmerMap<M1,MP>(8);
+	testKmerMap<M1,MP>(9);
+	testKmerMap<M1,MP>(10);
+	testKmerMap<M1,MP>(11);
+	testKmerMap<M1,MP>(12);
+
+	testStore<M1,MP>(1);
+	testStore<M1,MP>(2);
+	testStore<M1,MP>(3);
+	testStore<M1,MP>(5);
+	testStore<M1,MP>(6);
+	testStore<M1,MP>(7);
+	testStore<M1,MP>(8);
+	testStore<M1,MP>(9);
+	testStore<M1,MP>(10);
+	testStore<M1,MP>(11);
+	testStore<M1,MP>(12);
+	}
+
+	{
+	typedef KmerMapBoost<float> M1;
+	typedef KmerMapBoost< std::pair<unsigned int, float> > MP;
+	testKmerMap<M1,MP>(1);
+	testKmerMap<M1,MP>(2);
+	testKmerMap<M1,MP>(3);
+	testKmerMap<M1,MP>(5);
+	testKmerMap<M1,MP>(6);
+	testKmerMap<M1,MP>(7);
+	testKmerMap<M1,MP>(8);
+	testKmerMap<M1,MP>(9);
+	testKmerMap<M1,MP>(10);
+	testKmerMap<M1,MP>(11);
+	testKmerMap<M1,MP>(12);
+	}
+
+	{
+	typedef KmerMapGoogleSparse<float> M1;
+	typedef KmerMapGoogleSparse< std::pair<unsigned int, float> > MP;
+	testKmerMap<M1,MP>(1);
+	testKmerMap<M1,MP>(2);
+	testKmerMap<M1,MP>(3);
+	testKmerMap<M1,MP>(5);
+	testKmerMap<M1,MP>(6);
+	testKmerMap<M1,MP>(7);
+	testKmerMap<M1,MP>(8);
+	testKmerMap<M1,MP>(9);
+	testKmerMap<M1,MP>(10);
+	testKmerMap<M1,MP>(11);
+	testKmerMap<M1,MP>(12);
+	}
 
 }

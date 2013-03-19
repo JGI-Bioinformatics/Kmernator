@@ -52,7 +52,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 typedef TrackingDataWithDirection DataType;
 typedef KmerMap< DataType > MapType;
 typedef KmerSpectrum<MapType, MapType> KS;
-typedef ReadSelector<DataType> RS;
+typedef ReadSelector< MapType > RS;
 class _FilterReadsOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
