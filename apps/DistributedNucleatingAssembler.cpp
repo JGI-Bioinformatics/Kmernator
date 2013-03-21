@@ -68,10 +68,6 @@ typedef TrackingDataMinimal4f DataType;
 typedef KmerMapGoogleSparse< DataType > MapType;
 typedef KmerSpectrum<MapType, MapType> KS;
 
-typedef KmerMapGoogleSparse< TrackingDataWithAllReads > MapType2;
-typedef KmerSpectrum< MapType2, MapType2, TrackingDataSingletonWithReadPosition > KS2;
-
-
 class _DistributedNucleatingAssemblerOptions: public OptionsBaseInterface {
 public:
 	_DistributedNucleatingAssemblerOptions(): maxIterations(1000), maxContigLength(3000), maxContigsPerBatch(25) {}
@@ -290,7 +286,7 @@ std::string runPartialBatch(mpi::communicator world, boost::shared_ptr< MatcherI
         if (contigs.getGlobalSize() == 0)
 		return extendLog;
 
-	std::string contigFile = DistributedOfstreamMap::writeGlobalReadSet(world, contigs, ".tmp-batch.", boost::lexical_cast<std::string>(batchIdx), FormatOutput::Fasta());
+	std::string contigFile = DistributedOfstreamMap::writeGlobalReadSet(world, contigs, UniqueName::generateUniqueGlobalName(".tmp-batch", batchIdx), ".fasta", FormatOutput::Fasta());
 
 	MatcherInterface::MatchReadResults contigReadSet = matcher->match(contigs, contigFile);
 	assert(contigs.getSize() == contigReadSet.size());
