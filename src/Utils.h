@@ -199,13 +199,12 @@ class UniqueName {
 
 public:
 	typedef OptionsBaseInterface::StringListType StringListType;
-	static std::string generateUniqueGlobalName(std::string filename = "") {
-		filename += "-" + boost::lexical_cast<std::string>( getGlobalUnique() );
-		return filename;
+	static std::string generateUniqueGlobalName(std::string filename = "", int globalId = getGlobalUnique()) {
+		return filename + boost::lexical_cast<std::string>(globalId);
 	}
-	static std::string generateUniqueName(std::string filename = "") {
+	static std::string generateUniqueName(std::string filename = "", int id = getUnique()) {
 		filename += "-" + boost::lexical_cast<std::string>( getpid() );
-		filename += "-" + boost::lexical_cast<std::string>( getUnique() );
+		filename += "-" + boost::lexical_cast<std::string>( id );
 		filename += "-" + boost::lexical_cast<std::string>( omp_get_thread_num() );
 		filename += OptionsBaseInterface::getHostname();
 		return filename;
