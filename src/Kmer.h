@@ -184,8 +184,8 @@ class KmerHasher {
 public:
 	typedef Kmernator::KmerNumberType HashType;
 	typedef Kmernator::KmerNumberType NumberType;
-	static const int DMP_HASH_SHIFT = 14;
-	static const HashType DMP_HASH_MASK = 0xffff;
+	static const int DMP_HASH_SHIFT = 24;
+	static const HashType DMP_HASH_MASK = 0x8ffff;
 
 	// safely returns NumberType (64-bit) numeric version of any sized kmer
 	static NumberType toNumber(const void *ptr, int len) {
@@ -3256,8 +3256,10 @@ public:
 	Base::getBuckets;
 	Base::getBucketByIdx;
 	Base::getNumBuckets;
+
+	const static unsigned long KMbSTL_BUCKET_FACTOR = 65536;
 	KmerMapBySTLMap() : Base() {}
-	KmerMapBySTLMap(unsigned long estimatedRawKmers) : Base(omp_get_max_threads(), estimatedRawKmers / omp_get_max_threads()) {
+	KmerMapBySTLMap(unsigned long estimatedRawKmers, int numThreads = omp_get_max_threads()) : Base(numThreads * KMbSTL_BUCKET_FACTOR, estimatedRawKmers / KMbSTL_BUCKET_FACTOR / numThreads) {
 	}
 	KmerMapBySTLMap(const void *src) {
 		LOG_THROW("Unimplemented restore");
@@ -3288,8 +3290,9 @@ public:
 	typedef typename Base::ValueType ValueType;
 	typedef typename Base::Iterator Iterator;
 	typedef typename Base::ConstIterator ConstIterator;
+	const static int KMBM_OVER_ALLOCATE = 2; // allocate 2x the buckets we think we need
 	KmerMapBoost() : Base() {}
-	KmerMapBoost(unsigned long estimatedRawKmers) : Base(4*estimatedRawKmers) {} // allocate 4x the buckets we think we need...
+	KmerMapBoost(unsigned long estimatedRawKmers, int numThreads = omp_get_max_threads()) : Base(KMBM_OVER_ALLOCATE*estimatedRawKmers, numThreads) {}
 	KmerMapBoost(const void *src) : Base(src) {}
 	KmerMapBoost(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMapBoost &operator=(const Base &other) {
@@ -3306,7 +3309,7 @@ public:
 	typedef typename Base::mapped_type mapped_type;
 	typedef typename Base::iterator iterator;
 	typedef typename Base::size_type size_type;
-	GSHWrapper(unsigned long n = 0): Base(n) {}
+	GSHWrapper(unsigned long n = 0, int numThreads = omp_get_max_threads()): Base(n) {}
 	// GSH has no reserve method, but resize acts the same
 	void reserve(size_type n) { this->resize(n); }
 	// erase is not supported by GSH without a deleted_key...
@@ -3321,8 +3324,9 @@ public:
 	typedef typename Base::ValueType ValueType;
 	typedef typename Base::Iterator Iterator;
 	typedef typename Base::ConstIterator ConstIterator;
+	const static int KMGS_OVER_ALLOCATE = 8; // allocate 8x the buckets we think we need
 	KmerMapGoogleSparse(): Base() {}
-	KmerMapGoogleSparse(unsigned long estimatedRawKmers): Base(8*estimatedRawKmers) {} // allocate 8x the buckets we think we need
+	KmerMapGoogleSparse(unsigned long estimatedRawKmers, int numThreads = omp_get_max_threads()): Base(KMGS_OVER_ALLOCATE*estimatedRawKmers, numThreads) {}
 	KmerMapGoogleSparse(const void *src) : Base(src) {}
 	KmerMapGoogleSparse(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMapGoogleSparse &operator=(const Base &other) {
