@@ -363,6 +363,8 @@ public:
 	typedef typename SingletonMapType::BucketType SingletonBucketType;
 	typedef typename SingletonMapType::ValueType SingletonValueType;
 
+	typedef KmerHasher::HashType HashType;
+
 	typedef KmerArrayPair< SolidValueType > SolidKAP;
 	typedef KmerArrayPair< WeakValueType > WeakKAP;
 	typedef KmerArrayPair< SingletonValueType > SingletonKAP;
@@ -1698,7 +1700,7 @@ public:
 
 	void getThreadIds(Kmer &kmer, int &smpThreadId, int numSMPThreads, int &dmpThreadId, int numDmpThreads, bool isLeastComplement = false) {
 		// return the threads for weak / singleton map.
-		NumberType hash;
+		HashType hash;
 		if (isLeastComplement) {
 			hash = kmer.hash();
 		} else {
@@ -1707,17 +1709,16 @@ public:
 			hash = tmp.hash();
 		}
 		if (hasSolids) {
-			smpThreadId = solid.getLocalThreadId(hash, numSMPThreads);
-			dmpThreadId = solid.getDistributedThreadId(hash, numDmpThreads);
+			solid.getThreadIds(hash, smpThreadId, numSMPThreads, dmpThreadId, numDmpThreads);
 		} else {
-			smpThreadId = weak.getLocalThreadId(hash, numSMPThreads);
-			dmpThreadId = weak.getDistributedThreadId(hash, numDmpThreads);
+			weak.getThreadIds(hash, smpThreadId, numSMPThreads, dmpThreadId, numDmpThreads);
 		}
+		//LOG_DEBUG(1, "getThreadIds(" << kmer.toFasta() << " (" << hash << "), " << smpThreadId << ", " << numSMPThreads << ", " << dmpThreadId << ", " << numDmpThreads << ", " << isLeastComplement << " " << this << " " << weak.getNumBuckets());
 	}
 	// returns true if this is the correct distributed thread, and set the SMP threadId
 	inline bool getSMPThread( Kmer &kmer, int &smpThreadId, int numSMPThreads, int dmpThreadId, int numDmpThreads, bool isLeastComplement = false) {
 		// return the threads for weak / singleton map.
-		NumberType hash;
+		HashType hash;
 		if (isLeastComplement) {
 			hash = kmer.hash();
 		} else {
@@ -1725,6 +1726,7 @@ public:
 			kmer.buildLeastComplement(tmp);
 			hash = tmp.hash();
 		}
+		//LOG_DEBUG(1, "getSMPThread(" << kmer.toFasta() << " (" << hash << "), ilc: " << isLeastComplement);
 		if (hasSolids)
 			return solid.getLocalThreadId(hash, smpThreadId, numSMPThreads, dmpThreadId, numDmpThreads);
 		else
@@ -1733,7 +1735,7 @@ public:
 
 	inline int getSMPThread( Kmer &kmer, int numThreads, bool isLeastComplement = false) {
 		// return the smallest KmerMap in the spectrum's getLocalThreadId()
-		NumberType hash;
+		HashType hash;
 		if (isLeastComplement) {
 			hash = kmer.hash();
 		} else {
@@ -1741,6 +1743,7 @@ public:
 			kmer.buildLeastComplement(tmp);
 			hash = tmp.hash();
 		}
+		//LOG_DEBUG(1, "getSMPThread(" << kmer.toFasta() << " (" << hash << "), " << " numThreads: " << numThreads << " ilc: "<< isLeastComplement);
 		if (hasSolids)
 			return solid.getLocalThreadId(hash, numThreads);
 		else
@@ -1748,7 +1751,7 @@ public:
 
 	}
 	inline int getDMPThread( Kmer &kmer, NumberType numThreads, bool isLeastComplement = false ) {
-		NumberType hash;
+		HashType hash;
 		if (isLeastComplement) {
 			hash = kmer.hash();
 		} else {
@@ -1756,6 +1759,7 @@ public:
 			kmer.buildLeastComplement(tmp);
 			hash = tmp.hash();
 		}
+		//LOG_DEBUG(1, "getDMPThread(" << kmer.toFasta() << " (" << hash << "), " << " numThreads: " << numThreads << " ilc: "<< isLeastComplement);
 		if (hasSolids)
 			return solid.getDistributedThreadId(hash, numThreads);
 		else

@@ -98,7 +98,7 @@ void setGlobalReadSetConstants(mpi::communicator &world, ReadSet &store) {
 }
 
 
-template<typename So, typename We, typename Si = KmerMap< TrackingDataSingleton> >
+template<typename So, typename We, typename Si = KmerMapGoogleSparse< TrackingDataSingleton > >
 class DistributedKmerSpectrum : public KmerSpectrum<So, We, Si>
 {
 public:
@@ -124,6 +124,9 @@ protected:
 public:
 	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long estimatedRawKmers = 0, bool separateSingletons = true)
 	: KS(estimatedRawKmers, separateSingletons), world(_world, mpi::comm_duplicate) {
+		int numBuckets = this->weak.getNumBuckets();
+		assert(mpi::all_reduce(world, numBuckets, mpi::maximum<int>()) == numBuckets);
+		LOG_DEBUG(2, "DistributedKmerSpectrum() with " << numBuckets);
 	}
 	~DistributedKmerSpectrum() {
 	}
@@ -139,7 +142,7 @@ public:
 
 	static unsigned long estimateRawKmers(mpi::communicator &world, std::vector<std::string> filenames ) {
 		unsigned long estimatedKmers = 0;
-		for (int i = world.rank(); i < (int) filenames.size() && i < (int) world.size(); i += world.size())
+		for (int i = world.rank(); i < (int) filenames.size(); i += world.size())
 			estimatedKmers += KS::estimateRawKmers(filenames[i]);
 		estimatedKmers /= world.size();
 
@@ -378,8 +381,8 @@ public:
 			}
 			ReadSetSizeType myOffset = 0;
 			KmerReadUtils kru;
+			long progressCount = 0, progressMark = 1000000 / world.size();
 			while (isRunningInLoop) {
-				long progressCount = 0, progressMark = 1000000 / world.size();
 				Read batchReads[batchReadsSize];
 				ReadSetSizeType batchReadSetSize = 0;
 #pragma omp critical (readSmallBatch)
@@ -400,7 +403,9 @@ public:
 					ReadSetSizeType readIdx = batchReadIdx + myOffset;
 
 					if (loopThreadId == 0 && progressCount++ % progressMark == 0) {
-						LOG_VERBOSE_OPTIONAL(1, (progressCount-1) % world.size() == world.rank(), "distributed processing " << (readIdx * world.size()) << " reads. ");
+						long mark = (progressCount-1)/progressMark;
+						LOG_VERBOSE_OPTIONAL(1, mark % world.size() == world.rank(), "Building Kmers: distributed processing (approx) " << (readIdx * world.size()) << " reads. (mark: " << mark << ")");
+						LOG_DEBUG(1, "Building Kmers: mark: " << mark << " reads: " << readIdx << " memory: " << MemoryUtils::getMemoryUsage());
 					}
 
 					const Read &read = batchReads[ batchReadIdx ]; // store.getRead( readIdx );
@@ -441,6 +446,7 @@ public:
 			msgBuffers->finalize();
 
 		} // omp parallel
+		LOG_DEBUG(1, "Done building kmers");
 		LOG_VERBOSE(1, "Processed " << numReads << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
 
 		delete msgBuffers;

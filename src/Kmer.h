@@ -182,9 +182,12 @@ class KmerInstance;
 
 class KmerHasher {
 public:
+	typedef Kmernator::KmerNumberType HashType;
 	typedef Kmernator::KmerNumberType NumberType;
+	static const int DMP_HASH_SHIFT = 14;
+	static const HashType DMP_HASH_MASK = 0xffff;
 
-	// safely returns 64-bit numeric version of any sized kmer
+	// safely returns NumberType (64-bit) numeric version of any sized kmer
 	static NumberType toNumber(const void *ptr, int len) {
 		NumberType val;
 		if (len >= 8) {
@@ -201,16 +204,16 @@ public:
 		}
 		return val;
 	};
-	static NumberType getHash(const void *ptr, int length) {
+	static HashType getHash(const void *ptr, int length) {
 		// initialize it so something tasty
 		uint64_t hash = 0xDEADBEEF;
 
 		// Old hash algorithm, gave poor distribution, if I remember correctly
-		//		NumberType number = toNumber();
+		//		HashType number = toNumber();
 		//		return Lookup8::hash2(&number, 1, 0xDEADBEEF);
 
 		// Presently the act of caching the last hash takes longer than calculating it again
-		//		NumberType val = toNumber(ptr, length);
+		//		HashType val = toNumber(ptr, length);
 		//		MicroCache &mc = getThreadCache();
 		//		if (mc.isCached(ptr,length,val,hash))
 		//			return hash;
@@ -225,8 +228,8 @@ public:
 
 		return hash; // The same thing as the recommended mixing: return *pc + (((uint64_t)*pb)<<32);
 	}
-	NumberType operator()(const Kmer& kmer) const;
-	NumberType operator()(const KmerInstance& kmer) const;
+	HashType operator()(const Kmer& kmer) const;
+	HashType operator()(const KmerInstance& kmer) const;
 protected:
 	class MicroCache {
 	public:
@@ -237,14 +240,14 @@ protected:
 			_ptr = NULL;
 			_len = _val = _hash = 0;
 		}
-		bool isCached(const void *ptr, int len, NumberType val, NumberType &hash) {
+		bool isCached(const void *ptr, int len, NumberType val, HashType &hash) {
 			if (ptr == _ptr && _len == len && _val == val) {
 				hash = _hash;
 				return true;
 			}
 			return false;
 		}
-		void set(const void *ptr, int len, NumberType val, const NumberType &hash) {
+		void set(const void *ptr, int len, NumberType val, const HashType &hash) {
 			_ptr = ptr;
 			_len = len;
 			_val = val;
@@ -252,7 +255,7 @@ protected:
 		}
 	private:
 		const void *_ptr;
-		NumberType  _val, _hash;
+		HashType  _val, _hash;
 		int _len;
 	};
 	static MicroCache &getThreadCache() {
@@ -270,6 +273,7 @@ public:
 	typedef Kmernator::KmerNumberType NumberType;
 	typedef Kmernator::KmerIndexType  IndexType;
 	typedef Kmernator::KmerSizeType   SizeType;
+	typedef KmerHasher::HashType HashType;
 
 	inline static KmerHasher &getHasher() {
 		static KmerHasher hasher;
@@ -350,7 +354,7 @@ public:
 		return TwoBitSequence::getFasta(getTwoBitSequence(), 0, getTwoBitLength() * 4);
 	}
 
-	inline NumberType hash() const { return getHasher()(*this); }
+	inline HashType hash() const { return getHasher()(*this); }
 
 	TwoBitEncoding *getTwoBitSequence() {
 		return (TwoBitEncoding *) _data();
@@ -395,6 +399,7 @@ public:
 	typedef Kmernator::KmerNumberType NumberType;
 	typedef Kmernator::KmerIndexType  IndexType;
 	typedef Kmernator::KmerSizeType   SizeType;
+	typedef KmerHasher::HashType HashType;
 
 	inline static KmerHasher &getHasher() {
 		return Kmer::getHasher();
@@ -547,7 +552,7 @@ public:
 			TwoBitSequence::compressSequence(fasta, this->getTwoBitSequence());
 		}
 	}
-	inline NumberType hash() const { return getHasher()(*this); }
+	inline HashType hash() const { return getHasher()(*this); }
 
 private:
 	inline void init() {
@@ -1057,7 +1062,6 @@ public:
 		}
 		_size = 0;
 		_endSorted = 0;
-
 	}
 
 	inline IndexType size() const {
@@ -1439,12 +1443,14 @@ public:
 	IndexType findIndex(const Kmer &target) const {
 		bool targetIsFound;
 		IndexType idx;
-		if (_endSorted >= 8) {
+		const IndexType minSortedToFindSorted = 8;
+		if (_endSorted >= minSortedToFindSorted) {
+			assert(_endSorted <= size());
 			idx = _findSortedIndex(target, targetIsFound, 0, _endSorted);
 			if (targetIsFound)
 				return idx;
 		}
-		idx = _findIndex(target, _endSorted >= 16 ? _endSorted : 0, size());
+		idx = _findIndex(target, _endSorted >= minSortedToFindSorted ? _endSorted : 0, size());
 		return idx;
 	}
 	IndexType findIndex(const Kmer &target, bool &targetIsFound) const {
@@ -1466,6 +1472,7 @@ protected:
 		assert(min < size());
 		assert(max <= size());
 		assert(max <= _endSorted);
+		assert(_endSorted <= size());
 		assert(max > 0);
 
 		max--; // max must be a valid index... never cross the end boundary
@@ -1536,8 +1543,9 @@ protected:
 		if (!isFound) {
 			_insertAt(idx, target);
 			_endSorted++;
-			assert(_endSorted <= size());
+			//LOG_DEBUG(1, "_insertSorted(): " << _size << " of " << _capacity << ". " << _endSorted << " " << this << " " << target.toFasta());
 		}
+		assert(isSorted());
 		return idx;
 	}
 	IndexType _insertSorted(const Kmer &target, const Value &value) {
@@ -1567,6 +1575,7 @@ public:
 		resize(size()-1,idx);
 		if (_endSorted > idx)
 			_endSorted--;
+		assert(_endSorted <= size());
 	}
 
 
@@ -1618,6 +1627,7 @@ public:
 
 	void clear(bool releaseMemory = true) {
 		reset(releaseMemory);
+		LOG_DEBUG(2, "KAP::clear()");
 	}
 	// for STL compatibility
 	typedef Kmer& key_type;
@@ -1636,14 +1646,17 @@ public:
 	};
 
 	bool isSorted() const {
+		assert(_endSorted <= size());
 		return _endSorted == size();
 	}
 
 	IndexType getNumUnsorted() const {
+		assert(_endSorted <= size());
 		return _endSorted - size();
 	}
 
 	IndexType getNumSorted() const {
+		assert(_endSorted <= size());
 		return _endSorted;
 	}
 
@@ -1678,6 +1691,7 @@ public:
 		pushTmp(s);
 		LOG_DEBUG(5, "resort()" << _endSorted << ", " << size() << ", " << passingSize << " on " << this);
 		assert(_endSorted <= size());
+		assert(_endSorted == passingSize);
 	}
 public:
 	void swap(IndexType idx1, IndexType idx2) {
@@ -2106,6 +2120,7 @@ public:
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
 	typedef Kmer::SizeType      SizeType;
+	typedef KmerHasher::HashType HashType;
 
 	typedef typename BucketType::iterator BaseBucketTypeIterator;
 	typedef typename BucketType::const_iterator ConstBaseBucketTypeIterator;
@@ -2148,7 +2163,7 @@ public:
 		return powerOf2;
 	}
 
-	BucketExposedMapLogic(int numBuckets = 0, int elementsPerBucket = 0) {
+	BucketExposedMapLogic(unsigned long numBuckets = 0, unsigned long elementsPerBucket = 0) {
 		// ensure buckets are a precise powers of two
 		// with at least bucketCount buckets
 		resizeBuckets(numBuckets, elementsPerBucket);
@@ -2158,7 +2173,7 @@ public:
 		BUCKET_MASK = copy.BUCKET_MASK;
 		return *this;
 	}
-	void resizeBuckets(int bucketCount, int elementsPerBucket) {
+	void resizeBuckets(unsigned long bucketCount, unsigned long elementsPerBucket) {
 		if (bucketCount > MAX_KMER_MAP_BUCKETS)
 			bucketCount = MAX_KMER_MAP_BUCKETS;
 		NumberType powerOf2 = getMinPowerOf2(bucketCount);
@@ -2168,7 +2183,9 @@ public:
         	for(int i = 0; i < (int) powerOf2; i++)
         		_buckets[i].reserve(elementsPerBucket);
         } // else lazy allocate the buckets.
+
 		LOG_VERBOSE_OPTIONAL(1, bucketCount > 0 && Logger::isMaster(), "BucketExposedMap::resizeBuckets(" << bucketCount << " ): " << powerOf2 << " of " << elementsPerBucket);
+		LOG_DEBUG(1, "BucketExposedMap::resizeBuckets(" << bucketCount << " ): " << powerOf2 << " of " << elementsPerBucket << " " << this);
 	}
 	void clear(bool releaseMemory = true) { // release memory ignored by default
 		if (releaseMemory) {
@@ -2178,21 +2195,23 @@ public:
 			for(BaseBucketsVectorIterator it = _buckets.begin(); it != _buckets.end(); it++)
 				it->clear();
 		}
+		LOG_DEBUG(2, "BEML::clear()" << this);
 	}
 	void reset(bool releaseMemory = true) { // release memory ignored by default
 		for(size_t i=0; i< _buckets.size(); i++) {
 			_buckets[i].clear();
 		}
+		LOG_DEBUG(2, "BEML::reset()" << this);
 	}
 	void swap(BucketExposedMapLogic &other) {
 		_buckets.swap(other._buckets);
 		std::swap(BUCKET_MASK, other.BUCKET_MASK);
 	}
 
-	NumberType &getBucketMask() {
+	HashType &getBucketMask() {
 		return BUCKET_MASK;
 	}
-	const NumberType getBucketMask() const {
+	const HashType getBucketMask() const {
 		return BUCKET_MASK;
 	}
 	NumberType getNumBuckets() const {
@@ -2200,32 +2219,43 @@ public:
 	}
 
 	// Optionally organize buckets by Local thread and Distributed Rank
-	inline int getLocalThreadId(NumberType hash, int numThreads) const {
+	inline int getLocalThreadId(HashType hash, int numThreads) const {
 		// stripe across all buckets
 		assert(numThreads > 0);
-		if (getBuckets().size() > 0)
-			return (hash & getBucketMask()) % numThreads;
+		assert(_buckets.size() > 0);
+		int tid;
+		if (_buckets.size() > 1 && numThreads > 1)
+			tid = getBucketIdx(hash) % numThreads;
 		else
-			return 0;
+			tid = 0;
+		//LOG_DEBUG(1, "BEML::getLocalThreadId(" << hash << ", " << numThreads << "): " << tid);
+		return tid;
 	}
 	inline int getLocalThreadId(const KeyType &key, int numThreads) const {
 		return getLocalThreadId(HasherType()(key), numThreads);
 	}
-	inline int getDistributedThreadId(NumberType hash, NumberType numDistributedThreads) const {
-		// partition in contiguous blocks of 'global' buckets
-		if (getBuckets().size() > 0)
-			return numDistributedThreads * (hash & getBucketMask()) / getBuckets().size();
+	inline int getDistributedThreadId(HashType hash, int numDistributedThreads) const {
+		assert(numDistributedThreads >= 1);
+		assert((1ul << KmerHasher::DMP_HASH_SHIFT) > getBucketMask());
+		// partition blocks of 'global' buckets
+		int tid;
+		if (numDistributedThreads > 1)
+			tid = ((hash >> KmerHasher::DMP_HASH_SHIFT) & KmerHasher::DMP_HASH_MASK) % numDistributedThreads;
 		else
-			return 0;
+			tid = 0;
+		//LOG_DEBUG(1, "BEML::getDistributedThreadId(" << hash << ", " << numDistributedThreads << "): " << tid);
+		return tid;
 	}
-	inline int getDistributedThreadId(const KeyType &key, NumberType numDistributedThreads) const {
+	inline int getDistributedThreadId(const KeyType &key, int numDistributedThreads) const {
 		return getDistributedThreadId(HasherType()(key), numDistributedThreads);
 	}
 
 	// optimized to look at both possible thread partitions
 	// if this is the correct distributed thread, return true and set the proper localThread
 	// otherwise return false
-	inline bool getLocalThreadId(NumberType hash, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
+	inline bool getLocalThreadId(HashType hash, int &localThreadId, int numLocalThreads, int distributedThreadId, int numDistributedThreads) const {
+		assert(numLocalThreads >= 1);
+		assert(numDistributedThreads >= 1);
 		if (numDistributedThreads == 1 || getDistributedThreadId(hash, numDistributedThreads) == distributedThreadId) {
 			localThreadId = getLocalThreadId(hash, numLocalThreads);
 			return true;
@@ -2233,20 +2263,24 @@ public:
 			return false;
 		}
 	}
-	inline bool getLocalThreadId(const KeyType &key, int &localThreadId, int numLocalThreads, int distributedThreadId, NumberType numDistributedThreads) const {
-		NumberType hash = HasherType()(key);
+	inline bool getLocalThreadId(const KeyType &key, int &localThreadId, int numLocalThreads, int distributedThreadId, int numDistributedThreads) const {
+		HashType hash = HasherType()(key);
 		return getLocalThreadId(hash, localThreadId, numLocalThreads, distributedThreadId, numDistributedThreads);
 	}
 
-	inline void getThreadIds(const KeyType &key, int &localThreadId, int numLocalThreads, int &distributedThreadId, NumberType numDistributedThreads) const {
-		NumberType hash = HasherType()(key);
+	inline void getThreadIds(const KeyType &key, int &localThreadId, int numLocalThreads, int &distributedThreadId, int numDistributedThreads) const {
+		HashType hash = HasherType()(key);
+		return getThreadIds(hash, localThreadId, numLocalThreads, distributedThreadId, numDistributedThreads);
+	}
+	inline void getThreadIds(HashType hash, int &localThreadId, int numLocalThreads, int &distributedThreadId, int numDistributedThreads) const {
 		distributedThreadId = getDistributedThreadId(hash, numDistributedThreads);
 		localThreadId = getLocalThreadId(hash, numLocalThreads);
 	}
 
 	// Exposed BucketType interface
 
-	inline NumberType getBucketIdx(NumberType hash) const {
+	inline NumberType getBucketIdx(HashType hash) const {
+		assert(getNumBuckets() > 0);
 		NumberType bucketIdx = (hash & getBucketMask());
 		return bucketIdx;
 	}
@@ -2258,7 +2292,7 @@ public:
 		SizeType size = 0;
 
 		long bucketSize = _buckets.size();
-#pragma omp parallel for reduction(+:size) if(getBuckets().size()>1000000)
+#pragma omp parallel for reduction(+:size) if(bucketSize>1000000)
 		for(long i = 0; i < bucketSize; i++) {
 			size += _buckets[i].size();
 		}
@@ -2294,11 +2328,11 @@ public:
 	        return _buckets[index];
 	}
 
-	inline BucketType &getBucket(NumberType hash) {
+	inline BucketType &getBucket(HashType hash) {
 		NumberType idx = getBucketIdx(hash);
 		return getBucketByIdx(idx);
 	}
-	inline const BucketType &getBucket(NumberType hash) const {
+	inline const BucketType &getBucket(HashType hash) const {
 		NumberType idx = getBucketIdx(hash);
 		return getBucketByIdx(idx);
 	}
@@ -2331,7 +2365,7 @@ public:
 
 private:
 	BucketsVector _buckets;
-	NumberType BUCKET_MASK;
+	HashType BUCKET_MASK;
 };
 template<typename _KeyType, typename _ValueType, typename _BucketType, typename _Hasher>
 class BucketExposedMap : public BucketExposedMapLogic<_KeyType, _ValueType, _BucketType, _Hasher> {
@@ -2345,6 +2379,7 @@ public:
 	typedef Kmer::NumberType    NumberType;
 	typedef Kmer::IndexType     IndexType;
 	typedef Kmer::SizeType      SizeType;
+	typedef KmerHasher::HashType HashType;
 
 	typedef typename BEML::Iterator Iterator;
 	typedef typename BEML::ConstIterator ConstIterator;
@@ -2392,7 +2427,7 @@ public:
 	BucketExposedMap() : BEML() {
 		clear();
 	}
-	BucketExposedMap(int numBuckets, int elementsPerBucket = 0) : BEML(numBuckets, elementsPerBucket) {
+	BucketExposedMap(unsigned long numBuckets, unsigned long elementsPerBucket = 0) : BEML(numBuckets, elementsPerBucket) {
 	}
 	BucketExposedMap &operator=(const BucketExposedMap &other) {
 		(BEML&)*this = (BEML&) other;
@@ -2407,13 +2442,13 @@ public:
 	}
 	// optimization to move the buckets with pre-allocated memory to the next DMP thread
 	void rotateDMPBuffers(int numThreads) {
-		IndexType block = getBuckets().size() / numThreads;
+		IndexType block = getNumBuckets() / numThreads;
 		size_t i = 0;
 		// skip to the first non-zero bucket
-		while (i < getBuckets().size() && getBuckets()[i].size() == 0)
+		while (i < getNumBuckets() && getBucketByIdx(i).size() == 0)
 			i++;
 		for(size_t j = i; j < getBuckets().size() - 1 && j < i+block; j++) {
-			getBuckets()[j].swap(getBuckets()[ (j+block) % getBuckets().size() ]);
+			getBucketByIdx(j).swap(getBucketByIdx( (j+block) % getNumBuckets() ) );
 		}
 	}
 
@@ -2421,7 +2456,7 @@ public:
 	ElementType insert(const KeyType &key, const ValueType &value) {
 		return insert(key, value, getBucket(key));
 	}
-	ElementType insert(const KeyType &key, const ValueType &value, NumberType hash) {
+	ElementType insert(const KeyType &key, const ValueType &value, HashType hash) {
 		assert(HasherType()(key) == hash);
 		return insert(key,value, getBucket(hash));
 	}
@@ -2429,7 +2464,7 @@ public:
 	bool remove(const KeyType &key) {
 		return remove(key, getBucket(key));
 	}
-	bool remove(const KeyType &key, NumberType hash) {
+	bool remove(const KeyType &key, HashType hash) {
 		assert(HasherType()(key) == hash);
 		return remove(key, getBucket(hash));
 	}
@@ -2437,19 +2472,19 @@ public:
 	Iterator find(const KeyType &key) {
 		return find(key, getBucket(key));
 	}
-	Iterator find(const KeyType &key, NumberType hash) {
+	Iterator find(const KeyType &key, HashType hash) {
 		assert(HasherType()(key) == hash);
-		return find(key, getBuckets(hash));
+		return find(key, getBucket(hash));
 	}
 
 	ValueType &operator[](const KeyType &key) {
-		NumberType hash = HasherType()(key);
+		HashType hash = HasherType()(key);
 		BucketType &bucket = getBucket(hash);
 		BucketTypeIterator it = bucket.find(key);
 		if (it != bucket.end()) {
 			return it->value();
 		} else {
-			ValueType value;
+			ValueType value = ValueType();
 			return insert(key, value, bucket).value();
 		}
 	}
@@ -2457,16 +2492,16 @@ public:
 	bool exists(const KeyType &key) const {
 		return exists(key, getBucket(key));
 	}
-	bool exists(const KeyType &key, NumberType hash) const {
+	bool exists(const KeyType &key, HashType hash) const {
 		assert(HasherType()(key) == hash);
-		return exists(key, getBuckets(hash));
+		return exists(key, getBucket(hash));
 	}
 
 	const bool getValueIfExists(const KeyType &key, ValueType &value) const {
 		return getValueIfExists(key, value, getBucket(key));
 	}
 
-	const bool getValueIfExists(const KeyType &key, ValueType &value, NumberType hash) const {
+	const bool getValueIfExists(const KeyType &key, ValueType &value, HashType hash) const {
 		assert(HasherType()(key) == hash);
 		return getValueIfExists(key, value, getBucket(hash));
 	}
@@ -2478,11 +2513,11 @@ public:
 		return getElementIfExists(key, getBucket(key));
 	}
 
-	const ElementType getElementIfExists(const KeyType &key, NumberType hash) const {
+	const ElementType getElementIfExists(const KeyType &key, HashType hash) const {
 		assert(HasherType()(key) == hash);
 		return getElementIfExists(key, getBucket(hash));
 	}
-	ElementType getElementIfExists(const KeyType &key, NumberType hash) {
+	ElementType getElementIfExists(const KeyType &key, HashType hash) {
 		assert(HasherType()(key) == hash);
 		return getElementIfExists(key, getBucket(hash));
 	}
@@ -2494,11 +2529,11 @@ public:
 		ValueType value = ValueType();
 		return getOrSetElement(key, value);
 	}
-	ElementType getOrSetElement(const KeyType &key, ValueType value, NumberType hash) {
+	ElementType getOrSetElement(const KeyType &key, ValueType value, HashType hash) {
 		assert(HasherType()(key) == hash);
 		return getOrSetElement(key, value, getBucket(hash));
 	}
-	ElementType getElement(const KeyType &key, NumberType hash) {
+	ElementType getElement(const KeyType &key, HashType hash) {
 		assert(HasherType()(key) == hash);
 		ValueType value = ValueType();
 		return getOrSetElement(key, value);
@@ -2509,11 +2544,11 @@ public:
 		std::stringstream ss;
 		ss << this << "[";
 		IndexType idx=0;
-		for(; idx<getBuckets().size() && idx < 30; idx++) {
-			ss << "bucket:" << idx << " (" << getBuckets()[idx].size() << "), ";
+		for(; idx<getNumBuckets() && idx < 30; idx++) {
+			ss << "bucket:" << idx << " (" << getBucketByIdx(idx).size() << "), ";
 		}
-		if (idx < getBuckets().size())
-			ss << " ... " << getBuckets().size() - idx << " more ";
+		if (idx < getNumBuckets())
+			ss << " ... " << getNumBuckets() - idx << " more ";
 		ss << "]";
 		return ss.str();
 	}
@@ -2709,10 +2744,6 @@ protected:
 		return getOrSetElement(key, bucket, value);
 	}
 
-protected:
-	BucketsVector _buckets;
-	NumberType BUCKET_MASK;
-
 private:
 	inline const BucketExposedMap &_constThis() const {return *this;}
 
@@ -2756,7 +2787,7 @@ public:
 		_isSorted = defaultSort;
 		KAP::initTmp();
 	}
-	KmerMapByKmerArrayPair(long estimatedRawKmers) : Base(estimatedRawKmers / KmerBaseOptions::getOptions().getKmersPerBucket() + 1, KmerBaseOptions::getOptions().getKmersPerBucket()) {
+	KmerMapByKmerArrayPair(unsigned long estimatedRawKmers) : Base(estimatedRawKmers / KmerBaseOptions::getOptions().getKmersPerBucket() + 1, KmerBaseOptions::getOptions().getKmersPerBucket()) {
 		_isSorted = defaultSort;
 		KAP::initTmp();
 	}
@@ -2787,15 +2818,17 @@ public:
 
 	// specific overloading, taking advantage of KmerArrayPair memory release directives
 	void reset(bool releaseMemory = true) {
-		for(size_t i=0; i< getBuckets().size(); i++) {
-			getBuckets()[i].reset(releaseMemory);
+		for(size_t i=0; i< getNumBuckets(); i++) {
+			getBucketByIdx(i).reset(releaseMemory);
 		}
+		LOG_DEBUG(2, "KMbKAP::reset()");
 	}
 	void clear(bool releaseMemory = true) {
 		reset(releaseMemory);
 		if (releaseMemory) {
 			this->resizeBuckets(0,0);
 		}
+		LOG_DEBUG(2, "KMbKAP::clear()");
 	}
 
 	void swap(KmerMapByKmerArrayPair &other) {
@@ -3001,8 +3034,8 @@ public:
 		if (!_isSorted) {
 			LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "Sorting KmerMapByKmerArrayPair");
 #pragma omp parallel for
-			for(long i=0; i< (long) getBuckets().size(); i++) {
-				getBuckets()[i].resort();
+			for(long i=0; i< (long) getNumBuckets(); i++) {
+				getBucketByIdx(i).resort();
 			}
 			_isSorted = true;
 		}
@@ -3050,8 +3083,8 @@ public:
 		_isSorted = true;
 		for (NumberType idx = 0 ; idx < size ; idx++) {
 			ptr = ((char*)src) + *(offsetArray + idx);
-			getBuckets()[idx] = BucketType(ptr);
-			_isSorted &= getBuckets()[idx].isSorted();
+			getBucketByIdx(idx) = BucketType(ptr);
+			_isSorted &= getBucketByIdx(idx).isSorted();
 		}
 	}
 	const Kmernator::MmapFile store(std::string permanentFile = "") const {
@@ -3062,7 +3095,7 @@ public:
 	}
 	// store to mmap
 	const void *store(void *dst) const {
-		NumberType size = (NumberType) getBuckets().size();
+		NumberType size = (NumberType) getNumBuckets();
 		NumberType *numbers = (NumberType *) dst;
 		*(numbers++) = size;
 		*(numbers++) = getBucketMask();
@@ -3072,7 +3105,7 @@ public:
 		for(NumberType idx = 0 ; idx < size; idx++) {
 			*(offsetArray++) = offset;
 			void *ptr = ((char*)dst) + offset;
-			const char *newPtr = (const char *) getBuckets()[idx].store(ptr);
+			const char *newPtr = (const char *) getBucketByIdx(idx).store(ptr);
 			NumberType newSize = (newPtr - (const char *) ptr);
 			offset += newSize;
 		}
@@ -3087,8 +3120,8 @@ public:
 		map._isSorted = true;
 		for (NumberType idx = 0 ; idx < size ; idx++) {
 			ptr = ((char*)src) + *(offsetArray + idx);
-			map.getBuckets()[idx] = BucketType::restore(ptr);
-			map._isSorted &= map.getBuckets()[idx].isSorted();
+			map.getBucketByIdx(idx) = BucketType::restore(ptr);
+			map._isSorted &= map.getBucketByIdx(idx).isSorted();
 		}
 		return map;
 	}
@@ -3104,8 +3137,8 @@ public:
 				+ getSizeToStoreElements();
 	}
 	SizeType getSizeToStoreCountsAndIndexes() const {
-		return sizeof(NumberType)*(2+getBuckets().size())
-				+ getBuckets().size()*sizeof(IndexType);
+		return sizeof(NumberType)*(2+getNumBuckets())
+				+ getNumBuckets()*sizeof(IndexType);
 	}
 	SizeType getSizeToStoreElements() const {
 		return size()*(KmerSizer::getByteSize() + sizeof(ValueType));
@@ -3115,11 +3148,11 @@ public:
 		std::stringstream ss;
 		ss << this << "[";
 		IndexType idx=0;
-		for(; idx<getBuckets().size() && idx < 30; idx++) {
-			ss << "bucket:" << idx << ' ' << getBuckets()[idx].toString() << ", ";
+		for(; idx<getNumBuckets() && idx < 30; idx++) {
+			ss << "bucket:" << idx << ' ' << getBucketByIdx(idx).toString() << ", ";
 		}
-		if (idx < getBuckets().size())
-			ss << " ... " << getBuckets().size() - idx << " more ";
+		if (idx < getNumBuckets())
+			ss << " ... " << getNumBuckets() - idx << " more ";
 		ss << "]";
 		return ss.str();
 	}
@@ -3210,18 +3243,21 @@ public:
 
 	typedef BucketExposedMap< KmerInstance, Value, BucketType, KmerHasher > Base;
 	typedef Value ValueType;
+	typedef typename Base::Iterator Iterator;
+	typedef typename Base::ConstIterator ConstIterator;
+	typedef typename Base::ElementType ElementType;
 	//typedef	typename BucketType::iterator BucketTypeIterator;
 	//typedef typename BucketType::value_type BucketElementType;
 	//typedef std::vector< BucketType > BucketsVector;
 	//typedef typename BucketsVector::iterator BucketsVectorIterator;
 	//typedef typename BucketsVector::const_iterator ConstBucketsVectorIterator;
-	typedef typename Base::Iterator Iterator;
 	//typedef typename Iterator::value_type ElementType;
 
 	Base::getBuckets;
 	Base::getBucketByIdx;
+	Base::getNumBuckets;
 	KmerMapBySTLMap() : Base() {}
-	KmerMapBySTLMap(long estimatedRawKmers) : Base(omp_get_max_threads(), estimatedRawKmers / omp_get_max_threads()) {
+	KmerMapBySTLMap(unsigned long estimatedRawKmers) : Base(omp_get_max_threads(), estimatedRawKmers / omp_get_max_threads()) {
 	}
 	KmerMapBySTLMap(const void *src) {
 		LOG_THROW("Unimplemented restore");
@@ -3230,8 +3266,8 @@ public:
 		*this = copy;
 	}
 	KmerMapBySTLMap &operator=(const KmerMapBySTLMap &copy) {
-		getBuckets().resize(copy.getBuckets().size());
-		for(int i = 0; i < (int) getBuckets().size(); i++) {
+		getBuckets().resize(copy.getNumBuckets());
+		for(int i = 0; i < (int) getNumBuckets(); i++) {
 			getBucketByIdx(i).clear();
 			getBucketByIdx(i).insert(copy.getBucketByIdx(i).begin(), copy.getBucketByIdx(i).end());
 		}
@@ -3248,15 +3284,18 @@ template<typename Value>
 class KmerMapBoost : public KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, KmerHasher> > {
 public:
 	typedef KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, KmerHasher> > Base;
+	typedef typename Base::BucketType BucketType;
+	typedef typename Base::ValueType ValueType;
+	typedef typename Base::Iterator Iterator;
+	typedef typename Base::ConstIterator ConstIterator;
 	KmerMapBoost() : Base() {}
-	KmerMapBoost(long estimatedRawKmers) : Base(4*estimatedRawKmers) {} // allocate 4x the buckets we think we need...
+	KmerMapBoost(unsigned long estimatedRawKmers) : Base(4*estimatedRawKmers) {} // allocate 4x the buckets we think we need...
 	KmerMapBoost(const void *src) : Base(src) {}
 	KmerMapBoost(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMapBoost &operator=(const Base &other) {
 		*((Base*)this) = other;
 		return *this;
 	}
-	typedef typename Base::BucketType BucketType;
 };
 
 #include <sparsehash/sparse_hash_map>
@@ -3267,7 +3306,7 @@ public:
 	typedef typename Base::mapped_type mapped_type;
 	typedef typename Base::iterator iterator;
 	typedef typename Base::size_type size_type;
-	GSHWrapper(size_type n = 0): Base(n) {}
+	GSHWrapper(unsigned long n = 0): Base(n) {}
 	// GSH has no reserve method, but resize acts the same
 	void reserve(size_type n) { this->resize(n); }
 	// erase is not supported by GSH without a deleted_key...
@@ -3278,15 +3317,18 @@ template<typename Value>
 class KmerMapGoogleSparse : public KmerMapBySTLMap<Value, GSHWrapper<Value> > {
 public:
 	typedef KmerMapBySTLMap<Value, GSHWrapper<Value> > Base;
+	typedef typename Base::BucketType BucketType;
+	typedef typename Base::ValueType ValueType;
+	typedef typename Base::Iterator Iterator;
+	typedef typename Base::ConstIterator ConstIterator;
 	KmerMapGoogleSparse(): Base() {}
-	KmerMapGoogleSparse(long estimatedRawKmers): Base(8*estimatedRawKmers) {} // allocate 8x the buckets we think we need
+	KmerMapGoogleSparse(unsigned long estimatedRawKmers): Base(8*estimatedRawKmers) {} // allocate 8x the buckets we think we need
 	KmerMapGoogleSparse(const void *src) : Base(src) {}
 	KmerMapGoogleSparse(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMapGoogleSparse &operator=(const Base &other) {
 		*((Base*)this) = other;
 		return *this;
 	}
-	typedef typename Base::BucketType BucketType;
 };
 
 
@@ -3297,7 +3339,7 @@ public:
 	typedef KmerMapByKmerArrayPair<Value> Base;
 //	typedef KmerMapBySTLMap<Value, GSHWrapper<Value> > Base;
 	KmerMap(): Base() {}
-	KmerMap(long estimatedRawKmers) : Base(estimatedRawKmers) {}
+	KmerMap(unsigned long estimatedRawKmers) : Base(estimatedRawKmers) {}
 	KmerMap(const void *src) : Base(src) {}
 	KmerMap(const Base &copy) : Base( (const Base&) copy ) {}
 	KmerMap &operator=(const Base &other) {
