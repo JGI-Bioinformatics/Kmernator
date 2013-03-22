@@ -272,9 +272,13 @@ class BoostKmerHasher : public KmerHasher {
 public:
 	typedef KmerHasher::HashType HashType;
 	static HashType getHash(const void *ptr, int length) {
-		unsigned char *c = (unsigned char*) ptr;
+		const unsigned char *c = (const unsigned char*) ptr;
 		return boost::hash_range(c, c+length);
 	}
+	template<typename It>
+	static HashType getHash(It first, It last) {
+		return boost::hash_range<It>(first, last);
+	};
 	HashType operator()(const Kmer& kmer) const;
 	HashType operator()(const KmerInstance& kmer) const;
 };
@@ -404,7 +408,9 @@ protected:
 
 };
 
-#define MAX_KMER_INSTANCE_BYTES 24
+#ifndef MAX_KMER_INSTANCE_BASES
+#define MAX_KMER_INSTANCE_BASES 96
+#endif
 class KmerInstance {
 public:
 	typedef Kmer Base;
@@ -412,6 +418,7 @@ public:
 	typedef Kmernator::KmerIndexType  IndexType;
 	typedef Kmernator::KmerSizeType   SizeType;
 	typedef KmerHasher::HashType HashType;
+	static const int DATA_SIZE = (MAX_KMER_INSTANCE_BASES + 31) / 32;
 
 	inline static KmerHasher &getHasher() {
 		return Kmer::getHasher();
@@ -428,6 +435,7 @@ public:
 		*this = copy;
 	}
 	KmerInstance &operator=(const Kmer &other)  {
+		init();
 		memcpy(_data, other.getTwoBitSequence(), getByteSize());
 		return *this;
 	}
@@ -553,6 +561,12 @@ public:
 	const TwoBitEncoding *getTwoBitSequence() const {
 		return (const TwoBitEncoding *) _data;
 	}
+	const uint64_t *getData() const {
+		return (uint64_t*) _data;
+	}
+	const uint64_t *getDataEnd() const {
+		return ((uint64_t*)_data) + DATA_SIZE;
+	}
 
 	void set(std::string fasta, bool leastComplement = false) {
 		assert(fasta.length() == KmerSizer::getSequenceLength());
@@ -568,10 +582,13 @@ public:
 
 private:
 	inline void init() {
+		uint64_t *ptr = (uint64_t*) _data, *end = ((uint64_t*)_data) + DATA_SIZE;
+		while (ptr != end)
+			*(ptr++) = 0ul;
 	}
 	inline void destroy() {
 	}
-	char _data[MAX_KMER_INSTANCE_BYTES];
+	uint64_t _data[ DATA_SIZE ];
 };
 
 template<typename Value>

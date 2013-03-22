@@ -62,7 +62,7 @@ KmerHasher::NumberType BoostKmerHasher::operator()(const Kmer& kmer) const {
 	return getHash(kmer.getTwoBitSequence(), kmer.getTwoBitLength());
 }
 KmerHasher::NumberType BoostKmerHasher::operator()(const KmerInstance& kmer) const {
-	return getHash(kmer.getTwoBitSequence(), kmer.getTwoBitLength());
+	return getHash(kmer.getData(), kmer.getDataEnd());
 }
 
 
