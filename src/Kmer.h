@@ -267,6 +267,18 @@ protected:
 
 };
 
+#include <boost/functional/hash.hpp>
+class BoostKmerHasher : public KmerHasher {
+public:
+	typedef KmerHasher::HashType HashType;
+	static HashType getHash(const void *ptr, int length) {
+		unsigned char *c = (unsigned char*) ptr;
+		return boost::hash_range(c, c+length);
+	}
+	HashType operator()(const Kmer& kmer) const;
+	HashType operator()(const KmerInstance& kmer) const;
+};
+
 #define TEMP_KMER(name)  TwoBitEncoding _stack_##name[KmerSizer::getByteSize()]; Kmer &name = (Kmer &)(_stack_##name);
 class Kmer {
 public:
@@ -3283,9 +3295,10 @@ public:
 //
 #include <boost/unordered_map.hpp>
 template<typename Value>
-class KmerMapBoost : public KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, KmerHasher> > {
+class KmerMapBoost : public KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, BoostKmerHasher> > {
 public:
-	typedef KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, KmerHasher> > Base;
+	// Base::BucketType needs different hashfunction than the hash for the buckets (KmerHasher)
+	typedef KmerMapBySTLMap<Value, boost::unordered_map<KmerInstance, Value, BoostKmerHasher> > Base;
 	typedef typename Base::BucketType BucketType;
 	typedef typename Base::ValueType ValueType;
 	typedef typename Base::Iterator Iterator;
@@ -3303,9 +3316,10 @@ public:
 
 #include <sparsehash/sparse_hash_map>
 template<typename Value>
-class GSHWrapper : public google::sparse_hash_map<KmerInstance, Value, KmerHasher> {
+class GSHWrapper : public google::sparse_hash_map<KmerInstance, Value, BoostKmerHasher> {
 public:
-	typedef google::sparse_hash_map<KmerInstance, Value, KmerHasher> Base;
+	// Base::BucketType needs different hashfunction than the hash for the buckets (KmerHasher)
+	typedef google::sparse_hash_map<KmerInstance, Value, BoostKmerHasher> Base;
 	typedef typename Base::mapped_type mapped_type;
 	typedef typename Base::iterator iterator;
 	typedef typename Base::size_type size_type;

@@ -58,6 +58,13 @@ KmerHasher::NumberType KmerHasher::operator()(const Kmer& kmer) const {
 KmerHasher::NumberType KmerHasher::operator()(const KmerInstance& kmer) const {
 	return getHash(kmer.getTwoBitSequence(), kmer.getTwoBitLength());
 }
+KmerHasher::NumberType BoostKmerHasher::operator()(const Kmer& kmer) const {
+	return getHash(kmer.getTwoBitSequence(), kmer.getTwoBitLength());
+}
+KmerHasher::NumberType BoostKmerHasher::operator()(const KmerInstance& kmer) const {
+	return getHash(kmer.getTwoBitSequence(), kmer.getTwoBitLength());
+}
+
 
 TrackingData::WeightType TrackingData::minimumWeight = 0.01;
 TrackingData::CountType TrackingData::minimumDepth = 10;
