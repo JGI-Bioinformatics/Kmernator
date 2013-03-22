@@ -185,7 +185,7 @@ public:
 	typedef Kmernator::KmerNumberType HashType;
 	typedef Kmernator::KmerNumberType NumberType;
 	static const int DMP_HASH_SHIFT = 24;
-	static const HashType DMP_HASH_MASK = 0x8ffff;
+	static const HashType DMP_HASH_MASK = 0x7ffff;
 
 	// safely returns NumberType (64-bit) numeric version of any sized kmer
 	static NumberType toNumber(const void *ptr, int len) {
