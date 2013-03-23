@@ -95,7 +95,7 @@ public:
 
 		GeneralOptions::_resetDefaults();
 		FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() = 0;
-		KmerSpectrumOptions::getOptions().getMinDepth() = 1;
+		KmerSpectrumOptions::getOptions().getMinDepth() = 2;
 
 		// override the default output format!
 		GeneralOptions::getOptions().getFormatOutput() = 3;
