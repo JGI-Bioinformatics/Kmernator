@@ -409,7 +409,7 @@ protected:
 };
 
 #ifndef MAX_KMER_INSTANCE_BASES
-#define MAX_KMER_INSTANCE_BASES 96
+#define MAX_KMER_INSTANCE_BASES 95
 #endif
 class KmerInstance {
 public:
@@ -418,7 +418,14 @@ public:
 	typedef Kmernator::KmerIndexType  IndexType;
 	typedef Kmernator::KmerSizeType   SizeType;
 	typedef KmerHasher::HashType HashType;
-	static const int DATA_SIZE = (MAX_KMER_INSTANCE_BASES + 31) / 32;
+	// For KmerInstance, at least one trailing bit of the last byte is
+	// reserved to denote whether this is an invalid value or not
+	//   (this is needed for google_sparse_hash)
+	// This limits the MAX_KMER_INSTANCE_BASES to 1 less than normally
+	// expected for 8-byte integers, hence the default of 95 not 96...
+
+	// datasize includes one extra
+	static const int DATA_SIZE = (MAX_KMER_INSTANCE_BASES*2 + 2 + 63) / 64;
 
 	inline static KmerHasher &getHasher() {
 		return Kmer::getHasher();
@@ -580,14 +587,22 @@ public:
 	}
 	inline HashType hash() const { return getHasher()(*this); }
 
+	static KmerInstance &getInvalidKmer() {
+		static KmerInstance _ = KmerInstance(true);
+		return _;
+	}
 private:
-	inline void init() {
+	inline void init(uint64_t initValue = 0ul) {
 		uint64_t *ptr = (uint64_t*) _data, *end = ((uint64_t*)_data) + DATA_SIZE;
 		while (ptr != end)
-			*(ptr++) = 0ul;
+			*(ptr++) = initValue;
 	}
 	inline void destroy() {
 	}
+	KmerInstance(bool isInvalid) {
+		init(isInvalid ? 0xffffffff : 0ul);
+	}
+
 	uint64_t _data[ DATA_SIZE ];
 };
 
@@ -2213,8 +2228,8 @@ public:
         		_buckets[i].reserve(elementsPerBucket);
         } // else lazy allocate the buckets.
 
-		LOG_VERBOSE_OPTIONAL(1, bucketCount > 0 && Logger::isMaster(), "BucketExposedMap::resizeBuckets(" << bucketCount << " ): " << powerOf2 << " of " << elementsPerBucket);
-		LOG_DEBUG(1, "BucketExposedMap::resizeBuckets(" << bucketCount << " ): " << powerOf2 << " of " << elementsPerBucket << " " << this);
+		LOG_VERBOSE_OPTIONAL(1, bucketCount > 0 && elementsPerBucket > 0 && Logger::isMaster(), "BucketExposedMap::resizeBuckets(" << bucketCount << " ): " << powerOf2 << " of " << elementsPerBucket);
+		LOG_DEBUG(2, "BucketExposedMap::resizeBuckets(" << bucketCount << " ): " << powerOf2 << " of " << elementsPerBucket << " " << this);
 	}
 	void clear(bool releaseMemory = true) { // release memory ignored by default
 		if (releaseMemory) {
@@ -3340,11 +3355,13 @@ public:
 	typedef typename Base::mapped_type mapped_type;
 	typedef typename Base::iterator iterator;
 	typedef typename Base::size_type size_type;
-	GSHWrapper(unsigned long n = 0, int numThreads = omp_get_max_threads()): Base(n) {}
+	GSHWrapper(unsigned long n = 0): Base(n) {
+		this->set_deleted_key(KmerInstance::getInvalidKmer());
+	}
 	// GSH has no reserve method, but resize acts the same
 	void reserve(size_type n) { this->resize(n); }
 	// erase is not supported by GSH without a deleted_key...
-	void erase(iterator pos) { pos->second = mapped_type(); }
+	// void erase(iterator pos) { pos->second = mapped_type(); }
 
 };
 template<typename Value>
