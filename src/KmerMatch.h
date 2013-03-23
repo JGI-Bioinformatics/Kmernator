@@ -94,18 +94,16 @@ class KmerMatch : public MatcherInterface {
 public:
 	typedef MatcherInterface::MatchResults MatchResults;
 
-	typedef DistributedKmerSpectrum< KmerMap< TrackingDataWithAllReads >, KmerMap< TrackingDataWithAllReads >, KmerMap< TrackingDataSingletonWithReadPosition > > KS;
+	typedef KmerMapGoogleSparse< TrackingDataWithAllReads > MapType;
+	typedef DistributedKmerSpectrum< MapType, MapType, KmerMapGoogleSparse< TrackingDataSingletonWithReadPosition > > KS;
 
-// TODO make work with GSH
-//	typedef KmerMapGoogleSparse< TrackingDataWithAllReads > MapType;
-//	typedef DistributedKmerSpectrum< MapType, MapType, KmerMapGoogleSparse< TrackingDataSingletonWithReadPosition > > KS;
-
-	KmerMatch(mpi::communicator &world, const ReadSet &target)
-	: MatcherInterface(world, target), _spectrum(world, KS::estimateRawKmers(world, target)) {
+	KmerMatch(mpi::communicator &world, const ReadSet &target, int minDepth = KmerSpectrumOptions::getOptions().getMinDepth())
+	: MatcherInterface(world, target), _spectrum(world, KS::estimateRawKmers(world, target), true) {
 		assert(target.isGlobal());
 		_spectrum._buildKmerSpectrumMPI(target, false);
-		_spectrum.purgeMinDepth(KmerSpectrumOptions::getOptions().getMinDepth());
+		_spectrum.purgeMinDepth(minDepth);
 		_spectrum.optimize(true);
+
 	}
 	virtual ~KmerMatch() {}
 	MatchResults matchLocalImpl(std::string queryFile) {

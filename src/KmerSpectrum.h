@@ -268,10 +268,16 @@ namespace PurgeUtilsDetail {
 		typedef typename _BucketType::value_type value_type;
 		static IndexType purgeMinCountByBucket(_BucketType &bucket, long minimumCount) {
 			// generic algorithm
+
+			// quick check to see if there is any purging to be done, and allocate the right amount of memory...
 			long newSize = 0;
-			for(BaseBucketTypeIterator it = bucket.begin(); it != bucket.end(); it++)
-				if (minimumCount >= (long) it->second)
+			for(BaseBucketTypeIterator it = bucket.begin(); it != bucket.end(); it++) {
+				if (minimumCount >= (long) it->second) {
 					newSize++;
+				} else {
+					break;
+				}
+			}
 			if (newSize == (long) bucket.size())
 				return 0;
 			_BucketType newBucket;
@@ -295,11 +301,25 @@ namespace PurgeUtilsDetail {
 			// scan values that pass, keep list and count
 			KAP &kmerArray = (KAP&) bucket;
 			IndexType maxSize = kmerArray.size();
+
+			// quick check to see if there is any purging to be done, and allocate the right amount of memory...
+			long newSize = 0;
+			const Value *valuePtr = ((const KAP&)kmerArray).getValueStart();
+			for(IndexType i = 0; i < maxSize; i++) {
+				if ( minimumCount <= (long) *(valuePtr++) ) {
+					newSize++;
+				} else {
+					break;
+				}
+			}
+			if (newSize == (long) bucket.size())
+				return 0;
+
 			std::vector< IndexType > passingIndexes;
-			passingIndexes.reserve(maxSize);
+			passingIndexes.reserve(newSize);
 			IndexType affected;
 
-			const Value *valuePtr = ((const KAP&)kmerArray).getValueStart();
+			valuePtr = ((const KAP&)kmerArray).getValueStart();
 			for(IndexType i = 0; i < maxSize; i++) {
 				if ( minimumCount <= (long) *(valuePtr++) ) {
 					passingIndexes.push_back( i );
@@ -447,7 +467,7 @@ public:
 	void optimize(bool singletonsToo = false) {
 		solid.optimize();
 		weak.optimize();
-		if (singletonsToo)
+		if (singletonsToo && hasSingletons)
 			singleton.optimize();
 	}
 
@@ -1781,8 +1801,10 @@ public:
 		if (hasSolids && purgeSolidsToo)
 			PurgeUtils< SolidMapType >::purgeMinCount(solid, minimumCount);
 		PurgeUtils< WeakMapType >::purgeMinCount(weak, minimumCount);
-		if (hasSingletons && minimumCount > 1)
+		if (hasSingletons && minimumCount > 1) {
 			singleton.clear(false);
+			hasSingletons = false;
+		}
 	}
 
 	// important! returned memory maps must remain in scope!
@@ -2586,6 +2608,8 @@ public:
 
 		static SizeType purgeMinCount(BEM &map, long minimumCount) {
 			SizeType affected = 0;
+			if (minimumCount == 1)
+				return affected;
 			#pragma omp parallel for reduction(+:affected)
 			for(int i = 0; i < (int) map.getNumBuckets(); i++) {
 				affected += PurgeUtilsDetail::PurgeUtilsHelper<BucketType, ValueType>::purgeMinCountByBucket( map.getBucketByIdx(i), minimumCount);
