@@ -2,7 +2,7 @@
 
 MPI=""
 MPI_OPTS=""
-procs=$(grep -c ^processor /proc/cpuinfo)
+procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1))
 
 true=$(which true)
 

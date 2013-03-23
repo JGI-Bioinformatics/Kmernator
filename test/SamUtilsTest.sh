@@ -2,7 +2,7 @@
 
 set -e
 set -x
-procs=$(grep -c ^processor /proc/cpuinfo)
+procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1))
 
 T=$(mktemp -d)
 export TMPDIR=/tmp

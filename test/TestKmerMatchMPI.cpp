@@ -68,7 +68,7 @@ public:
 		KmerSpectrumOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 		MatcherInterfaceOptions::_resetDefaults();
-
+GeneralOptions::getOptions().getDebug() = 1;
 		KmerBaseOptions::getOptions().getKmerSize() = 21;
 		KmerSpectrumOptions::getOptions().getMinKmerQuality() = 0;
 		KmerSpectrumOptions::getOptions().getMinDepth() = 1;

@@ -1,7 +1,7 @@
 #!/bin/bash
 test=TestMPI
 MPI=""
-procs=$(grep -c ^processor /proc/cpuinfo)
+procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1))
 
 true=$(which true)
 if mpirun $true
