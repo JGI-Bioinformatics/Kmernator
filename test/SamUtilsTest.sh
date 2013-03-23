@@ -27,7 +27,6 @@ trap abort 1 2 3 15
 trap cleanup 0
 
 MPI=""
-procs=$(grep -c ^processor /proc/cpuinfo)
 
 true=$(which true)
 
