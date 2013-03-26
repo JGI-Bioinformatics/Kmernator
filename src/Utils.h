@@ -1356,10 +1356,7 @@ protected:
 	static void _setSignals() {
 		_setSignal(SIGHUP, Cleanup::cleanup);
 		_setSignal(SIGINT, Cleanup::cleanup);
-		_setSignal(SIGQUIT, Cleanup::cleanup);
-		_setSignal(SIGABRT, Cleanup::cleanup);
 		_setSignal(SIGUSR1, Cleanup::cleanup);
-		_setSignal(SIGSEGV, Cleanup::cleanup);
 		_setSignal(SIGUSR2, Cleanup::cleanup);
 		_setSignal(SIGPIPE, Cleanup::cleanup);
 		_setSignal(SIGTERM, Cleanup::cleanup);
@@ -1368,10 +1365,7 @@ protected:
 		LOG_DEBUG_OPTIONAL(2, true, "Unsetting cleanup signal handlers");
 		_setSignal(SIGHUP, getSigHandle(SIGHUP).sa_handler, false);
 		_setSignal(SIGINT, getSigHandle(SIGINT).sa_handler, false);
-		_setSignal(SIGQUIT, getSigHandle(SIGQUIT).sa_handler, false);
-		_setSignal(SIGABRT, getSigHandle(SIGABRT).sa_handler, false);
 		_setSignal(SIGUSR1, getSigHandle(SIGUSR1).sa_handler, false);
-		_setSignal(SIGSEGV, getSigHandle(SIGSEGV).sa_handler, false);
 		_setSignal(SIGUSR2, getSigHandle(SIGUSR2).sa_handler, false);
 		_setSignal(SIGPIPE, getSigHandle(SIGPIPE).sa_handler, false);
 		_setSignal(SIGTERM, getSigHandle(SIGTERM).sa_handler, false);
@@ -1481,7 +1475,8 @@ protected:
 			Logger::getAbortFlag() = true;
 			// reset the default and re-raise the signal to terminate
 			_setSignal(param, SIG_DFL, false);
-			raise(param);
+			//raise(param);
+			abort();
 		}
 	}
 
