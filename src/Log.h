@@ -83,7 +83,6 @@ class Logger
 	std::string _attribute;
 	unsigned int _level;
 	mutable int _thisLevel;
-	static char *reservedBuffer;
 
 	static bool &_debugGather() {
 		static bool _debugGather = false;
@@ -127,29 +126,41 @@ public:
 	}
 	Logger(const Logger &copy) {
 		*this = copy;
+		prepBuffer();
 	}
 	~Logger() {
 		releaseBuffer();
 	}
 	static void prepBuffer() {
-		if (reservedBuffer == NULL) {
-			#pragma omp critical
+		if (*getReservedBuffer() == NULL && ! getAbortFlag()) {
+#pragma omp critical
 			{
-				if (reservedBuffer == NULL)
-					reservedBuffer = new char[512*1024];
+				if (*getReservedBuffer() == NULL) {
+					*getReservedBuffer() = new char[ 64 * 1024 ];
+				}
 			}
 		}
 	}
 	static void releaseBuffer() {
-		if (reservedBuffer != NULL) {
-			#pragma omp critical
+		if (*getReservedBuffer() != NULL) {
+#pragma omp critical
 			{
-				if (reservedBuffer != NULL)
-					delete [] reservedBuffer;
-				reservedBuffer = NULL;
+				if (*getReservedBuffer() != NULL) {
+					delete [] *getReservedBuffer();
+					*getReservedBuffer() = NULL;
+				}
 			}
+
 		}
 	}
+private:
+	static char **getReservedBuffer() {
+		static char *_reservedBuffer = NULL;
+		return &_reservedBuffer;
+	}
+
+public:
+
 	static bool &getAbortFlag() {
 		static bool _ = false;
 		return _;
@@ -302,28 +313,29 @@ public:
 	};
 
 private:
-	static Logger verboseOstream;
-	static Logger debugOstream;
-	static Logger warningOstream;
-	static Logger errorOstream;
 
 	static void setErrorMessage(std::string &msg) {
 		getErrorMessages() += msg + "\n";
 	}
 
 	static inline Logger &getDebugOstream() {
-		return debugOstream;
+		static Logger _debugOstream =  Logger( std::cerr, "DEBUG", 0 );
+		return _debugOstream;
 	}
 	static inline Logger &getVerboseOstream() {
-		return verboseOstream;
+		static Logger _verboseOstream = Logger( std::cerr, "INFO", 1 );
+		return _verboseOstream;
 	}
 	static inline Logger &getWarningOstream() {
-		return warningOstream;
+		static Logger _warningOstream = Logger( std::cerr, "WARNING", 1 );
+		return _warningOstream;
 	}
 public:
 	static inline Logger &getErrorOstream() {
-		return errorOstream;
+		static Logger _errorOstream = Logger( std::cerr, "ERROR", 1 );
+		return _errorOstream;
 	}
+
 private:
 	static inline Logger &_log(Logger &log, std::string &msg, bool bypassmpi = true) {
 #ifdef _USE_MPI
@@ -346,16 +358,16 @@ public:
 		return Logger::isMaster() && ((isVerbose(1) || isDebug(1)));
 	}
 	static inline Logger &getDebug() {
-		return debugOstream;
+		return getDebugOstream();
 	}
 	static inline Logger &getVerbose() {
-		return verboseOstream;
+		return getVerboseOstream();
 	}
 	static inline Logger &getWarning() {
-		return warningOstream;
+		return getWarningOstream();
 	}
 	static inline Logger &getError() {
-		return errorOstream;
+		return getErrorOstream();
 	}
 
 	static inline void setVerboseOstream(std::ostream &os) {

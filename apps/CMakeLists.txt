@@ -53,7 +53,6 @@ target_link_libraries( CompareSpectrums
                               Sequence 
                               Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 add_dependencies(CompareSpectrums REPLACE_VERSION_H)
@@ -67,7 +66,6 @@ target_link_libraries( ContigExtender
                               Sequence
                               Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 add_dependencies(ContigExtender REPLACE_VERSION_H)
@@ -82,7 +80,6 @@ target_link_libraries( FilterReads
                               Sequence
                               Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 add_dependencies(FilterReads REPLACE_VERSION_H)
@@ -101,7 +98,6 @@ target_link_libraries( FilterReads-P
                               Sequence
                               Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
@@ -119,7 +115,6 @@ target_link_libraries( EstimateSize-P
                               Sequence
                               Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
@@ -138,7 +133,6 @@ target_link_libraries( DistributedNucleatingAssembler
                               Sequence
                               Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
@@ -156,7 +150,6 @@ target_link_libraries( MeraculousCounter
                               Sequence
                               Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
@@ -173,7 +166,6 @@ set_target_properties( BamSort-P
 target_link_libraries( BamSort-P 
                               libbam
                               ${ZLIB_LIBRARIES} 
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
@@ -188,7 +180,6 @@ set_target_properties( MPIBroadcastStream
                        PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
                        )
 target_link_libraries( MPIBroadcastStream 
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
@@ -206,7 +197,6 @@ target_link_libraries( TnfDistance
                               Sequence
                               Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 add_dependencies(TnfDistance REPLACE_VERSION_H)
@@ -219,7 +209,6 @@ add_executable( Fastq2Fasta Fastq2Fasta )
 target_link_libraries(        Fastq2Fasta
                               Sequence
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 add_dependencies(Fastq2Fasta REPLACE_VERSION_H)
@@ -232,7 +221,6 @@ add_executable( Fastq2FastaQual Fastq2FastaQual )
 target_link_libraries(        Fastq2FastaQual
                               Sequence
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 add_dependencies(Fastq2FastaQual REPLACE_VERSION_H)
@@ -246,7 +234,6 @@ add_executable( FixPair FixPair )
 target_link_libraries(        FixPair
                               Sequence
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 add_dependencies(FixPair REPLACE_VERSION_H)
@@ -267,7 +254,6 @@ set_target_properties( SplitSequenceOnTheFly
 target_link_libraries(        SplitSequenceOnTheFly
                               Sequence
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
@@ -281,7 +267,6 @@ add_executable( RandomlySample RandomlySample )
 target_link_libraries(        RandomlySample
                               Sequence
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 add_dependencies(RandomlySample REPLACE_VERSION_H)

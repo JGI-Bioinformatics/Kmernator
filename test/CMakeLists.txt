@@ -51,7 +51,6 @@ set_source_files_properties( TwoBitSequenceTest
                              )
 add_executable( TwoBitSequenceTest TwoBitSequenceTest )
 target_link_libraries( TwoBitSequenceTest TwoBitSequence
-                                          Log
                                           ${KMERNATOR_BOOST_LIBS}
                                           ${KMERNATOR_BOOST_TEST_LIBS}
                                           )
@@ -65,7 +64,6 @@ add_executable( ReadSetTest ReadSetTest )
 target_link_libraries( ReadSetTest Sequence
                                    ReadSet 
                                    Kmer
-                                   Log
                                    ${KMERNATOR_BOOST_LIBS}
                                    ${KMERNATOR_BOOST_TEST_LIBS}
                                    )
@@ -76,7 +74,7 @@ set_source_files_properties( KmerTest
                           )
                                                                                                            
 add_executable( KmerTest KmerTest )
-target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet Log
+target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet
                                 ${KMERNATOR_BOOST_LIBS}
                                 ${KMERNATOR_BOOST_TEST_LIBS}
                                 )
@@ -89,7 +87,6 @@ set_source_files_properties( ktest2
 add_executable( ktest2 ktest2 )
 target_link_libraries( ktest2 Sequence Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 add_test(ktest2 ktest2 --mask-simple-repeats 0 21 10.fastq)
@@ -102,7 +99,6 @@ target_link_libraries( HashTester
                               Sequence 
                               Kmer
                               ReadSet
-                              Log
                               ${KMERNATOR_BOOST_LIBS}
                               )
 
@@ -111,7 +107,6 @@ set_source_files_properties( MmapTempFileTest
                              )
 add_executable( MmapTempFileTest MmapTempFileTest )
 target_link_libraries( MmapTempFileTest
-                                   Log
                                    ${KMERNATOR_BOOST_LIBS}
                                    ${KMERNATOR_BOOST_TEST_LIBS}
                                    )
@@ -122,7 +117,6 @@ set_source_files_properties( UtilTest
                              )
 add_executable( UtilTest UtilTest )
 target_link_libraries( UtilTest
-                                   Log
                                    ${KMERNATOR_BOOST_LIBS}
                                    ${KMERNATOR_BOOST_TEST_LIBS}
                                    )
@@ -133,7 +127,6 @@ set_source_files_properties( BgzfStreamTest
                              )
 add_executable( BgzfStreamTest BgzfStreamTest )
 target_link_libraries( BgzfStreamTest
-                                   Log
                                    ${KMERNATOR_BOOST_LIBS}
                                    ${KMERNATOR_BOOST_TEST_LIBS}
                                    z
@@ -152,7 +145,6 @@ set_target_properties( TestMPI
                        PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
                        )
 target_link_libraries (TestMPI
-                            Log
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
@@ -167,7 +159,6 @@ set_target_properties( TestKmerMatchMPI
                        PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
                        )
 target_link_libraries (TestKmerMatchMPI
-                            Log
                             Kmer
                             Sequence
                             ReadSet
@@ -185,8 +176,7 @@ set_target_properties( SamUtilsTest
                        PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
                        )
 target_link_libraries (SamUtilsTest
-                            Log
-                              ${KMERNATOR_BOOST_LIBS}
+                             ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               libbam
                               z
