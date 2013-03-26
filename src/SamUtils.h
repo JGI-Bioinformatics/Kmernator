@@ -183,7 +183,7 @@ public:
 	typedef std::vector<bam1_p> BamVector;
 	typedef BamVector::iterator BamVectorIterator;
 	static inline int &getReadsPerBatch() {
-		static int READS_PER_BATCH = 32768;
+		static int READS_PER_BATCH = 65536;
 		return READS_PER_BATCH;
 	}
 
@@ -474,7 +474,7 @@ public:
 		MPI_Comm_rank(comm, &rank);
 		MPI_Comm_size(comm, &size);
 		long count = 0;
-		int batchSize = BamManager::getReadsPerBatch();
+		int batchSize = BamManager::getReadsPerBatch() - size;
 		while (lastOffset < 0 || samTell(ins) < lastOffset) {
 			if (readNextBam(ins, reads) < 0)
 				break;
@@ -1323,7 +1323,7 @@ public:
 				totalRecvBytes += recvBytes[i];
 			}
 
-			LOG_VERBOSE(1, "MPIReadExchanger::exchangeReads() " << getEnterCount()++ << ": remaining to send: " << totalRemainingToSend << " recv: " << totalRemainingToRecv);
+			LOG_DEBUG(1, "MPIReadExchanger::exchangeReads() " << getEnterCount()++ << ": remaining to send: " << totalRemainingToSend << " recv: " << totalRemainingToRecv);
 
 			if (Log::isDebug(3)) {
 				std::ostringstream ss;
@@ -1877,6 +1877,7 @@ public:
 			BamManager::destroyOrRecycleBamVector(tmpReads);
 
 			fixMates(pickedReads);
+			LOG_VERBOSE_OPTIONAL(1, myComm.rank() == 0, "syncAndPick(): exchangedReads " << readExchanger.getEnterCount() << ": " << pickedReads.size());
 			return pickedReads;
 
 		}
@@ -2500,9 +2501,10 @@ public:
 		LongVector sendOffsets(size, 0), sendCounts(size,0 ), recvOffsets(size, 0), recvCounts(size, 0);
 		LongVector deltas(size, 0);
 		long totSend = 0, totRecv = 0, keepOffset = 0;
-		long maxPerRank = BamManager::getReadsPerBatch() / size;
+		long maxPerRank = (BamManager::getReadsPerBatch() + size - 1) / size;
 		long slop = isFinal ? size : maxPerRank / 2;
 		for(int i = 0; i < size; i++) {
+			deltas[i] = 0;
 			if (worldState[i] > target + slop) {
 				deltas[i] = worldState[i] - target;
 				totSend += deltas[i];
@@ -2559,6 +2561,7 @@ public:
 		tmp.clear();
 		//BamManager::checkNulls("after distribute exchange:", myReads);
 
+		LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "DistributeReads::exchange(): " << myReads.size() << " total: " << nowTotal);
 		LOG_DEBUG_OPTIONAL(2, true, "DistributeReads() now at " << myReads.size());
 		return isFinal && stats.isDone() && stats.emptyExchange();
 	}
@@ -2575,7 +2578,7 @@ private:
 	long lastTotal, nowTotal;
 
 
-	DistributeReads(const MPI_Comm &comm, BamVector &_myReads) : exchanger(comm), worldState(), myReads(_myReads) {
+	DistributeReads(const MPI_Comm &comm, BamVector &_myReads) : exchanger(comm), worldState(), myReads(_myReads), lastTotal(0), nowTotal(0) {
 		myComm = mpi::communicator(comm, mpi::comm_duplicate);
 		int rank, size;
 		MPI_Comm_rank(myComm, &rank);
@@ -2627,8 +2630,10 @@ void BamStreamUtils::distributeReadsFinal(const MPI_Comm &comm, BamVector &reads
 	{
 		DistributeReads &dr = DistributeReads::getInstance(comm, reads);
 		while ( !dr.exchange(true) ) {
+			LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "distributeReadsFinal: " << reads.size());
 			LOG_DEBUG_OPTIONAL(2, true, "distributeReadsFinal()");
 		}
+		LOG_VERBOSE_OPTIONAL(1, Logger::isMaster(), "distributeReadsFinal: (done) " << reads.size());
 	}
 	DistributeReads::clearInstance();
 }
