@@ -667,10 +667,24 @@ public:
 		}
 	}
 
+	static std::string getPairedName(bam1_t *bam) {
+		std::string name(bam1_qname(bam));
+		size_t pos = 0;
+		while ((pos = name.find(' ',pos)) != std::string::npos) {
+			name[pos] = '_';
+		}
+		return name + getPairTag(bam);
+	}
+
 	static std::ostream &writeFastq(std::ostream &os, bam1_t *bam, int offset = 33) {
-		os << "@" << bam1_qname(bam) << getPairTag(bam) << "\n"
+		os << "@" << getPairedName(bam) << "\n"
 		<< getSequence(bam) << "\n+\n"
 		<< getQualFasta(bam, offset) << "\n";
+		return os;
+	}
+
+	static std::ostream &writeFasta(std::ostream &os, bam1_t *bam) {
+		os << ">" << getPairedName(bam) << "\n" << getSequence(bam) << "\n";
 		return os;
 	}
 
@@ -1211,6 +1225,10 @@ public:
 
 	class MPIReadExchanger {
 	public:
+		static int &getEnterCount() {
+			static int count = 0;
+			return count;
+		}
 		MPIReadExchanger(const MPI_Comm &_comm) :
 			buf1(NULL), buf2(NULL) {
 			myComm = mpi::communicator(_comm, mpi::comm_duplicate);
@@ -1305,7 +1323,7 @@ public:
 				totalRecvBytes += recvBytes[i];
 			}
 
-			LOG_DEBUG_OPTIONAL(2, true, "MPIReadExchanger::exchangeReads(): remaining to send: " << totalRemainingToSend << " recv: " << totalRemainingToRecv);
+			LOG_VERBOSE(1, "MPIReadExchanger::exchangeReads() " << getEnterCount()++ << ": remaining to send: " << totalRemainingToSend << " recv: " << totalRemainingToRecv);
 
 			if (Log::isDebug(3)) {
 				std::ostringstream ss;
@@ -1471,7 +1489,7 @@ public:
 				recvOffsets[i] += recvCounts[i];
 			}
 
-			LOG_DEBUG_OPTIONAL(2, rank == 0, "exchangeReads() Finished.  Remaining: " << stats.getGlobalRemaining() << " Global Sent: " << stats.getGlobalSent());
+			LOG_DEBUG(2, "exchangeReads() Finished.  Remaining: " << stats.getGlobalRemaining() << " Global Sent: " << stats.getGlobalSent());
 			return stats;
 		}
 	protected:
@@ -1819,6 +1837,7 @@ public:
 			while (!readExchanger.exchangeReads(batchReads, sendOffsets,
 					sendCounts, tmpReads, recvOffsets, recvCounts, true).isDone())
 				;
+
 			assert((int) tmpReads.size() >= myCount * size);
 			pickedReads.reserve(myCount);
 
@@ -1884,8 +1903,8 @@ public:
 		MPISortBam(const MPI_Comm &_comm, BamVector &_reads,
 				std::string outputFileName, bam_header_t *header) :
 			myReads(_reads), readExchanger(_comm) {
-			myComm = mpi::communicator(_comm, mpi::comm_duplicate), sortGlobal(
-					outputFileName, header);
+			myComm = mpi::communicator(_comm, mpi::comm_duplicate);
+			sortGlobal(outputFileName, header);
 		}
 		~MPISortBam() {
 		}
@@ -2026,7 +2045,7 @@ public:
 				std::string s = ss.str();
 				LOG_DEBUG_OPTIONAL(2, myRank==0, s);
 			}
-
+			LOG_VERBOSE(1, "Calculated Global Partitions");
 			return partitions;
 		}
 
@@ -2121,6 +2140,7 @@ public:
 				std::string s = ss.str();
 				LOG_DEBUG_OPTIONAL(2, true, s);
 			}
+			LOG_VERBOSE(1, "sortGlobal(): Exchanging reads");
 			// exchange reads (in batches)
 			LongVector sendOffsets(ourSize, 0), recvOffsets(ourSize, 0),
 					recvCounts;
@@ -2130,7 +2150,7 @@ public:
 				;
 			std::swap(myReads, globalReads);
 			BamManager::destroyBamVector(globalReads);
-			LOG_DEBUG_OPTIONAL(1, true, "_sortGlobal() finished: " << myReads.size());
+			LOG_VERBOSE(1, "sortGlobal() finished, ready for merge-sort: " << myReads.size());
 			//BamManager::checkNulls("after _sortGlobal: ", myReads);
 			return recvCounts;
 		}
@@ -2161,12 +2181,24 @@ public:
 
 	// takes all unmapped reads in reads and puts them in unmappedReads
 	// migrated reads will have NULL in reads (use collapseVector to fix)
-	static void splitUnmapped(BamVector &reads, BamVector &unmappedReads,
-			bool onlyUnmappedPairs = false) {
+	static void splitUnmapped(BamVector &reads, BamVector &unmappedReadSingles, BamVector &unmappedReadPairs,
+			bool keepUnmappedPairedRead = true) {
 		for (long i = 0; i < (long) reads.size(); i++) {
-			if (reads[i] != NULL && !isMapped(reads[i]) && (!isPaired(reads[i]) || !onlyUnmappedPairs || !isMateMapped(reads[i]))) {
-				unmappedReads.push_back(reads[i]);
-				reads[i] = NULL;
+			if (reads[i] != NULL && !isMapped(reads[i])) {
+				if (isPaired(reads[i])) {
+					if (isMateMapped(reads[i])) {
+						unmappedReadSingles.push_back(reads[i]);
+						if (!keepUnmappedPairedRead) {
+							reads[i] = NULL;
+						}
+					} else {
+						unmappedReadPairs.push_back(reads[i]);
+						reads[i] = NULL;
+					}
+				} else {
+					unmappedReadSingles.push_back(reads[i]);
+					reads[i] = NULL;
+				}
 			}
 		}
 	}

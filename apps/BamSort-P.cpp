@@ -58,7 +58,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 class _BamSortOptions : public OptionsBaseInterface {
 public:
-	_BamSortOptions() : unmappedReads(), unmappedReadPairs(), numPartitions(0) {
+	_BamSortOptions() : unmappedReads(), unmappedReadPairs(), keepUnmappedPairedRead(true), numPartitions(0) {
 	}
 	virtual ~_BamSortOptions() {}
 	std::string &getUnmappedReads() {
@@ -66,6 +66,9 @@ public:
 	}
 	std::string &getUnmappedReadPairs() {
 		return unmappedReadPairs;
+	}
+	bool &getKeepUnmappedPairedRead() {
+		return keepUnmappedPairedRead;
 	}
 	std::string &getOutputBam() {
 		return outputBam;
@@ -90,6 +93,7 @@ public:
 				("input-bams", po::value<FileListType>())
 				("unmapped-read-pairs", po::value<std::string>()->default_value(unmappedReadPairs), "gzipped file to place unmapped read Pairs Fastqs (can be same as --unmapped-reads)")
 				("unmapped-reads", po::value<std::string>()->default_value(unmappedReads), "gzipped file to place unmapped reads Fastqs (can be same as --unmapped-read-pairs)")
+				("keep-unmapped-paired-read", po::value<bool>()->default_value(keepUnmappedPairedRead), "if unmapped-read-pairs file is specified, keep an unmapped read in the bam if its pair is mapped")
 				("num-partitions", po::value<int>()->default_value(numPartitions), "The number of alignment-index partitions to merge. Input bams expected to come ordered grouped by in batches of num-partitions where each group has the exact same read counts in the exact same order");
 		desc.add(opts);
 
@@ -103,6 +107,7 @@ public:
 
 		setOpt("unmapped-read-pairs", unmappedReadPairs);
 		setOpt("unmapped-reads", unmappedReads);
+		setOpt("keep-unmapped-paired-read", keepUnmappedPairedRead);
 		setOpt("output-bam", outputBam);
 		setOpt2("input-bams", inputBams);
 		setOpt("num-partitions", numPartitions);
@@ -121,6 +126,7 @@ private:
 	FileListType inputBams;
 	std::string unmappedReads;
 	std::string unmappedReadPairs;
+	bool keepUnmappedPairedRead;
 	int numPartitions;
 };
 typedef OptionsBaseTemplate< _BamSortOptions > BamSortOptions;
@@ -139,6 +145,7 @@ int main(int argc, char **argv)
 		BamHeaderPtr header;
 
 		std::string outputBam = BamSortOptions::getOptions().getOutputBam();
+		std::string outputBamTmp = outputBam + ".tmp";
 		OptionsBaseInterface::FileListType inputBams = BamSortOptions::getOptions().getInputBams();
 		int partitions = BamSortOptions::getOptions().getNumPartitions();
 
@@ -155,7 +162,9 @@ int main(int argc, char **argv)
 			}
 		}
 
-		unlink(outputBam.c_str());
+		if (world.rank() == 0)
+			unlink(outputBamTmp.c_str());
+		world.barrier();
 	
 		LOG_VERBOSE_GATHER(1, "Reading input files");
 		if (partitions > 1) {
@@ -166,7 +175,7 @@ int main(int argc, char **argv)
 			SamUtils::MPIMergeSam mergeSam(partitionWorld, myInputFile, reads);
 	
 			if (color == 0)
-				mergeSam.outputMergedHeader(outputBam);
+				mergeSam.outputMergedHeader(outputBamTmp);
 	
 			world.barrier();
 	
@@ -176,36 +185,51 @@ int main(int argc, char **argv)
 	
 		bool needsCollapse = false;
 		std::string unmappedReadPairFile = BamSortOptions::getOptions().getUnmappedReadPairs();
-		if (!unmappedReadPairFile.empty()) {
-	
-			BamVector unmappedReads;
-			SamUtils::splitUnmapped(reads, unmappedReads, true);
-			if (!unmappedReads.empty())
-				needsCollapse = true;
-			LOG_VERBOSE(1, "Purging unmapped read pairs: " << unmappedReads.size());
-			if (unmappedReadPairFile.compare("/dev/null") == 0) {
-				BamManager::destroyOrRecycleBamVector(unmappedReads);
-			} else {
-				SamUtils::writeFastqGz(world, unmappedReads, unmappedReadPairFile, true);
-			}
-			assert(unmappedReads.empty());
-		}
-	
 		std::string unmappedReadsFile  = BamSortOptions::getOptions().getUnmappedReads();
-		if (!unmappedReadsFile.empty()) {
-			BamVector unmappedReads;
-			SamUtils::splitUnmapped(reads, unmappedReads, false);
-			if (!unmappedReads.empty())
-				needsCollapse = true;
-			LOG_VERBOSE(1, "Purging unmapped reads: " << unmappedReads.size());
-			if (unmappedReadsFile.compare("/dev/null") == 0) {
-				BamManager::destroyOrRecycleBamVector(unmappedReads);
-			} else {
-				SamUtils::writeFastqGz(world, unmappedReads, unmappedReadsFile, true);
-			}
-			assert(unmappedReads.empty());
-		}
+		if (!unmappedReadPairFile.empty() || !unmappedReadsFile.empty()) {
 	
+			BamVector unmappedReadSingles, unmappedReadPairs;
+			SamUtils::splitUnmapped(reads, unmappedReadSingles, unmappedReadPairs, BamSortOptions::getOptions().getKeepUnmappedPairedRead());
+			if (!unmappedReadSingles.empty() || !unmappedReadPairs.empty())
+				needsCollapse = true;
+			LOG_VERBOSE(1, "Purging unmapped read pairs: " << unmappedReadPairs.size());
+			LOG_VERBOSE(1, "Purging unmapped read singless: " << unmappedReadSingles.size());
+			if (unmappedReadPairFile.compare("/dev/null") == 0) {
+				BamManager::destroyOrRecycleBamVector(unmappedReadPairs);
+			} else {
+				std::string tmpFile(unmappedReadPairFile + ".tmp");
+				if (world.rank() == 0) {
+					unlink(tmpFile.c_str());
+				}
+				world.barrier();
+
+				SamUtils::writeFastqGz(world, unmappedReadPairs, tmpFile, true);
+				if (world.rank() == 0) {
+					unlink(unmappedReadPairFile.c_str());
+					rename(tmpFile.c_str(), unmappedReadPairFile.c_str());
+				}
+			}
+			assert(unmappedReadPairs.empty());
+
+			if (unmappedReadsFile.compare("/dev/null") == 0) {
+				BamManager::destroyOrRecycleBamVector(unmappedReadSingles);
+			} else {
+				std::string tmpFile(unmappedReadsFile + ".tmp");
+				if (world.rank() == 0) {
+					unlink(tmpFile.c_str());
+				}
+				world.barrier();
+
+				SamUtils::writeFastqGz(world, unmappedReadSingles, tmpFile, true);
+				if (world.rank() == 0) {
+					unlink(unmappedReadPairFile.c_str());
+					rename(tmpFile.c_str(), unmappedReadsFile.c_str());
+				}
+
+			}
+			assert(unmappedReadSingles.empty());
+		}
+
 		if (needsCollapse) {
 			LOG_DEBUG_OPTIONAL(1, true, "Collapsing read vector");
 			SamUtils::collapseVector(reads);
@@ -216,7 +240,11 @@ int main(int argc, char **argv)
 			BamStreamUtils::distributeReadsFinal(world, reads);
 	
 			LOG_VERBOSE_GATHER(1, "Sorting myreads: " << reads.size());
-			SamUtils::MPISortBam sortem(world, reads, outputBam, header.get());
+			SamUtils::MPISortBam sortem(world, reads, outputBamTmp, header.get());
+			if (world.rank() == 0) {
+				unlink(outputBam.c_str());
+				rename(outputBamTmp.c_str(), outputBam.c_str());
+			}
 		}
 	
 		header.reset();
