@@ -123,7 +123,11 @@ public:
 			LOG_THROW("ScopedMPIFile(," << ourFileName << "," << amode << ",): Could not open MPI_File: " << ourFileName);
 	}
 	~ScopedMPIFile() {
-		LOG_DEBUG_OPTIONAL(1, true, "Closing " << ourFileName << " MPI_File");
+		if (Log::isDebug(1)) {
+			MPI_Offset size;
+			MPI_File_get_size(mpiFile, &size);
+			LOG_DEBUG(1, "Closing " << ourFileName << " MPI_File: " << size);
+		}
 		if (MPI_SUCCESS != MPI_File_close(&mpiFile))
 			LOG_THROW("Could not close: " << ourFileName);
 	}

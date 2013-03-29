@@ -118,6 +118,13 @@ public:
 		if (inputBams.empty())
 			setOptionsErrorMsg("You must specify at least one input bam");
 
+		if (unmappedReads.empty() && !unmappedReadPairs.empty()) {
+			unmappedReads = unmappedReadPairs;
+		}
+		if (unmappedReadPairs.empty() && !unmappedReads.empty()) {
+			unmappedReadPairs = unmappedReads;
+		}
+
 		// Other ret &= *::_parseOptions(vm);
 		return ret;
 	}
@@ -184,55 +191,72 @@ int main(int argc, char **argv)
 		}
 	
 		bool needsCollapse = false;
+		bool keepUnmappedPairedRead = BamSortOptions::getOptions().getKeepUnmappedPairedRead();
 		std::string unmappedReadPairFile = BamSortOptions::getOptions().getUnmappedReadPairs();
 		std::string unmappedReadsFile  = BamSortOptions::getOptions().getUnmappedReads();
+		BamVector unmappedReadSingles, unmappedReadPairs, unmappedPairedReads;
 		if (!unmappedReadPairFile.empty() || !unmappedReadsFile.empty()) {
-	
-			BamVector unmappedReadSingles, unmappedReadPairs;
-			SamUtils::splitUnmapped(reads, unmappedReadSingles, unmappedReadPairs, BamSortOptions::getOptions().getKeepUnmappedPairedRead());
-			if (!unmappedReadSingles.empty() || !unmappedReadPairs.empty())
-				needsCollapse = true;
-			LOG_VERBOSE(1, "Purging unmapped read pairs: " << unmappedReadPairs.size());
-			LOG_VERBOSE(1, "Purging unmapped read singless: " << unmappedReadSingles.size());
-			if (unmappedReadPairFile.compare("/dev/null") == 0) {
-				BamManager::destroyOrRecycleBamVector(unmappedReadPairs);
-			} else {
-				std::string tmpFile(unmappedReadPairFile + ".tmp");
-				if (world.rank() == 0) {
-					unlink(tmpFile.c_str());
-				}
-				world.barrier();
 
-				SamUtils::writeFastqGz(world, unmappedReadPairs, tmpFile, true);
-				if (world.rank() == 0) {
-					unlink(unmappedReadPairFile.c_str());
-					rename(tmpFile.c_str(), unmappedReadPairFile.c_str());
-				}
+			std::string tmpFile(unmappedReadPairFile + ".tmp");
+			std::string tmpFile2(unmappedReadsFile + ".tmp");
+			if (world.rank() == 0) {
+				unlink(tmpFile.c_str());
+				unlink(tmpFile2.c_str());
+			}
+			world.barrier();
+
+			SamUtils::splitUnmapped(reads, unmappedReadSingles, unmappedReadPairs, unmappedPairedReads, keepUnmappedPairedRead);
+			if (!unmappedReadSingles.empty() || !unmappedReadPairs.empty() || (!keepUnmappedPairedRead && !unmappedPairedReads.empty())) {
+				needsCollapse = true;
+			}
+			LOG_VERBOSE(1, "Purging unmapped read pairs: " << unmappedReadPairs.size());
+			if (!unmappedReadPairFile.empty() && unmappedReadPairFile.compare("/dev/null") != 0) {
+				LOG_VERBOSE(1, "Writing unmappedReadPairs " << unmappedReadPairs.size() << " to " << unmappedReadPairFile << " (" << tmpFile << ")");
+
+				ScopedMPIFile pairedReads(world, tmpFile);
+				SamUtils::writeFastqGz(world, unmappedReadPairs, pairedReads, true);
+				world.barrier();
 			}
 			assert(unmappedReadPairs.empty());
 
-			if (unmappedReadsFile.compare("/dev/null") == 0) {
-				BamManager::destroyOrRecycleBamVector(unmappedReadSingles);
-			} else {
-				std::string tmpFile(unmappedReadsFile + ".tmp");
-				if (world.rank() == 0) {
-					unlink(tmpFile.c_str());
-				}
+			LOG_VERBOSE(1, "Purging unmapped read singles: " << unmappedPairedReads.size() << " and " << unmappedReadSingles.size());
+
+			if (!unmappedReadsFile.empty() && unmappedReadsFile.compare("/dev/null") != 0) {
+				LOG_VERBOSE(1, "Writing unmappedPairedReads " << unmappedPairedReads.size() << " to " << unmappedReadsFile << " (" << tmpFile2 << ")");
+
+				ScopedMPIFile singleReads(world, tmpFile2);
+				SamUtils::writeFastqGz(world, unmappedPairedReads, singleReads, !keepUnmappedPairedRead);
+
+				LOG_VERBOSE(1, "Writing unmappedReadSingles " << unmappedReadSingles.size() << " to " << unmappedReadsFile << " (" << tmpFile2 << ")");
+
+				SamUtils::writeFastqGz(world, unmappedReadSingles, singleReads, true);
 				world.barrier();
-
-				SamUtils::writeFastqGz(world, unmappedReadSingles, tmpFile, true);
-				if (world.rank() == 0) {
-					unlink(unmappedReadPairFile.c_str());
-					rename(tmpFile.c_str(), unmappedReadsFile.c_str());
-				}
-
 			}
 			assert(unmappedReadSingles.empty());
+			assert(keepUnmappedPairedRead || unmappedPairedReads.empty());
+
+			if (world.rank() == 0) {
+				unlink(unmappedReadsFile.c_str());
+				unlink(unmappedReadPairFile.c_str());
+				rename(tmpFile.c_str(), unmappedReadPairFile.c_str());
+				if (tmpFile.compare(tmpFile2) != 0) {
+					rename(tmpFile2.c_str(), unmappedReadsFile.c_str());
+				}
+			}
+
 		}
 
 		if (needsCollapse) {
-			LOG_DEBUG_OPTIONAL(1, true, "Collapsing read vector");
-			SamUtils::collapseVector(reads);
+			LOG_DEBUG(1, "Collapsing read vector");
+			long removed = SamUtils::collapseVector(reads);
+			LOG_DEBUG(1, "Collapsed: " << removed);			
+		}
+		BamManager::destroyOrRecycleBamVector(unmappedReadSingles);
+		BamManager::destroyOrRecycleBamVector(unmappedReadPairs);
+		if (keepUnmappedPairedRead) {
+			unmappedPairedReads.clear();
+		} else {
+			BamManager::destroyOrRecycleBamVector(unmappedPairedReads);
 		}
 	
 		{
@@ -241,6 +265,7 @@ int main(int argc, char **argv)
 	
 			LOG_VERBOSE_GATHER(1, "Sorting myreads: " << reads.size());
 			SamUtils::MPISortBam sortem(world, reads, outputBamTmp, header.get());
+			world.barrier();
 			if (world.rank() == 0) {
 				unlink(outputBam.c_str());
 				rename(outputBamTmp.c_str(), outputBam.c_str());

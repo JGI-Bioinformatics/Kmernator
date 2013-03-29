@@ -1017,13 +1017,12 @@ public:
 			LOG_DEBUG_OPTIONAL(2, true, "Writing Bam (mini) partition: " << threadId << " of " << numThreads);
 			#pragma omp single
 			{
-				myBams.reserve(numThreads);
-				for(int i = 0; i < numThreads; i++)
-					myBams.push_back(MemoryBufferPtr(new MemoryBuffer()));
+				myBams.resize(numThreads);
 			}
+			myBams[threadId] = MemoryBufferPtr(new MemoryBuffer());
 
 			long count = 0;
-			if (!reads.empty()) {
+			if (partitions.begin != partitions.end) {
 				MemoryBuffer::ostream os(*myBams[threadId]);
 				bool setEOFblock = (rank == (size - 1)) & (threadId == (numThreads - 1));
 				LOG_DEBUG_OPTIONAL(1, true, "bgzf_ostream(): " << setEOFblock);
@@ -1071,19 +1070,17 @@ public:
 			int threadId = omp_get_thread_num(), numThreads = omp_get_num_threads();
 			#pragma omp single
 			{
-				mygz.reserve(numThreads);
-				for(int i = 0; i < numThreads; i++)
-					mygz.push_back(MemoryBufferPtr(new MemoryBuffer()));
+				mygz.resize(numThreads);
 			}
+			mygz[threadId] = MemoryBufferPtr(new MemoryBuffer());
 
-
-			if (!reads.empty()) {
+			Partition<BamVector> partitions = Partition<BamVector>(reads, threadId, numThreads);
+			if (partitions.begin != partitions.end) {
 				MemoryBuffer::ostream mos(*mygz[threadId]);
 				boost::iostreams::filtering_ostream os;
 				os.push(boost::iostreams::gzip_compressor());
 				os.push(mos);
 
-				Partition<BamVector> partitions = Partition<BamVector>(reads, threadId, numThreads);
 				for (BamVector::iterator it = partitions.begin; it != partitions.end; it++) {
 					bam1_t *bam = *it;
 					BamStreamUtils::writeFastq(os, bam);
@@ -2182,13 +2179,13 @@ public:
 
 	// takes all unmapped reads in reads and puts them in unmappedReads
 	// migrated reads will have NULL in reads (use collapseVector to fix)
-	static void splitUnmapped(BamVector &reads, BamVector &unmappedReadSingles, BamVector &unmappedReadPairs,
+	static void splitUnmapped(BamVector &reads, BamVector &unmappedReadSingles, BamVector &unmappedReadPairs, BamVector &unmappedPairedReads,
 			bool keepUnmappedPairedRead = true) {
 		for (long i = 0; i < (long) reads.size(); i++) {
 			if (reads[i] != NULL && !isMapped(reads[i])) {
 				if (isPaired(reads[i])) {
 					if (isMateMapped(reads[i])) {
-						unmappedReadSingles.push_back(reads[i]);
+						unmappedPairedReads.push_back(reads[i]);
 						if (!keepUnmappedPairedRead) {
 							reads[i] = NULL;
 						}
@@ -2205,8 +2202,8 @@ public:
 	}
 
 	// removes NULL entries from reads
-	static void collapseVector(BamVector &reads) {
-		long countBams = 0;
+	static long collapseVector(BamVector &reads) {
+		long countBams = 0, removed = reads.size();
 		for (long i = 0; i < (long) reads.size(); i++) {
 			if (reads[i] != NULL) {
 				if (i != countBams)
@@ -2215,6 +2212,8 @@ public:
 			}
 		}
 		reads.resize(countBams);
+		removed -= countBams;
+		return removed;
 	}
 	static void dumpBamVector(int debugLevel, BamVector &reads, std::string msg) {
 		if (Log::isDebug(debugLevel)) {
