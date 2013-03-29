@@ -154,6 +154,34 @@ then
     $samtools view -h ${testoutsorted} | awk '{print $3" "$4}' > ${testoutsam3}
     diff -q ${testoutsam3} ${sortedorder} || failed mpi $i BamSort-P multiple-sam sort-order failed
 
+    # build list of unmapped read ids
+    samtools view ${testoutsorted} | awk '(and($2,0x04) == 0x00) {print $1}' | sort > ${testoutsorted}-mapped-read-ids
+    samtools view ${testoutsorted} | awk '(and($2,0x04) == 0x04) && $3 != "*" {print $1}' | sort > ${testoutsorted}-unmapped-paired-read-ids
+    samtools view ${testoutsorted} | awk '(and($2,0x04) == 0x04) && $3 == "*" {print $1}' | sort > ${testoutsorted}-unmapped-read-pair-ids
+    sort ${testoutsorted}-unmapped-paired-read-ids ${testoutsorted}-unmapped-read-pair-ids > ${testoutsorted}-all-unmapped-read-ids
+    
+    $mt $MPI $mpi  ../apps/BamSort-P --unmapped-reads ${testoutsorted}-unmapped.fastq.gz ${testoutsorted} ${testsampart1} ${testsampart2}
+    gunzip -c ${testoutsorted}-unmapped.fastq.gz | awk 'NR % 4 == 1 {print}' | sed 's/\/.*//;s/^@//;' | sort > ${testoutsorted}.xx
+    diff ${testoutsorted}.xx ${testoutsorted}-all-unmapped-read-ids || failed mpi --unmapped-reads wrong set of reads in fastq.gz
+    samtools view ${testoutsorted} | awk '{print $1}' | sort > ${testoutsorted}.xx
+    cat ${testoutsorted}-mapped-read-ids ${testoutsorted}-unmapped-paired-read-ids | sort | diff - ${testoutsorted}.xx || failed mpi --unmapped-reads included wrong set in bam
+
+    $mt $MPI $mpi  ../apps/BamSort-P --keep-unmapped-paired-read false --unmapped-reads ${testoutsorted}-unmapped.fastq.gz ${testoutsorted} ${testsampart1} ${testsampart2}
+    gunzip -c ${testoutsorted}-unmapped.fastq.gz | awk 'NR % 4 == 1 {print}' | sed 's/\/.*//;s/^@//;' | sort > ${testoutsorted}.xx
+    diff ${testoutsorted}.xx ${testoutsorted}-all-unmapped-read-ids || failed mpi --unmapped-reads wrong set of reads in fastq.gz
+    samtools view ${testoutsorted} | awk '{print $1}' | sort > ${testoutsorted}.xx
+    diff ${testoutsorted}-mapped-read-ids ${testoutsorted}.xx || failed mpi --unmapped-reads included wrong set in bam
+
+
+    $mt $MPI $mpi  ../apps/BamSort-P --unmapped-read-pairs ${testoutsorted}-unmapped-pairs.fastq.gz --unmapped-reads ${testoutsorted}-unmapped-singles.fastq.gz ${testoutsorted}.allmapped.bam ${testsampart1} ${testsampart2}
+    gunzip -c ${testoutsorted}-unmapped-pairs.fastq.gz | awk 'NR % 4 == 1 {print}' | sed 's/\/.*//;s/^@//;' | sort > ${testoutsorted}.xx
+    diff ${testoutsorted}.xx ${testoutsorted}-unmapped-read-pair-ids || failed mpi --unmapped-read-pairs wrong set of reads in fastq.gz
+    gunzip -c ${testoutsorted}-unmapped-singles.fastq.gz | awk 'NR % 4 == 1 {print}' | sed 's/\/.*//;s/^@//;' | sort > ${testoutsorted}.xx
+    diff ${testoutsorted}.xx ${testoutsorted}-unmapped-paired-read-ids || failed mpi --unmapped-reads wrong set of reads in fastq.gz
+    samtools view ${testoutsorted}.allmapped.bam | awk '{print $1}' | sort > ${testoutsorted}.xx
+    sort ${testoutsorted}-mapped-read-ids ${testoutsorted}-unmapped-paired-read-ids | diff - ${testoutsorted}.xx || failed mpi --unmapped-reads included wrong set in bam
+
+
   done
   
 fi
