@@ -926,9 +926,9 @@ public:
 #pragma omp barrier
 	}
 	bool isReadyToSend(int offset, int trailingBytes) {
-		return offset >= this->getSoftMaxBufferSize() && (threadsSending > this->getSoftNumThreads()
-				|| (offset + trailingBytes + this->getMessageSize())
-				>= this->getBufferSize());
+		assert(trailingBytes + this->getMessageSize() <= this->getBufferSize());
+		return ( ( (offset >= this->getSoftMaxBufferSize()) & (threadsSending > this->getSoftNumThreads()) )
+				| ((offset + trailingBytes + this->getMessageSize()) >= this->getBufferSize()) );
 	}
 
 	MessageClass *bufferMessage(int rankDest, int tagDest) {

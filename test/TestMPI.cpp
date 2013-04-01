@@ -68,7 +68,7 @@ public:
 	int length;
 	void set(const char *_data, int _length) {
 		memcpy(getText(), _data, _length);
-		LOG_DEBUG(5, "TextMessage::set(): " << std::string(getText(), _length));
+		LOG_DEBUG(1, "TextMessage::set(" << (void *)this << " to " << (void*) (getText() + _length)  << ", " << _length << "): " << std::string(getText(), std::min(_length, 25)) );
 		length = _length;
 	}
 	// THIS IS DANGEROUS unless allocated extra bytes!
@@ -106,7 +106,9 @@ public:
 
 class _MPITestOptions : public OptionsBaseInterface {
 public:
-	void _resetDefaults() {}
+	void _resetDefaults() {
+		GeneralOptions::getOptions().getDebug() = 1;
+	}
 	void _setOptions(po::options_description &desc,
 			po::positional_options_description &p) {
 		GeneralOptions::getOptions()._setOptions(desc,p);
@@ -125,7 +127,7 @@ typedef OptionsBaseTemplate< _MPITestOptions > MPITestOptions;
 int main(int argc, char **argv)
 {
 	int provided;
-	MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+	MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
 
@@ -139,15 +141,18 @@ int main(int argc, char **argv)
 
 	int numThreads = omp_get_max_threads();
 
+	char *spam = NULL;
 
+{
 	A2ABufferBase a2a(world, sizeof(TextMessage));
 
 	long unsigned int spamMax = a2a.getBufferSize() - sizeof(TextMessage);
 	int msgSize = std::min(16*1024 - sizeof(TextMessage), spamMax);
 	int msgPerMb = 1024*1024 / msgSize;
+	assert(msgPerMb > 0);
 
 	LOG_VERBOSE_OPTIONAL(1, world.rank()==0, "Sending messages of size: " << msgSize);
-	char *spam = new char[spamMax];
+	spam = new char[spamMax];
 
 #pragma omp parallel for
 	for(int i = 0 ; i < (int) spamMax; i++) {
@@ -183,7 +188,8 @@ int main(int argc, char **argv)
 	rate = (double) mb / (double) elapsed.total_milliseconds() * 1000.0;
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "MPI all2all messagebuffer: " << rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
 
-	char in[spamMax * world.size()], out[spamMax * world.size()];
+	char *in = new char[spamMax * world.size()];
+	char *out = new char[spamMax * world.size()];
 	int inSize[world.size()], outSize[world.size()], inDisp[world.size()], outDisp[world.size()];
 
 	world.barrier();
@@ -208,9 +214,13 @@ int main(int argc, char **argv)
 	rate = (double) mb / (double) elapsed.total_milliseconds() * 1000.0;
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "MPI all2all: " << rate << " MB/s " << rate * 8 << " Mbit/s " << elapsed.total_milliseconds() << "ms");
 
+	delete [] in;
+	delete [] out;
+}
 	delete [] spam;
 
 	MPI_Finalize();
+
 	return 0;
 }
 
