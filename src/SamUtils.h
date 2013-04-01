@@ -957,20 +957,26 @@ public:
 
 		// output while processing the heap
 		MemoryBuffer myBams;
-		if (!reads.empty()) {
+		{
 
 			// prepare the heap
 			MSR msr = MSR(SortByPosition(true));
 
 			long totalCount = 0;
 			for(int i = 0; i < size; i++) {
+				if (reads.begin() == reads.end())
+					continue;
 				BamManager::BamVectorIterator begin = reads.begin() + totalCount;
+				if (begin == reads.end())
+					continue;
 				totalCount += sortedCounts[i];
 				BamManager::BamVectorIterator end = reads.begin() + totalCount;
+				if (begin == end)
+					continue;
 				LOG_DEBUG_OPTIONAL(2, true, "adding range " << bam1_qname(*begin) << " " << (*begin)->core.pos <<  " - " << bam1_qname(*(end-1)));
 				msr.addSortedRange(begin, end);
 			}
-			assert(msr.getSortedRanges().back().end == reads.end());
+			assert(msr.getSortedRanges().empty() || msr.getSortedRanges().back().end == reads.end());
 			assert(totalCount == (long) reads.size());
 
 			MemoryBuffer::ostream os(myBams);
@@ -997,7 +1003,6 @@ public:
 			MemoryBuffer::istream is(myBams);
 			count = MPIUtils::concatenateOutput(comm, ourFile, myLength, is);
 		}
-		reads.pop_back(); // remove terminate condition
 		BamManager::destroyOrRecycleBamVector(reads);
 
 		return count;
@@ -2110,6 +2115,7 @@ public:
 						}
 					} else {
 						sendCounts[i] = 0;
+						it = start;
 					}
 				}
 				totalSendCounts += sendCounts[i];

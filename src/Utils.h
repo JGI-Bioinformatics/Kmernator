@@ -1634,7 +1634,11 @@ public:
 	}
 
 	bool hasNext() {
-		return !sortedRanges.empty();
+		return !empty();
+	}
+
+	bool empty() {
+		return sortedRanges.empty();
 	}
 
 	SortedRangeVector getSortedRanges() {

@@ -300,10 +300,9 @@ public:
 		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "MPIMessageBuffer(): " << _numThreads << " threads, " << _bufferSize << " size " << getMessageSize() << " message size");
 	}
 	~MPIMessageBuffer() {
-		for (ThreadedFreeBufferCache::iterator it = _freeBuffers.begin(); it
-		!= _freeBuffers.end(); it++)
+		for (ThreadedFreeBufferCache::iterator it = _freeBuffers.begin(); it != _freeBuffers.end(); it++)
 			for (FreeBufferCache::iterator it2 = it->begin(); it2 != it->end(); it2++)
-				delete[] *it2;
+				delete [] *it2;
 		_freeBuffers.clear();
 	}
 	inline mpi::communicator &getWorld() {
@@ -347,20 +346,23 @@ public:
 	}
 	Buffer getNewBuffer() {
 		int threadId = omp_get_thread_num();
+		Buffer buf;
 		if (_freeBuffers[threadId].empty()) {
-			return new char[_bufferSize];
+			buf = new char[_bufferSize];
+			LOG_DEBUG(1, "getNewBuffer(): " << (void*) buf << " of " << _bufferSize << " ending: " << (void*) (buf + _bufferSize));
 		} else {
-			Buffer buf;
 			buf = _freeBuffers[threadId].back();
 			_freeBuffers[threadId].pop_back();
-			return buf;
 		}
+		return buf;
+
 	}
 	void returnBuffer(Buffer buf) {
 		int threadId = omp_get_thread_num();
 		if (_freeBuffers[threadId].size() >= (size_t) (BUFFER_QUEUE_SOFT_LIMIT
 				* _numWorldThreads)) {
-			delete[] buf;
+			delete [] buf;
+			buf = NULL;
 		} else {
 			_freeBuffers[threadId].push_back(buf);
 		}
@@ -495,8 +497,10 @@ public:
 		}
 		void reset() {
 			header.reset();
-			if (buffer != NULL)
-				delete[] buffer;
+			if (buffer != NULL) {
+				delete [] buffer;
+				buffer = NULL;
+			}
 		}
 	};
 	class TransmitBuffer {
@@ -726,6 +730,8 @@ public:
 				BufferBase(world, messageSize, processor, totalBufferSize, softRatio),
 				numTags(_numTags), threadsSending(0) {
 		assert(!omp_in_parallel());
+		assert(omp_get_thread_num() == 0);
+		assert(numTags > 0);
 		int worldSize = this->getWorldSize();
 		int numThreads = this->getNumThreads();
 
@@ -733,14 +739,14 @@ public:
 		for (int threadId = 0; threadId < numThreads; threadId++) {
 			buildsTWT[threadId].resize(worldSize);
 		}
-		for(int i = 0; i < NUM_BUFFERS; i++)
+		for(int i = 0; i < NUM_BUFFERS; i++) {
 			buffers[i] = new TransmitBuffer(numThreads, worldSize, numTags, this->getBufferSize());
+		}
 		currentBuffer = 0;
 
 		for (int rankDest = 0; rankDest < worldSize; rankDest++) {
 			for (int threadId = 0; threadId < numThreads; threadId++) {
-				buildsTWT[threadId][rankDest].resize(numThreads * numTags,
-						BuildBuffer());
+				buildsTWT[threadId][rankDest].resize(numThreads * numTags, BuildBuffer());
 				for (int threadDest = 0; threadDest < (numThreads * numTags); threadDest++) {
 					BuildBuffer &bb = buildsTWT[threadId][rankDest][threadDest];
 					bb.header.reset(threadId, threadDest);
@@ -751,8 +757,12 @@ public:
 	}
 	~MPIAllToAllMessageBuffer() {
 		assert(!omp_in_parallel());
-		for(int i = 0; i < NUM_BUFFERS; i++)
-			delete buffers[i];
+		for(int i = 0; i < NUM_BUFFERS; i++) {
+			if (buffers[i] != NULL) {
+				delete buffers[i];
+				buffers[i] = NULL;
+			}
+		}
 	}
 
 private:
@@ -957,9 +967,10 @@ public:
 		int msgSize = this->getMessageSize() + trailingBytes;
 		bb.header.append(msgSize);
 		this->newMessage();
-		LOG_DEBUG(5, "bufferMessage(" << rankDest << ", " << tagDest << ", "
+		LOG_DEBUG(1, "bufferMessage(" << rankDest << ", " << tagDest << ", "
 				<< wasSent << ", " << messages << ", " << trailingBytes
 				<< "): " << (void*) buf << " size: " << msgSize);
+		assert(((Buffer)buf) + msgSize < bb.buffer + this->getBufferSize());
 		return buf;
 	}
 private:
@@ -1096,11 +1107,11 @@ public:
 		for (int i = 0; i < this->getWorld().size(); i++) {
 			Buffer &buf = _recvBuffers[i];
 			if (buf != NULL)
-				delete[] buf;
+				delete [] buf;
 			buf = NULL;
 		}
-		delete[] _recvBuffers;
-		delete[] _requests;
+		delete [] _recvBuffers;
+		delete [] _requests;
 	}
 	void cancelAllRequests() {
 		for (int source = 0; source < this->getWorld().size(); source++) {
@@ -1365,8 +1376,8 @@ public:
 				delete[] buf;
 			buf = NULL;
 		}
-		delete[] _sendBuffers;
-		delete[] _offsets;
+		delete [] _sendBuffers;
+		delete [] _offsets;
 	}
 
 	Buffer &getBuffer(int rank) {
