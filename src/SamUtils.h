@@ -794,7 +794,7 @@ public:
 			bamBuf.reset( new char[maxBufSize] );
 			uint16_t compressedBlockLength;
 			uint32_t uncompressedBlockLength;
-			bgzfOffset = bgzf_detail::getNextBlockFileOffset(fp->x.bam->file, geFileOffset, compressedBlockLength, uncompBlock.get(), uncompressedBlockLength);
+			bgzfOffset = bgzf_detail::getNextBlockFileOffset(fp->x.bam->fp, geFileOffset, compressedBlockLength, uncompBlock.get(), uncompressedBlockLength);
 			while (bgzfOffset >= 0) {
 				bamPointer = bgzfOffset << 16;
 				if (bam_seek(fp->x.bam, bamPointer, SEEK_SET) != 0)
@@ -826,7 +826,7 @@ public:
 
 				// get next block
 				int64_t newOffset = bgzfOffset + compressedBlockLength;
-				bgzfOffset = bgzf_detail::getNextBlockFileOffset(fp->x.bam->file, bgzfOffset + 1, compressedBlockLength, uncompBlock.get(), uncompressedBlockLength);
+				bgzfOffset = bgzf_detail::getNextBlockFileOffset(fp->x.bam->fp, bgzfOffset + 1, compressedBlockLength, uncompBlock.get(), uncompressedBlockLength);
 				if (newOffset != bgzfOffset)
 					LOG_WARN(1, "Detected potentially different BGZF offsets from " << (newOffset - compressedBlockLength) << ": " << newOffset << " vs " << bgzfOffset);
 			}

@@ -34,7 +34,9 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+extern "C" {
 #include "bgzf.h"
+}
 #include "Log.h"
 #include <zlib.h>
 
@@ -46,12 +48,12 @@
 class bgzf_detail  {
 public:
 	typedef char char_type;
-	typedef int8_t bgzf_byte_t;
+	typedef uint8_t bgzf_byte_t;
 	typedef std::vector< int64_t > FileOffsetVector;
-	static const int DEFAULT_BLOCK_SIZE = 64 * 1024;
-	static const int MAX_BLOCK_SIZE = 64 * 1024;
+
 	static const int BLOCK_HEADER_LENGTH = 18;
 	static const int BLOCK_FOOTER_LENGTH = 8;
+	static const int DEFAULT_BLOCK_SIZE = BGZF_MAX_BLOCK_SIZE;
 
 	static const int GZIP_ID1 = 31;
 	static const int GZIP_ID2 = 139;
@@ -120,7 +122,7 @@ public:
 	    bool deflateBlock()
 	    {
 	        assert(compressed_block_length == 0);
-	        assert(fp->block_offset <= fp->uncompressed_block_size);
+	        assert(fp->block_offset <= BGZF_MAX_BLOCK_SIZE);
 	        compressed_block_length = deflate_block(fp, fp->block_offset);
 	        blockFileOffsets.push_back( fp->block_address );
 	        return fp->block_offset == 0;
@@ -129,7 +131,7 @@ public:
 	    void readIntoBuffer(const char *end_in, const char *& begin_in)
 	    {
 	        int bytesInputAvailable = end_in - begin_in;
-	        int bytesLeftInBuffer = fp->uncompressed_block_size - fp->block_offset;
+	        int bytesLeftInBuffer = BGZF_MAX_BLOCK_SIZE - fp->block_offset;
 	        int copy_length = std::min(bytesInputAvailable, bytesLeftInBuffer);
 	        if(copy_length > 0){
 	            char *buffer = (char*)(fp->uncompressed_block);
@@ -143,7 +145,7 @@ public:
 	    {
 	        // copy in, if possible
 	        bool readIsEmpty = (end_in == begin_in);
-	        int block_length = fp->uncompressed_block_size;
+	        int block_length = BGZF_MAX_BLOCK_SIZE;
 	        readIntoBuffer(end_in, begin_in);
 	        // copy out, if possible
 			bool writeIsEmpty = writeBuffer(begin_out, end_out);
@@ -233,7 +235,7 @@ public:
 			assert(uncompressed_block_length == 0);
 			assert(fp->block_offset >= BLOCK_HEADER_LENGTH + BLOCK_FOOTER_LENGTH);
 			assert(fp->block_offset == getBlockLength());
-			assert(fp->block_offset <= fp->compressed_block_size);
+			assert(fp->block_offset <= BGZF_MAX_BLOCK_SIZE);
 			uncompressed_block_length = inflate_block(fp, fp->block_offset);
 			fp->block_offset = 0;
 			return true;
@@ -265,7 +267,7 @@ public:
 			int block_length = getBlockLength();
 			int bytesInputAvailable = end_in - begin_in;
 			int bytesLeftInBuffer = block_length - fp->block_offset;
-			assert(block_length <= fp->compressed_block_size);
+			assert(block_length <= BGZF_MAX_BLOCK_SIZE);
 
 			int copy_length = std::min(bytesInputAvailable, bytesLeftInBuffer);
 			if (copy_length > 0) {
@@ -316,18 +318,13 @@ public:
 
 protected:
 	static void init(BGZF *fp, bool compress = true) {
-		fp->file_descriptor = -1;
-		fp->open_mode = 'w';
-		fp->owned_file = 0;
+		fp->fp = NULL;
 		fp->compress_level = compress ? 7 : 0;
-		fp->uncompressed_block_size = DEFAULT_BLOCK_SIZE;
-		fp->uncompressed_block = calloc(MAX_BLOCK_SIZE, 1);
-		fp->compressed_block_size = MAX_BLOCK_SIZE;
-		fp->compressed_block = calloc(MAX_BLOCK_SIZE, 1);
+		fp->uncompressed_block = calloc(BGZF_MAX_BLOCK_SIZE, 1);
+		fp->compressed_block = calloc(BGZF_MAX_BLOCK_SIZE, 1);
 		fp->block_address = 0;
 		fp->block_offset = 0;  // uncompressed offset
 		fp->block_length = 0;
-		fp->error = NULL;
 	}
 	static void reset(BGZF *fp) {
 		if (fp->uncompressed_block != NULL) free(fp->uncompressed_block);
@@ -362,25 +359,23 @@ public:
 	   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	   THE SOFTWARE.
 	 */
+	static const uint8_t *getGmagic() {
+		static const uint8_t g_magic[19] = "\037\213\010\4\0\0\0\0\0\377\6\0\102\103\2\0\0\0";
+		return g_magic;
+	}
 
-	static inline
-	void
-	packInt16(uint8_t* buffer, uint16_t value)
+	static inline void packInt16(uint8_t *buffer, uint16_t value)
 	{
 		buffer[0] = value;
 		buffer[1] = value >> 8;
 	}
 
-	static inline
-	int
-	unpackInt16(const uint8_t* buffer)
+	static inline int unpackInt16(const uint8_t *buffer)
 	{
-		return (buffer[0] | (buffer[1] << 8));
+		return buffer[0] | buffer[1] << 8;
 	}
 
-	static inline
-	void
-	packInt32(uint8_t* buffer, uint32_t value)
+	static inline void packInt32(uint8_t *buffer, uint32_t value)
 	{
 		buffer[0] = value;
 		buffer[1] = value >> 8;
@@ -388,185 +383,88 @@ public:
 		buffer[3] = value >> 24;
 	}
 
-	static inline
-	uint32_t
-	unpackInt32(uint8_t * buffer) {
+	static inline uint32_t unpackInt32(uint8_t * buffer) {
 		return (buffer[0] | (buffer[1] << 8) | (buffer[2] << 16) | (buffer[3] << 24));
 	}
 
-	static inline
-	int
-	bgzf_min(int x, int y)
+
+	// Deflate the block in fp->uncompressed_block into fp->compressed_block. Also adds an extra field that stores the compressed block length.
+	static int deflate_block(BGZF *fp, int block_length)
 	{
-		return (x < y) ? x : y;
-	}
-
-	static
-	void
-	report_error(BGZF* fp, const char* message) {
-		fp->error = message;
-	}
-
-	static
-	int
-	deflate_block(BGZF* fp, int block_length)
-	{
-		// Deflate the block in fp->uncompressed_block into fp->compressed_block.
-		// Also adds an extra field that stores the compressed block length.
-
-		bgzf_byte_t* buffer = (bgzf_byte_t*) fp->compressed_block;
-		int buffer_size = fp->compressed_block_size;
-
-		// Init gzip header
-		buffer[0] = GZIP_ID1;
-		buffer[1] = GZIP_ID2;
-		buffer[2] = CM_DEFLATE;
-		buffer[3] = FLG_FEXTRA;
-		buffer[4] = 0; // mtime
-		buffer[5] = 0;
-		buffer[6] = 0;
-		buffer[7] = 0;
-		buffer[8] = 0;
-		buffer[9] = OS_UNKNOWN;
-		buffer[10] = BGZF_XLEN;
-		buffer[11] = 0;
-		buffer[12] = BGZF_ID1;
-		buffer[13] = BGZF_ID2;
-		buffer[14] = BGZF_LEN;
-		buffer[15] = 0;
-		buffer[16] = 0; // placeholder for block length
-		buffer[17] = 0;
-
-		// loop to retry for blocks that do not compress enough
-		int input_length = block_length;
-		int compressed_length = 0;
-		while (1) {
-			z_stream zs;
-			zs.msg = Z_NULL;
-			zs.opaque = Z_NULL;
-			zs.zalloc = Z_NULL;
-			zs.zfree = Z_NULL;
-			zs.next_in = (Bytef*) fp->uncompressed_block;
-			zs.avail_in = input_length;
-			zs.next_out = (Bytef*)&buffer[BLOCK_HEADER_LENGTH];
-			zs.avail_out = buffer_size - BLOCK_HEADER_LENGTH - BLOCK_FOOTER_LENGTH;
-			zs.data_type = Z_BINARY;
-
-			int status = deflateInit2(&zs, fp->compress_level, Z_DEFLATED,
-					GZIP_WINDOW_BITS, Z_DEFAULT_MEM_LEVEL, Z_DEFAULT_STRATEGY);
-			if (status != Z_OK) {
-				report_error(fp, "deflate init failed");
-				return -1;
-			}
-			status = deflate(&zs, Z_FINISH);
-			if (status != Z_STREAM_END) {
-				deflateEnd(&zs);
-				if (status == Z_OK) {
-					// Not enough space in buffer.
-					// Can happen in the rare case the input doesn't compress enough.
-					// Reduce the amount of input until it fits.
-					input_length -= 1024;
-					if (input_length <= 0) {
-						// should never happen
-						report_error(fp, "input reduction failed");
-						return -1;
-					}
-					continue;
-				}
-				report_error(fp, "deflate failed");
-				return -1;
-			}
-			status = deflateEnd(&zs);
-			if (status != Z_OK) {
-				report_error(fp, "deflate end failed");
-				return -1;
-			}
-			compressed_length = zs.total_out;
-			compressed_length += BLOCK_HEADER_LENGTH + BLOCK_FOOTER_LENGTH;
-			//std::cout << " total_out: " << zs.total_out << " ";
-			if (compressed_length > MAX_BLOCK_SIZE) {
-				// should never happen
-				report_error(fp, "deflate overflow");
-				return -1;
-			}
-			break;
+		int comp_size = BGZF_MAX_BLOCK_SIZE;
+		if (bgzf_compress(fp->compressed_block, &comp_size, fp->uncompressed_block, block_length, fp->compress_level) != 0) {
+			fp->errcode |= BGZF_ERR_ZLIB;
+			return -1;
 		}
-
-		packInt16((uint8_t*)&buffer[16], compressed_length-1);
-		uint32_t crc = crc32(0L, NULL, 0L);
-		crc = crc32(crc, (const Bytef*)fp->uncompressed_block, input_length);
-		packInt32((uint8_t*)&buffer[compressed_length-8], crc);
-		packInt32((uint8_t*)&buffer[compressed_length-4], input_length);
-
-
-		int remaining = block_length - input_length;
-		if (remaining > 0) {
-			if (remaining > input_length) {
-				// should never happen (check so we can use memcpy)
-				report_error(fp, "remainder too large");
-				return -1;
-			}
-			memcpy(fp->uncompressed_block,
-					((Bytef*)fp->uncompressed_block) + input_length,
-					remaining);
-		}
-		fp->block_offset = remaining;
-		//std::cout << "compressed length " << compressed_length << " crc: " << crc << " input_length: " << input_length << " remaining: " << remaining << std::endl;
-		return compressed_length;
+		fp->block_offset = 0;
+		return comp_size;
 	}
 
-	static
-	int
-	inflate_block(BGZF* fp, int block_length)
+	// Inflate the block in fp->compressed_block into fp->uncompressed_block
+	static int inflate_block(BGZF* fp, int block_length)
 	{
-		// Inflate the block in fp->compressed_block into fp->uncompressed_block
-
 		z_stream zs;
-		int status;
-		zs.msg = Z_NULL;
-		zs.opaque = Z_NULL;
-		zs.zalloc = Z_NULL;
-		zs.zfree = Z_NULL;
-		zs.next_in = (Bytef*) fp->compressed_block + 18;
+		zs.zalloc = NULL;
+		zs.zfree = NULL;
+		zs.next_in = ((Bytef*)fp->compressed_block) + 18;
 		zs.avail_in = block_length - 16;
 		zs.next_out = (Bytef*) fp->uncompressed_block;
-		zs.avail_out = fp->uncompressed_block_size;
+		zs.avail_out = BGZF_MAX_BLOCK_SIZE;
 
-		status = inflateInit2(&zs, GZIP_WINDOW_BITS);
-		if (status != Z_OK) {
-			report_error(fp, "inflate init failed");
+		if (inflateInit2(&zs, -15) != Z_OK) {
+			fp->errcode |= BGZF_ERR_ZLIB;
 			return -1;
 		}
-		status = inflate(&zs, Z_FINISH);
-		if (status != Z_STREAM_END) {
+		if (inflate(&zs, Z_FINISH) != Z_STREAM_END) {
 			inflateEnd(&zs);
-			report_error(fp, "inflate failed");
+			fp->errcode |= BGZF_ERR_ZLIB;
 			return -1;
 		}
-		status = inflateEnd(&zs);
-		if (status != Z_OK) {
-			report_error(fp, "inflate failed");
+		if (inflateEnd(&zs) != Z_OK) {
+			fp->errcode |= BGZF_ERR_ZLIB;
 			return -1;
 		}
 		return zs.total_out;
 	}
 
-public:
-	static
-	bool
-	check_header(const bgzf_byte_t* header)
+	static int bgzf_compress(void *_dst, int *dlen, void *src, int slen, int level)
 	{
-		return (header[0] == GZIP_ID1 &&
-				header[1] == (bgzf_byte_t) GZIP_ID2 &&
-				header[2] == Z_DEFLATED &&
-				(header[3] & FLG_FEXTRA) != 0 &&
-				unpackInt16((uint8_t*)&header[10]) == BGZF_XLEN &&
-				header[12] == BGZF_ID1 &&
-				header[13] == BGZF_ID2 &&
-				unpackInt16((uint8_t*)&header[14]) == BGZF_LEN &&
-				header[15] == 0);
+		uint32_t crc;
+		z_stream zs;
+		uint8_t *dst = (uint8_t*)_dst;
+
+		// compress the body
+		zs.zalloc = NULL; zs.zfree = NULL;
+		zs.next_in  = (Bytef*)src;
+		zs.avail_in = slen;
+		zs.next_out = dst + BLOCK_HEADER_LENGTH;
+		zs.avail_out = *dlen - BLOCK_HEADER_LENGTH - BLOCK_FOOTER_LENGTH;
+		if (deflateInit2(&zs, level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) return -1; // -15 to disable zlib header/footer
+		if (deflate(&zs, Z_FINISH) != Z_STREAM_END) return -1;
+		if (deflateEnd(&zs) != Z_OK) return -1;
+		*dlen = zs.total_out + BLOCK_HEADER_LENGTH + BLOCK_FOOTER_LENGTH;
+		// write the header
+		memcpy(dst, getGmagic(), BLOCK_HEADER_LENGTH); // the last two bytes are a place holder for the length of the block
+		packInt16(&dst[16], *dlen - 1); // write the compressed length; -1 to fit 2 bytes
+		// write the footer
+		crc = crc32(crc32(0L, NULL, 0L), (const Bytef*) src, slen);
+		packInt32((uint8_t*)&dst[*dlen - 8], crc);
+		packInt32((uint8_t*)&dst[*dlen - 4], slen);
+		return 0;
 	}
+
+
+	static int check_header(const uint8_t *header)
+	{
+		return (header[0] == 31 && header[1] == 139 && header[2] == 8 && (header[3] & 4) != 0
+				&& unpackInt16((uint8_t*)&header[10]) == 6
+				&& header[12] == 'B' && header[13] == 'C'
+				&& unpackInt16((uint8_t*)&header[14]) == 2);
+	}
+
+	//
 	// end copied from bgzf.c
+	//
 
 	static bool checkInflate(char *compressedBuffer, char *uncompressedBuffer, int block_length, uint32_t crc, uint32_t uncompressedLength) {
 
@@ -579,7 +477,7 @@ public:
 		zs.next_in = (Bytef*) compressedBuffer + 18;
 		zs.avail_in = block_length - 16;
 		zs.next_out = (Bytef*) uncompressedBuffer;
-		zs.avail_out = DEFAULT_BLOCK_SIZE;
+		zs.avail_out = BGZF_MAX_BLOCK_SIZE;
 
 		status = inflateInit2(&zs, GZIP_WINDOW_BITS);
 		if (status != Z_OK) {
@@ -605,10 +503,11 @@ public:
 	}
 
 	// returns -1 if there is no block after offset and before eof
-	static int64_t getNextBlockFileOffset(FILE *f, int64_t offset, uint16_t &compressedBlockLength, char *uncompblock, uint32_t &uncompressedBlockLength) {
+	static int64_t getNextBlockFileOffset(void *bgzf_fp, int64_t offset, uint16_t &compressedBlockLength, char *uncompblock, uint32_t &uncompressedBlockLength) {
+		FILE *f = (FILE*) bgzf_fp;
 		fseek(f, offset, SEEK_SET);
-		size_t readSize = DEFAULT_BLOCK_SIZE*3;
-		int8_t *bgzfBuff = (int8_t*) calloc(readSize, 1);
+		size_t readSize = BGZF_MAX_BLOCK_SIZE*3;
+		uint8_t *bgzfBuff = (uint8_t*) calloc(readSize, 1);
 //		buffer[0] = GZIP_ID1;
 //		buffer[1] = GZIP_ID2;
 //		buffer[2] = CM_DEFLATE;
@@ -670,7 +569,7 @@ private:
 public:
 	typedef typename base_type::char_type               char_type;
 	typedef typename base_type::category                category;
-	basic_bgzf_compressor(bool setEOFBlock = true) : base_type(bgzf_detail::DEFAULT_BLOCK_SIZE, setEOFBlock) {}
+	basic_bgzf_compressor(bool setEOFBlock = true) : base_type(BGZF_MAX_BLOCK_SIZE, setEOFBlock) {}
 };
 typedef basic_bgzf_compressor<> bgzf_compressor;
 
@@ -682,7 +581,7 @@ private:
 public:
 	typedef typename base_type::char_type               char_type;
 	typedef typename base_type::category                category;
-	basic_bgzf_decompressor() : base_type(bgzf_detail::DEFAULT_BLOCK_SIZE) {}
+	basic_bgzf_decompressor() : base_type(BGZF_MAX_BLOCK_SIZE) {}
 };
 typedef basic_bgzf_decompressor<> bgzf_decompressor;
 

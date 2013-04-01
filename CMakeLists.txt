@@ -233,7 +233,7 @@ set(KMERNATOR_BOOST_TEST_LIBS    boost_test_exec_monitor
                                  boost_unit_test_framework
                                  )
   
-set(SAMTOOLS_VERSION 0.1.18)
+set(SAMTOOLS_VERSION 0.1.19)
 set(SAMTOOLS_DIR ${CMAKE_CURRENT_BINARY_DIR}/samtools-${SAMTOOLS_VERSION})
 if(NOT EXISTS ${SAMTOOLS_DIR})
   set(SAMTOOLS_TBZ2 ${CMAKE_SOURCE_DIR}/opt/samtools-${SAMTOOLS_VERSION}.tar.bz2)
