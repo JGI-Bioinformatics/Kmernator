@@ -155,6 +155,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		}
+		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
 
 		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 			LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
@@ -168,15 +169,13 @@ int main(int argc, char *argv[]) {
 
 			if (KmerSpectrumOptions::getOptions().getMinDepth() > 1) {
 				LOG_DEBUG(1, "Clearing singletons from memory");
-				spectrum.singleton.clear();
+				spectrum.purgeMinDepth(minDepth, true);
 				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 			} else {
 				spectrum.optimize(true);
 			}
 		}
 
-
-		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
 
 		if (!outputFilename.empty()) {
 

@@ -55,14 +55,109 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "KmerTrackingData.h"
 #include "Kmer.h"
 
+#include <boost/shared_ptr.hpp>
+#include <boost/unordered_set.hpp>
+
 class KmerReadUtils {
+public:
+	typedef std::vector< int > PositionVector;
+	typedef boost::shared_ptr< PositionVector > PositionVectorPtr;
+	typedef KmerArrayPair< PositionVectorPtr > KmerReferenceMap;
+	typedef KmerReferenceMap::IndexType IndexType;
+	typedef KmerWeightedExtensions::CompareArrayIdx CompareArrayIdx;
 private:
 	KmerWeightedExtensions kmers;
+	KmerReferenceMap kmerMap;
 public:
 	KmerReadUtils() {
 		LOG_DEBUG_OPTIONAL(2, true, "KmerReadUtils()" << &kmers);
 	}
 	~KmerReadUtils() {}
+
+	// reports low with indels & subs
+	SequenceLengthType getReferenceMapKmerOverlap(const Read &tgt) {
+		SequenceLengthType overlap = 0;
+		kmers.build(tgt.getTwoBitSequence(), tgt.getLength(), true);
+		for(int i = 0; i < (int) kmers.size(); i++) {
+			KmerReferenceMap::Iterator it;
+			it = kmerMap.find(kmers.get(i));
+			if (it != kmerMap.end()) {
+				overlap += it->value()->size();
+			}
+		}
+		return overlap;
+	}
+
+	// accounts for every base that is covered by at least one kmer
+	SequenceLengthType getReferenceMapOverlap(const Read &tgt) {
+		boost::unordered_set<SequenceLengthType> coveredPositions;
+		kmers.build(tgt.getTwoBitSequence(), tgt.getLength(), true);
+		for(int i = 0; i < (int) kmers.size(); i++) {
+			KmerReferenceMap::Iterator it;
+			LOG_DEBUG(2, "getReferenceMapOverlap(): finding kmer: " << kmers.get(i).toFasta());
+			it = kmerMap.find(kmers.get(i));
+			if (it != kmerMap.end()) {
+				LOG_DEBUG(2, "getReferenceMapOverlap(): matched kmer: " << it->key().toFasta() << " " << it->value()->front());
+				for(PositionVector::iterator it2 = it->value()->begin(); it2 != it->value()->end(); it2++) {
+					int startPos, endPos, signedPosition = *it2;
+					if (signedPosition < 0) {
+						startPos = 0 - signedPosition;
+					} else {
+						startPos = signedPosition;
+					}
+					endPos = startPos + KmerSizer::getSequenceLength();
+					
+					assert(startPos < endPos);
+					assert(startPos >= 0);
+					assert(endPos < (int) tgt.getLength());
+					for(int j = startPos; j < endPos; j++)
+						coveredPositions.insert(j);
+				}
+			}
+		}
+		LOG_DEBUG(2, "getReferenceMapOverlap(): " << coveredPositions.size());
+		return coveredPositions.size();
+	}
+	SequenceLengthType buildReferenceMap(const Read &read) {
+		kmerMap.clear(false);
+		SequenceLengthType readLength = read.getLength();
+		SequenceLengthType numKmers = readLength - KmerSizer::getSequenceLength() - 1;
+		STACK_ALLOC(bool, boolVec, numKmers);
+		kmers.build(read.getTwoBitSequence(), readLength, true, boolVec);
+
+		SequenceLengthType size = kmers.size();
+
+		std::vector< IndexType > sortedIndexes;
+		sortedIndexes.reserve(size);
+		for(IndexType i = 0; i < size; i++)
+			sortedIndexes.push_back(i);
+		std::sort(sortedIndexes.begin(), sortedIndexes.end(), CompareArrayIdx(kmers));
+
+		kmerMap.reserve(size);
+		SequenceLengthType dupIdx = 0;
+		for(SequenceLengthType i = 0; i < sortedIndexes.size(); i++) {
+			IndexType sorted = sortedIndexes[i];
+			int signedPosition = boolVec[sorted] ? (int) sorted : 0 - (int) sorted;
+			LOG_DEBUG(2, "buildReferenceMap(): mapPos: " << i-dupIdx << ", sorted: " << sorted << ", signedPosition: " << signedPosition << " " << kmers[sorted].toFasta());
+		
+			if (i > 0 && kmers.get(sorted).compare(kmers.get( sortedIndexes[i-dupIdx-1] )) == 0) {
+				dupIdx++;
+				assert(kmerMap.size() == i - dupIdx + 1);
+				kmerMap.valueAt(i-dupIdx)->push_back( signedPosition );
+				continue;
+			}
+			PositionVectorPtr pvp(new PositionVector());
+			pvp->reserve(2);
+			pvp->push_back( signedPosition );
+			kmerMap.append(kmers.get(sorted), pvp);
+			assert(kmerMap.size() == i - dupIdx + 1);
+		}
+		STACK_DEALLOC(boolVec);
+
+		kmerMap.setLastSorted();
+		return kmers.size();
+	}
+
 	KmerWeightedExtensions &buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
 		if (read.isDiscarded()) {
 			kmers.resize(0);

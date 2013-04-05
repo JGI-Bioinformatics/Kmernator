@@ -174,6 +174,9 @@ std::string extendContigsWithCap3(const ReadSet & contigs,
 
 	int poolsWithoutMinimumCoverage = 0;
 
+	// initialize per-thread Cap3 instances
+	Cap3 cap3[omp_get_max_threads()];
+
 	#pragma omp parallel for
 	for (long i = 0; i < (long) contigs.getSize(); i++) {
 		const Read &oldRead = contigs.getRead(i);
@@ -185,7 +188,7 @@ std::string extendContigsWithCap3(const ReadSet & contigs,
 		double extTime = MPI_Wtime();
 		if (poolSize > minimumCoverage) {
 			LOG_VERBOSE_OPTIONAL(2, true, "Extending " << oldRead.getName() << " with " << poolSize << " pool of reads");
-			newRead = Cap3::extendContig(oldRead, contigReadSet[i]);
+			newRead = cap3[omp_get_thread_num()].extendContig(oldRead, contigReadSet[i]);
 			newLen = newRead.getLength();
 		} else {
 			poolsWithoutMinimumCoverage++;

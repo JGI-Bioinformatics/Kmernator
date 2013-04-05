@@ -132,12 +132,16 @@ public:
 			matchResults.push_back(MatchHitSet());
 
 			KmerWeights kmers(read.getTwoBitSequence(), read.getLength(), true);
-			unsigned int lowerMaxKmer = maxPositionsFromEdge > 0 ? maxKmersFromEdge : kmers.size();
-			unsigned int upperMinKmer = maxPositionsFromEdge > 0 ? kmers.size() - maxKmersFromEdge : 0;
+			unsigned int lowerMaxKmer = maxKmersFromEdge, upperMinKmer = 0;
+			if ((int) kmers.size() > maxKmersFromEdge) {
+				upperMinKmer = kmers.size() - maxKmersFromEdge;
+			}
 			LOG_DEBUG(4, "KmerMatch::matchLocal: " << contigIdx << " " << read.toString() << " kmers: " << kmers.size());
 
 			for(unsigned int j = 0; j < kmers.size(); j++) {
-				if (j > lowerMaxKmer && j < upperMinKmer ) {
+				if (j <= lowerMaxKmer || j >= upperMinKmer ) {
+					LOG_DEBUG(5, "Considering edge match: " << contigIdx << " len:" << read.getLength() << " kmer:" << j);
+				} else {
 					LOG_DEBUG(5, "Skipping match to middle of " << contigIdx << " len:" << read.getLength() << " kmer:" << j);
 					continue;
 				}

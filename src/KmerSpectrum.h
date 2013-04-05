@@ -272,7 +272,7 @@ namespace PurgeUtilsDetail {
 			// quick check to see if there is any purging to be done, and allocate the right amount of memory...
 			long newSize = 0;
 			for(BaseBucketTypeIterator it = bucket.begin(); it != bucket.end(); it++) {
-				if (minimumCount >= (long) it->second) {
+				if (minimumCount <= (long) it->second.getCount()) {
 					newSize++;
 				} else {
 					break;
@@ -283,7 +283,7 @@ namespace PurgeUtilsDetail {
 			_BucketType newBucket;
 			newBucket.reserve(newSize);
 			for(BaseBucketTypeIterator it = bucket.begin(); it != bucket.end(); it++)
-				if (minimumCount >= (long) it->second)
+				if (minimumCount <= (long) it->second.getCount())
 					newBucket.insert(newBucket.end(), value_type(it->first, it->second));
 			IndexType affected = bucket.size() - newSize;
 			std::swap(newBucket, bucket);
@@ -1066,7 +1066,7 @@ public:
 		os << getHistogram(printSolidOnly);
 	}
 	virtual std::string getHistogram(bool solidOnly = false) {
-		Histogram histogram(63);
+		Histogram histogram(256);
 
 		histogram.set(*this, solidOnly);
 		return histogram.toString();
@@ -1798,9 +1798,11 @@ public:
 	}
 
 	void purgeMinDepth(long minimumCount, bool purgeSolidsToo = false) {
-		if (hasSolids && purgeSolidsToo)
-			PurgeUtils< SolidMapType >::purgeMinCount(solid, minimumCount);
-		PurgeUtils< WeakMapType >::purgeMinCount(weak, minimumCount);
+		if (!hasSingletons || minimumCount > 2) {
+			if (hasSolids && purgeSolidsToo)
+				PurgeUtils< SolidMapType >::purgeMinCount(solid, minimumCount);
+			PurgeUtils< WeakMapType >::purgeMinCount(weak, minimumCount);
+		}
 		if (hasSingletons && minimumCount > 1) {
 			singleton.clear(false);
 			hasSingletons = false;

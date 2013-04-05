@@ -60,7 +60,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 class _ContigExtenderBaseOptions : public OptionsBaseInterface {
 public:
-	_ContigExtenderBaseOptions() : minimumConsensus(85), minimumCoverage(4.8), maximumDeltaRatio(0.33) {}
+	_ContigExtenderBaseOptions() : minimumConsensus(85), minimumCoverage(4.8), maximumDeltaRatio(0.33), minimumExtensionFactor(0.90) {}
 	std::string &getContigFile () {
 		return contigFile;
 	}
@@ -72,6 +72,9 @@ public:
 	}
 	double &getMaximumDeltaRatio() {
 		return maximumDeltaRatio;
+	}
+	double &getMinimumExtensionFactor() {
+		return minimumExtensionFactor;
 	}
 	void _resetDefaults() {
 	}
@@ -87,6 +90,8 @@ public:
 
 				("maximum-delta-ratio", po::value<double>()->default_value(maximumDeltaRatio), "maximum allowable change in coverage between adjacent kmers")
 
+				("minimum-extension-factor", po::value<double>()->default_value(minimumExtensionFactor), "minimum amount of target contig that a candidate extension contig must contain")
+
 				("contig-file", po::value<std::string>()->default_value(contigFile), "filename of input contigs.fa");
 
 
@@ -100,6 +105,7 @@ public:
 		setOpt("minimum-consensus", minimumConsensus);
 		setOpt("minimum-coverage", minimumCoverage);
 		setOpt("maximum-delta-ratio", maximumDeltaRatio);
+		setOpt("minimum-extension-factor", minimumExtensionFactor);
 		setOpt("contig-file", contigFile);
 
 		if (getContigFile().empty()) {
@@ -117,6 +123,7 @@ private:
 	double minimumConsensus;
 	double minimumCoverage;
 	double maximumDeltaRatio;
+	double minimumExtensionFactor;
 };
 typedef OptionsBaseTemplate< _ContigExtenderBaseOptions > ContigExtenderBaseOptions;
 

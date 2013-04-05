@@ -129,10 +129,11 @@ int main(int argc, char *argv[]) {
 			std::string hist = spectrum.getHistogram(false);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
 		}
+
 		std::string outputFilenameBase = outputFilename + ".mercount.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength());
-		spectrum.dumpCounts(outputFilenameBase);
+		spectrum.dumpCounts(outputFilenameBase, KmerSpectrumOptions::getOptions().getMinDepth());
 		outputFilenameBase = outputFilename + ".mergraph.m" + boost::lexical_cast<std::string>(KmerSizer::getSequenceLength()) + ".D" + boost::lexical_cast<std::string>(KmerSpectrumOptions::getOptions().getMinDepth());
-		spectrum.dumpGraphs(outputFilenameBase);
+		spectrum.dumpGraphs(outputFilenameBase, KmerSpectrumOptions::getOptions().getMinDepth());
 		world.barrier();
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
 

@@ -93,7 +93,6 @@ class Cap3 {
 public:
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 	static const int repeatContig = 1;
-	static const double minOverlapFraction = 0.9;
 	static std::string getNewName(std::string oldName, int deltaLen) {
 		std::string newName;
 		size_t pos = oldName.find_last_of("+");
@@ -106,37 +105,39 @@ public:
 
 		return newName + "+" + boost::lexical_cast<std::string>(deltaLen);
 	}
-	static Read selectBestContig(const ReadSet &candidateContigs, const Read &targetContig) {
-		Read bestRead = targetContig;
-		SequenceLengthType oldSize = KmerSizer::getSequenceLength();
-		KmerSizer::set(16);
-		KmerSpectrum<> tgtSpectrum(16);
-		tgtSpectrum.setSolidOnly();
-		tgtSpectrum.buildKmerSpectrum(targetContig);
-		long tgtKmers = tgtSpectrum.solid.size();
-		LOG_DEBUG(4, "Cap3::selectBestContig(): tgtContig: " << targetContig.getLength() << ", " << tgtKmers);
 
+	Read selectBestContig(const ReadSet &candidateContigs, const Read &targetContig) {
+		LOG_DEBUG(2, "selectBestRead(): for " << targetContig.getName() << " " << targetContig.getLength());
+		Read bestRead = targetContig;
+		kmerReadUtils.buildReferenceMap(targetContig);
+		SequenceLengthType contigLength = targetContig.getLength();
+		double minExtensionFactor = ContigExtenderBaseOptions::getOptions().getMinimumExtensionFactor();
+
+		SequenceLengthType minOverlap = contigLength * minExtensionFactor;
+		int bestOverlap = minOverlap - 1;
 		for(ReadSetSizeType i = 0; i < candidateContigs.getSize(); i++) {
-			const Read &tgtRead = candidateContigs.getRead(i);
-			KmerWeights readKmers(tgtRead.getTwoBitSequence(), tgtRead.getLength(), true);
-			tgtSpectrum.getCounts(readKmers, false);
-			long readOverlap = readKmers.sumAll();
-			if (readOverlap >= minOverlapFraction * tgtKmers && tgtRead.getLength() >= targetContig.getLength() && bestRead.getLength() < tgtRead.getLength()) {
-				bestRead = tgtRead;
-				bestRead.setName(getNewName(targetContig.getName(), tgtRead.getLength() - targetContig.getLength()));
+			const Read &candidateRead = candidateContigs.getRead(i);
+			if (candidateRead.getLength() <= contigLength) {
+				LOG_DEBUG(2, "selectBestContig(): candidateRead is too short: " << candidateRead.getLength());
+				continue;
 			}
-			LOG_DEBUG(4, "Cap3::selectBestContig(): tgtRead: " << tgtRead.getLength() << ", " << readOverlap << ": " << bestRead.getLength());
+			long readOverlap = kmerReadUtils.getReferenceMapOverlap(candidateRead);
+			if (readOverlap > bestOverlap) {
+				bestOverlap = readOverlap;
+				bestRead = candidateRead;
+				bestRead.setName(getNewName(targetContig.getName(), candidateRead.getLength() - targetContig.getLength()));
+				LOG_DEBUG(2, "Cap3::selectBestContig(): candidateRead: " << candidateRead.getLength() << ", " << readOverlap << ": " << bestRead.getLength() << " " << bestRead.getName());
+			}
 		}
 
 		if (bestRead.getLength() > targetContig.getLength()) {
-			LOG_DEBUG_OPTIONAL(2, true, "Cap3 new contig: " << bestRead.getName() << " from " << targetContig.getLength() << " to " << bestRead.getLength());
+			LOG_DEBUG(2, "Cap3 new contig: " << bestRead.getName() << " from " << targetContig.getLength() << " to " << bestRead.getLength());
 		} else {
-			LOG_DEBUG_OPTIONAL(2, true, "Cap3 failed to extend: " << bestRead.getName());
+			LOG_DEBUG(2, "Cap3 failed to extend: " << bestRead.getName());
 		}
-		KmerSizer::set(oldSize);
 		return bestRead;
 	}
-	static Read extendContig(const Read &oldContig, const ReadSet &_inputReads) {
+	Read extendContig(const Read &oldContig, const ReadSet &_inputReads) {
 		ReadSet inputReads = _inputReads;
 		int status;
 
@@ -155,7 +156,7 @@ public:
 		}
 		std::string log = outputName + ".log";
 		std::string cmd = Cap3Options::getOptions().getCap3Path() + " " + outputName + " > " + log + " 2>&1";
-		LOG_DEBUG_OPTIONAL(1, true, "Executing (" << inputReads.getSize() << " read pool): " << cmd);
+		LOG_DEBUG_OPTIONAL(1, true, "Executing cap3 for " << oldContig.getName() << "(" << inputReads.getSize() << " read pool): " << cmd);
 		status = system(cmd.c_str());
 		if (status == 0) {
 			std::string newContigFile = outputName + ".cap.contigs";
@@ -173,6 +174,8 @@ public:
 		Cleanup::removeTempDir(outputDir);
 		return Read();
 	}
+private:
+	KmerReadUtils kmerReadUtils;
 };
 
 #endif /* CAP3_H_ */

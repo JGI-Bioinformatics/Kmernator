@@ -870,19 +870,9 @@ private:
 		return ((char *) ptr + i * KmerSizer::getByteSize());
 	}
 
-	// these are never thread safe!
-	inline const Kmer &get(IndexType index) const {
-		return *((Kmer *) _add(_begin, index));
-	}
-	inline Kmer &get(IndexType index) {
-		return *((Kmer *) _add(_begin, index));
-	}
-
-	KmerArrayPair(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity), _endSorted(0) {
-	}
+	KmerArrayPair(void *begin, IndexType size, IndexType capacity) : _begin(begin), _size(size), _capacity(capacity), _endSorted(0) { }
 
 public:
-
 	KmerArrayPair(IndexType size = 0) :
 		_begin(NULL), _size(0), _capacity(0), _endSorted(0) {
 		resize(size);
@@ -988,6 +978,16 @@ public:
 		array.setLastSorted();
 		return array;
 	}
+
+	// these are never thread safe!
+	inline const Kmer &get(IndexType index) const {
+		return *((Kmer *) _add(_begin, index));
+	}
+
+	inline Kmer &get(IndexType index) {
+		return *((Kmer *) _add(_begin, index));
+	}
+
 	// never thread safe!
 	const ValueType *getValueStart() const {
 		if (capacity() > 0)
@@ -996,7 +996,6 @@ public:
 			return NULL;
 	}
 
-protected:
 	void setLastSorted() {
 		_endSorted = size() > 0 ? 1: 0;
 		for(IndexType i = 1; i < size(); i++) {
@@ -1010,6 +1009,7 @@ protected:
 		assert(_endSorted <= size());
 	}
 
+protected:
 	// never thread safe!
 	ValueType *getValueStart() {
 		if (capacity() > 0)

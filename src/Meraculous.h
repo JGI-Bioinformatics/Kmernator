@@ -104,10 +104,12 @@ public:
 	}
 	~MeraculousDistributedKmerSpectrum() {}
 
-	void dumpCounts(std::string filename) {
+	void dumpCounts(std::string filename, int minDepth) {
 		DistributedOfstreamMap dom(getWorld(), filename, "");
 		ostream &os = dom.getOfstream("");
 		for(KmerIter it = weak.begin(); it != weak.end(); it++) {
+			if ((int) it.value().getCount() < minDepth)
+				continue;
 			long count = it.value().getDirectionBias();
 			long revCount = it.value().getCount() - count;
 			os << it.key().toFasta() << "\t" << count+revCount << std::endl;
@@ -116,10 +118,12 @@ public:
 			os << rev.toFasta() << "\t" << revCount+count << std::endl;
 		}
 	}
-	void dumpGraphs(std::string filename) {
+	void dumpGraphs(std::string filename, int minDepth) {
 		DistributedOfstreamMap dom(getWorld(), filename, "");
 		ostream &os = dom.getOfstream("");
 		for(KmerIter it = weak.begin(); it != weak.end(); it++) {
+			if ((int) it.value().getCount() < minDepth)
+				continue;
 			ExtensionTracking extensions = it.value().getExtensionTracking();
 			os << it.key().toFasta() << "\t" << extensions.toTextValues() << std::endl;
 			TEMP_KMER(rev);
