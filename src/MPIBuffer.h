@@ -349,7 +349,7 @@ public:
 		Buffer buf;
 		if (_freeBuffers[threadId].empty()) {
 			buf = new char[_bufferSize];
-			LOG_DEBUG(1, "getNewBuffer(): " << (void*) buf << " of " << _bufferSize << " ending: " << (void*) (buf + _bufferSize));
+			LOG_DEBUG(4, "getNewBuffer(): " << (void*) buf << " of " << _bufferSize << " ending: " << (void*) (buf + _bufferSize));
 		} else {
 			buf = _freeBuffers[threadId].back();
 			_freeBuffers[threadId].pop_back();
@@ -401,7 +401,7 @@ public:
 	void checkpoint() {
 #pragma omp atomic
 		_numCheckpoints++;
-		LOG_DEBUG_OPTIONAL(3, true, "checkpoint received:" << _numCheckpoints);
+		LOG_DEBUG(3, "checkpoint received:" << _numCheckpoints);
 	}
 
 };
@@ -848,7 +848,7 @@ private:
 
 		if (out.areAllFinal()) {
 			// wait for all to process the last buffer, update checkpoints, then check it
-			LOG_DEBUG_OPTIONAL(2, true, "sendReceive() Starting areAllFinal barrier on buffer: " << thisBuffer << " " << threadsSending);
+			LOG_DEBUG(2, "sendReceive() Starting areAllFinal barrier on buffer: " << thisBuffer << " " << threadsSending);
 			assert(out.isReadyOut());
 			assert(last.isUnused());
 
@@ -918,7 +918,7 @@ public:
 
 	void finalize() {
 		assert(omp_get_max_threads() == 1 || omp_in_parallel());
-		LOG_DEBUG_OPTIONAL(2, true, "Entering finalize()");
+		LOG_DEBUG(2, "Entering finalize()");
 		while (!this->reachedCheckpoint(this->getNumThreads())) {
 			sendReceive(true);
 		}
@@ -967,7 +967,7 @@ public:
 		int msgSize = this->getMessageSize() + trailingBytes;
 		bb.header.append(msgSize);
 		this->newMessage();
-		LOG_DEBUG(1, "bufferMessage(" << rankDest << ", " << tagDest << ", "
+		LOG_DEBUG(5, "bufferMessage(" << rankDest << ", " << tagDest << ", "
 				<< wasSent << ", " << messages << ", " << trailingBytes
 				<< "): " << (void*) buf << " size: " << msgSize);
 		assert(((Buffer)buf) + msgSize < bb.buffer + this->getBufferSize());
@@ -1197,11 +1197,7 @@ private:
 			messages += this->receiveAllIncomingMessages();
 			messages += this->flushAll();
 			if (this->reachedCheckpoint(checkpointFactor) && messages != 0) {
-				LOG_DEBUG_OPTIONAL(
-						3,
-						true,
-						"Recv " << _tag
-						<< ": Achieved checkpoint but more messages are pending");
+				LOG_DEBUG(3, "Recv " << _tag << ": Achieved checkpoint but more messages are pending");
 			}
 			if (messages == 0)
 				WAIT_AND_WARN(iterations, "_finalize(" << checkpointFactor << ") with messages: " << messages << " checkpoint: " << this->getNumCheckpoints());
@@ -1210,21 +1206,15 @@ private:
 	}
 public:
 	void finalize(int checkpointFactor = 1) {
-		LOG_DEBUG_OPTIONAL(2, true, "Recv " << _tag
-				<< ": Entering finalize checkpoint: "
-				<< this->getNumCheckpoints() << " out of " << (checkpointFactor
-						* this->getWorld().size()));
+		LOG_DEBUG(2, "Recv " << _tag << ": Entering finalize checkpoint: " << this->getNumCheckpoints() << " out of " << (checkpointFactor * this->getWorld().size()));
 
 		long messages = 0;
 		do {
 			messages = _finalize(checkpointFactor);
-			LOG_DEBUG_OPTIONAL(3, true, "waiting for message to be 0: "
-					<< messages);
+			LOG_DEBUG(3, "waiting for message to be 0: " << messages);
 		} while (messages != 0);
 
-		LOG_DEBUG_OPTIONAL(3, true, "Recv " << _tag
-				<< ": Finished finalize checkpoint: "
-				<< this->getNumCheckpoints());
+		LOG_DEBUG(3, "Recv " << _tag << ": Finished finalize checkpoint: " << this->getNumCheckpoints());
 		this->resetCheckpoints();
 		this->syncPoint();
 	}
@@ -1574,25 +1564,21 @@ public:
 
 	}
 	void finalize(int tagDest) {
-		LOG_DEBUG_OPTIONAL(2, true, "Send " << tagDest
-				<< ": entering finalize()");
+		LOG_DEBUG(2, "Send " << tagDest << ": entering finalize()");
 
 		// first clear the buffer and in-flight messages
 		flushAllMessagesUntilEmpty(tagDest);
 		receiveAllIncomingMessages();
 
-		LOG_DEBUG_OPTIONAL(3, true, "Send " << tagDest
-				<< ": entering finalize stage2()");
+		LOG_DEBUG(3, "Send " << tagDest << ": entering finalize stage2()");
 		// send zero-message as checkpoint signal to stop
 		flushAllMessageBuffers(tagDest, true);
 
-		LOG_DEBUG_OPTIONAL(3, true, "Send " << tagDest
-				<< ": entering finalize stage3()");
+		LOG_DEBUG(3, "Send " << tagDest << ": entering finalize stage3()");
 		// now continue to flush until there is nothing left in the buffer;
 		flushAllMessagesUntilEmpty(tagDest);
 
-		LOG_DEBUG_OPTIONAL(3, true, "Send " << tagDest
-				<< ": finished finalize()");
+		LOG_DEBUG(3, "Send " << tagDest << ": finished finalize()");
 		this->syncPoint();
 	}
 	long processPending() {

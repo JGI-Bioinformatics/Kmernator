@@ -278,7 +278,7 @@ std::string runPartialBatch(mpi::communicator world, boost::shared_ptr< MatcherI
 		double minimumCoverage, SequenceLengthType maxKmerSize,
 		SequenceLengthType maxExtend, SequenceLengthType kmerStep) {
 
-	LOG_DEBUG_GATHER(1, "Starting runPartialBatch(" << batchIdx << " of " << _contigs.getSize() << "): " << MemoryUtils::getMemoryUsage());
+	LOG_DEBUG(1, "Starting runPartialBatch(" << batchIdx << " of " << _contigs.getSize() << "): " << MemoryUtils::getMemoryUsage());
 
 	ReadSet contigs; // new global contigs file a subset of original
 	std::string extendLog;
@@ -386,7 +386,7 @@ int main(int argc, char *argv[]) {
 
 		short iteration = 0;
 		while (++iteration <= maxIterations) {
-			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+			LOG_DEBUG_GATHER(1, "Iteration " << iteration << " " << MemoryUtils::getMemoryUsage());
 			int batchIdx = 0;
 
 			matcher->resetTimes("Start Iteration", MPI_Wtime());
