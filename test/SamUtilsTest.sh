@@ -85,14 +85,14 @@ sortedsam=${sorted}.sam
 sorted=${sorted}.bam
 sortedorder=${sorted}.sam.order
 $samtools view -h ${sorted} > ${sortedsam}
-awk '{print $3" "$4}'  ${sortedsam} > ${sortedorder}
+awk '{print $3" "$4}'  ${sortedsam} | sed 's/SO:unsorted/SO:coordinate/;' > ${sortedorder}
 
 if ((isaprun==0))
 then
 
   ./SamUtilsTest ${test} ${testout} ${testoutsorted}
   $samtools view -h $testout > ${testoutsam2}
-  $samtools view -h ${testoutsorted} | awk '{print $3" "$4}' > ${testoutsam3}
+  $samtools view -h ${testoutsorted} | awk '{print $3" "$4}' | sed 's/SO:unsorted/SO:coordinate/;' > ${testoutsam3}
   diff -q ${testoutsam2} ${testoutsam} || failed SamUtilsTest bam copy failed
   diff -q ${testoutsam3} ${sortedorder} || failed SamUtilsTest bam sort-order failed
 

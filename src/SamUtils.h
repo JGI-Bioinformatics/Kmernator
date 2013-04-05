@@ -191,6 +191,43 @@ public:
 	~BamManager() {
 	}
 
+	/* copied from bam_sort.c within samtools 0.1.19 */
+	static int change_SO(bam_header_t *h, const char *so)
+	{
+		char *p, *q, *beg = 0, *end = 0, *newtext;
+		if (h == NULL)
+			return 0;
+		if (h->l_text > 3) {
+			if (strncmp(h->text, "@HD", 3) == 0) {
+				if ((p = strchr(h->text, '\n')) == 0) return -1;
+				*p = '\0';
+				if ((q = strstr(h->text, "\tSO:")) != 0) {
+					*p = '\n'; // change back
+					if (strncmp(q + 4, so, p - q - 4) != 0) {
+						beg = q;
+						for (q += 4; *q != '\n' && *q != '\t'; ++q);
+						end = q;
+					} else return 0; // no need to change
+				} else beg = end = p, *p = '\n';
+			}
+		}
+		if (beg == 0) { // no @HD
+			h->l_text += strlen(so) + 15;
+			newtext = (char*) malloc(h->l_text + 1);
+			sprintf(newtext, "@HD\tVN:1.3\tSO:%s\n", so);
+			strcat(newtext, h->text);
+		} else { // has @HD but different or no SO
+			h->l_text = (beg - h->text) + (4 + strlen(so)) + (h->text + h->l_text - end);
+			newtext = (char*) malloc(h->l_text + 1);
+			strncpy(newtext, h->text, beg - h->text);
+			sprintf(newtext + (beg - h->text), "\tSO:%s", so);
+			strcat(newtext, end);
+		}
+		free(h->text);
+		h->text = newtext;
+		return 0;
+	}
+
 	static void initBamVector(BamVector &reads, int newSize) {
 		reads.reserve(newSize + 1); // add extra for option to add extra NULL at end for heapsort
 		BamVector &bv = getRecycledReads();
@@ -983,6 +1020,7 @@ public:
 			bgzf_ostream bgzfo(os, rank == size - 1);
 			if (header != NULL && rank == 0) {
 				LOG_DEBUG_OPTIONAL(1, true, "Writing header");
+				BamManager::change_SO(header, "coordinate");
 				bgzfo << *header;
 			}
 			long count = 0;

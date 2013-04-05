@@ -102,6 +102,7 @@ int main(int argc, char **argv)
 	{
 		SamUtils::MPISortBam sortem(MPI_COMM_WORLD, reads);
 	}
+	BamManager::change_SO(header.get(), "coordinate");
 	SamUtils::writeBamVector(MPI_COMM_WORLD, argv[3], reads, header.get(), false);
 
 	BamManager::destroyBamVector(reads);
