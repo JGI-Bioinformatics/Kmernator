@@ -1685,7 +1685,7 @@ public:
 	public:
 		CompareArrayIdx(const KmerArrayPair &kmerArray): _kmerArray(kmerArray) {}
 		bool operator()(IndexType i, IndexType j) {
-			return _kmerArray.get(i).compare(_kmerArray.get(j)) <= 0;
+			return _kmerArray.get(i).compare(_kmerArray.get(j)) < 0;
 		}
 	};
 
