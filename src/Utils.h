@@ -77,8 +77,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <boost/lexical_cast.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/tokenizer.hpp>
-#include <boost/random/mersenne_twister.hpp>
-#include <boost/random/uniform_01.hpp>
+#include <boost/random.hpp>
 #include <boost/thread.hpp>
 #include <boost/thread/mutex.hpp>
 
@@ -199,6 +198,23 @@ class UniqueName {
 
 public:
 	typedef OptionsBaseInterface::StringListType StringListType;
+	static std::string getOurUniqueHandle() {
+#ifdef _USE_MPI
+		char buf[128];
+		int rank;
+		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+		if (rank == 0) {
+			std::string hostAndPid = OptionsBaseInterface::getHostnameAndPid();
+			int len = std::min((int) 127, (int) hostAndPid.length());
+			memcpy(buf, hostAndPid.c_str(), len);
+			buf[len] = '\0';
+		}
+		MPI_Bcast(buf, 127, MPI_BYTE, 0, MPI_COMM_WORLD);
+		return std::string(buf);
+#else
+		return OptionsBaseInterface::getHostnameAndPid();
+#endif
+	}
 	static std::string generateUniqueGlobalName(std::string filename = "", int globalId = getGlobalUnique()) {
 		return filename + boost::lexical_cast<std::string>(globalId);
 	}
@@ -1043,28 +1059,32 @@ public:
 	};
 };
 
-template<typename Engine, typename Type>
+template<typename Engine, typename Type, typename Distribution>
 class _Rand {
 public:
 	typedef boost::shared_ptr< _Rand  > Instance;
 	typedef std::vector< Instance > Instances;
-	_Rand( Type _seed = 0 ) : impl( _seed ) {	}
+	_Rand( uint64_t _seed = 0 ) : engine( _seed ), dist() {	}
 	Type getRand() {
-		return impl();
+		return dist(engine);
 	}
 	static Type rand() {
 		return getInstance().getRand();
 	}
-protected:
-	static _Rand &getInstance() {
+	Type min() {
+		return dist.min();
+	}
+	Type max() {
+		return dist.max();
+	}
+	static _Rand &getInstance(int threadId = omp_get_thread_num()) {
 		static Instances _staticInstances = Instances();
-		unsigned int id = omp_get_thread_num();
-		if (_staticInstances.size() <= id) {
+		if ((int) _staticInstances.size() <= threadId) {
 			// not found, create a new, lock and add to map
 			boost::mutex::scoped_lock mylock(getMutex());
-			if (_staticInstances.size() <= id) {
+			if ((int) _staticInstances.size() <= threadId) {
 				Instances tmp(_staticInstances);
-				tmp.resize(omp_get_num_threads());
+				tmp.resize(std::max(threadId+1, omp_get_num_threads()));
 				for(int i = 0; i < (int) tmp.size(); i++) {
 					if (tmp[i].get() == NULL) {
 						Instance lr( new _Rand(time(NULL) ^ (i+1)) );
@@ -1072,25 +1092,26 @@ protected:
 					}
 				}
 				_staticInstances.swap(tmp);
-				LOG_DEBUG_OPTIONAL(1, true, "_Rand::getInstance(): " << id << " " << _staticInstances.size());
+				LOG_DEBUG_OPTIONAL(1, true, "_Rand::getInstance(): " << threadId << " " << _staticInstances.size());
 			}
 		}
-		assert(_staticInstances.size() > id && _staticInstances[id].get() != NULL);
-		return *_staticInstances[id];
+		assert((int) _staticInstances.size() > threadId && _staticInstances[threadId].get() != NULL);
+		return *_staticInstances[threadId];
 	}
-
+protected:
 	static boost::mutex &getMutex() {
 		static boost::mutex _;
 		return _;
 	}
 private:
-	Engine impl;
+	Engine engine;
+	Distribution dist;
 };
 
-typedef _Rand< boost::random::mt19937, uint32_t > IntRand;
-typedef _Rand< boost::random::mt19937_64, uint64_t > LongRand;
-typedef _Rand< boost::random::uniform_01<float>, float > FloatRand;
-typedef _Rand< boost::random::uniform_01<double>, double > DoubleRand;
+typedef _Rand< boost::random::mt19937, uint32_t, boost::random::uniform_int_distribution<uint32_t> > IntRand;
+typedef _Rand< boost::random::mt19937_64, uint64_t, boost::random::uniform_int_distribution<uint64_t> > LongRand;
+typedef _Rand< boost::random::mt19937, float, boost::random::uniform_01<float> > FloatRand;
+typedef _Rand< boost::random::mt19937_64, double, boost::random::uniform_01<double> > DoubleRand;
 
 class LongRandOld {
 public:
