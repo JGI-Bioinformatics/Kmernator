@@ -122,10 +122,11 @@ public:
 		kmerMap.clear(false);
 		SequenceLengthType readLength = read.getLength();
 		SequenceLengthType numKmers = readLength - KmerSizer::getSequenceLength() + 1;
-		STACK_ALLOC(bool, boolVec, numKmers);
-		kmers.build(read.getTwoBitSequence(), readLength, true, boolVec);
+		STACK_ALLOC(bool, bools, readLength);
 
+		kmers.build(read.getTwoBitSequence(), readLength, true, bools);
 		SequenceLengthType size = kmers.size();
+		assert(size == numKmers);
 
 		std::vector< IndexType > sortedIndexes;
 		sortedIndexes.reserve(size);
@@ -137,7 +138,7 @@ public:
 		SequenceLengthType dupIdx = 0;
 		for(SequenceLengthType i = 0; i < sortedIndexes.size(); i++) {
 			IndexType sorted = sortedIndexes[i];
-			int signedPosition = boolVec[sorted] ? (int) sorted : 0 - (int) sorted;
+			int signedPosition = bools[sorted] ? (int) sorted : 0 - (int) sorted;
 			LOG_DEBUG(2, "buildReferenceMap(): mapPos: " << i-dupIdx << ", sorted: " << sorted << ", signedPosition: " << signedPosition << " " << kmers[sorted].toFasta());
 		
 			if (i > 0 && kmers.get(sorted).compare(kmers.get( sortedIndexes[i-dupIdx-1] )) == 0) {
@@ -152,7 +153,7 @@ public:
 			kmerMap.append(kmers.get(sorted), pvp);
 			assert(kmerMap.size() == i - dupIdx + 1);
 		}
-		STACK_DEALLOC(boolVec);
+		STACK_DEALLOC(bools);
 
 		kmerMap.setLastSorted();
 		return kmers.size();
