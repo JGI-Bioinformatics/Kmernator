@@ -289,7 +289,7 @@ std::string runPartialBatch(mpi::communicator world, boost::shared_ptr< MatcherI
         if (contigs.getGlobalSize() == 0)
 		return extendLog;
 
-	std::string contigFile = DistributedOfstreamMap::writeGlobalReadSet(world, contigs, UniqueName::generateUniqueGlobalName(".tmp-batch", batchIdx), ".fasta", FormatOutput::Fasta());
+	std::string contigFile = DistributedOfstreamMap::writeGlobalReadSet(world, contigs, UniqueName::generateUniqueGlobalName(".tmp-batch" + UniqueName::getOurUniqueHandle() + "-", batchIdx), ".fasta", FormatOutput::Fasta());
 
 	MatcherInterface::MatchReadResults contigReadSet = matcher->match(contigs, contigFile);
 	assert(contigs.getSize() == contigReadSet.size());

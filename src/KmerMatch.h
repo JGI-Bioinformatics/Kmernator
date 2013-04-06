@@ -124,12 +124,14 @@ public:
 		int maxPositionsFromEdge = KmerMatchOptions::getOptions().getMatchMaxPositionsFromEdge();
 		int maxKmersFromEdge = maxPositionsFromEdge - KmerSizer::getSequenceLength() + 1;
 
+		float maxHits = 2 * MatcherInterfaceOptions::getOptions().getMaxReadMatches();
 		long totalMatches = 0;
 		long maxMatch = 0;
 		ReadSet::ReadSetSizeType contigIdx = 0;
+		MatchHitSet tmpHits;
 		while(query.hasNext()) {
 			Read read = query.getRead();
-			matchResults.push_back(MatchHitSet());
+			tmpHits = MatchHitSet(1<<19);
 
 			KmerWeights kmers(read.getTwoBitSequence(), read.getLength(), true);
 			unsigned int lowerMaxKmer = maxKmersFromEdge, upperMinKmer = 0;
@@ -149,22 +151,31 @@ public:
 				KS::WeakElementType element = _spectrum.getIfExistsWeak( kmers[j] );
 				if (element.isValid()) {
 					TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
-					_addResults(matchResults[contigIdx], rpwv);
+					_addResults(tmpHits, rpwv);
 				} else if (_spectrum.hasSingletons) {
 					KS::SingletonElementType element = _spectrum.getIfExistsSingleton( kmers[j] );
 					if (element.isValid()) {
 						TrackingData::ReadPositionWeightVector rpwv = element.value().getEachInstance();
-						_addResults(matchResults[contigIdx], rpwv);
+						_addResults(tmpHits, rpwv);
 					}
 				}
 			}
-			totalMatches += matchResults[contigIdx].size();
-			if (maxMatch < (long) matchResults[contigIdx].size())
-				maxMatch = matchResults[contigIdx].size();
-			LOG_DEBUG_OPTIONAL(2, (int) (contigIdx % (100*getWorld().size())) == (100*getWorld().rank()), "KmerMatch::_matchLocal(): processed " << contigIdx << " with " << matchResults[contigIdx].size() << " total: " << totalMatches);
+			long size = tmpHits.size();
+			totalMatches += size;
+			if (maxMatch < (long) size)
+				maxMatch = size;
+
+			if (size > maxHits)
+				matchResults.push_back(sampleMatches(tmpHits, maxHits / (float) size ));
+			else
+				matchResults.push_back(tmpHits);
+
+			long subSampleSize = matchResults.back().size();
+
+			LOG_DEBUG(2, "KmerMatch::_matchLocal(): processed contig " << contigIdx << " with " << size << " subsample: " << subSampleSize << " total: " << totalMatches);
 			contigIdx++;
 		}
-		LOG_DEBUG(1, "KmerMatch::_matchLocal(): processed " << contigIdx << " total: " << totalMatches << " max: " << maxMatch<< ". " << MemoryUtils::getMemoryUsage());
+		LOG_DEBUG(1, "KmerMatch::_matchLocal(): processed " << contigIdx << " contigs total: " << totalMatches << " max: " << maxMatch<< ". " << MemoryUtils::getMemoryUsage());
 
 		return matchResults;
 	}

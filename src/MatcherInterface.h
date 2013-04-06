@@ -53,6 +53,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 #include <vector>
 #include "boost/unordered_set.hpp"
+#include "boost/random/uniform_01.hpp"
 
 #include "ReadSet.h"
 #include "Utils.h"
@@ -145,6 +146,8 @@ public:
 	MatcherInterface(mpi::communicator &world, const ReadSet &target)
 	: _world(world, mpi::comm_duplicate), _target(target), globalQueryFile(), rmGlobalQueryFile(false) {
 		assert(_target.isGlobal() && _target.getGlobalSize() > 0);
+		assert(!omp_in_parallel());
+		FloatRand::getInstance(omp_get_max_threads());	// initialize random number thread-safe generators
 	}
 	~MatcherInterface() {
 		cleanGlobalQueryFile();
@@ -272,6 +275,15 @@ public:
 			}
 		}
 		return;
+	}
+
+	MatchHitSet sampleMatches(MatchHitSet &all, float fraction) {
+		FloatRand &myRand = FloatRand::getInstance();
+		MatchHitSet keep;
+		for(MatchHitSet::iterator it = all.begin(); it != all.end(); it++)
+			if (myRand.getRand() <= fraction)
+				keep.insert(*it);
+		return keep;
 	}
 
 	// returns a ReadSetVector of reads that are local (i.e. targets in globalReadIdx space local to the node)

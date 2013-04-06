@@ -177,6 +177,9 @@ public:
 		gethostname(hostname, 256);
 		return std::string(hostname);
 	}
+	static std::string getHostnameAndPid() {
+		return getHostname() + "(" + boost::lexical_cast<std::string>(getpid()) + ")";
+	}
 
 	// use to set/overrided any defaults on options that are stored persistently
 	virtual void _resetDefaults() {}
@@ -445,7 +448,7 @@ public:
 			}
 
 			if (getVerbose() > 0)
-				LOG_VERBOSE(1, "Starting on " << OptionsBaseInterface::getHostname() << " (" << getpid() <<  ") version: " << Kmernator_VERSION);
+				LOG_VERBOSE(1, "Starting on " << OptionsBaseInterface::getHostnameAndPid() << " version: " << Kmernator_VERSION);
 
 			bool print = Log::printOptions();
 			if (print) {
