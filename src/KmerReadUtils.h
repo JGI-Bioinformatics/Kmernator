@@ -121,7 +121,7 @@ public:
 	SequenceLengthType buildReferenceMap(const Read &read) {
 		kmerMap.clear(false);
 		SequenceLengthType readLength = read.getLength();
-		SequenceLengthType numKmers = readLength - KmerSizer::getSequenceLength() - 1;
+		SequenceLengthType numKmers = readLength - KmerSizer::getSequenceLength() + 1;
 		STACK_ALLOC(bool, boolVec, numKmers);
 		kmers.build(read.getTwoBitSequence(), readLength, true, boolVec);
 
