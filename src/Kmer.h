@@ -2838,7 +2838,6 @@ public:
 	virtual ~KmerMapByKmerArrayPair()
 	{
 		clear();
-		KAP::clearTmp();
 	}
 	KmerMapByKmerArrayPair &operator=(const KmerMapByKmerArrayPair &other) {
 		*((Base*)this) = (const Base&) other;
