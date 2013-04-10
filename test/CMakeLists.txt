@@ -198,6 +198,7 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus2-diff.fastq tes
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus3.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered-0.85.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered-readlength.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered-readlength-both.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runFilterTests.sh test/ )
@@ -210,5 +211,3 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10k.bam test/ )
 add_test(filter runFilterTests.sh)
 add_test(meraculous runMeraculousTests.sh)
 add_test(randomlysample runRandomlySampleTests.sh)
-
-

@@ -2,7 +2,7 @@
 
 FR=../apps/FilterReads
 FRP=../apps/FilterReads-P
-procs=$(grep -c ^processor /proc/cpuinfo)
+procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1))
 
 TMP=$(mktemp testXXXXXX)
 export TMPDIR=/tmp
@@ -19,7 +19,7 @@ clean()
 trap clean 0 1 2 3 15
 
 IN=1000.fastq
-GOOD=1000-Filtered.fastq
+GOOD=
 
 check()
 {
@@ -40,6 +40,8 @@ check()
   fi
 }
 
+GOOD=1000-Filtered-0.85.fastq
+check $FR --min-read-length 0.85
 GOOD=1000-Filtered-readlength.fastq
 check $FR --min-read-length 1 
 GOOD=1000-Filtered-readlength-both.fastq
@@ -82,10 +84,24 @@ then
       break
     fi
     export OMP_NUM_THREADS=$(((procs+mpi-1)/mpi))
+    GOOD=1000-Filtered-0.85.fastq
+    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 0.85
+    rm -f $TMP*
+ 
+    GOOD=1000-Filtered-readlength.fastq
+    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 1     
+    rm -f $TMP*
+ 
+    GOOD=1000-Filtered-readlength-both.fastq
+    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 1 --min-passing-in-pair 2
+    rm -f $TMP*
+ 
+    GOOD=1000-Filtered.fastq
     check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --thread 1
     rm -f $TMP*
     check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25
     rm -f $TMP*
+    
     # TODO restore save/load kmer map in MPI version...
     #check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --thread 1 --save-kmer-mmap 1
     #mv $TMP-mmap $TMP-mmap-saved
