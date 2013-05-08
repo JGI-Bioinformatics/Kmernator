@@ -1064,7 +1064,9 @@ class _Rand {
 public:
 	typedef boost::shared_ptr< _Rand  > Instance;
 	typedef std::vector< Instance > Instances;
-	_Rand( uint64_t _seed = 0 ) : engine( _seed ), dist() {	}
+
+	_Rand( uint64_t _seed = getSeed( ) ) : engine( _seed ), dist() {	}
+
 	Type getRand() {
 		return dist(engine);
 	}
@@ -1098,6 +1100,29 @@ public:
 		assert((int) _staticInstances.size() > threadId && _staticInstances[threadId].get() != NULL);
 		return *_staticInstances[threadId];
 	}
+	static uint64_t getSeed(uint16_t variable = omp_get_thread_num()) {
+		uint64_t dummy = time(NULL);
+		dummy <<= 30;
+		dummy |= clock();
+		return mix64<uint64_t>(dummy, (uint64_t) &dummy, (getpid()*(variable+1)) ^ 3);
+	}
+	template<typename I>
+	static I mix64(I a, I b, I c) {
+		a=a-b;  a=a-c;  a=a^(c>>43); 
+		b=b-c;  b=b-a;  b=b^(a<<9); 
+		c=c-a;  c=c-b;  c=c^(b>>8); 
+		a=a-b;  a=a-c;  a=a^(c>>38); 
+		b=b-c;  b=b-a;  b=b^(a<<23); 
+		c=c-a;  c=c-b;  c=c^(b>>5); 
+		a=a-b;  a=a-c;  a=a^(c>>35); 
+		b=b-c;  b=b-a;  b=b^(a<<49); 
+		c=c-a;  c=c-b;  c=c^(b>>11); 
+		a=a-b;  a=a-c;  a=a^(c>>12); 
+		b=b-c;  b=b-a;  b=b^(a<<18); 
+		c=c-a;  c=c-b;  c=c^(b>>22); 
+		return c;
+	};
+
 protected:
 	static boost::mutex &getMutex() {
 		static boost::mutex _;
