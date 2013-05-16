@@ -86,8 +86,8 @@ typedef ExtensionTrackingDataSingleton SingletonDataType;
 //typedef KmerMap< SingletonDataType > SDefaultMapType;
 //typedef KmerMapBoost< DataType > DefaultMapType;
 //typedef KmerMapBoost< SingletonDataType > SDefaultMapType;
-typedef KmerMapGoogleSparse< DataType > DefaultMapType;
-typedef KmerMapGoogleSparse< SingletonDataType > SDefaultMapType;
+typedef KmerMapByKmerArrayPair< DataType > DefaultMapType;
+typedef KmerMapByKmerArrayPair< SingletonDataType > SDefaultMapType;
 
 typedef DefaultMapType MapType;
 typedef SDefaultMapType SMapType;

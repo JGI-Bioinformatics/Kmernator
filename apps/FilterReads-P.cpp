@@ -54,8 +54,8 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 typedef TrackingDataWithDirection DataType;
 typedef TrackingDataSingleton SDataType;
-typedef KmerMapGoogleSparse< DataType > MapType;
-typedef KmerMapGoogleSparse< SDataType > SMapType;
+typedef KmerMapByKmerArrayPair< DataType > MapType;
+typedef KmerMapByKmerArrayPair< SDataType > SMapType;
 typedef DistributedKmerSpectrum<MapType, MapType, SMapType> KS;
 typedef DistributedReadSelector< MapType > RS;
 
@@ -90,6 +90,101 @@ public:
 	}
 };
 typedef OptionsBaseTemplate< _MPIFilterReadsOptions > MPIFilterReadsOptions;
+
+template<typename KS, typename RS>
+void BuildSpectrumAndFilter(ScopedMPIComm< MPIFilterReadsOptions > &world, ReadSet &reads, std::string &outputFilename)
+{
+	long rawKmers = 0;
+	if(KmerBaseOptions::getOptions().getKmerSize() > 0){
+		rawKmers = KS::estimateRawKmers(world, reads);
+	}
+	KS spectrum(world, rawKmers);
+	Kmernator::MmapFileVector spectrumMmaps;
+	if (KmerBaseOptions::getOptions().getKmerSize() > 0 && !KmerSpectrumOptions::getOptions().getLoadKmerMmap().empty()) {
+		spectrum.restoreMmap(KmerSpectrumOptions::getOptions().getLoadKmerMmap());
+	} else if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
+		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+
+		spectrum.buildKmerSpectrum(reads);
+		spectrum.optimize();
+		spectrum.trackSpectrum(true);
+		typename KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
+
+		std::string sizeHistoryFile = FilterReadsBaseOptions::getOptions().getSizeHistoryFile();
+		if (!sizeHistoryFile.empty()) {
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Writing size history file to: " << sizeHistoryFile);
+			if (world.rank() == 0) {
+				OfstreamMap ofm(sizeHistoryFile, "");
+				ofm.getOfstream("") << reducedSizeTracker.toString();
+			}
+		} else {
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Kmer Size History:" << std::endl << reducedSizeTracker.toString())
+		}
+
+		if (Log::isVerbose(1)) {
+			std::string hist = spectrum.getHistogram(false);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
+		}
+
+		if (!FilterReadsBaseOptions::getOptions().getHistogramFile().empty()) {
+			ofstream of(FilterReadsBaseOptions::getOptions().getHistogramFile().c_str());
+			spectrum.printHistograms(of);
+		}
+
+	}
+	unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
+	if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
+
+		if (KmerSpectrumOptions::getOptions().getVariantSigmas() > 0.0) {
+			long purgedVariants = spectrum.purgeVariants();
+			long totalPurgedVariants = mpi::all_reduce(world, purgedVariants, std::plus<long>());
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << totalPurgedVariants << " kmer variants");
+
+			std::string hist = spectrum.getHistogram(false);
+
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Variant Purged Kmer Histogram\n" << hist);
+			world.barrier();
+
+		}
+		/*
+		 * TODO Reimplement the ability to store and restore GoogleSparse maps...
+			if (!outputFilename.empty() && KmerSpectrumOptions::getOptions().getSaveKmerMmap() > 0) {
+				spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
+				LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+			}
+		 */
+
+		if (minDepth > 1) {
+			LOG_DEBUG_GATHER(1, "Clearing singletons from memory");
+			spectrum.purgeMinDepth(minDepth, true);
+			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+		} else {
+			spectrum.optimize(true);
+		}
+	}
+	if (!outputFilename.empty()) {
+		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << minDepth);
+		} else {
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
+		}
+		RS selector(world, reads, spectrum.weak);
+		selector.scoreAndTrimReads(minDepth);
+
+		// TODO implement a more efficient algorithm to output data in order
+
+		// rank 0 will overwrite, all others will append
+		if (world.rank() != 0)
+			OfstreamMap::getDefaultAppend() = true;
+
+		// let only one rank at a time write to the files
+		LOG_VERBOSE_GATHER(1, "Writing Files");
+
+		selectReads(minDepth, reads, selector, outputFilename);
+	}
+	spectrum.reset();
+	LOG_DEBUG_GATHER(1, "Finished, waiting for rest of collective");
+}
 
 int main(int argc, char *argv[]) {
 
@@ -160,99 +255,7 @@ int main(int argc, char *argv[]) {
 
 		}
 
-		long rawKmers = 0;
-		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-
-			rawKmers = KS::estimateRawKmers(world, reads);
-
-		}
-		KS spectrum(world, rawKmers);
-		Kmernator::MmapFileVector spectrumMmaps;
-		if (KmerBaseOptions::getOptions().getKmerSize() > 0 && !KmerSpectrumOptions::getOptions().getLoadKmerMmap().empty()) {
-			spectrum.restoreMmap(KmerSpectrumOptions::getOptions().getLoadKmerMmap());
-		} else if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
-
-			spectrum.buildKmerSpectrum(reads);
-			spectrum.optimize();
-			spectrum.trackSpectrum(true);
-			KS::SizeTracker reducedSizeTracker = spectrum.reduceSizeTracker(world);
-
-			std::string sizeHistoryFile = FilterReadsBaseOptions::getOptions().getSizeHistoryFile();
-			if (!sizeHistoryFile.empty()) {
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Writing size history file to: " << sizeHistoryFile);
-				if (world.rank() == 0) {
-					OfstreamMap ofm(sizeHistoryFile, "");
-					ofm.getOfstream("") << reducedSizeTracker.toString();
-				}
-			} else {
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Kmer Size History:" << std::endl << reducedSizeTracker.toString())
-			}
-
-			if (Log::isVerbose(1)) {
-				std::string hist = spectrum.getHistogram(false);
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
-			}
-
-			if (!FilterReadsBaseOptions::getOptions().getHistogramFile().empty()) {
-				ofstream of(FilterReadsBaseOptions::getOptions().getHistogramFile().c_str());
-				spectrum.printHistograms(of);
-			}
-
-		}
-		unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
-		if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-
-			if (KmerSpectrumOptions::getOptions().getVariantSigmas() > 0.0) {
-				long purgedVariants = spectrum.purgeVariants();
-				long totalPurgedVariants = mpi::all_reduce(world, purgedVariants, std::plus<long>());
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Distributed Purged " << totalPurgedVariants << " kmer variants");
-
-				std::string hist = spectrum.getHistogram(false);
-
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Variant Purged Kmer Histogram\n" << hist);
-				world.barrier();
-
-			}
-/*
- * TODO Reimplement the ability to store and restore GoogleSparse maps...
-			if (!outputFilename.empty() && KmerSpectrumOptions::getOptions().getSaveKmerMmap() > 0) {
-				spectrumMmaps = spectrum.writeKmerMaps(outputFilename + "-mmap");
-				LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
-			}
-*/
-
-			if (minDepth > 1) {
-				LOG_DEBUG_GATHER(1, "Clearing singletons from memory");
-				spectrum.purgeMinDepth(minDepth, true);
-				LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
-			} else {
-				spectrum.optimize(true);
-			}
-		}
-
-		if (!outputFilename.empty()) {
-			if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads with minDepth: " << minDepth);
-			} else {
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Trimming reads that pass Artifact Filter with length: " << ReadSelectorOptions::getOptions().getMinReadLength());
-			}
-			RS selector(world, reads, spectrum.weak);
-			selector.scoreAndTrimReads(minDepth);
-
-			// TODO implement a more efficient algorithm to output data in order
-
-			// rank 0 will overwrite, all others will append
-			if (world.rank() != 0)
-				OfstreamMap::getDefaultAppend() = true;
-
-			// let only one rank at a time write to the files
-			LOG_VERBOSE_GATHER(1, "Writing Files");
-
-			selectReads(minDepth, reads, selector, outputFilename);
-		}
-		spectrum.reset();
-		LOG_DEBUG_GATHER(1, "Finished, waiting for rest of collective");
+		BuildSpectrumAndFilter<KS, RS>(world, reads, outputFilename);
 
 	} catch (std::exception &e) {
 		LOG_ERROR(1, "FilterReads-P caught an exception!\n\t" << e.what());
