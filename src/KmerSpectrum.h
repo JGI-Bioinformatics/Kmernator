@@ -407,19 +407,21 @@ public:
 	bool hasSolids;
 	bool hasSingletons;
 	unsigned long purgedSingletons;
+	boost::shared_ptr< KmerSpectrum > subtractingReference;
 
 private:
 	long rawKmers;       // total kmers tracked
 	long rawGoodKmers;   // total number of non-discarded kmers
 	long uniqueKmers;    // total number of unique kmers (includes singleton)
 	long singletonKmers; // total number of kmers seen exactly once
+	long subtracted;
 
 public:
 	// if singletons are separated use less buckets (but same # as singletons)
-	KmerSpectrum() : solid(), weak(), singleton(), hasSolids(false), hasSingletons(false), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0) {}
+	KmerSpectrum() : solid(), weak(), singleton(), hasSolids(false), hasSingletons(false), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0), subtracted(0) {}
 	KmerSpectrum(unsigned long estimatedRawKmers, bool separateSingletons = true):
 		solid(), weak((int) (estimatedRawKmers / KmerSpectrumOptions::getOptions().getEstimatedDepth())), singleton(separateSingletons ? estimatedRawKmers * KmerSpectrumOptions::getOptions().getEstimatedErrorRate() : 1),
-		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0)
+		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0), subtracted(0)
 	{
 		// apply the minimum quality automatically
 		Read::setMinQualityScore( Options::getOptions().getMinQuality(), Read::FASTQ_START_CHAR );
@@ -439,6 +441,7 @@ public:
 		this->rawGoodKmers = other.rawGoodKmers;
 		this->uniqueKmers = other.uniqueKmers;
 		this->singletonKmers = other.singletonKmers;
+		this->subtracted = other.subtracted;
 		return *this;
 	}
 
@@ -453,22 +456,28 @@ public:
 		std::swap(rawGoodKmers, other.rawGoodKmers);
 		std::swap(uniqueKmers, other.uniqueKmers);
 		std::swap(singletonKmers, other.singletonKmers);
+		std::swap(subtracted, other.subtracted);
 	}
 
 	inline long getRawKmers() const { return rawKmers; }
 	inline long getRawGoodKmers() const { return rawGoodKmers; }
 	inline long getUniqueKmers() const { return uniqueKmers; }
 	inline long getSingletonKmers() const { return singletonKmers; }
+	inline long getSubtractedKmers() const { return subtracted; }
 
 	static long &getKmerSubsample() {
 		return KmerSpectrumOptions::getOptions().getKmerSubsample();
 	}
 
 	void optimize(bool singletonsToo = false) {
+		subtractingReference.reset();
 		solid.optimize();
 		weak.optimize();
 		if (singletonsToo && hasSingletons)
 			singleton.optimize();
+	}
+	void subtractReference(boost::shared_ptr< KmerSpectrum > subtractingSpectrum) {
+		subtractingReference = subtractingSpectrum;
 	}
 
 	Kmernator::MmapFileVector storeMmap(string mmapFilename){
@@ -538,6 +547,7 @@ public:
 		rawGoodKmers = 0;
 		uniqueKmers = 0;
 		singletonKmers = 0;
+		subtractedKmers = 0;
 	}
 
 	static unsigned long estimateRawKmers( std::string filename ) {
@@ -700,6 +710,9 @@ public:
 		}
 	};
 
+	bool exists(Kmer &kmer) {
+		return getCount(kmer, false) > 0;
+	}
 	// returns the count for a single kmer
 	double getCount(const Kmer &kmer, bool useWeights) {
 		DataPointers pointer(*this, kmer);
@@ -1581,6 +1594,13 @@ public:
 		if (omp_get_thread_num() == 0)
 			trackSpectrum(false);
 
+		if (subtractingReference.get() != NULL) {
+			if (subtractingReference->exists(least)) {
+#pragma omp atomic
+				subtracted++;
+				return;
+			}
+		}
 #pragma omp atomic
 		rawKmers++;
 

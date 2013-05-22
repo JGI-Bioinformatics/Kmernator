@@ -92,18 +92,22 @@ public:
 typedef OptionsBaseTemplate< _MPIFilterReadsOptions > MPIFilterReadsOptions;
 
 template<typename KS, typename RS>
-void BuildSpectrumAndFilter(ScopedMPIComm< MPIFilterReadsOptions > &world, ReadSet &reads, std::string &outputFilename)
+void BuildSpectrumAndFilter(ScopedMPIComm< MPIFilterReadsOptions > &world, ReadSet &reads, std::string &outputFilename, boost::shared_ptr< KS > subtractingSpectrum = NULL)
 {
 	long rawKmers = 0;
 	if(KmerBaseOptions::getOptions().getKmerSize() > 0){
 		rawKmers = KS::estimateRawKmers(world, reads);
 	}
+	unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
 	KS spectrum(world, rawKmers);
 	Kmernator::MmapFileVector spectrumMmaps;
 	if (KmerBaseOptions::getOptions().getKmerSize() > 0 && !KmerSpectrumOptions::getOptions().getLoadKmerMmap().empty()) {
 		spectrum.restoreMmap(KmerSpectrumOptions::getOptions().getLoadKmerMmap());
 	} else if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+
+		spectrum.subtractReference(subtractingSpectrum);
+		subtractingSpectrum.reset(); // spectrum now has its own copy
 
 		spectrum.buildKmerSpectrum(reads);
 		spectrum.optimize();
@@ -132,7 +136,6 @@ void BuildSpectrumAndFilter(ScopedMPIComm< MPIFilterReadsOptions > &world, ReadS
 		}
 
 	}
-	unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
 	if (KmerBaseOptions::getOptions().getKmerSize() > 0) {
 
 		if (KmerSpectrumOptions::getOptions().getVariantSigmas() > 0.0) {
@@ -186,6 +189,66 @@ void BuildSpectrumAndFilter(ScopedMPIComm< MPIFilterReadsOptions > &world, ReadS
 	LOG_DEBUG_GATHER(1, "Finished, waiting for rest of collective");
 }
 
+void importAndProcessReadset(ScopedMPIComm<MPIFilterReadsOptions>& world,
+		ReadSet& reads, OptionsBaseInterface::FileListType& inputs) {
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
+	reads.appendAllFiles(inputs, world.rank(), world.size());
+	LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Identifying Pairs: ");
+	setGlobalReadSetConstants(world, reads);
+	LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+	if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
+
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0,
+				"Preparing artifact filter: ");
+
+		FilterKnownOddities filter;
+		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+
+		LOG_VERBOSE_OPTIONAL(2, world.rank() == 0,
+				"Applying sequence artifact filter to Input Files");
+
+		unsigned long filtered = filter.applyFilter(reads);
+
+		LOG_VERBOSE_GATHER(2,
+				"local filter affected (trimmed/removed) " << filtered
+				<< " Reads ");
+		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+
+		unsigned long allFiltered;
+		mpi::reduce(world, filtered, allFiltered, std::plus<unsigned long>(),
+				0);
+		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0,
+				"distributed filter (trimmed/removed) " << allFiltered << " Reads.");
+
+	}
+	if (DuplicateFragmentFilterOptions::getOptions().getDeDupMode() > 0
+			&& DuplicateFragmentFilterOptions::getOptions().getDeDupEditDistance()
+			>= 0) {
+		if (world.size() == 1) {
+			LOG_VERBOSE_GATHER(2,
+					"Applying DuplicateFragmentPair Filter to Input Files");
+			unsigned long duplicateFragments =
+					DuplicateFragmentFilter::filterDuplicateFragments(reads);
+
+			LOG_VERBOSE(2,
+					"filter removed duplicate fragment pair reads: " << duplicateFragments);
+			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
+
+			unsigned long allDuplicateFragments;
+			mpi::reduce(world, duplicateFragments, allDuplicateFragments,
+					std::plus<unsigned long>(), 0);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0,
+					"distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
+		} else {
+			if (world.rank() == 0)
+				LOG_WARN(1,
+						"Distributed DuplicateFragmentPair Filter is not supported (yet)." << std::endl << "If you want this feature please run the non-MPI FilterReads");
+		}
+
+	}
+}
+
 int main(int argc, char *argv[]) {
 
 	ScopedMPIComm< MPIFilterReadsOptions > world (argc, argv);
@@ -204,58 +267,27 @@ int main(int argc, char *argv[]) {
 	ReadSet reads;
 
 	try {
+		boost::shared_ptr< KS > subtractingSpectrum;
+		OptionsBaseInterface::FileListType subtractFiles = FilterReadsBaseOptions::getOptions().getSubtractFiles();
 		OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Reading Input Files");
+		importAndProcessReadset(world, reads, inputs);
 
-		reads.appendAllFiles(inputs, world.rank(), world.size());
-
-		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
-
-		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Identifying Pairs: ");
-
-		setGlobalReadSetConstants(world, reads);
-		LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
-
-		if (FilterKnownOdditiesOptions::getOptions().getSkipArtifactFilter() == 0) {
-
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Preparing artifact filter: ");
-
-			FilterKnownOddities filter;
-			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
-
-			LOG_VERBOSE_OPTIONAL(2, world.rank() == 0, "Applying sequence artifact filter to Input Files");
-
-			unsigned long filtered = filter.applyFilter(reads);
-
-			LOG_VERBOSE_GATHER(2, "local filter affected (trimmed/removed) " << filtered << " Reads ");
-			LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
-
-			unsigned long allFiltered;
-			mpi::reduce(world, filtered, allFiltered, std::plus<unsigned long>(), 0);
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed filter (trimmed/removed) " << allFiltered << " Reads.");
-
+		if (!subtractFiles.empty()) {
+			long rawKmers = KS::estimateRawKmers(world, reads);
+			ReadSet subtractReads;
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Subtracting abundant kmers in subtract-file set: ", OptionsBaseInterface::toString(subtractFiles));
+			importAndProcessReadset(world, subtractReads, subtractFiles);
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Building subtraction abundant kmers");
+			subtractingSpectrum = new KS(world, rawKmers);
+			subtractingSpectrum->buildKmerSpectrum(subtractReads);
+			subtractReads.clear();
+			unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
+			if (minDepth > 1)
+				subtractingSpectrum->purgeMinDepth(minDepth, true);
+			subtractingSpectrum->optimize();
 		}
 
-		if ( DuplicateFragmentFilterOptions::getOptions().getDeDupMode() > 0 && DuplicateFragmentFilterOptions::getOptions().getDeDupEditDistance() >= 0) {
-			if (world.size() == 1) {
-				LOG_VERBOSE_GATHER(2, "Applying DuplicateFragmentPair Filter to Input Files");
-				unsigned long duplicateFragments = DuplicateFragmentFilter::filterDuplicateFragments(reads);
-
-				LOG_VERBOSE(2, "filter removed duplicate fragment pair reads: " << duplicateFragments);
-				LOG_DEBUG_GATHER(1, MemoryUtils::getMemoryUsage());
-
-				unsigned long allDuplicateFragments;
-				mpi::reduce(world, duplicateFragments, allDuplicateFragments, std::plus<unsigned long>(), 0);
-				LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "distributed removed duplicate fragment pair reads: " << allDuplicateFragments);
-			} else {
-				if (world.rank() == 0)
-					LOG_WARN(1, "Distributed DuplicateFragmentPair Filter is not supported (yet)." << std::endl
-							<< "If you want this feature please run the non-MPI FilterReads");
-			}
-
-		}
-
-		BuildSpectrumAndFilter<KS, RS>(world, reads, outputFilename);
+		BuildSpectrumAndFilter<KS, RS>(world, reads, outputFilename, subtractingSpectrum);
 
 	} catch (std::exception &e) {
 		LOG_ERROR(1, "FilterReads-P caught an exception!\n\t" << e.what());

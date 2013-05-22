@@ -68,13 +68,14 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "Log.h"
 
 #include <boost/lexical_cast.hpp>
+#include <boost/shared_ptr.hpp>
 
 using namespace std;
 
 // TODO add outputformat of fasta
 class _FilterReadsBaseOptions : public OptionsBaseInterface {
 public:
-	_FilterReadsBaseOptions() :  sizeHistoryFile(""), histogramFile("") {}
+	_FilterReadsBaseOptions() :  sizeHistoryFile(""), histogramFile(""), subtractFiles() {}
 	virtual ~_FilterReadsBaseOptions() {}
 
 	std::string &getSizeHistoryFile() {
@@ -82,6 +83,9 @@ public:
 	}
 	std::string &getHistogramFile() {
 		return histogramFile;
+	}
+	FileListType &getSubtractFiles() {
+		return subtractFiles;
 	}
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
@@ -99,7 +103,9 @@ public:
 		opts.add_options()
 
 		        ("histogram-file", po::value<std::string>()->default_value(histogramFile), "if set the histogram table will be output to this file")
-				("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile), "if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)");
+				("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile), "if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)")
+		        ("subtract-file", po::value<FileListType>()->default_value(subtractFiles), "if set, abundant kmers from this file will be subtracted from kmers within input-file")
+		        ;
 
 		desc.add(opts);
 		GeneralOptions::_setOptions(desc, p);
@@ -122,6 +128,7 @@ public:
 
 		setOpt("histogram-file", histogramFile);
 		setOpt("size-history-file", sizeHistoryFile);
+		setOpt2("subtract-file", subtractFile);
 
 		if (Options::getOptions().getOutputFile().empty() && Logger::isMaster())
 		{
@@ -138,6 +145,7 @@ public:
 
 protected:
 	std::string sizeHistoryFile, histogramFile;
+	OptionsBaseInterface::FileListType subtractFiles;
 };
 typedef OptionsBaseTemplate< _FilterReadsBaseOptions > FilterReadsBaseOptions;
 
