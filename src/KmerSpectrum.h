@@ -547,7 +547,7 @@ public:
 		rawGoodKmers = 0;
 		uniqueKmers = 0;
 		singletonKmers = 0;
-		subtractedKmers = 0;
+		subtracted = 0;
 	}
 
 	static unsigned long estimateRawKmers( std::string filename ) {

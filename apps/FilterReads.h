@@ -75,7 +75,7 @@ using namespace std;
 // TODO add outputformat of fasta
 class _FilterReadsBaseOptions : public OptionsBaseInterface {
 public:
-	_FilterReadsBaseOptions() :  sizeHistoryFile(""), histogramFile(""), subtractFiles() {}
+	_FilterReadsBaseOptions() :  sizeHistoryFile(""), histogramFile(""), subtractFiles(), referenceFiles() {}
 	virtual ~_FilterReadsBaseOptions() {}
 
 	std::string &getSizeHistoryFile() {
@@ -86,6 +86,9 @@ public:
 	}
 	FileListType &getSubtractFiles() {
 		return subtractFiles;
+	}
+	FileListType &getReferenceFiles() {
+		return referenceFiles;
 	}
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
@@ -104,7 +107,8 @@ public:
 
 		        ("histogram-file", po::value<std::string>()->default_value(histogramFile), "if set the histogram table will be output to this file")
 				("size-history-file", po::value<std::string>()->default_value(sizeHistoryFile), "if set, a text file with accumulated kmer counts will be generated (for EstimateSize.R)")
-		        ("subtract-file", po::value<FileListType>()->default_value(subtractFiles), "if set, abundant kmers from this file will be subtracted from kmers within input-file")
+		        ("subtract-file", po::value<FileListType>(), "if set, abundant kmers from this file will be subtracted from kmers within input-file")
+		        ("reference-file", po::value<FileListType>(), "if set any kmers from this file will be subtracted from kmers within input-file (not subject to min-depth)")
 		        ;
 
 		desc.add(opts);
@@ -128,7 +132,8 @@ public:
 
 		setOpt("histogram-file", histogramFile);
 		setOpt("size-history-file", sizeHistoryFile);
-		setOpt2("subtract-file", subtractFile);
+		setOpt2("subtract-file", subtractFiles);
+		setOpt2("reference-file", referenceFiles);
 
 		if (Options::getOptions().getOutputFile().empty() && Logger::isMaster())
 		{
@@ -145,7 +150,7 @@ public:
 
 protected:
 	std::string sizeHistoryFile, histogramFile;
-	OptionsBaseInterface::FileListType subtractFiles;
+	OptionsBaseInterface::FileListType subtractFiles, referenceFiles;
 };
 typedef OptionsBaseTemplate< _FilterReadsBaseOptions > FilterReadsBaseOptions;
 

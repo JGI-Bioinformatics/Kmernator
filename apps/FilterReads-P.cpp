@@ -268,17 +268,26 @@ int main(int argc, char *argv[]) {
 
 	try {
 		boost::shared_ptr< KS > subtractingSpectrum;
-		OptionsBaseInterface::FileListType subtractFiles = FilterReadsBaseOptions::getOptions().getSubtractFiles();
+		OptionsBaseInterface::FileListType &subtractFiles = FilterReadsBaseOptions::getOptions().getSubtractFiles();
+		OptionsBaseInterface::FileListType &referenceFiles = FilterReadsBaseOptions::getOptions().getReferenceFiles();
 		OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 		importAndProcessReadset(world, reads, inputs);
-
+		long rawKmers = KS::estimateRawKmers(world, reads);
+		if (!referenceFiles.empty()) {
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Subtracting reference-file set: " << OptionsBaseInterface::toString(referenceFiles));
+			if (subtractingSpectrum.get() == NULL)
+				subtractingSpectrum.reset( new KS(world, rawKmers) );
+			ReadSetStream rss(referenceFiles);
+			subtractingSpectrum->buildKmerSpectrum(rss, true, 0);
+		}
 		if (!subtractFiles.empty()) {
-			long rawKmers = KS::estimateRawKmers(world, reads);
+
 			ReadSet subtractReads;
-			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Subtracting abundant kmers in subtract-file set: ", OptionsBaseInterface::toString(subtractFiles));
+			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Subtracting abundant kmers in subtract-file set: " << OptionsBaseInterface::toString(subtractFiles));
 			importAndProcessReadset(world, subtractReads, subtractFiles);
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Building subtraction abundant kmers");
-			subtractingSpectrum = new KS(world, rawKmers);
+			if (subtractingSpectrum.get() == NULL)
+				subtractingSpectrum.reset( new KS(world, rawKmers) );
 			subtractingSpectrum->buildKmerSpectrum(subtractReads);
 			subtractReads.clear();
 			unsigned int minDepth = KmerSpectrumOptions::getOptions().getMinDepth();
