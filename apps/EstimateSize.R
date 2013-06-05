@@ -39,7 +39,7 @@ predictedAsymptote <- function(rawKmerCount, errorRate, genomeSize) {
 fitModel <- function(rawKmers, uniqueKmers) { 
 
   d <- data.frame(rawKmers=rawKmers, uniqueKmers=uniqueKmers)
-  w <- unlist(uniqueKmers)
+  w <- log(unlist(rawKmers))
   w <- w / sum(as.numeric(w))
 
 
@@ -75,12 +75,12 @@ fun4 <- function(x, ax, bx, fx) {
 fitModel4 <- function(rawKmers, uniqueKmers) { 
 
   d <- data.frame(rawKmers=rawKmers, uniqueKmers=uniqueKmers)
-  w <- unlist(uniqueKmers)
+  w <- log(unlist(rawKmers))
   w <- w / sum(as.numeric(w))
 
 
   cont <- nls.control(maxiter=500, tol=1e-5, minFactor=1/1024,warnOnly=TRUE)
-  res <- nls(uniqueKmers ~ fun4(rawKmers, errorRate, genomeSize, errorFactor), d , trace=TRUE, control=cont, start=list(errorRate=0.001, genomeSize=5000000, errorFactor=50), algorithm='port', lower=list(errorRate=0.0005, genomeSize=5000, errorFactor=50), upper=list(errorRate=maxErrorRate, genomeSize=100000000000, errorFactor=1000000))
+  res <- nls(uniqueKmers ~ fun4(rawKmers, errorRate, genomeSize, errorFactor), d , trace=TRUE, control=cont, start=list(errorRate=0.001, genomeSize=5000000, errorFactor=50), algorithm='port', lower=list(errorRate=0.0005, genomeSize=5000, errorFactor=50), upper=list(errorRate=maxErrorRate, genomeSize=100000000000, errorFactor=1000000), weights=w)
 
   #print(summary(res))
   #res
@@ -143,15 +143,15 @@ png(filename=plotfile, width=640, height=480)
 plot(pl3, xlim=c(0, max(pl3[,1])*1.10), ylim=c(0, max(pl3[,2])*1.10), xaxs='i', yaxs='i', main='Estimated Genome Size', sub=file)
 
 predictedUniqKmers1 <- predictedAsymptote(inputRawKmers, bestFit1['errorRate'], bestFit1['genomeSize'])
-predictedUniqKmers2 <- predictedAsymptote(inputRawKmers, bestFit2'errorRate'], bestFit2['genomeSize'])
+predictedUniqKmers2 <- predictedAsymptote(inputRawKmers, bestFit2['errorRate'], bestFit2['genomeSize'])
 
 #pred <- data.frame(RawKmers=inputRawKmers, Predicted=predictedUniqKmers)
 #lines(pred, col='red')
 abline(bestFit1['genomeSize'],bestFit1['errorRate'], col='red')
 abline(bestFit2['genomeSize'],bestFit2['errorRate'], col='blue')
-abline(bestFit1['genomeSize'] * bestFit1['errorFactor'], 0, col='orange')
-l1<- paste("y =",  round(bestFit1['genomeSize']), "+", bestFit1['errorRate'], "* x")
-l2<- paste("y =",  round(bestFit2['genomeSize']), "+", bestFit2['errorRate'], "* x")
+abline(bestFit2['genomeSize'] * bestFit2['errorFactor'], 0, col='orange')
+l1<- paste("y_simple =",  round(bestFit1['genomeSize']), "+", bestFit1['errorRate'], "* x")
+l2<- paste("y_saturated =",  round(bestFit2['genomeSize']), "+", bestFit2['errorRate'], "* x")
 legend("topleft", col=c("black","red","blue","green"),lty=1,legend=c("DataPoints",l1,l2,"Estimated Genomic Kmers"))
 points(pl2, col='green')
 
@@ -163,5 +163,5 @@ for(i in 20:numDataPoints) {
 
 # return the parameters for the best fit last
 bestFit1
-bestfit2
+bestFit2
 
