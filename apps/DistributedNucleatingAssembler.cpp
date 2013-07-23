@@ -153,9 +153,16 @@ public:
 		setOpt("max-contigs-per-batch", maxContigsPerBatch);
 		setOpt("max-contig-length", maxContigLength);
 
-		if (Options::getOptions().getOutputFile().empty()) {
-			LOG_ERROR(1, "You must specify an --output");
+		if (GeneralOptions::getOptions().getOutputFile().empty()) {
+			setOptionsErrorMsg("You must specify an --output-file");
 			ret = false;
+		}
+		if (ContigExtenderBaseOptions::getOptions().getContigFile().empty()) {
+			setOptionsErrorMsg("You must specify a --contig-file");
+			ret = false;
+		}
+		if (GeneralOptions::getOptions().getInputFiles().empty()) {
+			setOptionsErrorMsg("You must specify at least one --input-file");
 		}
 
 		return ret;
