@@ -304,7 +304,8 @@ long pickBySeeks(ReadFileReader &rfr, unsigned long numSamples, unsigned long mi
 }
 
 int main(int argc, char *argv[]) {
-	RSOptions::parseOpts(argc, argv);
+
+	if (!RSOptions::parseOpts(argc, argv)) exit(1);
 
 	Cleanup::prepare();
 

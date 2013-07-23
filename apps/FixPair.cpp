@@ -79,7 +79,8 @@ public:
 typedef OptionsBaseTemplate< _FixPair > FixPair;
 
 int main(int argc, char *argv[]) {
-	FixPair::parseOpts(argc, argv);
+
+	if (!FixPair::parseOpts(argc, argv)) exit(1);
 
 	Cleanup::prepare();
 

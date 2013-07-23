@@ -72,7 +72,8 @@ public:
 typedef OptionsBaseTemplate< _HashTesterOptions > HashTesterOptions;
 
 int main(int argc, char *argv[]) {
-	HashTesterOptions::parseOpts(argc, argv);
+
+	if (!HashTesterOptions::parseOpts(argc, argv)) exit(1);
 
 	MemoryUtils::getMemoryUsage();
 	cerr << MemoryUtils::getMemoryUsage() << endl;

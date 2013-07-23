@@ -436,7 +436,8 @@ public:
 } mvo;
 
 int main(int argc, char *argv[]) {
-	TnfDistanceOptions::parseOpts(argc, argv);
+
+	if (!TnfDistanceOptions::parseOpts(argc, argv)) exit(1);
 
 	Cleanup::prepare();
 

@@ -229,7 +229,7 @@ public:
 	static std::string getOptionsErrorMsg() {
 		return getOptions().getOptionsErrorMsg();
 	}
-	static void parseOpts(int argc, char *argv[]) {
+	static bool parseOpts(int argc, char *argv[]) {
 		// set any defaults
 		bool ret = true;
 		try {
@@ -249,7 +249,7 @@ public:
 			ret = _parseOptions( getVarMap() );
 
 			if (hasOptionsErrorMsg() || !Log::getErrorMessages().empty() || !ret) {
-				LOG_THROW("one or more options are invalid: " << getOptionsErrorMsg());
+				LOG_WARN(1, "one or more options are invalid: " << getOptionsErrorMsg());
 			}
 
 		} catch (std::exception &e) {
@@ -267,7 +267,7 @@ public:
 			}
 			throw;
 		}
-
+		return ret;
 	}
 
 
@@ -282,7 +282,8 @@ protected:
 class NullClass {};
 class NullOptions : public OptionsBaseTemplate< NullClass > {
 public:
-	static void parseOpts(int argc, char *argv[]) {}
+	// override default method so as not to need NullClass interface methods _parseOptions, _resetDefaults...
+	static bool parseOpts(int argc, char *argv[]) { return false; }
 };
 
 /* Example copy-paste template */

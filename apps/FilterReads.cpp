@@ -74,7 +74,7 @@ typedef OptionsBaseTemplate< _FilterReadsOptions > FilterReadsOptions;
 
 int main(int argc, char *argv[]) {
 
-	FilterReadsOptions::parseOpts(argc, argv);
+	if (!FilterReadsOptions::parseOpts(argc, argv)) exit(1);
 
 	Cleanup::prepare();
 

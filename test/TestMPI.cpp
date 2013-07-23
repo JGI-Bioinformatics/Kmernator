@@ -131,7 +131,7 @@ int main(int argc, char **argv)
 	mpi::environment env(argc, argv);
 	mpi::communicator world;
 
-	MPITestOptions::parseOpts(argc,argv);
+	if (!MPITestOptions::parseOpts(argc,argv)) exit(1);
 	Logger::setWorld(&world);
 
 	printf("Hello World from Node %d, mpi support %d\n", world.rank(), provided);

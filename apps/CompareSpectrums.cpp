@@ -164,7 +164,7 @@ void evaluatePerRead(std::ostream &os, KS &ks1, KS &ks2, ReadSet &readSet1);
 
 int main(int argc, char *argv[]) {
 
-	CS_Options::parseOpts(argc, argv);
+	if( !CS_Options::parseOpts(argc, argv)) exit(1);
 
 	MemoryUtils::getMemoryUsage();
 	ReadSet readSet1, readSet2;

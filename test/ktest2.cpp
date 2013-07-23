@@ -80,7 +80,7 @@ typedef OptionsBaseTemplate< _Ktest2Options > Ktest2Options;
 
 int main(int argc, char *argv[]) {
 
-	Ktest2Options::parseOpts(argc, argv);
+	if (!Ktest2Options::parseOpts(argc, argv)) exit(1);
 
 	ReadSet refReads, reads;
 

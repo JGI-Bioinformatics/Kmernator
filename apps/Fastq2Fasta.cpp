@@ -103,7 +103,8 @@ private:
 typedef OptionsBaseTemplate< _Fastq2FastaOptions > Fastq2FastaOptions;
 
 int main(int argc, char *argv[]) {
-	Fastq2FastaOptions::parseOpts(argc, argv);
+
+	if (!Fastq2FastaOptions::parseOpts(argc, argv)) exit(1);
 
 	Cleanup::prepare();
 

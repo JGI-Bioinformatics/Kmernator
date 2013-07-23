@@ -100,7 +100,7 @@ typedef OptionsBaseTemplate< _ContigExtenderOptions > ContigExtenderOptions;
 
 int main(int argc, char *argv[]) {
 
-	ContigExtenderOptions::parseOpts(argc, argv);
+	if (!ContigExtenderOptions::parseOpts(argc, argv)) exit(1);
 
 	Cleanup::prepare();
 
