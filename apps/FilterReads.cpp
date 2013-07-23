@@ -61,6 +61,12 @@ public:
 		KmerSpectrumOptions::getOptions().getSaveKmerMmap() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
+		po::options_description opts("Usage: FilterReads <options> [[--kmer-size] 51] [[--input-file] ...]\n\tNote: --kmer-size and --input-file can either be specified as positional arguments at the end or within <options>");
+
+		p.add("kmer-size", 1);
+		p.add("input-file", -1);
+		desc.add(opts);
+
 		FilterReadsBaseOptions::_setOptions(desc, p);
 	}
 	bool _parseOptions(po::variables_map &vm) {

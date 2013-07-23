@@ -106,10 +106,14 @@ public:
 	void _setOptions(po::options_description &desc,
 			po::positional_options_description &p) {
 
-		po::options_description opts("DistributedNucleatingAssembly <options> [input-file ...]\n\tNote: --input-file can be specified either as a positional argument or within the options\n\nDistributedNucleatingAssembler Options");
+		po::options_description usage("Usage: DistributedNucleatingAssembly <options> [[--contig-file contigs.fa] [[--input-file input.fq ...]\n\tNote: --contig-file and --input-file can be specified either as a positional argument or within the options");
 
+		p.add("contig-file", 1);
 		p.add("input-file", -1);
 
+		desc.add(usage);
+
+		po::options_description opts("DistributedNucleatingAssembly Options");
 		opts.add_options()
 					("max-iterations", po::value<int>()->default_value(maxIterations), "the maximum number of rounds to extend the set of contigs")
 

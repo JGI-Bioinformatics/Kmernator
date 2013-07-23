@@ -229,6 +229,14 @@ public:
 	static std::string getOptionsErrorMsg() {
 		return getOptions().getOptionsErrorMsg();
 	}
+	static void printError(std::string message = "") {
+		if (Logger::isMaster()) {
+			std::cerr << getDesc() << std::endl << std::endl;
+			std::cerr << "\tPLEASE FIX THE COMMAND LINE ARGUMENTS\n\n" << message;
+			std::cerr << std::endl << std::endl;
+		}
+
+	}
 	static bool parseOpts(int argc, char *argv[]) {
 		// set any defaults
 		bool ret = true;
@@ -253,20 +261,14 @@ public:
 			}
 
 		} catch (std::exception &e) {
-			if (Logger::isMaster()) {
-				std::cerr << getDesc() << std::endl << std::endl;
-				std::cerr << "Please fix the command line arguments:" << std::endl << std::endl << e.what();
-				std::cerr << std::endl << std::endl;
-			}
+			printError( e.what() );
 			throw e;
 		} catch (...) {
-			if (Logger::isMaster()) {
-				std::cerr << getDesc() << std::endl << std::endl;
-				std::cerr << "Please fix the command line arguments: something is wrong... " << std::endl << std::endl;
-				std::cerr << std::endl << std::endl;
-			}
+			printError("Unknown error");
 			throw;
 		}
+		if (ret == false)
+			printError("Bad Arguments\n" + getOptionsErrorMsg());
 		return ret;
 	}
 

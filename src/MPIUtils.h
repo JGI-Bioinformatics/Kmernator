@@ -327,7 +327,8 @@ protected:
 
 		try {
 			Logger::setWorld(comm.get());
-			if (!OptionsTempl::parseOpts(argc, argv)) throw;
+			if (!OptionsTempl::parseOpts(argc, argv))
+				throw std::invalid_argument("invalid options");
 
 			if (GeneralOptions::getOptions().getGatheredLogs())
 				Logger::setWorld(comm.get(), Options::getOptions().getDebug() >= 2);
@@ -337,13 +338,10 @@ protected:
 
 		} catch (...) {
 
-			if (Logger::isMaster()) {
-				std::cerr << "Could not initializeWorldAndOptions!" << std::endl;
-//				MPI_Abort(MPI_COMM_WORLD, 1);
-			}
 			comm->barrier();
 			MPI_Finalize();
 			exit(1);
+
 		}
 		comm->barrier();
 		return comm;
