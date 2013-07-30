@@ -1,12 +1,11 @@
 /*
- * Cap3.h
+ * Newbler.h
  *
- *  Created on: Sep 7, 2011
  *      Author: regan
  */
 /*****************
 
-Kmernator Copyright (c) 2012, The Regents of the University of California,
+Kmernator Copyright (c) 2013, The Regents of the University of California,
 through Lawrence Berkeley National Laboratory (subject to receipt of any
 required approvals from the U.S. Dept. of Energy).  All rights reserved.
 
@@ -48,8 +47,8 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 *****************/
 
-#ifndef CAP3_H_
-#define CAP3_H_
+#ifndef NEWBLER_H
+#define NEWBLER_H
 
 #include "Options.h"
 #include "Utils.h"
@@ -57,57 +56,89 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "Kmer.h"
 #include "KmerSpectrum.h"
 #include "Utils.h"
-#include "ExternalAssembler.h"
 
-class _Cap3Options : public OptionsBaseInterface {
+class _NewblerOptions : public OptionsBaseInterface {
 public:
-	_Cap3Options() : cap3Path() {}
-	virtual ~_Cap3Options() {}
-	std::string &getCap3Path() {
-		return cap3Path;
+	_NewblerOptions() : newblerPath(), newblerOpts(), minOverlapLength(51), minOverlapIdentity(94), minLargeContigLength(151) {}
+	virtual ~_NewblerOptions() {}
+	std::string &getNewblerPath() {
+		return newblerPath;
+	}
+	int &getMinOverlapLength() {
+		return minOverlapLength;
+	}
+	int &getMinOverlapIdentity() {
+		return minOverlapIdentity;
+	}
+	int &getMinLargeContigLength() {
+		return minLargeContigLength;
+	}
+	string &getNewblerOpts() {
+		return newblerOpts;
 	}
 	void _resetDefaults() {
 		Options::getOptions().getMmapInput() = false;
 	}
+
 	void _setOptions(po::options_description &desc,	po::positional_options_description &p) {
-		po::options_description opts("Cap3 Options");
+		po::options_description opts("Newbler Options");
 
 		opts.add_options()
-				("cap3-path", po::value<std::string>()->default_value(cap3Path), "if set, cap3 will be used to extend contigs")
-
+				("newbler-path", po::value<std::string>()->default_value(newblerPath), "if set, ${newbler-path}/runAssembly will be used to extend contigs")
+				("newbler-ml", po::value<int>()->default_value(minOverlapLength), "minimum overlap length")
+				("newbler-mi", po::value<int>()->default_value(minOverlapIdentity), "minimum overlap identity")
+				("newbler-l", po::value<int>()->default_value(minLargeContigLength), "minimum large contig length")
+				("newbler-opts", po::value<std::string>()->default_value(newblerOpts), "extra options to send to newbler (use 'quotes')")
 				;
 
 		desc.add(opts);
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
-		setOpt("cap3-path", cap3Path);
+		setOpt("newbler-path", newblerPath);
+		setOpt("newbler-opts", newblerOpts);
+		setOpt("newbler-ml", minOverlapLength);
+		setOpt("newbler-mi", minOverlapIdentity);
+		setOpt("newbler-l", minLargeContigLength);
 
 		return ret;
 	}
 protected:
-	std::string cap3Path;
+	std::string newblerPath, newblerOpts;
+	int minOverlapLength, minOverlapIdentity, minLargeContigLength;
 };
-typedef OptionsBaseTemplate< _Cap3Options > Cap3Options;
 
-class Cap3 : public ExternalAssembler {
+typedef OptionsBaseTemplate< _NewblerOptions > NewblerOptions;
+
+class Newbler : public ExternalAssembler {
 public:
-	Cap3() : ExternalAssembler("Cap3") {}
-	virtual ~Cap3() {}
-
+	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
+	Newbler() : ExternalAssembler("newbler", 25) {}
+	virtual ~Newbler() {
+	}
 	Read extendContig(const Read &oldContig, const ReadSet &inputReads) {
 
-		std::string prefix = "/.cap3-assembly";
+		std::string prefix = "/.newbler-assembly";
 		std::string outputDir = Cleanup::makeTempDir(Options::getOptions().getTmpDir(), prefix);
-		LOG_VERBOSE_OPTIONAL(1, !GeneralOptions::getOptions().getKeepTempDir().empty(), "Saving Cap3 working directory for " << oldContig.getName()
+		LOG_VERBOSE_OPTIONAL(1, !GeneralOptions::getOptions().getKeepTempDir().empty(), "Saving Newbler working directory for " << oldContig.getName()
 				<< " to " << GeneralOptions::getOptions().getKeepTempDir() << outputDir.substr(outputDir.find(prefix)));
-		std::string baseName = outputDir + "/input.fa";
-		writeReads(inputReads, oldContig, baseName, FormatOutput::FastaUnmasked());
+		std::string baseName = outputDir + "/input.fastq";
+		writeReads(inputReads, oldContig, baseName, FormatOutput::FastqUnmasked());
 		std::string log = baseName + ".log";
-		std::string cmd = Cap3Options::getOptions().getCap3Path() + " " + baseName + " > " + log + " 2>&1";
-		LOG_DEBUG_OPTIONAL(1, true, "Executing cap3 for " << oldContig.getName() << "(" << inputReads.getSize() << " read pool): " << cmd);
+		// TODO support CDNA & isotigs
+		// -cdna -isplit //isotig traversal when depth spikes
+		// -icc "$ICC" -icl "$ICL" -it $MAX_NUM_ISOTIGS_PER_ISOGROUP // maximum number of contigs in an isotig, min length, man num
+		std::string cmd = NewblerOptions::getOptions().getNewblerPath() + "/runAssembly ";
+		cmd += NewblerOptions::getOptions().getNewblerOpts();
+		cmd += " -force -m -urt -nofe -noace -nobig -cpu " + boost::lexical_cast<string>(omp_get_num_threads());
+		cmd += " -o " + outputDir + "/assembly";
+		cmd += " -ml " + boost::lexical_cast<string>( NewblerOptions::getOptions().getMinOverlapLength() );
+		cmd += " -mi " + boost::lexical_cast<string>( NewblerOptions::getOptions().getMinOverlapIdentity() );
+		cmd += " -l " + boost::lexical_cast<string>( NewblerOptions::getOptions().getMinLargeContigLength() );
+		cmd += baseName + " > " + log + " 2>&1";
+		LOG_DEBUG_OPTIONAL(1, true, "Executing newbler for " << oldContig.getName() << "(" << inputReads.getSize() << " read pool): " << cmd);
 
-		std::string newContigFile = baseName + ".cap.contigs";
+		std::string newContigFile = outputDir + "/assembly/454Scaffolds.fna";
 		Read bestRead = executeAssembly(cmd, newContigFile, oldContig);
 
 		if (bestRead.empty())
@@ -116,8 +147,6 @@ public:
 		Cleanup::removeTempDir(outputDir);
 		return bestRead;
 	}
-
 };
 
 #endif /* CAP3_H_ */
-

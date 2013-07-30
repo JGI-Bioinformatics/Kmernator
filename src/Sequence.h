@@ -272,6 +272,9 @@ public:
 	inline void markPaired()     { setFlag(PAIRED);     }
 
 	SequenceLengthType getLength() const;
+	bool empty() const {
+		return ! (isValid() && getLength() > 0);
+	}
 
 	const RecordPtr getRecord() const;
 	inline RecordPtr getRecord() {
@@ -472,6 +475,7 @@ public:
 	// format == 1 fasta
 	// format == 2 fastq unmasked
 	// format == 3 fasta unmasked
+
 	inline static std::ostream &write(std::ostream &os, const Read &read,
 			SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) {
 		switch (format.getType()) {
@@ -482,6 +486,9 @@ public:
 		default: LOG_THROW("Invalid format for Sequence::write(): " << format.getType());
 		}
 		return os;
+	}
+	inline std::ostream &write(std::ostream &os, FormatOutput format) const {
+		return write(os, *this, 0, MAX_SEQUENCE_LENGTH, "", format);
 	}
 	inline std::ostream &write(std::ostream &os,
 			SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH, std::string label = "", FormatOutput format = FormatOutput::getDefault()) const {

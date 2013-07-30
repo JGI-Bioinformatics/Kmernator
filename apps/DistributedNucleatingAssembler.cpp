@@ -60,6 +60,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "Log.h"
 #include "Vmatch.h"
 #include "Cap3.h"
+#include "Newbler.h"
 #include "KmerMatch.h"
 #include "MatcherInterface.h"
 
@@ -83,6 +84,7 @@ public:
 		return maxContigsPerBatch;
 	}
 	void _resetDefaults() {
+		NewblerOptions::_resetDefaults();
 		Cap3Options::_resetDefaults();
 		ContigExtenderBaseOptions::_resetDefaults();
 		MatcherInterfaceOptions::_resetDefaults();
@@ -129,6 +131,7 @@ public:
 		KmerSpectrumOptions::_setOptions(desc,p);
 		VmatchOptions::_setOptions(desc,p);
 		ContigExtenderBaseOptions::_setOptions(desc,p);
+		NewblerOptions::_setOptions(desc, p);
 		Cap3Options::_setOptions(desc,p);
 		MPIOptions::_setOptions(desc,p);
 		FilterKnownOdditiesOptions::_setOptions(desc,p);
@@ -145,6 +148,7 @@ public:
 		ret &= KmerSpectrumOptions::_parseOptions(vm);
 		ret &= VmatchOptions::_parseOptions(vm);
 		ret &= ContigExtenderBaseOptions::_parseOptions(vm);
+		ret &= NewblerOptions::_parseOptions(vm);
 		ret &= Cap3Options::_parseOptions(vm);
 		ret &= MPIOptions::_parseOptions(vm);
 		ret &= FilterKnownOdditiesOptions::_parseOptions(vm);
@@ -181,7 +185,6 @@ std::string extendContigsWithCap3(const ReadSet & contigs,
 		ReadSet::ReadSetVector &contigReadSet, ReadSet & changedContigs,
 		ReadSet & finalContigs, ReadSet::ReadSetSizeType minimumCoverage) {
 	std::stringstream extendLog;
-	std::string cap3Path = Cap3Options::getOptions().getCap3Path();
 
 	int poolsWithoutMinimumCoverage = 0;
 
@@ -307,13 +310,27 @@ std::string runPartialBatch(mpi::communicator world, boost::shared_ptr< MatcherI
 
 	LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, " batch " << contigs.getSize() << ". Matches made");
 
+	int numThreads = omp_get_max_threads();
+	std::string extendLogs[numThreads];
 	if (!Cap3Options::getOptions().getCap3Path().empty()) {
-		extendLog = extendContigsWithCap3(contigs, contigReadSet, changedContigs, finalContigs, minimumCoverage);
+		Cap3 cap3Instances[numThreads];
+		#pragma omp parallel for
+		for(int i = 0; i < numThreads; i++) {
+			extendLogs[i] = cap3Instances[i].extendContigs(contigs, contigReadSet, changedContigs, finalContigs, minimumCoverage, i, numThreads);
+		}
+	} else if (!NewblerOptions::getOptions().getNewblerPath().empty()) {
+		Newbler newblerInstances[numThreads];
+		#pragma omp parallel for
+		for(int i = 0; i < numThreads; i++) {
+				extendLogs[i] = newblerInstances[i].extendContigs(contigs, contigReadSet, changedContigs, finalContigs, minimumCoverage, i, numThreads);
+		}
 	} else {
 		extendLog = extendContigsWithContigExtender(contigs, contigReadSet,
 				changedContigs, finalContigs,
 				minKmerSize, minimumCoverage, maxKmerSize, maxExtend, kmerStep);
 	}
+	for(int i = 0; i < numThreads; i++)
+		extendLog += extendLogs[i];
 
 	unlink(contigFile.c_str());
 
