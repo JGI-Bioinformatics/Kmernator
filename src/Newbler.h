@@ -59,7 +59,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 class _NewblerOptions : public OptionsBaseInterface {
 public:
-	_NewblerOptions() : newblerPath(), newblerOpts(), minOverlapLength(51), minOverlapIdentity(94), minLargeContigLength(151) {}
+	_NewblerOptions() : newblerPath(), newblerOpts(), minOverlapLength(51), minOverlapIdentity(98), minLargeContigLength(151), newblerScaffold(false) {}
 	virtual ~_NewblerOptions() {}
 	std::string &getNewblerPath() {
 		return newblerPath;
@@ -76,6 +76,9 @@ public:
 	string &getNewblerOpts() {
 		return newblerOpts;
 	}
+	bool &getNewblerScaffold() {
+		return newblerScaffold;
+	}
 	void _resetDefaults() {
 		Options::getOptions().getMmapInput() = false;
 	}
@@ -89,6 +92,7 @@ public:
 				("newbler-mi", po::value<int>()->default_value(minOverlapIdentity), "minimum overlap identity")
 				("newbler-l", po::value<int>()->default_value(minLargeContigLength), "minimum large contig length")
 				("newbler-opts", po::value<std::string>()->default_value(newblerOpts), "extra options to send to newbler (use 'quotes')")
+				("newbler-scaffold", po::value<bool>()->default_value(newblerScaffold), "if set newbler will generate scaffolds")
 				;
 
 		desc.add(opts);
@@ -106,6 +110,7 @@ public:
 protected:
 	std::string newblerPath, newblerOpts;
 	int minOverlapLength, minOverlapIdentity, minLargeContigLength;
+	bool newblerScaffold;
 };
 
 typedef OptionsBaseTemplate< _NewblerOptions > NewblerOptions;
@@ -128,21 +133,32 @@ public:
 		// TODO support CDNA & isotigs
 		// -cdna -isplit //isotig traversal when depth spikes
 		// -icc "$ICC" -icl "$ICL" -it $MAX_NUM_ISOTIGS_PER_ISOGROUP // maximum number of contigs in an isotig, min length, man num
+
+		std::string newContigFile = outputDir + "/assembly/454LargeContigs.fna";
+		SequenceLengthType contigLen = oldContig.getLength();
+
 		std::string cmd = NewblerOptions::getOptions().getNewblerPath() + "/runAssembly ";
 		cmd += NewblerOptions::getOptions().getNewblerOpts();
 		cmd += " -force -m -urt -nofe -noace -nobig -cpu " + boost::lexical_cast<string>(omp_get_num_threads());
 		cmd += " -o " + outputDir + "/assembly";
 		cmd += " -ml " + boost::lexical_cast<string>( NewblerOptions::getOptions().getMinOverlapLength() );
 		cmd += " -mi " + boost::lexical_cast<string>( NewblerOptions::getOptions().getMinOverlapIdentity() );
-		cmd += " -l " + boost::lexical_cast<string>( NewblerOptions::getOptions().getMinLargeContigLength() );
-		cmd += baseName + " > " + log + " 2>&1";
+		if (contigLen * 0.95 < NewblerOptions::getOptions().getMinLargeContigLength()) {
+			cmd += " -l " + boost::lexical_cast<string>( (int) (contigLen * 0.95) );
+		} else {
+			cmd += " -l " + boost::lexical_cast<string>( NewblerOptions::getOptions().getMinLargeContigLength() );
+		}
+		if (NewblerOptions::getOptions().getNewblerScaffold()) {
+			newContigFile = outputDir + "/assembly/454Scaffolds.fna";
+			cmd += " -scaffold";
+		}
+		cmd += " " + baseName + " > " + log + " 2>&1";
 		LOG_DEBUG_OPTIONAL(1, true, "Executing newbler for " << oldContig.getName() << "(" << inputReads.getSize() << " read pool): " << cmd);
 
-		std::string newContigFile = outputDir + "/assembly/454Scaffolds.fna";
 		Read bestRead = executeAssembly(cmd, newContigFile, oldContig);
 
 		if (bestRead.empty())
-			LOG_WARN(1, "Could not assemble " << oldContig.getName() << " with pool of " << inputReads.getSize() << " reads: " << FileUtils::dumpFile(log));
+			LOG_WARN(1, "Could not assemble contig: '" << oldContig.getName() << "' with pool of " << inputReads.getSize() << " reads: " << FileUtils::dumpFile(log));
 
 		Cleanup::removeTempDir(outputDir);
 		return bestRead;

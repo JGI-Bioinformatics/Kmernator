@@ -131,7 +131,11 @@ public:
 				newContig.appendFastaFile(newContigFile);
 				Read bestRead = selectBestContig(newContig, oldContig);
 				return bestRead;
+			} else {
+				LOG_WARN(1, myName << "::executeAssembly(): returned no file or zero byte file: " << newContigFile << " cmd: " << cmd);
 			}
+		} else {
+			LOG_WARN(1, myName << "::executeAssembly(): cmd failed (" << status << "): " << cmd);
 		}
 		return Read();
 	}
