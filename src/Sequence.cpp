@@ -268,6 +268,9 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 		if (totalMarkupSize > 0)
 			setMarkups(markupSizes, markupBases);
 
+		assert(fasta.compare( getFasta() ) == 0);
+		assert(getLength() == fasta.size());
+
 	} catch (std::bad_alloc &e) {
 		LOG_THROW("RuntimeError: Cannot allocate memory in Sequence::setSequence() of " << buffSize << ": " << e.what());
 	} catch (std::exception &e) {
