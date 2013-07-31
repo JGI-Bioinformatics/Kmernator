@@ -288,8 +288,38 @@ void testKmerMap(SequenceLengthType size) {
 }
 
 
+void _testKmerBuild(int kmerSize, string fasta) {
+	int oldSize = KmerSizer::getSequenceLength();
+	KmerSizer::set(kmerSize);
+	Sequence seq(fasta);
+	int len = fasta.length();
+	BOOST_CHECK_EQUAL( len, (int) fasta.size() );
+	BOOST_CHECK_EQUAL( len, (int) seq.getLength() );
+	KmerWeightedExtensions kmers(seq.getTwoBitSequence(), len);
+	int kmersLen = len - kmerSize + 1;
+	BOOST_CHECK_EQUAL((int) kmers.size(), kmersLen);
+	for(int i = 0; i < kmersLen ; i++)
+		BOOST_CHECK_EQUAL( fasta.substr(i, kmerSize), kmers[i].toFasta());
+
+	KmerSizer::set(oldSize);
+}
+void testKmerBuild() {
+	string test = "ACGTCGTAGTATTACGTTTTCCCCAAAAGGGG";
+	for (int p = 0; p < (int) test.length(); p++) {
+		for (int l = 2; l < (int) test.length() - p - 1; l++) {
+			for (int k = 1; k < l - 1; k++) {
+				_testKmerBuild(k, test.substr(p,l));
+			}
+		}
+	}
+}
+
+
+
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
+	testKmerBuild();
+
 	testParser();
 
 	Sequence::clearCaches();

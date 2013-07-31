@@ -1328,7 +1328,7 @@ public:
 			resize(numKmers, MAX_INDEX, _capacity > 0);
 
 		KmerArrayPair &kmers = *this;
-		long numBytes = (numKmers + 3) / 4;
+		long numBytes = TwoBitSequence::fastaLengthToTwoBitLength(length);
 
 #pragma omp parallel for if(numKmers >= 10000)
 		for (long bytes = 0; bytes < numBytes; bytes++) {
@@ -3404,6 +3404,29 @@ typedef KmerArrayPair<char> Kmers;
 typedef KmerArrayPair<double> KmerWeights;
 typedef KmerArrayPair<Kmernator::UI32> KmerCounts;
 typedef KmerArrayPair< WeightedExtensionMessagePacket > KmerWeightedExtensions;
+
+
+template<typename KmerMap>
+std::ostream &dumpKmerMap(std::ostream &os, const KmerMap &_map) {
+	KmerMap &map = const_cast<KmerMap&>(_map);
+	for(typename KmerMap::Iterator it = map.begin(); it != map.end(); it++) {
+		long count = it.value().getDirectionBias();
+		long revCount = it.value().getCount() - count;
+		TEMP_KMER(rev);
+		it.key().buildReverseComplement(rev);
+		if (it.key() <= rev) {
+			os << it.key().toFasta() << "\t" << count << "\t"
+			   << rev.toFasta() << "\t" << revCount << "\t" << it.value().getExtensionTracking().toTextValues() << "\n";
+			assert(map.getElementIfExists(it.key()).isValid());
+		} else {
+			os << rev.toFasta() << "\t" << revCount << "\t"
+			   << it.key().toFasta() << "\t" << count << "\t" << it.value().getExtensionTracking().toTextValues() << "\n";
+			assert(map.getElementIfExists(rev).isValid());
+		}
+	}
+	return os;
+}
+
 
 #endif
 
