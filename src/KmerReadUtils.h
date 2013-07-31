@@ -159,6 +159,18 @@ public:
 		return kmers.size();
 	}
 
+	KmerWeightedExtensions &buildEmptyWeightedKmers(const Read &read, bool leastComplement = false, bool* bools = NULL) {
+		kmers.build(read.getTwoBitSequence(), read.getLength(), leastComplement, bools);
+		if (Log::isDebug(5) && bools == NULL) {
+			ostream &debug = Log::Debug() << "KmerWeights: idx toFasta" << std::endl;;
+			for(Kmer::IndexType i = 0 ; i < kmers.size(); i++) {
+				debug << i << " " << kmers[i].toFasta() << std::endl;
+			}
+		}
+
+		return kmers;
+	}
+
 	KmerWeightedExtensions &buildWeightedKmers(const Read &read, bool leastComplement = false, bool leastComplementForNegativeWeight = false) {
 		if (read.isDiscarded()) {
 			kmers.resize(0);
