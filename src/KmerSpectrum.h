@@ -559,6 +559,8 @@ public:
 		for(numReads = 0; numReads < 5000; numReads++) {
 			if (rfr.nextRead(name, bases, quals, comment))
 				numBases += bases.length();
+			else
+				break;
 		}
 		double bytesPerRead = rfr.getPos() / numReads;
 		double basesPerRead = numBases / numReads;
