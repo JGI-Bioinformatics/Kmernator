@@ -138,7 +138,7 @@ public:
 	mpi::communicator &getWorld() {
 		return world;
 	}
-	KS::estimateRawKmers;
+	using KS::estimateRawKmers;
 
 	static unsigned long estimateRawKmers(mpi::communicator &world, std::vector<std::string> filenames ) {
 		unsigned long estimatedKmers = 0;

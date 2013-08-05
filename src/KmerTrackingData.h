@@ -503,8 +503,8 @@ class TrackingDataWithDirection: public TrackingData {
 public:
 
 protected:
-	TrackingData::count;
-	TrackingData::weightedCount;
+	using TrackingData::count;
+	using TrackingData::weightedCount;
 	CountType directionBias;
 
 public:
@@ -554,9 +554,9 @@ class TrackingDataWithLastRead: public TrackingDataWithDirection {
 public:
 
 protected:
-	TrackingDataWithDirection::count;
-	TrackingDataWithDirection::weightedCount;
-	TrackingDataWithDirection::directionBias;
+	using TrackingDataWithDirection::count;
+	using TrackingDataWithDirection::weightedCount;
+	using TrackingDataWithDirection::directionBias;
 	ReadPosition readPosition;
 
 public:
@@ -921,7 +921,7 @@ public:
 
 class TrackingDataSingletonWithReadPositionAndExtension : public TrackingDataSingletonWithReadPosition {
 protected:
-	TrackingDataSingletonWithReadPosition::instance;
+	using TrackingDataSingletonWithReadPosition::instance;
 	ExtensionMessagePacket _extensionMsgPacket;
 
 public:
@@ -953,9 +953,9 @@ public:
 };
 class TrackingDataWithAllReadsAndExtensions : public TrackingDataWithAllReads {
 protected:
-	TrackingDataWithAllReads::instances;
-	TrackingDataWithAllReads::directionBias;
-	TrackingDataWithAllReads::weightedCount;
+	using TrackingDataWithAllReads::instances;
+	using TrackingDataWithAllReads::directionBias;
+	using TrackingDataWithAllReads::weightedCount;
 	ExtensionTracking _extensionTracking;
 
 public:

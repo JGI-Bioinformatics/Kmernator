@@ -844,9 +844,9 @@ public:
 		inline bool isValid() const {
 			return Base::isValid() && _array != NULL && _idx != MAX_INDEX;
 		}
-		Base::key;
-		Base::value;
-		Base::getConst;
+		using Base::key;
+		using Base::value;
+		using Base::getConst;
 
 	};
 
@@ -2446,24 +2446,24 @@ public:
 	typedef KmerElementPair<ValueType> BaseElementType;
 	typedef BaseElementType ElementType;
 
-	BEML::getMinPowerOf2;
-	BEML::clear;
-	BEML::reset;
-	BEML::getNumBuckets;
-	BEML::getBucketMask;
-	BEML::getBucketIdx;
-	BEML::getThreadIds;
-	BEML::getLocalThreadId;
-	BEML::getDistributedThreadId;
+	using BEML::getMinPowerOf2;
+	using BEML::clear;
+	using BEML::reset;
+	using BEML::getNumBuckets;
+	using BEML::getBucketMask;
+	using BEML::getBucketIdx;
+	using BEML::getThreadIds;
+	using BEML::getLocalThreadId;
+	using BEML::getDistributedThreadId;
 
-	BEML::getBuckets;
-	BEML::getBucket;
-	BEML::getBucketByIdx;
+	using BEML::getBuckets;
+	using BEML::getBucket;
+	using BEML::getBucketByIdx;
 
-	BEML::begin;
-	BEML::end;
-	BEML::beginThreaded;
-	BEML::endThreaded;
+	using BEML::begin;
+	using BEML::end;
+	using BEML::beginThreaded;
+	using BEML::endThreaded;
 
 
 
@@ -2844,19 +2844,19 @@ public:
 		_isSorted = other._isSorted;
 		return *this;
 	}
-	Base::getBuckets;
-	Base::getBucketMask;
-	Base::getBucket;
-	Base::getBucketByIdx;
-	Base::insert;
-	Base::remove;
+	using Base::getBuckets;
+	using Base::getBucketMask;
+	using Base::getBucket;
+	using Base::getBucketByIdx;
+	using Base::insert;
+	using Base::remove;
 
 	// Base LocalThread / DistributedRank methods
-	Base::getLocalThreadId;
-	Base::getDistributedThreadId;
-	Base::getThreadIds;
-	Base::getBucketIdx;
-	Base::getNumBuckets;
+	using Base::getLocalThreadId;
+	using Base::getDistributedThreadId;
+	using Base::getThreadIds;
+	using Base::getBucketIdx;
+	using Base::getNumBuckets;
 
 
 	// specific overloading, taking advantage of KmerArrayPair memory release directives
@@ -3056,7 +3056,7 @@ public:
 	}
 
 	// other methods
-	Base::size;
+	using Base::size;
 
 	// Sorted KmerArrayPair specializations
 public:
@@ -3200,7 +3200,7 @@ public:
 		return ss.str();
 	}
 
-	Base::mergeTriviallyInterleavedBuckets;
+	using Base::mergeTriviallyInterleavedBuckets;
 
 	// specialized merge for KmerArrayPair
 	void mergeAdd(KmerMapByKmerArrayPair &src) {
@@ -3296,9 +3296,9 @@ public:
 	//typedef typename BucketsVector::const_iterator ConstBucketsVectorIterator;
 	//typedef typename Iterator::value_type ElementType;
 
-	Base::getBuckets;
-	Base::getBucketByIdx;
-	Base::getNumBuckets;
+	using Base::getBuckets;
+	using Base::getBucketByIdx;
+	using Base::getNumBuckets;
 
 	const static unsigned long KMbSTL_BUCKET_FACTOR = 65536;
 	KmerMapBySTLMap() : Base() {}
