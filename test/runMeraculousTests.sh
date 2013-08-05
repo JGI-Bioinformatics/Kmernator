@@ -6,12 +6,6 @@ procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1))
 
 true=$(which true)
 
-mt=time
-if memtime $true 2>/dev/null
-then
-  mt=memtime
-fi
-
 ismpi=0
 isaprun=0
 if mpirun $true
@@ -98,7 +92,7 @@ then
       break
     fi
     export OMP_NUM_THREADS=1
-     check $mt $MPI $MPI_OPTS $mpi $FRP
+     check $MPI $MPI_OPTS $mpi $FRP
   done
   
   if ((ismpi)) && $MPI -bysocket -bind-to-socket $true
@@ -127,7 +121,7 @@ then
     fi
 
     export OMP_NUM_THREADS=$threads
-    check $mt $MPI $MPI_OPTS $mpi $socket $FRP
+    check $MPI $MPI_OPTS $mpi $socket $FRP
   done
 
 fi

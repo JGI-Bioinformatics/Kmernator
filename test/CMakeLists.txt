@@ -211,3 +211,4 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10k.bam test/ )
 add_test(filter runFilterTests.sh)
 add_test(meraculous runMeraculousTests.sh)
 add_test(randomlysample runRandomlySampleTests.sh)
+

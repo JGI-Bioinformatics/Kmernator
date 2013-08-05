@@ -5,12 +5,6 @@ procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1))
 
 true=$(which true)
 
-mt=time
-if memtime $true
-then
-  mt=memtime
-fi
-
 ismpi=0
 if mpirun $true
 then
@@ -62,11 +56,11 @@ then
     fi
     export OMP_NUM_THREADS=$(((procs+mpi-1) / mpi))
     rm -f ${TMP}*
-    $mt $MPI $mpi $SSOTF --output-file "$TMP-{Uniq}.fastq" $IN
+    $MPI $mpi $SSOTF --output-file "$TMP-{Uniq}.fastq" $IN
     cat ${TMP}-*.fastq | diff -q - $IN
 
     rm -f ${TMP}*
-    $mt $MPI $mpi $SSOTF --output-file "$TMP-{Uniq}.fastq.1" --split-file "$TMP-{Uniq}.fastq.2" $IN
+    $MPI $mpi $SSOTF --output-file "$TMP-{Uniq}.fastq.1" --split-file "$TMP-{Uniq}.fastq.2" $IN
     c1=$(cat ${TMP}*.1 | grep -c ^@)
     c2=$(cat ${TMP}*.2 | grep -c ^@)
     if ((c1+c2 != total))
@@ -77,12 +71,12 @@ then
     if ((mpi%2 == 0))
     then
       rm -f ${TMP}*
-      $mt $MPI $mpi  $SSOTF --second-dim 2 --output-file "$TMP-{UniqFirst}x{UniqSecond}.fastq" $IN
+      $MPI $mpi  $SSOTF --second-dim 2 --output-file "$TMP-{UniqFirst}x{UniqSecond}.fastq" $IN
       cat ${TMP}-*x000000of000002.fastq | diff -q - $IN
       cat ${TMP}-*x000001of000002.fastq | diff -q - $IN
 
       rm -f ${TMP}*
-      $mt $MPI $mpi $SSOTF --second-dim 2 --output-file "$TMP-{UniqFirst}x{UniqSecond}.fastq.1" --split-file "$TMP-{UniqFirst}x{UniqSecond}.fastq.2" $IN
+      $MPI $mpi $SSOTF --second-dim 2 --output-file "$TMP-{UniqFirst}x{UniqSecond}.fastq.1" --split-file "$TMP-{UniqFirst}x{UniqSecond}.fastq.2" $IN
       c1=$(cat ${TMP}*x000000of000002.fastq.1 | grep -c ^@)
       c2=$(cat ${TMP}*x000000of000002.fastq.2 | grep -c ^@)
       if ((c1+c2 != total))
