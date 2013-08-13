@@ -73,7 +73,7 @@ check()
   fi
 }
 
-if ((isaprun==0))
+if ((ismpi==1))
 then
   for thread in {1..4}
   do

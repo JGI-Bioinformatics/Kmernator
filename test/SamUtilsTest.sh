@@ -81,7 +81,7 @@ sortedorder=${sorted}.sam.order
 $samtools view -h ${sorted} > ${sortedsam}
 awk '{print $3" "$4}'  ${sortedsam} | sed 's/SO:unsorted/SO:coordinate/;' > ${sortedorder}
 
-if ((isaprun==0))
+if ((ismpi==1))
 then
 
   ./SamUtilsTest ${test} ${testout} ${testoutsorted}
