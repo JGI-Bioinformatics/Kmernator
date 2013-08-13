@@ -54,6 +54,7 @@ target_link_libraries( TwoBitSequenceTest TwoBitSequence
                                           ${KMERNATOR_BOOST_LIBS}
                                           ${KMERNATOR_BOOST_TEST_LIBS}
                                           )
+add_dependencies(TwoBitSequenceTest REPLACE_VERSION_H)
 add_test( TwoBitSequenceTest TwoBitSequenceTest )
 
 set_source_files_properties( ReadSetTest
@@ -67,6 +68,7 @@ target_link_libraries( ReadSetTest Sequence
                                    ${KMERNATOR_BOOST_LIBS}
                                    ${KMERNATOR_BOOST_TEST_LIBS}
                                    )
+add_dependencies(ReadSetTest REPLACE_VERSION_H)
 add_test( ReadSetTest ReadSetTest )
                             
 set_source_files_properties( KmerTest
@@ -78,6 +80,7 @@ target_link_libraries( KmerTest TwoBitSequence Kmer Sequence ReadSet
                                 ${KMERNATOR_BOOST_LIBS}
                                 ${KMERNATOR_BOOST_TEST_LIBS}
                                 )
+add_dependencies(KmerTest REPLACE_VERSION_H)
 add_test( KmerTest KmerTest )
 
 set_source_files_properties( ktest2
@@ -89,6 +92,7 @@ target_link_libraries( ktest2 Sequence Kmer
                               ReadSet
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(ktest2 REPLACE_VERSION_H)
 add_test(ktest2 ktest2 --mask-simple-repeats 0 21 10.fastq)
 
 set_source_files_properties( HashTester
@@ -101,6 +105,7 @@ target_link_libraries( HashTester
                               ReadSet
                               ${KMERNATOR_BOOST_LIBS}
                               )
+add_dependencies(HashTester REPLACE_VERSION_H)
 
 set_source_files_properties( MmapTempFileTest
                              PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}"
@@ -110,6 +115,7 @@ target_link_libraries( MmapTempFileTest
                                    ${KMERNATOR_BOOST_LIBS}
                                    ${KMERNATOR_BOOST_TEST_LIBS}
                                    )
+add_dependencies(MmapTempFileTest REPLACE_VERSION_H)
 add_test( MmapTempFileTest MmapTempFileTest )
 
 set_source_files_properties( UtilTest
@@ -120,6 +126,7 @@ target_link_libraries( UtilTest
                                    ${KMERNATOR_BOOST_LIBS}
                                    ${KMERNATOR_BOOST_TEST_LIBS}
                                    )
+add_dependencies(UtilTest REPLACE_VERSION_H)
 add_test( UtilTest UtilTest )
 
 set_source_files_properties( BgzfStreamTest
@@ -131,6 +138,7 @@ target_link_libraries( BgzfStreamTest
                                    ${KMERNATOR_BOOST_TEST_LIBS}
                                    z
                                    )
+add_dependencies(BgzfStreamTest REPLACE_VERSION_H)
 add_test( BgzfStreamTest BgzfStreamTest )
 
 if( MPI_FOUND )
@@ -148,6 +156,7 @@ target_link_libraries (TestMPI
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_dependencies(TestMPI REPLACE_VERSION_H)
 add_test(testmpi testMPI.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/testMPI.sh test/ )
     
@@ -165,6 +174,7 @@ target_link_libraries (TestKmerMatchMPI
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )
+add_dependencies(TestKmerMatchMPI REPLACE_VERSION_H)
 add_test(testKmerMatchMPI testKmerMatchMPI.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/testKmerMatchMPI.sh test/ )
 
@@ -181,6 +191,7 @@ target_link_libraries (SamUtilsTest
                               libbam
                               z
                               )
+add_dependencies(SamUtilsTest REPLACE_VERSION_H)
 add_test(SamUtilsTest SamUtilsTest.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/SamUtilsTest.sh test/ )
 
@@ -209,5 +220,7 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runRandomlySampleTests.sh
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10k.bam test/ )
 
 add_test(filter runFilterTests.sh)
+
 add_test(meraculous runMeraculousTests.sh)
+
 add_test(randomlysample runRandomlySampleTests.sh)
