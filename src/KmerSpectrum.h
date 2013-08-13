@@ -2036,7 +2036,7 @@ public:
 						continue;
 					}
 					const Read &read = store.getRead( readIdx );
-					LOG_DEBUG_OPTIONAL(1, true, "Evaluating readid: " << readIdx << " " << read.getName());
+					LOG_DEBUG(3, "Evaluating readid: " << readIdx << " " << read.getName());
 					if (read.isDiscarded())
 						continue;
 
