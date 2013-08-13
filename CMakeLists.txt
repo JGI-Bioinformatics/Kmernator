@@ -131,6 +131,14 @@ else()
 endif()
 
 #
+# General flags
+#
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_LINKER_FLAGS}")
+set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${KMERNATOR_LINKER_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${KMERNATOR_CXX_FLAGS}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${KMERNATOR_C_FLAGS}")
+
+#
 # OpenMP
 #
 
@@ -205,6 +213,10 @@ else()
       message(FATAL_ERROR "Could not unpack boost")
     endif()
 
+    if( EXISTS "$ENV{HOME}/user-config.jam") 
+      message("renaming $ENV{HOME}/user-config.jam to $ENV{HOME}/user-config.jam-old as it will interfere with this build")
+      file(RENAME "$ENV{HOME}/user-config.jam" "$ENV{HOME}/user-config.jam-old")
+    endif()
     if(NOT DISABLE_MPI)
       if(NOT BOOST_MPI_USER_CONFIG)
         file(APPEND ${BOOST_ROOT}/tools/build/v2/user-config.jam "using mpi ;\n")
