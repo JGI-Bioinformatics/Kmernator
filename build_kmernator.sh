@@ -10,7 +10,7 @@ fi
 mod=$3
 if [ -z "$mod" ]
 then
-  mod=prod
+  mod=dev
 fi
 
 set -e
@@ -65,6 +65,7 @@ then
   module load cmake
   module load git
   module load boost/1.53.0
+  module load samtools
 
   module list
 
