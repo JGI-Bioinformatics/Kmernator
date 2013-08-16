@@ -54,6 +54,7 @@ endif()
 
 project( Kmernator CXX C)
 
+set(CMAKE_SKIP_RPATH true)
 
 cmake_minimum_required(VERSION 2.8)
 enable_testing()
@@ -108,12 +109,6 @@ endif()
 #set(Kmernator_VERSION "${Kmernator_VERSION_MAJOR}.${Kmernator_VERSION_MINOR}.${Kmernator_VERSION_TAG}")
 #message("Building ${PROJECT_NAME} version ${Kmernator_VERSION}")
 message("BuildType: ${CMAKE_BUILD_TYPE}")
-
-set(Boost_USE_STATIC_LIBS ON)
-set(Boost_USE_SHARED_LIBS OFF)
-
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_USE_SINGLETHREADED OFF)
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(BIT_CXX_FLAGS "-DIS_64_BIT")
@@ -173,8 +168,14 @@ else()
   endif()
 endif()
 
-set(Boost_USE_STATIC_LIBS   ON)
+
+# look for boost shared libs, use them if available
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_SHARED_LIBS ON)
+
 set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_SINGLETHREADED OFF)
+
 set(BOOST_MAJOR_VER 1)
 set(BOOST_MINOR_VER 53)
 set(BOOST_MINOR_SUBVER 0)
@@ -184,6 +185,11 @@ if(Boost_FOUND)
   include_directories(${BOOST_ROOT}/libs)
   link_directories(${Boost_LIBRARY_DIRS})
 else()
+
+  # if we are building our own boost, build and use static libs
+  set(Boost_USE_STATIC_LIBS ON)
+  set(Boost_USE_SHARED_LIBS OFF)
+  
   set(BOOST_INSTALL_VER ${BOOST_MAJOR_VER}_${BOOST_MINOR_VER}_${BOOST_MINOR_SUBVER})
   set(BOOST_FULL_VERSION ${BOOST_MAJOR_VER}.${BOOST_MINOR_VER}.${BOOST_MINOR_SUBVER})
   set(BOOST_DOWNLOAD_URL http://sourceforge.net/projects/boost/files/boost/${BOOST_FULL_VERSION}/boost_${BOOST_INSTALL_VER}.tar.bz2)
