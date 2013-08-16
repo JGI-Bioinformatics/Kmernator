@@ -79,6 +79,8 @@ public:
 		KmerBaseOptions::_resetDefaults();
 		KmerSpectrumOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
+
+		GeneralOptions::getOptions().getMmapInput() = false;
 	}
 
 

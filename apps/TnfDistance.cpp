@@ -95,6 +95,7 @@ public:
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
 		GeneralOptions::getOptions().getVerbose() = 0;
+		GeneralOptions::getOptions().getMmapInput() = false;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program

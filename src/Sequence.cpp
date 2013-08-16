@@ -62,40 +62,20 @@ using namespace std;
 /*----------------------------- SEQUENCE -------------------------------------------*/
 boost::uint8_t Sequence::FASTQ_START_CHAR = Kmernator::FASTQ_START_CHAR_DEFAULT;
 
-// thread safe caches
-Sequence::CachedSequencesVector Sequence::threadCacheSequences(omp_get_max_threads(), Sequence::CachedSequences(Sequence::maxCachePerThread));
-
 // dangling pointer!!
 Sequence::DataPtrListVector *Sequence::preAllocatedDataPtrs = new Sequence::DataPtrListVector();
 
 // static methods of Sequence
 void Sequence::clearCaches() {
 	assert(!omp_in_parallel());
-	threadCacheSequences = CachedSequencesVector(omp_get_max_threads(), CachedSequences(Sequence::maxCachePerThread));
 	preAllocatedDataPtrs->reset();
 }
 
-Sequence::CachedSequences &Sequence::getCachedSequencesForThread() {
-	int threadNum = omp_get_thread_num();
-	return threadCacheSequences[threadNum];
-}
-
-void Sequence::setThreadCache(Sequence &mmapedSequence, SequencePtr &expandedSequence) {
-	mmapedSequence.setCache(expandedSequence);
-}
 
 // instance based cache methods
 Sequence::SequencePtr Sequence::getCache() const {
 	assert(isMmaped());
-
-	CachedSequences &cache = getCachedSequencesForThread();
-	SequencePtr cachedSequence;
-
-	if ( cache.fetch( getRecord(), cachedSequence ) && cachedSequence.get() != NULL ) {
-		return cachedSequence;
-	} else {
-		return setCache();
-	}
+	return setCache();
 }
 Sequence::SequencePtr Sequence::setCache() const {
 	SequencePtr ptr;
@@ -103,11 +83,7 @@ Sequence::SequencePtr Sequence::setCache() const {
 }
 Sequence::SequencePtr &Sequence::setCache(Sequence::SequencePtr &expandedSequence) const {
 	assert(isMmaped());
-
-	if (expandedSequence.get() == NULL)
-		expandedSequence = readMmaped(true);
-	CachedSequences &cache = getCachedSequencesForThread();
-	cache.insert( getRecord(), expandedSequence);
+	expandedSequence = readMmaped(true);
 	return expandedSequence;
 }
 

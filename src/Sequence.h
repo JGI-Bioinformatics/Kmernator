@@ -59,7 +59,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "config.h"
 #include "TwoBitSequence.h"
 #include "Utils.h"
-#include "LRUCache.h"
+//#include "LRUCache.h"
 
 class Sequence {
 public:
@@ -81,9 +81,9 @@ public:
 	typedef TwoBitSequenceBase::TwoBitEncodingPtr DataPtr;
 
 	typedef boost::shared_ptr< Sequence > SequencePtr;
-	typedef std::pair< const void*, SequencePtr > _CachedSequenceElement;
-	typedef LRUCache< _CachedSequenceElement::first_type, _CachedSequenceElement::second_type > CachedSequences;
-	typedef std::vector< CachedSequences > CachedSequencesVector;
+//	typedef std::pair< const void*, SequencePtr > _CachedSequenceElement;
+//	typedef LRUCache< _CachedSequenceElement::first_type, _CachedSequenceElement::second_type > CachedSequences;
+//	typedef std::vector< CachedSequences > CachedSequencesVector;
 	const static long maxCachePerThread = 31;
 
 private:
@@ -123,9 +123,6 @@ private:
 	inline const Sequence &constThis() const {
 		return *this;
 	}
-
-protected:
-	static CachedSequencesVector threadCacheSequences;
 
 protected:
 	// TODO if mmaped w/o markups, can this be a regular pointer with no allocation?
@@ -225,14 +222,9 @@ protected:
 
 	void setMarkups(MarkupElementSizeType markupElementSize, const BaseLocationVectorType &markups);
 
-	static CachedSequences &getCachedSequencesForThread();
-
 	SequencePtr getCache() const;
 	SequencePtr setCache() const;
 	SequencePtr &setCache(SequencePtr &expandedSequence) const;
-
-public:
-	static void setThreadCache(Sequence &mmapedSequence, SequencePtr &expandedSequence);
 
 public:
 

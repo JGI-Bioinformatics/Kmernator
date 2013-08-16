@@ -57,7 +57,9 @@ class _FilterReadsOptions : public OptionsBaseInterface {
 public:
 	void _resetDefaults() {
 		FilterReadsBaseOptions::_resetDefaults();
+		GeneralOptions::_resetDefaults();
 
+		GeneralOptions::getOptions().getMmapInput() = true;
 		KmerSpectrumOptions::getOptions().getSaveKmerMmap() = 0;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {

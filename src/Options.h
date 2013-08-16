@@ -323,7 +323,7 @@ class _GeneralOptions : public OptionsBaseInterface {
 public:
 	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), keepTempDir(),
 	formatOutput(0), keepReadComment(GlobalOptions::isCommentStored()), buildOutputInMemory(false),
-	minQuality(3),  fastqBaseQuality(Kmernator::FASTQ_START_CHAR_ILLUMINA), ignoreQual(false), mmapInput(true), gatheredLogs(true),
+	minQuality(3),  fastqBaseQuality(Kmernator::FASTQ_START_CHAR_ILLUMINA), ignoreQual(false), mmapInput(false), gatheredLogs(true),
 	batchSize(100000)
 	{
 		char *tmpPath;
