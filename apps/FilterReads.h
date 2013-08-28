@@ -134,13 +134,15 @@ public:
 		setOpt2("subtract-file", subtractFiles);
 		setOpt2("reference-file", referenceFiles);
 
-		if (Options::getOptions().getOutputFile().empty() && Logger::isMaster())
+		if (Options::getOptions().getOutputFile().empty())
 		{
-			LOG_WARN(1, "no output file specified... This is a dry run!");
+			if (Logger::isMaster())
+				LOG_WARN(1, "no output file specified... This is a dry run!");
 		}
 
-		if (Options::getOptions().getInputFiles().empty() && Logger::isMaster()) {
-			setOptionsErrorMsg("Please specify at least one input file");
+		if (Options::getOptions().getInputFiles().empty()) {
+			if (Logger::isMaster())
+				setOptionsErrorMsg("Please specify at least one input file");
 			ret = false;
 		}
 
