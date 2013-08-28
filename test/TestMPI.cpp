@@ -146,9 +146,9 @@ int main(int argc, char **argv)
 {
 	A2ABufferBase a2a(world, sizeof(TextMessage));
 
-	long unsigned int spamMax = a2a.getBufferSize() - sizeof(TextMessage);
+	long unsigned int spamMax = a2a.getMaxMessageSize();
 	int msgSize = std::min(16*1024 - sizeof(TextMessage), spamMax);
-	int msgPerMb = 1024*1024 / msgSize;
+	int msgPerMb = (1024*1024 + msgSize - 1) / msgSize;
 	assert(msgPerMb > 0);
 
 	LOG_VERBOSE_OPTIONAL(1, world.rank()==0, "Sending messages of size: " << msgSize);
@@ -172,10 +172,11 @@ int main(int argc, char **argv)
 	world.barrier();
 	start = boost::posix_time::microsec_clock::local_time();
 
+	int numMessages = std::min(1, msgPerMb * mb / numThreads / world.size());
 #pragma omp parallel num_threads(numThreads)
 	{
 		int threadId = omp_get_thread_num();
-		for(int i = 0; i < msgPerMb * mb / numThreads / world.size(); i++) {
+		for(int i = 0; i < numMessages; i++) {
 			for(int w=0; w < world.size() ; w++) {
 				a2a.bufferMessage(w, threadId, msgSize)->set(spam, msgSize);
 			}

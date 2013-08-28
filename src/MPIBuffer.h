@@ -337,6 +337,9 @@ public:
 				* _softRatio));
 		assert(_softMaxBufferSize >= 0 && _softMaxBufferSize <= _bufferSize);
 	}
+	inline int getMaxMessageSize() const {
+		return getBufferSize() - sizeof(MessageClass) - sizeof(long);
+	}
 	inline int getBufferSize() const {
 		return _bufferSize;
 	}
