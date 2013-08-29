@@ -15,6 +15,15 @@ then
 fi
 buildType=$4
 
+logcmd()
+{
+  logfile=$1
+  shift
+  echo "Starting $@ at $(date)" >> $logfile
+  $@ 2>&1 | tee -a $logfile
+  [ "${PIPESTATUS[*]}" == "0 0" ]
+}
+
 set -e
 buildDir=build
 buildDirective=
@@ -95,16 +104,16 @@ done
 module list || /bin/true
 
 echo "Executing cmake $sourceDir $cmakeOpts (see `pwd`/cmake.log) `date`" | tee -a cmake.log
-cmake $sourceDir $cmakeOpts 2>&1 | tee -a cmake.log
+logcmd cmake.log cmake $sourceDir $cmakeOpts
 
 echo "Building executables (see `pwd`/make.log) `date`" | tee -a make.log
-make VERBOSE=1 -j18 2>&1 | tee -a make.log 
+logcmd make.log make VERBOSE=1 -j18
 
 echo "Testing (see `pwd`/make-test.log) `date`" | tee -a make-test.log
-make test 2>&1 | tee -a make-test.log
+logcmd make-test.log make test
 
 echo "Installing (see `pwd`/make-install.log) `date`" | tee -a make-install.log
-make install 2>&1 | tee -a  make-install.log 
+logcmd make-install.log make install
 
 ver=$(cat git-version)
 
