@@ -1978,7 +1978,7 @@ public:
 				{
 					numThreads = omp_get_num_threads();
 				}
-				LOG_WARN(1, "Detected OpenMP thread mis-match, reducing threads to " << numThreads << "... KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << maxThreads << " vs " << omp_get_num_threads() << " nested:" << omp_get_nested() << " dynamic: " << omp_get_dynamic());
+				LOG_DEBUG(1, "Detected OpenMP thread mis-match, reducing threads to " << numThreads << "... KmerSpectrum::_buildKmerSpectrumParallelOMP(): thread count mis-match " << maxThreads << " vs " << omp_get_num_threads() << " nested:" << omp_get_nested() << " dynamic: " << omp_get_dynamic());
 			}
 		}
 
