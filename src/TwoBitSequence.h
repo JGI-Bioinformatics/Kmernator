@@ -190,6 +190,8 @@ public:
 	static void permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1, TwoBitEncoding *out2, TwoBitEncoding *out3,
 			SequenceLengthType sequenceLength, SequenceLengthType permuteBaseIdx);
 
+	static bool permuteFasta(char *fasta, int len);
+
 	static SequenceLengthType getGC(const TwoBitEncoding *in, SequenceLengthType length);
 
 	static inline SequenceLengthType fastaLengthToTwoBitLength(SequenceLengthType fastaLength)

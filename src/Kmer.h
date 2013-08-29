@@ -342,7 +342,11 @@ public:
 		return compare(other) >= 0;
 	}
 
-
+	void clear() {
+		TwoBitEncoding *c = getTwoBitSequence();
+		for(int i = 0; i < (int) getTwoBitLength(); i++)
+			*(c++) = 0;
+	}
 	void buildReverseComplement(Kmer &output) const {
 		TwoBitSequence::reverseComplement(getTwoBitSequence(),
 				output.getTwoBitSequence(), getLength());

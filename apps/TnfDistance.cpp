@@ -68,8 +68,13 @@ typedef KmerSpectrum<KM, KM> KS;
 
 class _TnfDistanceBaseOptions : public OptionsBaseInterface {
 public:
-	_TnfDistanceBaseOptions() : interDistanceFile(), intraDistanceFile(), clusterFile(), intraWindowSize(25000), clusterThresholdDistance(.175), referenceFiles() {}
+	_TnfDistanceBaseOptions() : kmerSize(4), interDistanceFile(), intraDistanceFile(), clusterFile(), intraWindowSize(25000), clusterThresholdDistance(.175), referenceFiles() {}
 	virtual ~_TnfDistanceBaseOptions() {}
+
+	int &getKmerSize() {
+		return kmerSize;
+	}
+
 	string &getInterFile() {
 		return interDistanceFile;
 	}
@@ -99,15 +104,16 @@ public:
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		// set options specific to this program
-		po::options_description opts("TnfDistance <options>\n\nTetra Nucleotide Distance Options");
-
+		po::options_description opts("Tetra Nucleotide Frequency (TNF) Distance Options");
 		opts.add_options()
 
-				("reference-file", po::value<FileListType>(), "set reference file(s)")
+		        ("kmer-size", po::value<int>()->default_value(kmerSize), "set to 4 for tetra-mer, 5 penta-mer, 1 for AT/GC ...")
 
-				("inter-distance-file", po::value<string>()->default_value(interDistanceFile), "output inter-distance LT matrix to this filename")
+				("reference-file", po::value<FileListType>(), "set reference file(s).  If set calculate distance of each input to this reference TNF vector")
 
-				("intra-distance-file", po::value<string>()->default_value(intraDistanceFile), "output intra-distance matrix (one line per read) to this filename")
+				("inter-distance-file", po::value<string>()->default_value(interDistanceFile), "output inter-distance LT matrix of inputs to this filename")
+
+				("intra-distance-file", po::value<string>()->default_value(intraDistanceFile), "output intra-distance matrix (one line per input) to this filename")
 
 				("intra-window-size", po::value<int>()->default_value(intraWindowSize), "size of adjacent intra-distance windows")
 
@@ -122,6 +128,7 @@ public:
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
 
+		setOpt("kmer-size", kmerSize);
 		setOpt("inter-distance-file", interDistanceFile);
 		setOpt("intra-distance-file", intraDistanceFile);
 		setOpt("intra-window-size", intraWindowSize);
@@ -133,6 +140,7 @@ public:
 		return ret;
 	}
 private:
+	int kmerSize;
 	string interDistanceFile, intraDistanceFile, clusterFile;
 	int intraWindowSize;
 	double clusterThresholdDistance;
@@ -145,34 +153,57 @@ class _TnfDistanceOptions : public OptionsBaseInterface {
 public:
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("input-file", -1);
+		po::options_description opts("TnfDistance <options> input.fa");
+		desc.add(opts);
+
 		TnfDistanceBaseOptions::_setOptions(desc,p);
+
 	}
 	bool _parseOptions(po::variables_map &vm) {
-		return TnfDistanceBaseOptions::_parseOptions(vm);
+		bool ret = true;
+		ret |= TnfDistanceBaseOptions::_parseOptions(vm);
+		if (GeneralOptions::getOptions().getInputFiles().empty()) {
+			ret = false;
+			setOptionsErrorMsg("You must specify at least one input!");
+		}
+		return ret;
 	}
 };
 
 typedef OptionsBaseTemplate< _TnfDistanceOptions > TnfDistanceOptions;
+typedef std::vector<std::string> FastaVector;
 
 class TNF {
 public:
 	typedef vector<double> Vector;
 	static KM stdMap;
 	static long stdSize;
-	static void initStdMap() {
-		for(int i=0; i < 256 ; i++) {
-			char c = (char) i;
-			Kmer &kmer = (Kmer&) c;
-			TEMP_KMER(lc);
+
+	static void init(int kmerSize) {
+		KmerSizer::set(kmerSize);
+		TEMP_KMER(kmer);
+		TEMP_KMER(lc);
+		kmer.clear();
+		char fasta[kmerSize];
+		strcpy(fasta, kmer.toFasta().c_str());
+
+		do {
+			kmer.set(fasta);
 			kmer.buildLeastComplement(lc);
-			if ( !stdMap.exists(lc) ) {
-				LOG_DEBUG(1, lc.toFasta() << "\t" << (int) i);
+
+			bool exists = stdMap.exists(lc);
+			LOG_DEBUG_OPTIONAL(2, exists, lc.toFasta() << "\t" << "\t" << kmer.toFasta());
+			if ( !exists ) {
+
 				stdMap.insert(lc, DataType());
 			}
-		}
+		} while(TwoBitSequence::permuteFasta(fasta, kmerSize));
+
 		stdSize = stdMap.size();
+		LOG_DEBUG(1, "Found " << stdSize << " unique " << kmerSize << "-mers");
 	}
 	static std::string toHeader() {
+		assert(stdSize > 0);
 		std::stringstream ss;
 		bool printTab = false;
 		for(KM::Iterator it = stdMap.begin(); it != stdMap.end(); it++) {
@@ -188,12 +219,15 @@ private:
 
 public:
 	TNF() : length(1.0) {
+		assert(stdSize > 0);
 		tnfValues.resize(stdSize);
 	}
 	TNF(const TNF &copy) {
+		assert(stdSize > 0);
 		*this = copy;
 	}
 	TNF(const KM &map, bool normalize = false) : length(1.0) {
+		assert(stdSize > 0);
 		buildTnf(map);
 		if (normalize)
 			buildLength();
@@ -326,8 +360,8 @@ public:
 	}
 
 };
-KM TNF::stdMap(512);
-long TNF::stdSize;
+KM TNF::stdMap(2112); // initialize room for hexamers
+long TNF::stdSize = 0;
 
 typedef std::vector<TNF> TNFS;
 TNFS buildTnfs(const ReadSet &reads, bool normalize = false) {
@@ -444,8 +478,7 @@ int main(int argc, char *argv[]) {
 
 	ReadSet refs;
 	ReadSet reads;
-	KmerSizer::set(4);
-	TNF::initStdMap();
+	TNF::init(TnfDistanceBaseOptions::getOptions().getKmerSize());
 
 	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 	reads.appendAllFiles(inputs);

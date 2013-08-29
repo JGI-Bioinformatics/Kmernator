@@ -550,3 +550,19 @@ void TwoBitSequence::permuteBase(const TwoBitEncoding *in, TwoBitEncoding *out1,
 
 }
 
+bool TwoBitSequence::permuteFasta(char *fasta, int len) {
+	int pos = len-1;
+	bool changed = false;
+	while(!changed && pos >= 0) {
+		char c = fasta[pos];
+		switch(c) {
+		case('A'): fasta[pos] = 'C'; changed = true; break;
+		case('C'): fasta[pos] = 'G'; changed = true; break;
+		case('G'): fasta[pos] = 'T'; changed = true; break;
+		case('T'): fasta[pos] = 'A'; break;
+		default: fasta[pos] = 'A'; break;
+		}
+		pos--;
+	}
+	return changed;
+}
