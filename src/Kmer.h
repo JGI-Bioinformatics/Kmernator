@@ -2232,7 +2232,6 @@ public:
         		_buckets[i].reserve(elementsPerBucket);
         } // else lazy allocate the buckets.
 
-		LOG_VERBOSE_OPTIONAL(1, bucketCount > 0 && elementsPerBucket > 0 && Logger::isMaster(), "BucketExposedMap::resizeBuckets(" << bucketCount << " ): " << powerOf2 << " of " << elementsPerBucket);
 		LOG_DEBUG(2, "BucketExposedMap::resizeBuckets(" << bucketCount << " ): " << powerOf2 << " of " << elementsPerBucket << " " << this);
 	}
 	void clear(bool releaseMemory = true) { // release memory ignored by default
