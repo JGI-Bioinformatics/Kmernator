@@ -151,6 +151,11 @@ typedef OptionsBaseTemplate< _TnfDistanceBaseOptions > TnfDistanceBaseOptions;
 
 class _TnfDistanceOptions : public OptionsBaseInterface {
 public:
+	_TnfDistanceOptions() {}
+	virtual ~_TnfDistanceOptions() {}
+	void _resetDefaults() {
+		TnfDistanceBaseOptions::_resetDefaults();
+	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
 		p.add("input-file", -1);
 		po::options_description opts("TnfDistance <options> input.fa");
