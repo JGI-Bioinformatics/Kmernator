@@ -258,6 +258,7 @@ public:
 
 			if (hasOptionsErrorMsg() || !Log::getErrorMessages().empty() || !ret) {
 				LOG_WARN(1, "one or more options are invalid: " << getOptionsErrorMsg());
+				ret = false;
 			}
 
 		} catch (std::exception &e) {
