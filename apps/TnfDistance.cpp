@@ -160,6 +160,7 @@ public:
 		setOpt("distance-formula", df);
 		if (df < 0 || df >= DistanceFormula::MAX) {
 			setOptionsErrorMsg("Invalid --distance-formula.  Please choose either 0 or 1");
+			ret = false;
 		} else {
 			distanceFormula = (DistanceFormula::Enum) df;
 		}
