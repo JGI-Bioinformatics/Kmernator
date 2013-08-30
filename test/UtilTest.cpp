@@ -152,9 +152,56 @@ void testIpipestream()
 	}
 }
 
+typedef RankVector<int> RV;
+void testRankVector(int size = 100) {
+	std::vector<int> v,u;
+	v.reserve(size);
+	u.reserve(size);
+
+	// put 1..50 with duplicate entries
+	for(int i = 0; i < size; i++) {
+		v.push_back(i/2);
+		u.push_back((size-i-1)/2);
+	}
+
+	RV rv(v), ru(u);
+	BOOST_CHECK_EQUAL(rv.size(), v.size());
+	BOOST_CHECK_EQUAL(ru.size(), u.size());
+	for(int i = 0; i < size; i++) {
+		// odd sized batches have last rank untied
+		if ((size & 0x01) == 0x01) {
+			if (i == 0) {
+				BOOST_CHECK_EQUAL(rv[i], 1.5);
+				BOOST_CHECK_EQUAL(ru[i], size);
+			} else if (i == size - 1) {
+				// last rank does not tie rv
+				BOOST_CHECK_EQUAL(rv[i], size);
+				BOOST_CHECK_EQUAL(ru[i], 1.5);
+			} else {
+				// all other ranks tie...
+				BOOST_CHECK_EQUAL(rv[i], (2*(i/2)) + 1.5);
+				BOOST_CHECK_EQUAL(ru[i], (2*((size-i-1)/2)) + 1.5);
+			}
+		} else {
+			// all ranks tie
+			BOOST_CHECK_EQUAL(rv[i], (2*(i/2)) + 1.5);
+			BOOST_CHECK_EQUAL(ru[i], (2*((size-i-1)/2)) + 1.5);
+		}
+	}
+	BOOST_CHECK_EQUAL( rv.getSpearmanDistance(rv), 0.0 );
+	BOOST_CHECK_EQUAL( ru.getSpearmanDistance(ru), 0.0 );
+	BOOST_CHECK( rv.getSpearmanDistance(ru) >= 0.99 );
+
+	BOOST_CHECK(abs(rv.getSpearmanDistance(ru) - ru.getSpearmanDistance(rv)) < 0.01);
+	BOOST_CHECK(rv.getSpearmanDistance(ru) >= 0.0);
+	BOOST_CHECK(ru.getSpearmanDistance(rv) >= 0.0);
+}
+
 
 BOOST_AUTO_TEST_CASE( UtilTest )
 {
+	for(int i = 20; i < 200; i += 17)
+		testRankVector(i);
 	testBimodalPartition();
 	testIpipestream();
 }

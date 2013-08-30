@@ -1743,7 +1743,7 @@ public:
 		}
 	}
 	// return the rank of the dataVector at index idx
-	int operator[](int idx) const {
+	T operator[](int idx) const {
 		return ranks[idx];
 	}
 	size_t size() const {
