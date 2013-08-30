@@ -66,9 +66,21 @@ typedef TrackingDataMinimal4f DataType;
 typedef KmerMap<DataType> KM;
 typedef KmerSpectrum<KM, KM> KS;
 
+struct DistanceFormula {
+	enum Enum{EUCLIDEAN = 0, SPEARMAN, MAX};
+};
+
 class _TnfDistanceBaseOptions : public OptionsBaseInterface {
 public:
-	_TnfDistanceBaseOptions() : kmerSize(4), interDistanceFile(), intraDistanceFile(), clusterFile(), intraWindowSize(25000), clusterThresholdDistance(.175), referenceFiles() {}
+	_TnfDistanceBaseOptions() :
+		kmerSize(4),
+		interDistanceFile(),
+		intraDistanceFile(),
+		clusterFile(),
+		intraWindowSize(25000),
+		clusterThresholdDistance(.175),
+		referenceFiles(),
+		distanceFormula(DistanceFormula::EUCLIDEAN) {}
 	virtual ~_TnfDistanceBaseOptions() {}
 
 	int &getKmerSize() {
@@ -87,8 +99,12 @@ public:
 	int &getIntraWindow() {
 		return intraWindowSize;
 	}
-	double &getClusterThreshold() {
+	float &getClusterThreshold() {
 		return clusterThresholdDistance;
+	}
+
+	enum DistanceFormula::Enum &getDistanceFormula() {
+		return distanceFormula;
 	}
 
 	FileListType &getReferenceFiles()
@@ -119,7 +135,12 @@ public:
 
 				("cluster-file", po::value<string>()->default_value(clusterFile), "cluster output filename")
 
-				("cluster-threshold-distance", po::value<double>()->default_value(clusterThresholdDistance), "Euclidean distance threshold for clusters") ;
+				("cluster-threshold-distance", po::value<float>()->default_value(clusterThresholdDistance), "Euclidean distance threshold for clusters")
+
+				("distance-formula", po::value<int>()->default_value(distanceFormula), "0 - Euclidean, 1 - Spearman")
+
+				;
+
 
 		desc.add(opts);
 
@@ -135,6 +156,13 @@ public:
 		setOpt("cluster-file", clusterFile);
 		setOpt("cluster-threshold-distance", clusterThresholdDistance);
 		setOpt2("reference-file", referenceFiles);
+		int df;
+		setOpt("distance-formula", df);
+		if (df < 0 || df >= DistanceFormula::MAX) {
+			setOptionsErrorMsg("Invalid --distance-formula.  Please choose either 0 or 1");
+		} else {
+			distanceFormula = (DistanceFormula::Enum) df;
+		}
 
 		ret |= GeneralOptions::_parseOptions(vm);
 		return ret;
@@ -143,8 +171,9 @@ private:
 	int kmerSize;
 	string interDistanceFile, intraDistanceFile, clusterFile;
 	int intraWindowSize;
-	double clusterThresholdDistance;
+	float clusterThresholdDistance;
 	FileListType referenceFiles;
+	DistanceFormula::Enum distanceFormula;
 
 };
 typedef OptionsBaseTemplate< _TnfDistanceBaseOptions > TnfDistanceBaseOptions;
@@ -180,11 +209,15 @@ typedef std::vector<std::string> FastaVector;
 
 class TNF {
 public:
-	typedef vector<double> Vector;
+	typedef vector<float> Vector;
+	typedef RankVector<float> RVector;
+
 	static KM stdMap;
 	static long stdSize;
+	static DistanceFormula::Enum distanceFormula;
 
-	static void init(int kmerSize) {
+	static void init(int kmerSize, DistanceFormula::Enum df = DistanceFormula::EUCLIDEAN) {
+		distanceFormula = df;
 		KmerSizer::set(kmerSize);
 		TEMP_KMER(kmer);
 		TEMP_KMER(lc);
@@ -219,7 +252,7 @@ public:
 		return ss.str();
 	}
 private:
-	double length;
+	float length;
 	Vector tnfValues;
 
 public:
@@ -244,7 +277,7 @@ public:
 		tnfValues = copy.tnfValues;
 		return *this;
 	}
-	TNF &operator*(double factor) {
+	TNF &operator*(float factor) {
 		bool wasNormalized = isNormalized();
 		for(unsigned int i = 0; i < tnfValues.size(); i++) {
 			tnfValues[i] *= factor;
@@ -297,76 +330,39 @@ public:
 		tnfValues.reserve(stdSize);
 		for(KM::Iterator it = stdMap.begin(); it != stdMap.end(); it++) {
 			KM::ElementType elem = map.getElementIfExists(it->key());
-			double t = 0.0;
+			float t = 0.0;
 			if (elem.isValid()) {
 				t = elem.value() / length;
 			}
 			tnfValues.push_back(t);
 		}
 	}
-	double getDistance(const TNF &other) const {
-		bool debug = Log::isDebug(1);
-		double dist = 0.0;
-		ostream *debugPtr = NULL;
-		if (debug) {
-			debugPtr = Log::Debug("getDistance()\t").getOstreamPtr();
+	float getDistance(const TNF &other) const {
+		float dist = 0.0;
+		if (distanceFormula == DistanceFormula::EUCLIDEAN) {
+			for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
+				float d = tnfValues[i] / length - other.tnfValues[i] / other.length;
+				dist += d*d;
+			}
+			dist = sqrt(dist);
+		} else if (distanceFormula == DistanceFormula::SPEARMAN) {
+			dist = RVector::getSpearmanDistance(RVector(tnfValues), RVector(other.tnfValues));
 		}
-		for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
-			double d = tnfValues[i] / length - other.tnfValues[i] / other.length;
-			dist += d*d;
-			if (debug) *debugPtr << tnfValues[i] / length << "\t" << other.tnfValues[i] / other.length << "\t" << d*d << endl;
-		}
-		dist = sqrt(dist);
-		if (debug) *debugPtr << dist << endl;
 		return dist;
 	}
-	double getDistance(const KM &query) const {
+	float getDistance(const KM &query) const {
 		TNF other(query, isNormalized());
 		return getDistance(other);
 	}
-	static double getDistance(const KM &target, const KM &query, bool normalize = true) {
+	static float getDistance(const KM &target, const KM &query, bool normalize = true) {
 		TNF tgt(target, normalize), qry(query, normalize);
 		return tgt.getDistance(qry);
-	}
-	static double getDistance(KM &kmers, KM &target, KM &query) {
-		double distance = 0.0;
-
-		double targetSum = 0.0;
-		double querySum = 0.0;
-		bool debug = Log::isDebug(1);
-
-		ostream *debugPtr = NULL;
-		if (debug) {
-			debugPtr = Log::Debug("getDistance(...)").getOstreamPtr();
-		}
-		for(KM::Iterator it = kmers.begin(); it != kmers.end(); it++) {
-			double t = target[it->key()];
-			targetSum += t*t;
-			double q = query[it->key()];
-			querySum += q*q;
-			if (debug) *debugPtr << t << "\t" << q << endl;
-		}
-		if (debug) *debugPtr << endl;
-		targetSum = sqrt(targetSum);
-		querySum = sqrt(querySum);
-		if (debug) *debugPtr << targetSum << "\t" << querySum << endl;
-
-		for(KM::Iterator it = kmers.begin(); it != kmers.end(); it++) {
-			double t = target[it->key()] / targetSum;
-			double q = query[it->key()] / querySum;
-			double d = t-q;
-			distance += d*d;
-			if (debug) *debugPtr << t << "\t" << q << "\t" << d*d << endl;
-		}
-		distance = sqrt(distance);
-		if (debug) *debugPtr << distance << endl;
-
-		return distance;
 	}
 
 };
 KM TNF::stdMap(2112); // initialize room for hexamers
 long TNF::stdSize = 0;
+DistanceFormula::Enum TNF::distanceFormula;
 
 typedef std::vector<TNF> TNFS;
 TNFS buildTnfs(const ReadSet &reads, bool normalize = false) {
@@ -405,12 +401,12 @@ TNFS buildIntraTNFs(const Read &read, long window, long step, bool normalize = f
 
 class Result {
 public:
-	double distance;
+	float distance;
 	string label;
 	TNF tnf;
 	Result() : distance(0.0) {}
-	Result(double _dist, string _label) : distance(_dist), label(_label) {}
-	Result(double _dist, string _label, TNF _tnf) :  distance(_dist), label(_label), tnf(_tnf) {}
+	Result(float _dist, string _label) : distance(_dist), label(_label) {}
+	Result(float _dist, string _label, TNF _tnf) :  distance(_dist), label(_label), tnf(_tnf) {}
 	Result(const Result &copy) {
 		*this = copy;
 	}
@@ -442,7 +438,7 @@ Results calculateDistances(const TNF &refTnf, const ReadSet &reads, const TNFS &
 		Read read = reads.getRead(readIdx);
 		string name = read.getName();
 
-		double dist = refTnf.getDistance(tnfs[readIdx]);
+		float dist = refTnf.getDistance(tnfs[readIdx]);
 		if (dist <= 0.20) {
 			string fullFasta = read.getFasta();
 			long len = fullFasta.length();
@@ -453,7 +449,7 @@ Results calculateDistances(const TNF &refTnf, const ReadSet &reads, const TNFS &
 			ss.precision(3);
 			ss << name;
 			for(long i = 0 ; i < (long) intraTnfs.size() ; i++) {
-				double distPart = refTnf.getDistance(intraTnfs[i]);
+				float distPart = refTnf.getDistance(intraTnfs[i]);
 				ss << "\t" << fixed << distPart;
 			}
 			name = ss.str();
@@ -466,11 +462,11 @@ Results calculateDistances(const TNF &refTNF, const ReadSet &reads) {
 	return calculateDistances(refTNF, reads, buildTnfs(reads));
 }
 
-typedef vector<double> DVector;
+typedef vector<float> DVector;
 typedef vector< DVector > DMatrix;
 class MinVecOper {
 public:
-	bool operator()( const vector<double>::iterator &a, const vector<double>::iterator &b) const {
+	bool operator()( const DVector::iterator &a, const DVector::iterator &b) const {
 		return (*a < *b);
 	}
 } mvo;
@@ -483,7 +479,8 @@ int main(int argc, char *argv[]) {
 
 	ReadSet refs;
 	ReadSet reads;
-	TNF::init(TnfDistanceBaseOptions::getOptions().getKmerSize());
+	TNF::init(TnfDistanceBaseOptions::getOptions().getKmerSize(),
+			TnfDistanceBaseOptions::getOptions().getDistanceFormula());
 
 	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
 	reads.appendAllFiles(inputs);
@@ -530,7 +527,7 @@ int main(int argc, char *argv[]) {
 		for(ReadSet::ReadSetSizeType readIdxi = 0; readIdxi < reads.getSize(); readIdxi++) {
 			os << reads.getRead(readIdxi).getName();
 			for(ReadSet::ReadSetSizeType readIdxj = 0; readIdxj < readIdxi; readIdxj++) {
-				double dist = readTnfs[readIdxi].getDistance(readTnfs[readIdxj]);
+				float dist = readTnfs[readIdxi].getDistance(readTnfs[readIdxj]);
 				os << "\t" << dist;
 			}
 			os << endl;
@@ -549,7 +546,7 @@ int main(int argc, char *argv[]) {
 			os << read.getName();
 			for(unsigned long i = 0 ; i < intraTnfs.size(); i++) {
 				for(unsigned long j = 0 ; j < i ; j++) {
-					double dist = intraTnfs[i].getDistance(intraTnfs[j]);
+					float dist = intraTnfs[i].getDistance(intraTnfs[j]);
 					os << "\t" << dist;
 				}
 			}
@@ -571,7 +568,7 @@ int main(int argc, char *argv[]) {
 		clusterNames.resize( size );
 
 		//TODO optimize this and the the while loop (use LT, and directed updates to minVec)
-		vector< vector<double>::iterator > minVec;
+		vector< DVector::iterator > minVec;
 		minVec.resize( size );
 		float clusterThreshold = TnfDistanceBaseOptions::getOptions().getClusterThreshold();
 
@@ -605,7 +602,7 @@ int main(int argc, char *argv[]) {
 		while( true ) {
 			// set the thresholds for each remaining read
 
-			vector< vector<double>::iterator >::iterator minElem = std::min_element(minVec.begin(), minVec.end(), mvo);
+			vector< DVector::iterator >::iterator minElem = std::min_element(minVec.begin(), minVec.end(), mvo);
 			if (**minElem > clusterThreshold)
 				break;
 			LOG_DEBUG(1, **minElem );

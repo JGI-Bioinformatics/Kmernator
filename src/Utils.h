@@ -1697,5 +1697,79 @@ private:
 	Compare comp;
 
 };
+
+template<typename V, typename T = float>
+class RankVector {
+public:
+	typedef typename std::vector< V > VectorType;
+	typedef std::vector<T> Ranks;
+	typedef std::vector<int> Indexes;
+	class Comp {
+	public:
+		const VectorType &_dataVector;
+		Comp(const VectorType &dataVector) : _dataVector(dataVector) {}
+		inline bool operator()(int a, int b) {
+			assert(a >= 0 && a < (int) _dataVector.size());
+			assert(b >= 0 && b < (int) _dataVector.size());
+			return _dataVector[a] < _dataVector[b];
+		}
+	};
+	RankVector(const VectorType &dataVector) {
+		// build index vector to dataVector 0-(N-1)
+		Indexes indexes;
+		indexes.reserve(dataVector.size());
+		for(int i = 0; i < (int) dataVector.size(); i++)
+			indexes.push_back(i);
+
+		// sort indexes of dataVector
+		Comp comp(dataVector);
+		std::sort(indexes.begin(), indexes.end(), comp);
+
+		// calculate rank 1-N (lowest value == lowest rank)
+		ranks.resize(dataVector.size());
+		int lastTie = 0, lastTieSum = 0;
+		for(int i = 0; i < (int) indexes.size(); i++) {
+			int rank = i + 1;
+			if (i != lastTie && dataVector[indexes[i]] == dataVector[indexes[lastTie]]) {
+				lastTieSum += rank;
+				for(int j = lastTie ; j < i+1 ; j++) {
+					ranks[indexes[j]] = (T) lastTieSum / (T) (i-lastTie+1);
+				}
+			} else {
+				ranks[indexes[i]] = rank;
+				lastTieSum = rank;
+				lastTie = i;
+			}
+		}
+	}
+	// return the rank of the dataVector at index idx
+	int operator[](int idx) const {
+		return ranks[idx];
+	}
+	size_t size() const {
+		return ranks.size();
+	}
+
+	T getSpearmanDistance(const RankVector &other) const {
+		return getSpearmanDistance(*this, other);
+	}
+	static T getSpearmanDistance(const RankVector a, const RankVector b) {
+		assert(a.ranks.size() == b.ranks.size());
+		T mean = (a.ranks.size() + 1) / 2;
+		T dist = 0, sum_xy = 0.0, sum_x2 = 0, sum_y2 = 0;
+		for(int i = 0; i < (int) a.ranks.size(); i++) {
+			T x = a.ranks[i] - mean;
+			T y = b.ranks[i] - mean;
+			sum_xy += x * y;
+			sum_x2 += x * x;
+			sum_y2 += y * y;
+		}
+		dist = sum_xy / sqrt( sum_x2 * sum_y2 );
+		return (1 - dist) / 2;
+	}
+private:
+	Ranks ranks;
+};
+
 #endif
 
