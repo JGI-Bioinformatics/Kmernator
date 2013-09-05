@@ -605,7 +605,7 @@ int main(int argc, char *argv[]) {
 		long step = TnfDistanceBaseOptions::getOptions().getWindowStep();
 		int numBins = TnfDistanceBaseOptions::getOptions().getLikelihoodBins();
 
-		GH intraHist(0.0, 1.0, numBins), interHist(0.0, 1.0, numBins);
+		GH intraHist(0.0, 1.0, numBins, true), interHist(0.0, 1.0, numBins, true);
 
 		std::vector< TNFS > interTnfs;
 		interTnfs.resize( reads.getReadFileNum( reads.getSize() - 1 ));
@@ -669,8 +669,8 @@ int main(int argc, char *argv[]) {
 		os << "Distance\tIntraLikelihood\tInterLikelihood\n";
 		for(int i = 0; i < numBins; i++) {
 			GH::Bin intraBin = intraHist.getBin(i), interBin = interHist.getBin(i);
-			assert(intraBin.first == interBin.first);
-			os << intraBin.first << "\t" << intraBin.second/totalIntra << "\t" << interBin.second/totalInter << "\n";
+			assert(intraBin.binStart == interBin.binStart);
+			os << intraBin.binStart << "\t" << intraBin.count/totalIntra << "\t" << interBin.count/totalInter << "\n";
 		}
 	}
 

@@ -1772,18 +1772,44 @@ private:
 };
 
 
-template<typename T, typename C = int>
+template<typename T, typename C = long>
 class GenericHistogram {
 public:
 	typedef T ValueType;
 	typedef C CountType;
-	typedef std::pair<ValueType, CountType> Bin;
+	struct Bin {
+		ValueType binStart;
+		CountType count;
+	};
 
-	GenericHistogram(ValueType start, ValueType end, int numBins) : _start(start), _end(end) {
+	GenericHistogram(ValueType start, ValueType end, int numBins, bool threadSafe = false) : _start(start), _end(end), _threadSafe(threadSafe) {
 		_bins.resize(numBins + 2, 0);
 		_step = (end - start) / numBins;
 	}
-	void observe(ValueType v) { // thread safe!
+	GenericHistogram(const GenericHistogram &copy) {
+		*this = copy;
+	}
+	GenericHistogram &operator=(const GenericHistogram &copy) {
+		if (this == &copy)
+			return *this;
+		_start = copy._start;
+		_end = copy._end;
+		_step = copy._step;
+		_bins = copy._bins;
+		_threadSafe = copy._threadSafe;
+		return *this;
+	}
+	GenericHistogram &operator+(const GenericHistogram &other) {
+		assert(_start == other._start);
+		assert(_end == other._end);
+		assert(_step == other._step);
+		assert(_bins.size() == other._bins.size());
+		_threadSafe |= other._threadSafe;
+		for(int i = 0; i < _bins.size(); i++)
+			_bins[i] += other._bins[i];
+		return *this;
+	}
+	void observe(ValueType v) { // thread safe only when set!
 		int idx;
 		if (v < _start) {
 			idx = 0;
@@ -1792,8 +1818,12 @@ public:
 		} else {
 			idx = ((v - _start) / _step) + 1;
 		}
+		if (_threadSafe) {
 #pragma omp atomic
-		++_bins[ idx ];
+			++_bins[ idx ];
+		} else {
+			++_bins[ idx ];
+		}
 	}
 	int getNumBins(bool includeOutliers = false) const {
 		return _bins.size() - (includeOutliers ? 2 : 0);
@@ -1819,18 +1849,19 @@ public:
 		assert(idx < (int) _bins.size());
 		Bin bin;
 		if (idx == 0) {
-			bin.first = _start;
+			bin.binStart = _start;
 		} else if (idx < (int) _bins.size() - 1) {
-			bin.first = _start + (idx-1) * _step;
+			bin.binStart = _start + (idx-1) * _step;
 		} else {
-			bin.first = _end;
+			bin.binStart = _end;
 		}
-		bin.second = _bins[idx];
+		bin.count = _bins[idx];
 		return bin;
 	}
 
 private:
 	ValueType _start, _end, _step;
+	bool _threadSafe;
 	std::vector<CountType> _bins;
 };
 
