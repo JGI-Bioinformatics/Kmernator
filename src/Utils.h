@@ -1771,5 +1771,68 @@ private:
 	Ranks ranks;
 };
 
+
+template<typename T, typename C = int>
+class GenericHistogram {
+public:
+	typedef T ValueType;
+	typedef C CountType;
+	typedef std::pair<ValueType, CountType> Bin;
+
+	GenericHistogram(ValueType start, ValueType end, int numBins) : _start(start), _end(end) {
+		_bins.resize(numBins + 2, 0);
+		_step = (end - start) / numBins;
+	}
+	void observe(ValueType v) { // thread safe!
+		int idx;
+		if (v < _start) {
+			idx = 0;
+		} else if (v > _end) {
+			idx = _bins.size()-1;
+		} else {
+			idx = ((v - _start) / _step) + 1;
+		}
+#pragma omp atomic
+		++_bins[ idx ];
+	}
+	int getNumBins(bool includeOutliers = false) const {
+		return _bins.size() - (includeOutliers ? 2 : 0);
+	}
+	CountType getTotalCount(bool includeOutliers = false) const {
+		CountType totalCount = 0;
+		int end = _bins.size();
+		if (!includeOutliers) end--;
+		for(int i = (includeOutliers?0:1); i < end ; i++) {
+			totalCount += _bins[i];
+		}
+		return totalCount;
+	}
+	CountType getOutlierCount() const {
+		return _bins[0] + _bins[_bins.size() - 1];
+	}
+	Bin getBin(int idx, bool includeOutliers = false) const {
+		assert(idx >= 0);
+		if (!includeOutliers) {
+			idx++;
+			assert(idx < (int) _bins.size()-1);
+		}
+		assert(idx < (int) _bins.size());
+		Bin bin;
+		if (idx == 0) {
+			bin.first = _start;
+		} else if (idx < (int) _bins.size() - 1) {
+			bin.first = _start + (idx-1) * _step;
+		} else {
+			bin.first = _end;
+		}
+		bin.second = _bins[idx];
+		return bin;
+	}
+
+private:
+	ValueType _start, _end, _step;
+	std::vector<CountType> _bins;
+};
+
 #endif
 

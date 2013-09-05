@@ -75,9 +75,11 @@ public:
 	_TnfDistanceBaseOptions() :
 		kmerSize(4),
 		interDistanceFile(),
-		intraDistanceFile(),
+		intraInterFile(),
 		clusterFile(),
-		intraWindowSize(25000),
+		likelihoodBins(100),
+		windowSize(10000),
+		windowStep(1000),
 		clusterThresholdDistance(.175),
 		referenceFiles(),
 		distanceFormula(DistanceFormula::EUCLIDEAN) {}
@@ -90,14 +92,20 @@ public:
 	string &getInterFile() {
 		return interDistanceFile;
 	}
-	string &getIntraFile() {
-		return intraDistanceFile;
+	string &getIntraInterFile() {
+		return intraInterFile;
+	}
+	int &getLikelihoodBins() {
+		return likelihoodBins;
 	}
 	string &getClusterFile() {
 		return clusterFile;
 	}
-	int &getIntraWindow() {
-		return intraWindowSize;
+	int &getWindowSize() {
+		return windowSize;
+	}
+	int &getWindowStep() {
+		return windowStep;
 	}
 	float &getClusterThreshold() {
 		return clusterThresholdDistance;
@@ -115,7 +123,7 @@ public:
 
 	void _resetDefaults() {
 		GeneralOptions::_resetDefaults();
-		GeneralOptions::getOptions().getVerbose() = 0;
+		GeneralOptions::getOptions().getVerbose() = 1;
 		GeneralOptions::getOptions().getMmapInput() = false;
 	}
 	void _setOptions(po::options_description &desc, po::positional_options_description &p) {
@@ -127,11 +135,15 @@ public:
 
 				("reference-file", po::value<FileListType>(), "set reference file(s).  If set calculate distance of each input to this reference TNF vector")
 
-				("inter-distance-file", po::value<string>()->default_value(interDistanceFile), "output inter-distance LT matrix of inputs to this filename")
+				("inter-distance-file", po::value<string>()->default_value(interDistanceFile), "output inter-distance LT matrix (one line per input fasta) to this filename")
 
-				("intra-distance-file", po::value<string>()->default_value(intraDistanceFile), "output intra-distance matrix (one line per input) to this filename")
+				("intra-inter-file", po::value<string>()->default_value(intraInterFile), "output two discrete likelihood functions of intra vs inter-distances between all windows fasta between separate files.  Assumes intra are calculated within a file and inter between files")
 
-				("intra-window-size", po::value<int>()->default_value(intraWindowSize), "size of adjacent intra-distance windows")
+				("likelihood-bins", po::value<int>()->default_value(likelihoodBins), "How many bins to create for the discrete likelihood functions")
+
+				("window-size", po::value<int>()->default_value(windowSize), "size of adjacent intra/inter-distance windows")
+
+				("window-step", po::value<int>()->default_value(windowStep), "step size of adjacent intra/inter-distance windows")
 
 				("cluster-file", po::value<string>()->default_value(clusterFile), "cluster output filename")
 
@@ -148,11 +160,14 @@ public:
 	}
 	bool _parseOptions(po::variables_map &vm) {
 		bool ret = true;
+		ret |= GeneralOptions::_parseOptions(vm);
 
 		setOpt("kmer-size", kmerSize);
 		setOpt("inter-distance-file", interDistanceFile);
-		setOpt("intra-distance-file", intraDistanceFile);
-		setOpt("intra-window-size", intraWindowSize);
+		setOpt("intra-inter-file", intraInterFile);
+		setOpt("likelihood-bins", likelihoodBins);
+		setOpt("window-size", windowSize);
+		setOpt("window-step", windowStep);
 		setOpt("cluster-file", clusterFile);
 		setOpt("cluster-threshold-distance", clusterThresholdDistance);
 		setOpt2("reference-file", referenceFiles);
@@ -165,13 +180,13 @@ public:
 			distanceFormula = (DistanceFormula::Enum) df;
 		}
 
-		ret |= GeneralOptions::_parseOptions(vm);
 		return ret;
 	}
 private:
 	int kmerSize;
-	string interDistanceFile, intraDistanceFile, clusterFile;
-	int intraWindowSize;
+	string interDistanceFile, intraInterFile, clusterFile;
+	int likelihoodBins;
+	int windowSize, windowStep;
 	float clusterThresholdDistance;
 	FileListType referenceFiles;
 	DistanceFormula::Enum distanceFormula;
@@ -255,28 +270,57 @@ public:
 private:
 	float length;
 	Vector tnfValues;
+	RVector *rvector;
 
 public:
-	TNF() : length(1.0) {
+	TNF() : length(1.0), rvector(NULL) {
 		assert(stdSize > 0);
 		tnfValues.resize(stdSize);
 	}
-	TNF(const TNF &copy) {
+	TNF(const TNF &copy) : length(1.0), rvector(NULL) {
 		assert(stdSize > 0);
 		*this = copy;
 	}
-	TNF(const KM &map, bool normalize = false) : length(1.0) {
+	TNF(const KM &map, bool normalize = false) : length(1.0), rvector(NULL) {
 		assert(stdSize > 0);
 		buildTnf(map);
 		if (normalize)
 			buildLength();
+		setRankVector();
 	}
 	TNF &operator=(const TNF &copy) {
 		if (this == &copy)
 			return *this;
 		length = copy.length;
 		tnfValues = copy.tnfValues;
+		setRankVector();
 		return *this;
+	}
+	virtual ~TNF() {
+		clear();
+	}
+	void clear() {
+		length = 1.0;
+		tnfValues.clear();
+		clearRankVector();
+	}
+	void clearRankVector() {
+		if (rvector != NULL) {
+			delete rvector;
+			rvector = NULL;
+		}
+	}
+	void setRankVector(bool force = false) {
+		if (force || distanceFormula == DistanceFormula::SPEARMAN) {
+			if (rvector == NULL)
+				rvector = new RVector(tnfValues);
+			else
+				*rvector = RVector(tnfValues);
+		}
+	}
+	RVector &getRankVector() const {
+		assert(rvector != NULL);
+		return *rvector;
 	}
 	TNF &operator*(float factor) {
 		bool wasNormalized = isNormalized();
@@ -286,6 +330,7 @@ public:
 		if (wasNormalized) {
 			buildLength();
 		}
+		setRankVector();
 		return *this;
 	}
 	TNF &operator+(const TNF &rh) {
@@ -297,6 +342,7 @@ public:
 		if (wasNormalized) {
 			buildLength();
 		}
+		setRankVector();
 		return *this;
 	}
 	std::string toString() const {
@@ -312,7 +358,7 @@ public:
 	}
 	void buildLength() {
 		length = 0.0;
-		bool debug = Log::isDebug(1);
+		bool debug = Log::isDebug(2);
 		ostream *debugPtr = NULL;
 		if (debug) {
 			debugPtr = Log::Debug("buildLength()").getOstreamPtr();
@@ -337,6 +383,7 @@ public:
 			}
 			tnfValues.push_back(t);
 		}
+		setRankVector();
 	}
 	float getDistance(const TNF &other) const {
 		float dist = 0.0;
@@ -347,7 +394,7 @@ public:
 			}
 			dist = sqrt(dist);
 		} else if (distanceFormula == DistanceFormula::SPEARMAN) {
-			dist = RVector::getSpearmanDistance(RVector(tnfValues), RVector(other.tnfValues));
+			dist = RVector::getSpearmanDistance(getRankVector(), other.getRankVector());
 		}
 		return dist;
 	}
@@ -371,7 +418,7 @@ TNFS buildTnfs(const ReadSet &reads, bool normalize = false) {
 	long size = reads.getSize();
 	tnfs.resize(size);
 
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic,1)
 	for(long readIdx = 0; readIdx < size; readIdx++) {
 		KS ksReads;
 		ksReads.setSolidOnly();
@@ -388,16 +435,24 @@ TNFS buildTnfs(const ReadSet &reads, bool normalize = false) {
 	return tnfs;
 }
 
-TNFS buildIntraTNFs(const Read &read, long window, long step, bool normalize = false) {
+void shredReadByWindow(const Read &read, ReadSet &shrededReads, long window, long step) {
 	string fullFasta = read.getFasta();
 	long length = fullFasta.length();
-	ReadSet reads;
 	for(long i = 0 ; i < length - window; i+= step) {
 		string fasta = fullFasta.substr(i, window);
 		Read newRead(read.getName() + ":" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(i+fasta.length()), fasta, string(fasta.length(), Kmernator::PRINT_REF_QUAL), "");
-		reads.append(newRead);
+		shrededReads.append(newRead);
 	}
+}
+
+TNFS buildIntraTNFs(const ReadSet &reads, bool normalize = false) {
 	return buildTnfs(reads, normalize);
+}
+
+TNFS buildIntraTNFs(const Read &read, long window, long step, bool normalize = false) {
+	ReadSet reads;
+	shredReadByWindow(read, reads, window, step);
+	return buildIntraTNFs(reads, normalize);
 }
 
 class Result {
@@ -463,6 +518,7 @@ Results calculateDistances(const TNF &refTNF, const ReadSet &reads) {
 	return calculateDistances(refTNF, reads, buildTnfs(reads));
 }
 
+
 typedef vector<float> DVector;
 typedef vector< DVector > DMatrix;
 class MinVecOper {
@@ -471,6 +527,8 @@ public:
 		return (*a < *b);
 	}
 } mvo;
+
+typedef GenericHistogram<float, long> GH;
 
 int main(int argc, char *argv[]) {
 
@@ -484,11 +542,13 @@ int main(int argc, char *argv[]) {
 			TnfDistanceBaseOptions::getOptions().getDistanceFormula());
 
 	OptionsBaseInterface::FileListType &inputs = Options::getOptions().getInputFiles();
+	LOG_VERBOSE(1, "Loading " << inputs.size() << " input files");
 	reads.appendAllFiles(inputs);
 
 	KS ksRef;
 	ksRef.setSolidOnly();
 
+	LOG_VERBOSE(1, "Calculating TNFs for " << reads.getSize() << " input reads");
 	TNFS readTnfs = buildTnfs(reads, true);
 
 	ostream *out = &cout;
@@ -499,10 +559,12 @@ int main(int argc, char *argv[]) {
 	OptionsBaseInterface::FileListType referenceInputs = TnfDistanceBaseOptions::getOptions().getReferenceFiles();
 	if (!referenceInputs.empty()) {
 		// compare distances from reference to each read in the input
+		LOG_VERBOSE(1, "Loading reference input");
 		refs.appendAllFiles(referenceInputs);
 		ksRef.buildKmerSpectrum(refs, true);
 		TNF refTnf(ksRef.solid, true);
 
+		LOG_VERBOSE(1, "Calculating distances from input to reference");
 		Results results = calculateDistances(refTnf, reads, readTnfs);
 		std::sort(results.begin(), results.end(), ResultCompare());
 		for(Results::iterator it = results.begin(); it != results.end(); it++) {
@@ -511,6 +573,7 @@ int main(int argc, char *argv[]) {
 	} else {
 		// output TNF matrix for each read in the input
 
+		LOG_VERBOSE(1, "Outputting TNF vectors from input sequences");
 		*out << "Label\t" << TNF::toHeader() << endl;
 		for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < reads.getSize(); readIdx++) {
 
@@ -523,11 +586,12 @@ int main(int argc, char *argv[]) {
 
 	string interFile = TnfDistanceBaseOptions::getOptions().getInterFile();
 	if (!interFile.empty()) {
+		LOG_VERBOSE(1, "Outputting Lower Triangle of inter-TNF distances between inputs sequences.");
 		OfstreamMap om(interFile, "");
 		ostream &os = om.getOfstream("");
 		for(ReadSet::ReadSetSizeType readIdxi = 0; readIdxi < reads.getSize(); readIdxi++) {
 			os << reads.getRead(readIdxi).getName();
-			for(ReadSet::ReadSetSizeType readIdxj = 0; readIdxj < readIdxi; readIdxj++) {
+			for(ReadSet::ReadSetSizeType readIdxj = 0; readIdxj < readIdxi; readIdxj++) { // LT matrix only
 				float dist = readTnfs[readIdxi].getDistance(readTnfs[readIdxj]);
 				os << "\t" << dist;
 			}
@@ -535,23 +599,78 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	string intraFile = TnfDistanceBaseOptions::getOptions().getIntraFile();
-	if (!intraFile.empty()) {
-		OfstreamMap om(intraFile, "");
-		ostream &os = om.getOfstream("");
-		long window = TnfDistanceBaseOptions::getOptions().getIntraWindow();
-		long step = window / 10;
+	string intraInterFile = TnfDistanceBaseOptions::getOptions().getIntraInterFile();
+	if (!intraInterFile.empty()) {
+		long window = TnfDistanceBaseOptions::getOptions().getWindowSize();
+		long step = TnfDistanceBaseOptions::getOptions().getWindowStep();
+		int numBins = TnfDistanceBaseOptions::getOptions().getLikelihoodBins();
+
+		GH intraHist(0.0, 1.0, numBins), interHist(0.0, 1.0, numBins);
+
+		std::vector< TNFS > interTnfs;
+		interTnfs.resize( reads.getReadFileNum( reads.getSize() - 1 ));
+
+		LOG_VERBOSE(1, "Creating intra cluster TNF distance histogram for " << interTnfs.size() << " different sets.");
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+		ReadSet shrededReads;
+		int fileIdx = 0;
 		for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < reads.getSize(); readIdx++) {
 			Read read = reads.getRead(readIdx);
-			TNFS intraTnfs = buildIntraTNFs(read, window, step, true);
-			os << read.getName();
-			for(unsigned long i = 0 ; i < intraTnfs.size(); i++) {
-				for(unsigned long j = 0 ; j < i ; j++) {
-					float dist = intraTnfs[i].getDistance(intraTnfs[j]);
-					os << "\t" << dist;
+			shredReadByWindow(read, shrededReads, window, step);
+			if (readIdx+1 == reads.getSize() || fileIdx+1 != reads.getReadFileNum(readIdx+1)) {
+
+				LOG_VERBOSE(1, "Creating intra cluster TNFs for fileNum: " << fileIdx << " with " << shrededReads.getSize() << " shreded reads (readIdx: " << readIdx << ")");
+				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+				assert(fileIdx < (int) interTnfs.size());
+				interTnfs[fileIdx] = buildIntraTNFs(shrededReads, true);
+				TNFS &intraTnfs = interTnfs[fileIdx];
+#pragma omp parallel for schedule(dynamic,1)
+				for(long i = 0 ; i < (long) intraTnfs.size(); i++) {
+					for(long j = 0 ; j < i ; j++) { // lower triangle only
+						float dist = intraTnfs[i].getDistance(intraTnfs[j]);
+						intraHist.observe(dist);
+					}
+				}
+
+				shrededReads.clear();
+				if (readIdx +1 != reads.getSize()) {
+					fileIdx = reads.getReadFileNum(readIdx+1) - 1;
 				}
 			}
-			os << endl;
+		}
+
+		LOG_VERBOSE(1, "Creating inter cluster TNF distance histogram.");
+		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+#pragma omp parallel for schedule(dynamic,1)
+		for(long i = 0; i < (long) interTnfs.size(); i++) {
+			TNFS &interi = interTnfs[i];
+			for(long j = 0 ; j < i; j++) { // lower triangle only
+				TNFS &interj = interTnfs[j];
+				long isize = interi.size(), jsize = interj.size();
+				for(long k = 0 ; k < isize; k++) {
+					for(long l = 0; l < jsize; l++) {
+						float dist = interi[k].getDistance(interj[l]);
+						interHist.observe(dist);
+					}
+				}
+			}
+		}
+
+		assert(interHist.getOutlierCount() == 0);
+		assert(intraHist.getOutlierCount() == 0);
+
+		OfstreamMap om(intraInterFile, "");
+		ostream &os = om.getOfstream("");
+
+		double totalIntra = intraHist.getTotalCount(), totalInter = interHist.getTotalCount();
+		os << "Distance\tIntraLikelihood\tInterLikelihood\n";
+		for(int i = 0; i < numBins; i++) {
+			GH::Bin intraBin = intraHist.getBin(i), interBin = interHist.getBin(i);
+			assert(intraBin.first == interBin.first);
+			os << intraBin.first << "\t" << intraBin.second/totalIntra << "\t" << interBin.second/totalInter << "\n";
 		}
 	}
 
@@ -623,6 +742,7 @@ int main(int argc, char *argv[]) {
 				debugOut << endl;
 			}
 			clusterNames[tgti].insert( clusterNames[tgti].end(), clusterNames[tgtj].begin(), clusterNames[tgtj].end() );
+			clusterNames[tgtj].clear();
 			LOG_VERBOSE(1, "Cluster merged " << tgti << " with " << tgtj << " " << **minElem);
 			readTnfs2[tgti] = readTnfs2[tgti] + readTnfs2[tgtj];
 
@@ -669,6 +789,7 @@ int main(int argc, char *argv[]) {
 				os << clusterNames[i][j] << "\t";
 			if (!clusterNames[i].empty())
 				os << endl;
+			clusterNames[i].clear();
 		}
 		clusterNames.clear();
 
