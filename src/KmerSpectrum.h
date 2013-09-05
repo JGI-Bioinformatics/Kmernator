@@ -2078,7 +2078,7 @@ public:
 
 #pragma omp single
 				{
-					LOG_VERBOSE_OPTIONAL(1, true, "_buildKmerSpectrumParallel() running single update: " << batchIdx << " batch: " << batch << " total: " << store.getSize());
+					LOG_DEBUG_OPTIONAL(1, batch > 1, "_buildKmerSpectrumParallel() running single update: " << batchIdx << " batch: " << batch << " total: " << store.getSize());
 					batchIdx += batch;
 					_evaluateBatch(isSolid, batchIdx, purgeEvery, purgeCount);
 				}
@@ -2117,7 +2117,7 @@ public:
 		long purgeCount = 0;
 		long batch = Options::getOptions().getBatchSize();
 
-		if (omp_get_max_threads() > 1) {
+		if (omp_in_parallel() == 0 && omp_get_max_threads() > 1) {
 #ifdef _USE_OPENMP
 			_buildKmerSpectrumParallel(store, isSolid, partIdx, numParts, batch, purgeEvery, purgeCount);
 #endif
