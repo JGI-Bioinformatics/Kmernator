@@ -703,7 +703,6 @@ int main(int argc, char *argv[]) {
 
 		long maxInterSamples = maxSamples / (inputs.size() * (inputs.size()-1) / 2);
 
-#pragma omp parallel for schedule(dynamic,1)
 		for(long i = 0; i < (long) interTnfs.size(); i++) {
 			TNFS &interi = interTnfs[i];
 			for(long j = 0 ; j < i; j++) { // lower triangle only
@@ -712,6 +711,7 @@ int main(int argc, char *argv[]) {
 				long numSamples = isize * jsize;
 				if (numSamples < maxInterSamples) {
 					// calculate everything
+#pragma omp parallel for
 					for(long k = 0 ; k < isize; k++) {
 						for(long l = 0; l < jsize; l++) {
 							float dist = interi[k].getDistance(interj[l]);
@@ -722,7 +722,8 @@ int main(int argc, char *argv[]) {
 					}
 				} else {
 					// subsample
-					for(long k = 0; k < (long) maxInterSamples ; k++) {
+#pragma omp parallel for
+					for(long k = 0; k < maxInterSamples ; k++) {
 						long indexSample = randGen[omp_get_thread_num()].getRand() % numSamples;
 						long x = indexSample / jsize, y = indexSample % jsize;
 						assert(x < isize);
