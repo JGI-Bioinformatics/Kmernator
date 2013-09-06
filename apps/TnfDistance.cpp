@@ -77,9 +77,11 @@ public:
 		interDistanceFile(),
 		intraInterFile(),
 		clusterFile(),
+		includeIntraInterDataFile(false),
 		likelihoodBins(100),
 		windowSize(10000),
 		windowStep(1000),
+		maxSamples(MAX_I64),
 		clusterThresholdDistance(.175),
 		referenceFiles(),
 		distanceFormula(DistanceFormula::EUCLIDEAN) {}
@@ -95,6 +97,9 @@ public:
 	string &getIntraInterFile() {
 		return intraInterFile;
 	}
+	bool &getIncludeIntraInterDataFile() {
+		return includeIntraInterDataFile;
+	}
 	int &getLikelihoodBins() {
 		return likelihoodBins;
 	}
@@ -106,6 +111,9 @@ public:
 	}
 	int &getWindowStep() {
 		return windowStep;
+	}
+	long &getMaxSamples() {
+		return maxSamples;
 	}
 	float &getClusterThreshold() {
 		return clusterThresholdDistance;
@@ -139,11 +147,15 @@ public:
 
 				("intra-inter-file", po::value<string>()->default_value(intraInterFile), "output two discrete likelihood functions of intra vs inter-distances between all windows fasta between separate files.  Assumes intra are calculated within a file and inter between files")
 
+				("include-intra-inter-data-file", po::value<bool>()->default_value(includeIntraInterDataFile), "if set then intra-inter-file.data will be created too (VERY LARGE) one per thread")
+
 				("likelihood-bins", po::value<int>()->default_value(likelihoodBins), "How many bins to create for the discrete likelihood functions")
 
 				("window-size", po::value<int>()->default_value(windowSize), "size of adjacent intra/inter-distance windows")
 
 				("window-step", po::value<int>()->default_value(windowStep), "step size of adjacent intra/inter-distance windows")
+
+				("max-samples", po::value<long>()->default_value(maxSamples), "maximum number of samples of intra and inter distances")
 
 				("cluster-file", po::value<string>()->default_value(clusterFile), "cluster output filename")
 
@@ -165,9 +177,11 @@ public:
 		setOpt("kmer-size", kmerSize);
 		setOpt("inter-distance-file", interDistanceFile);
 		setOpt("intra-inter-file", intraInterFile);
+		setOpt("include-intra-inter-data-file", includeIntraInterDataFile);
 		setOpt("likelihood-bins", likelihoodBins);
 		setOpt("window-size", windowSize);
 		setOpt("window-step", windowStep);
+		setOpt("max-samples", maxSamples);
 		setOpt("cluster-file", clusterFile);
 		setOpt("cluster-threshold-distance", clusterThresholdDistance);
 		setOpt2("reference-file", referenceFiles);
@@ -185,8 +199,10 @@ public:
 private:
 	int kmerSize;
 	string interDistanceFile, intraInterFile, clusterFile;
+	bool includeIntraInterDataFile;
 	int likelihoodBins;
 	int windowSize, windowStep;
+	long maxSamples;
 	float clusterThresholdDistance;
 	FileListType referenceFiles;
 	DistanceFormula::Enum distanceFormula;
@@ -604,14 +620,32 @@ int main(int argc, char *argv[]) {
 		long window = TnfDistanceBaseOptions::getOptions().getWindowSize();
 		long step = TnfDistanceBaseOptions::getOptions().getWindowStep();
 		int numBins = TnfDistanceBaseOptions::getOptions().getLikelihoodBins();
+		bool dataFile = TnfDistanceBaseOptions::getOptions().getIncludeIntraInterDataFile();
 
-		GH intraHist(0.0, 1.0, numBins, true), interHist(0.0, 1.0, numBins, true);
+		float maxDistance = TNF::distanceFormula == DistanceFormula::EUCLIDEAN ? sqrt(2.0) : 1.0;
+		GH intraHist(0.0, maxDistance, numBins, true), interHist(0.0, maxDistance, numBins, true);
 
 		std::vector< TNFS > interTnfs;
 		interTnfs.resize( reads.getReadFileNum( reads.getSize() - 1 ));
 
 		LOG_VERBOSE(1, "Creating intra cluster TNF distance histogram for " << interTnfs.size() << " different sets.");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+		long maxSamples = TnfDistanceBaseOptions::getOptions().getMaxSamples();
+		long maxIntraSamples = maxSamples / inputs.size();
+		LongRand randGen[ omp_get_max_threads() ];
+		ostream *dataPtr[omp_get_max_threads()];
+		OfstreamMap om(intraInterFile, "");
+#pragma omp parallel
+		{
+			int threadId = omp_get_thread_num();
+			randGen[threadId] = LongRand();
+			if (dataFile) {
+				dataPtr[threadId] = & om.getOfstream(".data." +  boost::lexical_cast<string>( omp_get_thread_num() ));
+				*dataPtr[threadId] << "Distance\tIntra\tInter\n";
+			} else {
+				dataPtr[threadId] = NULL;
+			}
+		}
 
 		ReadSet shrededReads;
 		int fileIdx = 0;
@@ -626,11 +660,33 @@ int main(int argc, char *argv[]) {
 				assert(fileIdx < (int) interTnfs.size());
 				interTnfs[fileIdx] = buildIntraTNFs(shrededReads, true);
 				TNFS &intraTnfs = interTnfs[fileIdx];
+				LowerTriangle<false, long> lt(intraTnfs.size());
+				long numSamples = lt.getNumValues();
+				assert(numSamples == (long) ( intraTnfs.size() * (intraTnfs.size() - 1) / 2) );
+
+				if (numSamples < (long) maxIntraSamples) {
+					// calculate everything
 #pragma omp parallel for schedule(dynamic,1)
-				for(long i = 0 ; i < (long) intraTnfs.size(); i++) {
-					for(long j = 0 ; j < i ; j++) { // lower triangle only
-						float dist = intraTnfs[i].getDistance(intraTnfs[j]);
+					for(long i = 0 ; i < (long) intraTnfs.size(); i++) {
+						for(long j = 0 ; j < i ; j++) { // lower triangle only
+							float dist = intraTnfs[i].getDistance(intraTnfs[j]);
+							intraHist.observe(dist);
+							if (dataPtr[omp_get_thread_num()] != NULL)
+								*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
+						}
+					}
+				} else {
+					// subsample the full data set
+					LOG_DEBUG(1, "Subsampling all possible: " << numSamples << " to " << numSamples);
+
+#pragma omp parallel for
+					for(long k = 0; k < (long) maxIntraSamples; k++) {
+						long x,y, indexSample = randGen[omp_get_thread_num()].getRand() % numSamples;
+						lt.getXY(indexSample, x, y);
+						float dist = intraTnfs[x].getDistance(intraTnfs[y]);
 						intraHist.observe(dist);
+						if (dataPtr[omp_get_thread_num()] != NULL)
+							*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
 					}
 				}
 
@@ -641,8 +697,11 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		LOG_VERBOSE(1, "intra-histogram totalCount: " << intraHist.getTotalCount() << " outliers: " << intraHist.getOutlierCount());
 		LOG_VERBOSE(1, "Creating inter cluster TNF distance histogram.");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
+
+		long maxInterSamples = maxSamples / (inputs.size() * (inputs.size()-1) / 2);
 
 #pragma omp parallel for schedule(dynamic,1)
 		for(long i = 0; i < (long) interTnfs.size(); i++) {
@@ -650,19 +709,38 @@ int main(int argc, char *argv[]) {
 			for(long j = 0 ; j < i; j++) { // lower triangle only
 				TNFS &interj = interTnfs[j];
 				long isize = interi.size(), jsize = interj.size();
-				for(long k = 0 ; k < isize; k++) {
-					for(long l = 0; l < jsize; l++) {
-						float dist = interi[k].getDistance(interj[l]);
+				long numSamples = isize * jsize;
+				if (numSamples < maxInterSamples) {
+					// calculate everything
+					for(long k = 0 ; k < isize; k++) {
+						for(long l = 0; l < jsize; l++) {
+							float dist = interi[k].getDistance(interj[l]);
+							interHist.observe(dist);
+							if (dataPtr[omp_get_thread_num()] != NULL)
+								*dataPtr[omp_get_thread_num()] << dist << "\t0\t1\n";
+						}
+					}
+				} else {
+					// subsample
+					for(long k = 0; k < (long) maxInterSamples ; k++) {
+						long indexSample = randGen[omp_get_thread_num()].getRand() % numSamples;
+						long x = indexSample / jsize, y = indexSample % jsize;
+						assert(x < isize);
+						assert(y < jsize);
+						float dist = interi[x].getDistance(interj[y]);
 						interHist.observe(dist);
+						if (dataPtr[omp_get_thread_num()] != NULL)
+							*dataPtr[omp_get_thread_num()] << dist << "\t0\t1\n";
 					}
 				}
 			}
 		}
 
+		LOG_VERBOSE(1, "inter-histogram totalCount: " << interHist.getTotalCount() << " outliers: " << interHist.getOutlierCount());
+
 		assert(interHist.getOutlierCount() == 0);
 		assert(intraHist.getOutlierCount() == 0);
 
-		OfstreamMap om(intraInterFile, "");
 		ostream &os = om.getOfstream("");
 
 		double totalIntra = intraHist.getTotalCount(), totalInter = interHist.getTotalCount();

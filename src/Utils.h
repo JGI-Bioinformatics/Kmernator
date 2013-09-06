@@ -1066,7 +1066,16 @@ public:
 	typedef std::vector< Instance > Instances;
 
 	_Rand( uint64_t _seed = getSeed( ) ) : engine( _seed ), dist() {	}
-
+	_Rand(const _Rand &copy) {
+		*this = copy;
+	}
+	_Rand &operator=(const _Rand &copy) {
+		if (this == &copy)
+			return *this;
+		engine = copy.engine;
+		dist = copy.dist;
+		return *this;
+	}
 	Type getRand() {
 		return dist(engine);
 	}
@@ -1863,6 +1872,61 @@ private:
 	ValueType _start, _end, _step;
 	bool _threadSafe;
 	std::vector<CountType> _bins;
+};
+
+template<bool diagonal = false, typename IndexType = int>
+class LowerTriangle {
+public:
+	struct XY {
+		IndexType x,y;
+	};
+	LowerTriangle(IndexType _size) {
+		assert(_size > 1);
+		size = diagonal ? _size : _size + 1;
+	}
+	IndexType getIndex(IndexType x, IndexType y) const {
+		assert(x >= 0 && y >= 0);
+		assert(y < size);
+		if (diagonal) {
+			assert(x <= y);
+		} else {
+			assert(y > 0);
+			y--;
+			assert(x < y);
+		}
+		return x + (y+1) * y / 2;
+	}
+	void getXY(IndexType index, IndexType &x, IndexType &y) {
+		assert(index >= 0);
+		y = (IndexType)((-1 + sqrt(8*index+1))/2);
+		x = index - y * (y+1) / 2;
+
+		if (diagonal) {
+			assert(index < size * (size + 1) / 2);
+			assert(x <= y);
+		} else {
+			assert(index < size * (size + 1) / 2);
+			y++;
+			assert(x < y);
+			assert(y < size - 1);
+			}
+		assert(y < size);
+		assert(x >= 0 && y >= 0);
+	}
+	XY getXY(IndexType index) const {
+		XY xy;
+		getXY(index, xy.x, xy.y);
+		return xy;
+	}
+	IndexType getNumValues() const {
+		if (diagonal) {
+			return size * (size+1) / 2;
+		} else {
+			return (size-2) * (size-1) / 2;
+		}
+	}
+private:
+	IndexType size;
 };
 
 #endif
