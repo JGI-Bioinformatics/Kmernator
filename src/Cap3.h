@@ -92,7 +92,7 @@ typedef OptionsBaseTemplate< _Cap3Options > Cap3Options;
 
 class Cap3 : public ExternalAssembler {
 public:
-	Cap3() : ExternalAssembler("Cap3") {}
+	Cap3() : ExternalAssembler("Cap3", 2, 25000, 10000) {}
 	virtual ~Cap3() {}
 
 	Read extendContig(const Read &oldContig, const ReadSet &inputReads) {

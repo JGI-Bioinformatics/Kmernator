@@ -213,6 +213,19 @@ public:
 	~ReadSet() {
 	}
 
+	static ReadSet shred(const Read &read, SequenceLengthType length, SequenceLengthType step) {
+		ReadSet shreds;
+		SequenceLengthType len = read.getLength();
+		assert(len > length);
+		assert(step < length);
+		for(int i = 0; i < (int) (len - length + step - 1); i += step) {
+			Read shreddedRead(read.getName() + "-" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(i+length),
+					read.getFasta(i, length), read.getQuals(i, length), "shredded");
+			shreds.addRead(shreddedRead);
+		}
+		return shreds;
+	}
+
 	void swap(ReadSet &other) {
 		_reads.swap(other._reads);
 		_filePartitions.swap(other._filePartitions);

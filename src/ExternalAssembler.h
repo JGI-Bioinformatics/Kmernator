@@ -62,6 +62,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 class ExternalAssembler {
 public:
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
+
 	int &getRepeatContig() {
 		return repeatContig;
 	}
@@ -77,14 +78,26 @@ public:
 
 		return newName + "+" + boost::lexical_cast<std::string>(deltaLen);
 	}
-	ExternalAssembler(std::string name, int _repeatContig = 1): myName(name), kmerReadUtils(), repeatContig(repeatContig) {}
+	ExternalAssembler(std::string _name, int _repeatContig = 1, int _maxSeedLength = 1999, int _shredStep = 250):
+		myName(_name), kmerReadUtils(), repeatContig(_repeatContig), maxSeedLength(_maxSeedLength), shredStep(_shredStep) {}
 	virtual ~ExternalAssembler() {}
 
 	void writeReads(const ReadSet &reads, const Read &oldContig, std::string outputName, FormatOutput format = FormatOutput::FastaUnmasked()) {
 		OfstreamMap ofm(outputName, "");
 		reads.writeAll(ofm.getOfstream(""), format);
-		for(int i = 0; i < repeatContig; i++)
-			oldContig.write(ofm.getOfstream(""), format);
+		if (oldContig.getLength() > maxSeedLength) {
+			LOG_DEBUG(1, "Shredding " << oldContig.getName() << " " << oldContig.getLength());
+			for(int i = 0; i < repeatContig; i++) {
+				ReadSet shreds = ReadSet::shred(oldContig, maxSeedLength, shredStep);
+				for(int j = 0 ; j < (int) shreds.getSize(); j++) {
+					shreds.getRead(j).write(ofm.getOfstream(""), format);
+				}
+			}
+		} else {
+			for(int i = 0; i < repeatContig; i++) {
+				oldContig.write(ofm.getOfstream(""), format);
+			}
+		}
 	}
 
 
@@ -191,6 +204,7 @@ private:
 	std::string myName;
 	KmerReadUtils kmerReadUtils;
 	int repeatContig;
+	SequenceLengthType maxSeedLength, shredStep;
 
 };
 

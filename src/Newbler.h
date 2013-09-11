@@ -118,7 +118,7 @@ typedef OptionsBaseTemplate< _NewblerOptions > NewblerOptions;
 class Newbler : public ExternalAssembler {
 public:
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
-	Newbler() : ExternalAssembler("newbler", 25) {}
+	Newbler() : ExternalAssembler("newbler", 3, 1999, 250) {}
 	virtual ~Newbler() {
 	}
 	Read extendContig(const Read &oldContig, const ReadSet &inputReads) {
@@ -127,8 +127,8 @@ public:
 		std::string outputDir = Cleanup::makeTempDir(Options::getOptions().getTmpDir(), prefix);
 		LOG_VERBOSE_OPTIONAL(1, !GeneralOptions::getOptions().getKeepTempDir().empty(), "Saving Newbler working directory for " << oldContig.getName()
 				<< " to " << GeneralOptions::getOptions().getKeepTempDir() << outputDir.substr(outputDir.find(prefix)));
-		std::string baseName = outputDir + "/input.fastq";
-		writeReads(inputReads, oldContig, baseName, FormatOutput::FastqUnmasked());
+		std::string baseName = outputDir + "/input.fasta";
+		writeReads(inputReads, oldContig, baseName, FormatOutput::FastaUnmasked());
 		std::string log = baseName + ".log";
 		// TODO support CDNA & isotigs
 		// -cdna -isplit //isotig traversal when depth spikes
