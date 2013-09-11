@@ -284,20 +284,21 @@ public:
 		return ss.str();
 	}
 private:
-	float length;
 	Vector tnfValues;
 	RVector *rvector;
+	float length;
+	bool normalize;
 
 public:
-	TNF() : length(1.0), rvector(NULL) {
+	TNF(bool _normalize = false) : rvector(NULL), length(1.0), normalize(_normalize) {
 		assert(stdSize > 0);
 		tnfValues.resize(stdSize);
 	}
-	TNF(const TNF &copy) : length(1.0), rvector(NULL) {
+	TNF(const TNF &copy) : rvector(NULL), length(1.0), normalize(false) {
 		assert(stdSize > 0);
 		*this = copy;
 	}
-	TNF(const KM &map, bool normalize = false) : length(1.0), rvector(NULL) {
+	TNF(const KM &map, bool _normalize = false) :  rvector(NULL), length(1.0), normalize(_normalize) {
 		assert(stdSize > 0);
 		buildTnf(map);
 		if (normalize)
@@ -309,6 +310,7 @@ public:
 			return *this;
 		length = copy.length;
 		tnfValues = copy.tnfValues;
+		normalize = copy.normalize;
 		setRankVector();
 		return *this;
 	}
@@ -317,6 +319,7 @@ public:
 	}
 	void clear() {
 		length = 1.0;
+		normalize = false;
 		tnfValues.clear();
 		clearRankVector();
 	}
@@ -370,7 +373,7 @@ public:
 		return ss.str();
 	}
 	bool isNormalized() const {
-		return length != 1.0;
+		return normalize;
 	}
 	void buildLength() {
 		length = 0.0;
@@ -395,11 +398,13 @@ public:
 			KM::ElementType elem = map.getElementIfExists(it->key());
 			float t = 0.0;
 			if (elem.isValid()) {
-				t = elem.value() / length;
+				t = elem.value();
 			}
 			tnfValues.push_back(t);
 		}
 		setRankVector();
+		if(normalize)
+			buildLength();
 	}
 	float getDistance(const TNF &other) const {
 		float dist = 0.0;
@@ -531,7 +536,7 @@ Results calculateDistances(const TNF &refTnf, const ReadSet &reads, const TNFS &
 	return results;
 }
 Results calculateDistances(const TNF &refTNF, const ReadSet &reads) {
-	return calculateDistances(refTNF, reads, buildTnfs(reads));
+	return calculateDistances(refTNF, reads, buildTnfs(reads, true));
 }
 
 
