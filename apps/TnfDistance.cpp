@@ -62,7 +62,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 
 using namespace std;
-typedef TrackingDataMinimal4f DataType;
+typedef TrackingDataMinimal4 DataType;
 typedef KmerMap<DataType> KM;
 typedef KmerSpectrum<KM, KM> KS;
 
@@ -392,7 +392,7 @@ public:
 		if (debug) *debugPtr << length << endl;
 	}
 	void buildTnf(const KM & map) {
-		tnfValues.empty();
+		tnfValues.clear();
 		tnfValues.reserve(stdSize);
 		for(KM::Iterator it = stdMap.begin(); it != stdMap.end(); it++) {
 			KM::ElementType elem = map.getElementIfExists(it->key());
@@ -438,11 +438,13 @@ TNFS buildTnfs(const ReadSet &reads, bool normalize = false) {
 	TNFS tnfs;
 	long size = reads.getSize();
 	tnfs.resize(size);
+	int targetBucketElementCount = 8;
 
 #pragma omp parallel for schedule(dynamic,1)
 	for(long readIdx = 0; readIdx < size; readIdx++) {
 		KS ksReads;
 		ksReads.setSolidOnly();
+		ksReads.solid.resizeBuckets(TNF::stdSize / targetBucketElementCount + 1, targetBucketElementCount);
 		ReadSet singleRead;
 		Read read = reads.getRead(readIdx);
 		LOG_DEBUG(1, "buildTnfs() for: " << read.getName());
