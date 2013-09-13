@@ -375,21 +375,39 @@ public:
 	bool isNormalized() const {
 		return normalize;
 	}
-	void buildLength() {
-		length = 0.0;
+	float getCount() const {
+		float count = 0.0;
+		for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
+			count += tnfValues[i];
+		}
+		return count;
+	}
+	float getLength() const {
+		if (normalize)
+			return length;
+		else
+			return calcLength();
+	}
+	float calcLength() const {
+		float l = 0.0;
 		bool debug = Log::isDebug(2);
 		ostream *debugPtr = NULL;
 		if (debug) {
 			debugPtr = Log::Debug("buildLength()").getOstreamPtr();
 		}
 		for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
-			length += tnfValues[i] * tnfValues[i];
+			l += tnfValues[i] * tnfValues[i];
 			if (debug) *debugPtr << tnfValues[i] << "\t";
 		}
-		length = sqrt(length);
-		if (length == 0.0)
+		l = sqrt(l);
+
+		if (debug) *debugPtr << l << endl;
+		return l;
+	}
+	void buildLength() {
+		length = calcLength();
+		if (length == 0.0) // avoid any divide by zero problems
 			length = 1.0;
-		if (debug) *debugPtr << length << endl;
 	}
 	void buildTnf(const KM & map) {
 		tnfValues.clear();
@@ -476,6 +494,20 @@ TNFS buildIntraTNFs(const Read &read, long window, long step, bool normalize = f
 	ReadSet reads;
 	shredReadByWindow(read, reads, window, step);
 	return buildIntraTNFs(reads, normalize);
+}
+// use this to remove TNFs that are missing too much of the expected or required data.
+void purgeShortTNFS(TNFS &tnfs, int minimumCount) {
+	long oldSize = tnfs.size();
+	long size=oldSize;
+	for(long readIdx = 0; readIdx < size; readIdx++) {
+		if (tnfs[readIdx].getCount() < minimumCount) {
+			std::swap(tnfs[readIdx], tnfs[size-1]);
+			tnfs.pop_back();
+			size--;
+			readIdx--;
+		}
+	}
+	LOG_DEBUG_OPTIONAL(1, oldSize != size, "purgeShortTNFS(" << oldSize << "," << minimumCount << "): purged " << oldSize - size << " short TNFs, remaining: " << size);
 }
 
 class Result {
@@ -634,6 +666,7 @@ int main(int argc, char *argv[]) {
 
 		std::vector< TNFS > interTnfs;
 		interTnfs.resize( reads.getReadFileNum( reads.getSize() - 1 ));
+		assert(interTnfs.size() == inputs.size());
 
 		LOG_VERBOSE(1, "Creating intra cluster TNF distance histogram for " << interTnfs.size() << " different sets.");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
@@ -657,49 +690,60 @@ int main(int argc, char *argv[]) {
 		ReadSet shrededReads;
 		int fileIdx = 0;
 		for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < reads.getSize(); readIdx++) {
+			assert(fileIdx == reads.getReadFileNum(readIdx) - 1);
 			Read read = reads.getRead(readIdx);
 			shredReadByWindow(read, shrededReads, window, step);
-			if (readIdx+1 == reads.getSize() || fileIdx+1 != reads.getReadFileNum(readIdx+1)) {
+
+			// if this was the last read or the next read is from a new file
+			// process the intra
+			if (readIdx+1 == reads.getSize() || fileIdx != reads.getReadFileNum(readIdx+1) - 1) {
 
 				LOG_VERBOSE(1, "Creating intra cluster TNFs for fileNum: " << fileIdx << " with " << shrededReads.getSize() << " shreded reads (readIdx: " << readIdx << ")");
 				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 				assert(fileIdx < (int) interTnfs.size());
 				interTnfs[fileIdx] = buildIntraTNFs(shrededReads, true);
+				purgeShortTNFS(interTnfs[fileIdx], window*3/4);
 				TNFS &intraTnfs = interTnfs[fileIdx];
-				LowerTriangle<false, long> lt(intraTnfs.size());
-				long numSamples = lt.getNumValues();
-				assert(numSamples == (long) ( intraTnfs.size() * (intraTnfs.size() - 1) / 2) );
+				long intraTnfsSize = intraTnfs.size();
+				if (intraTnfsSize > 1) {
 
-				if (numSamples < (long) maxIntraSamples) {
-					// calculate everything
+					LowerTriangle<false, long> lt(intraTnfsSize);
+					long numSamples = lt.getNumValues();
+					assert(numSamples == (long) ( intraTnfsSize * (intraTnfsSize - 1) / 2) );
+
+					if (numSamples < (long) maxIntraSamples) {
+						// calculate everything
 #pragma omp parallel for schedule(dynamic,1)
-					for(long i = 0 ; i < (long) intraTnfs.size(); i++) {
-						for(long j = 0 ; j < i ; j++) { // lower triangle only
-							float dist = intraTnfs[i].getDistance(intraTnfs[j]);
+						for(long i = 0 ; i < (long) intraTnfs.size(); i++) {
+							for(long j = 0 ; j < i ; j++) { // lower triangle only
+								float dist = intraTnfs[i].getDistance(intraTnfs[j]);
+								intraHist.observe(dist);
+								if (dataPtr[omp_get_thread_num()] != NULL)
+									*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
+							}
+						}
+					} else {
+						// subsample the full data set
+						LOG_DEBUG(1, "Subsampling all possible: " << numSamples << " to " << numSamples);
+
+#pragma omp parallel for
+						for(long k = 0; k < (long) maxIntraSamples; k++) {
+							long x,y, indexSample = randGen[omp_get_thread_num()].getRand() % numSamples;
+							lt.getXY(indexSample, x, y);
+							float dist = intraTnfs[x].getDistance(intraTnfs[y]);
 							intraHist.observe(dist);
 							if (dataPtr[omp_get_thread_num()] != NULL)
 								*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
 						}
 					}
-				} else {
-					// subsample the full data set
-					LOG_DEBUG(1, "Subsampling all possible: " << numSamples << " to " << numSamples);
 
-#pragma omp parallel for
-					for(long k = 0; k < (long) maxIntraSamples; k++) {
-						long x,y, indexSample = randGen[omp_get_thread_num()].getRand() % numSamples;
-						lt.getXY(indexSample, x, y);
-						float dist = intraTnfs[x].getDistance(intraTnfs[y]);
-						intraHist.observe(dist);
-						if (dataPtr[omp_get_thread_num()] != NULL)
-							*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
-					}
 				}
-
 				shrededReads.clear();
-				if (readIdx +1 != reads.getSize()) {
+				if (readIdx + 1 != reads.getSize()) {
 					fileIdx = reads.getReadFileNum(readIdx+1) - 1;
+				} else {
+					assert(fileIdx == (int) inputs.size() - 1);
 				}
 			}
 		}
@@ -708,7 +752,9 @@ int main(int argc, char *argv[]) {
 		LOG_VERBOSE(1, "Creating inter cluster TNF distance histogram.");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-		long maxInterSamples = maxSamples / (inputs.size() * (inputs.size()-1) / 2);
+		long maxInterSamples = maxSamples / inputs.size();
+		if (inputs.size() >= 2)
+			maxInterSamples = maxSamples / (inputs.size() * (inputs.size()-1) / 2);
 
 		for(long i = 0; i < (long) interTnfs.size(); i++) {
 			TNFS &interi = interTnfs[i];
