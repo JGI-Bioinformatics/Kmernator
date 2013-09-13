@@ -672,6 +672,8 @@ int main(int argc, char *argv[]) {
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 		long maxSamples = TnfDistanceBaseOptions::getOptions().getMaxSamples();
 		long maxIntraSamples = maxSamples / inputs.size();
+		if (inputs.size() > 1)
+			maxIntraSamples += 1;
 		LongRand randGen[ omp_get_max_threads() ];
 		ostream *dataPtr[omp_get_max_threads()];
 		OfstreamMap om(intraInterFile, "");
@@ -753,8 +755,11 @@ int main(int argc, char *argv[]) {
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
 		long maxInterSamples = maxSamples / inputs.size();
-		if (inputs.size() >= 2)
+		if (inputs.size() >= 2) {
 			maxInterSamples = maxSamples / (inputs.size() * (inputs.size()-1) / 2);
+			if (inputs.size() > 2)
+				maxInterSamples += 1;
+		}
 
 		for(long i = 0; i < (long) interTnfs.size(); i++) {
 			TNFS &interi = interTnfs[i];
