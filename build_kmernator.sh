@@ -25,7 +25,7 @@ logcmd()
 }
 
 set -e
-buildDir=build
+buildDir=${BUILD_DIR:=build}
 buildDirective=
 installSuffix=
 if [ -n "$buildType" ]
@@ -52,26 +52,30 @@ then
   # edison is Cray XC30
 
   execute_modules="PrgEnv-gnu"
-  build_modules="cray-mpich cmake bzip2 samtools"
+  build_modules="cray-mpich cmake zlib bzip2 samtools"
 
   module rm PrgEnv-intel
   module rm boost
   module rm cmake
   module rm bzip2
+  module rm zlib
   module rm cray-mpich
 
-  mpilib=$(basename $MPICH_DIR/lib/libmpich_gnu*.a); mpilib=${mpilib%.a} ; mpilib2=${mpilib#lib}
-  export KMERNATOR_C_FLAGS="-Wall -Wno-unused-local-typedefs"
+  module load $execute_modules $build_modules
 
-  echo "Executing cmake (see `pwd`/cmake.log) `date`" | tee -a cmake.log
-  cmakeOpts=" -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DMPI_COMPILER=`which CC` \
+  mpilib=$(basename $MPICH_DIR/lib/libmpich_gnu*.a); mpilib=${mpilib%.a} ; mpilib2=${mpilib#lib}
+  export KMERNATOR_C_FLAGS="-Wno-unused-local-typedefs"
+
+  set -x
+  cmake -DCMAKE_C_COMPILER=`which cc` -DCMAKE_CXX_COMPILER=`which CC` -DMPI_COMPILER=`which CC` \
     $buildDirective \
     -DCMAKE_INSTALL_PREFIX:PATH=`pwd` \
-    -DKMERNATOR_C_FLAGS='$KMERNATOR_C_FLAGS' -DKMERNATOR_CXX_FLAGS='$KMERNATOR_C_FLAGS' \
+    -DKMERNATOR_C_FLAGS="${KMERNATOR_C_FLAGS}" -DKMERNATOR_CXX_FLAGS="${KMERNATOR_C_FLAGS}" \
     -DCMAKE_SHARED_LIBRARY_LINK_C_FLAGS='' -DCMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS='' \
-    -DMPI_LIBRARY='$mpilib2' -DMPI_INCLUDE_PATH='${MPICH_DIR}/include' \
-    -DBOOST_MPI_USER_CONFIG='using mpi : : <find-static-library>$mpilib ;' -DMPI_EXTRA_LIBRARY='' \
-"
+    -DMPI_LIBRARY="$mpilib2" -DMPI_INCLUDE_PATH="${MPICH_DIR}/include" \
+    -DBOOST_MPI_USER_CONFIG="using mpi : : <find-static-library>$mpilib ;" -DMPI_EXTRA_LIBRARY='' \
+    $sourceDir
+  set +x
 
 fi
 
@@ -84,10 +88,14 @@ then
   execute_modules="PrgEnv-gnu openmpi boost/1.53.0"
   build_modules="cmake git samtools"
 
-  cmakeOpts="
+  module load $execute_modules $build_modules
+
+  set -x
+  cmake
     $buildDirective \
     -DCMAKE_INSTALL_PREFIX:PATH=`pwd` \
-"
+    $sourceDir
+  set +x
 
 fi
 
@@ -97,14 +105,8 @@ do
   module load $module
   echo $module >> .deps
 done
-for module in ${build_modules}
-do
-  module load $module
-done
-module list || /bin/true
 
-echo "Executing cmake $sourceDir $cmakeOpts (see `pwd`/cmake.log) `date`" | tee -a cmake.log
-logcmd cmake.log cmake $sourceDir $cmakeOpts
+module list || /bin/true
 
 echo "Building executables (see `pwd`/make.log) `date`" | tee -a make.log
 logcmd make.log make VERBOSE=1 -j18
