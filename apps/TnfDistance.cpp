@@ -353,7 +353,7 @@ public:
 		return *this;
 	}
 	TNF &operator+(const TNF &rh) {
-		bool wasNormalized = isNormalized();
+		bool wasNormalized = isNormalized() | rh.isNormalized();
 
 		for(unsigned int i = 0; i < tnfValues.size(); i++) {
 			tnfValues[i] = tnfValues[i] + rh.tnfValues[i];
@@ -662,11 +662,16 @@ int main(int argc, char *argv[]) {
 		bool dataFile = TnfDistanceBaseOptions::getOptions().getIncludeIntraInterDataFile();
 
 		float maxDistance = TNF::distanceFormula == DistanceFormula::EUCLIDEAN ? sqrt(2.0) : 1.0;
-		GH intraHist(0.0, maxDistance, numBins, true), interHist(0.0, maxDistance, numBins, true);
+		GH intraHist(0.0, maxDistance, numBins, true),
+		   interHist(0.0, maxDistance, numBins, true),
+		   intraVsWholeHist(0.0, maxDistance, numBins, true),
+		   interVsWholeHist(0.0, maxDistance, numBins, true);
 
 		std::vector< TNFS > interTnfs;
 		interTnfs.resize( reads.getReadFileNum( reads.getSize() - 1 ));
 		assert(interTnfs.size() == inputs.size());
+		TNFS wholeTnfs;
+		wholeTnfs.resize( interTnfs.size() );
 
 		LOG_VERBOSE(1, "Creating intra cluster TNF distance histogram for " << interTnfs.size() << " different sets.");
 		LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
@@ -696,9 +701,11 @@ int main(int argc, char *argv[]) {
 			Read read = reads.getRead(readIdx);
 			shredReadByWindow(read, shrededReads, window, step);
 
+			int nextFileIdx = reads.getReadFileNum(readIdx+1) - 1;
+			wholeTnfs[ fileIdx ] = wholeTnfs[ fileIdx ] + readTnfs[ readIdx ];
 			// if this was the last read or the next read is from a new file
 			// process the intra
-			if (readIdx+1 == reads.getSize() || fileIdx != reads.getReadFileNum(readIdx+1) - 1) {
+			if (readIdx+1 == reads.getSize() || fileIdx != nextFileIdx) {
 
 				LOG_VERBOSE(1, "Creating intra cluster TNFs for fileNum: " << fileIdx << " with " << shrededReads.getSize() << " shreded reads (readIdx: " << readIdx << ")");
 				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
@@ -713,6 +720,12 @@ int main(int argc, char *argv[]) {
 					LowerTriangle<false, long> lt(intraTnfsSize);
 					long numSamples = lt.getNumValues();
 					assert(numSamples == (long) ( intraTnfsSize * (intraTnfsSize - 1) / 2) );
+
+#pragma omp parallel for
+					for(long i = 0 ; i < (long) intraTnfs.size(); i++) {
+						float dist = wholeTnfs[fileIdx].getDistance(intraTnfs[i]);
+						intraVsWholeHist.observe(dist);
+					}
 
 					if (numSamples < (long) maxIntraSamples) {
 						// calculate everything
@@ -761,10 +774,20 @@ int main(int argc, char *argv[]) {
 				maxInterSamples += 1;
 		}
 
-		for(long i = 0; i < (long) interTnfs.size(); i++) {
-			TNFS &interi = interTnfs[i];
-			for(long j = 0 ; j < i; j++) { // lower triangle only
-				TNFS &interj = interTnfs[j];
+		for(long fileIdxi = 0; fileIdxi < (long) interTnfs.size(); fileIdxi++) {
+			TNFS &interi = interTnfs[fileIdxi];
+
+#pragma omp parallel for
+			for(long k = 0 ; k < (long) interi.size(); k++) {
+				for(long fileIdxj = 0; fileIdxj < (int) interTnfs.size(); fileIdxj++) {
+					if (fileIdxi == fileIdxj) continue; // intra already calculated
+					float dist = wholeTnfs[fileIdxj].getDistance(interi[k]);
+					interVsWholeHist.observe(dist);
+				}
+			}
+
+			for(long fileIdxj = 0 ; fileIdxj < fileIdxi; fileIdxj++) { // lower triangle only
+				TNFS &interj = interTnfs[fileIdxj];
 				long isize = interi.size(), jsize = interj.size();
 				long numSamples = isize * jsize;
 				if (numSamples < maxInterSamples) {
@@ -802,12 +825,15 @@ int main(int argc, char *argv[]) {
 
 		ostream &os = om.getOfstream("");
 
-		double totalIntra = intraHist.getTotalCount(), totalInter = interHist.getTotalCount();
-		os << "Distance\tIntraLikelihood\tInterLikelihood\n";
+		double totalIntra = intraHist.getTotalCount(), totalInter = interHist.getTotalCount(),
+			totalIntraVsWhole = intraVsWholeHist.getTotalCount(), totalInterVsWhole = interVsWholeHist.getTotalCount();
+		os << "Distance\tIntraLikelihood\tInterLikelihood\tIntraVsWholeLikelihood\tInterVsWholeLikelihood\n";
 		for(int i = 0; i < numBins; i++) {
-			GH::Bin intraBin = intraHist.getBin(i), interBin = interHist.getBin(i);
+			GH::Bin intraBin = intraHist.getBin(i), interBin = interHist.getBin(i),
+					intraVsWholeBin = intraVsWholeHist.getBin(i), interVsWholeBin = interVsWholeHist.getBin(i);
 			assert(intraBin.binStart == interBin.binStart);
-			os << intraBin.binStart << "\t" << intraBin.count/totalIntra << "\t" << interBin.count/totalInter << "\n";
+			os << intraBin.binStart << "\t" << intraBin.count/totalIntra << "\t" << interBin.count/totalInter << "\t"
+					<< intraVsWholeBin.count / totalIntraVsWhole << "\t" << interVsWholeBin.count / totalInterVsWhole << "\n";
 		}
 	}
 
