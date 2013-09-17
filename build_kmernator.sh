@@ -77,9 +77,7 @@ then
     $sourceDir
   set +x
 
-fi
-
-if [ "$NERSC_HOST" == "genepool" ]
+elif [ "$NERSC_HOST" == "genepool" ]
 then
   # genepool is linux with openmpi
 
@@ -91,10 +89,16 @@ then
   module load $execute_modules $build_modules
 
   set -x
-  cmake
+  cmake \
     $buildDirective \
     -DCMAKE_INSTALL_PREFIX:PATH=`pwd` \
     $sourceDir
+  set +x
+
+else
+
+  set -x
+  cmake $buildDirective -DCMAKE_INSTALL_PREFIX:PATH=`pwd` $sourceDir
   set +x
 
 fi
@@ -102,7 +106,7 @@ fi
 > .deps
 for module in ${execute_modules}
 do
-  module load $module
+  
   echo $module >> .deps
 done
 
