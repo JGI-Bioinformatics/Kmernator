@@ -81,6 +81,8 @@ public:
 		likelihoodBins(100),
 		windowSize(10000),
 		windowStep(1000),
+		window2Size(-1),
+		window2Step(1000),
 		maxSamples(MAX_I64),
 		clusterThresholdDistance(.175),
 		referenceFiles(),
@@ -111,6 +113,12 @@ public:
 	}
 	int &getWindowStep() {
 		return windowStep;
+	}
+	int &getWindow2Size() {
+		return window2Size;
+	}
+	int &getWindow2Step() {
+		return window2Step;
 	}
 	long &getMaxSamples() {
 		return maxSamples;
@@ -155,6 +163,10 @@ public:
 
 				("window-step", po::value<int>()->default_value(windowStep), "step size of adjacent intra/inter-distance windows")
 
+				("window2-size", po::value<int>()->default_value(window2Size), "if specified then calcuate intra and inter distances betweeen two different window sizes")
+
+				("window2-step", po::value<int>()->default_value(window2Step), "step size of the second window adjacent intra/inter-distance windows")
+
 				("max-samples", po::value<long>()->default_value(maxSamples), "maximum number of samples of intra and inter distances")
 
 				("cluster-file", po::value<string>()->default_value(clusterFile), "cluster output filename")
@@ -181,6 +193,14 @@ public:
 		setOpt("likelihood-bins", likelihoodBins);
 		setOpt("window-size", windowSize);
 		setOpt("window-step", windowStep);
+		setOpt("window2-size", window2Size);
+		setOpt("window2-step", window2Step);
+		if (window2Size < windowSize) {
+			window2Size = windowSize;
+			window2Step = windowStep;
+			LOG_VERBOSE_OPTIONAL(1, Log::printOptions() && Logger::isMaster(), "Overriding window2-size to:" << windowSize);
+			LOG_VERBOSE_OPTIONAL(1, Log::printOptions() && Logger::isMaster(), "Overriding window2-step to:" << windowStep);
+		}
 		setOpt("max-samples", maxSamples);
 		setOpt("cluster-file", clusterFile);
 		setOpt("cluster-threshold-distance", clusterThresholdDistance);
@@ -201,7 +221,7 @@ private:
 	string interDistanceFile, intraInterFile, clusterFile;
 	bool includeIntraInterDataFile;
 	int likelihoodBins;
-	int windowSize, windowStep;
+	int windowSize, windowStep, window2Size, window2Step;
 	long maxSamples;
 	float clusterThresholdDistance;
 	FileListType referenceFiles;
@@ -658,6 +678,8 @@ int main(int argc, char *argv[]) {
 	if (!intraInterFile.empty()) {
 		long window = TnfDistanceBaseOptions::getOptions().getWindowSize();
 		long step = TnfDistanceBaseOptions::getOptions().getWindowStep();
+		long window2 = TnfDistanceBaseOptions::getOptions().getWindow2Size();
+		long step2 = TnfDistanceBaseOptions::getOptions().getWindow2Step();
 		int numBins = TnfDistanceBaseOptions::getOptions().getLikelihoodBins();
 		bool dataFile = TnfDistanceBaseOptions::getOptions().getIncludeIntraInterDataFile();
 
@@ -667,8 +689,9 @@ int main(int argc, char *argv[]) {
 		   intraVsWholeHist(0.0, maxDistance, numBins, true),
 		   interVsWholeHist(0.0, maxDistance, numBins, true);
 
-		std::vector< TNFS > interTnfs;
+		std::vector< TNFS > interTnfs, interTnfs2;
 		interTnfs.resize( reads.getReadFileNum( reads.getSize() - 1 ));
+		interTnfs2.resize( reads.getReadFileNum( reads.getSize() - 1 ));
 		assert(interTnfs.size() == inputs.size());
 		TNFS wholeTnfs;
 		wholeTnfs.resize( interTnfs.size() );
@@ -694,12 +717,14 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		ReadSet shrededReads;
+		ReadSet shrededReads, shrededReads2;
 		int fileIdx = 0;
 		for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < reads.getSize(); readIdx++) {
 			assert(fileIdx == reads.getReadFileNum(readIdx) - 1);
 			Read read = reads.getRead(readIdx);
 			shredReadByWindow(read, shrededReads, window, step);
+			if (window != window2)
+				shredReadByWindow(read, shrededReads2, window2, step2);
 
 			int nextFileIdx = reads.getReadFileNum(readIdx+1) - 1;
 			wholeTnfs[ fileIdx ] = wholeTnfs[ fileIdx ] + readTnfs[ readIdx ];
@@ -713,43 +738,86 @@ int main(int argc, char *argv[]) {
 				assert(fileIdx < (int) interTnfs.size());
 				interTnfs[fileIdx] = buildIntraTNFs(shrededReads, true);
 				purgeShortTNFS(interTnfs[fileIdx], window*3/4);
+				if (window != window2) {
+					interTnfs2[fileIdx] = buildIntraTNFs(shrededReads2, true);
+					purgeShortTNFS(interTnfs2[fileIdx], window2*3/4);
+				}
 				TNFS &intraTnfs = interTnfs[fileIdx];
 				long intraTnfsSize = intraTnfs.size();
 				if (intraTnfsSize > 1) {
+
+
+#pragma omp parallel for
+					for(long i = 0 ; i < (long) intraTnfsSize; i++) {
+						float dist = wholeTnfs[fileIdx].getDistance(intraTnfs[i]);
+						intraVsWholeHist.observe(dist);
+					}
 
 					LowerTriangle<false, long> lt(intraTnfsSize);
 					long numSamples = lt.getNumValues();
 					assert(numSamples == (long) ( intraTnfsSize * (intraTnfsSize - 1) / 2) );
 
-#pragma omp parallel for
-					for(long i = 0 ; i < (long) intraTnfs.size(); i++) {
-						float dist = wholeTnfs[fileIdx].getDistance(intraTnfs[i]);
-						intraVsWholeHist.observe(dist);
-					}
+					if (window == window2) { // same sized windows
 
-					if (numSamples < (long) maxIntraSamples) {
-						// calculate everything
+						if (numSamples < (long) maxIntraSamples) {
+							// calculate everything
 #pragma omp parallel for schedule(dynamic,1)
-						for(long i = 0 ; i < (long) intraTnfs.size(); i++) {
-							for(long j = 0 ; j < i ; j++) { // lower triangle only
-								float dist = intraTnfs[i].getDistance(intraTnfs[j]);
+							for(long i = 0 ; i < (long) intraTnfs.size(); i++) {
+								for(long j = 0 ; j < i ; j++) { // lower triangle only
+									float dist = intraTnfs[i].getDistance(intraTnfs[j]);
+									intraHist.observe(dist);
+									if (dataPtr[omp_get_thread_num()] != NULL)
+										*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
+								}
+							}
+						} else {
+							// subsample the full data set
+							LOG_DEBUG(1, "Subsampling all possible: " << numSamples << " to " << maxIntraSamples);
+
+#pragma omp parallel for
+							for(long k = 0; k < (long) maxIntraSamples; k++) {
+								long x,y, indexSample = randGen[omp_get_thread_num()].getRand() % numSamples;
+								lt.getXY(indexSample, x, y);
+								float dist = intraTnfs[x].getDistance(intraTnfs[y]);
 								intraHist.observe(dist);
 								if (dataPtr[omp_get_thread_num()] != NULL)
 									*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
 							}
 						}
-					} else {
-						// subsample the full data set
-						LOG_DEBUG(1, "Subsampling all possible: " << numSamples << " to " << numSamples);
+
+					} else { // different sized windows...
+						TNFS &intraTnfs2 = interTnfs2[fileIdx];
+						long intraTnfsSize2 = intraTnfs2.size();
+						numSamples = intraTnfsSize * intraTnfsSize2;
+
+						if (numSamples < (long) maxIntraSamples) {
+							// calculate everything
+
+#pragma omp parallel for schedule(dynamic,1)
+							for(long i = 0 ; i < (long) intraTnfsSize; i++) {
+								for(long j = 0 ; j < intraTnfsSize2 ; j++) {
+									float dist = intraTnfs[i].getDistance(intraTnfs2[j]);
+									intraHist.observe(dist);
+									if (dataPtr[omp_get_thread_num()] != NULL)
+										*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
+								}
+							}
+						} else {
+							// subsample the full data set
+							LOG_DEBUG(1, "Subsampling all possible: " << numSamples << " to " << maxIntraSamples);
 
 #pragma omp parallel for
-						for(long k = 0; k < (long) maxIntraSamples; k++) {
-							long x,y, indexSample = randGen[omp_get_thread_num()].getRand() % numSamples;
-							lt.getXY(indexSample, x, y);
-							float dist = intraTnfs[x].getDistance(intraTnfs[y]);
-							intraHist.observe(dist);
-							if (dataPtr[omp_get_thread_num()] != NULL)
-								*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
+							for(long k = 0; k < (long) maxIntraSamples; k++) {
+								long x,y, indexSample = randGen[omp_get_thread_num()].getRand() % numSamples;
+								x = indexSample / intraTnfsSize2;
+								y = indexSample % intraTnfsSize2;
+								assert(x < intraTnfsSize);
+								float dist = intraTnfs[x].getDistance(intraTnfs2[y]);
+								intraHist.observe(dist);
+								if (dataPtr[omp_get_thread_num()] != NULL)
+									*dataPtr[omp_get_thread_num()] << dist << "\t1\t0\n";
+							}
+
 						}
 					}
 
@@ -786,8 +854,15 @@ int main(int argc, char *argv[]) {
 				}
 			}
 
-			for(long fileIdxj = 0 ; fileIdxj < fileIdxi; fileIdxj++) { // lower triangle only
-				TNFS &interj = interTnfs[fileIdxj];
+			// if windows are the same size, just calc lower triangle
+			long maxJ = window == window2 ? fileIdxi : interTnfs2.size();
+
+			for(long fileIdxj = 0 ; fileIdxj < maxJ; fileIdxj++) { // lower triangle only
+				if (fileIdxj == fileIdxi)
+					continue;
+				// choose which version to use window or window2
+				TNFS &interj = (window == window2) ? interTnfs[fileIdxj] : interTnfs2[fileIdx];
+
 				long isize = interi.size(), jsize = interj.size();
 				long numSamples = isize * jsize;
 				if (numSamples < maxInterSamples) {
@@ -827,12 +902,12 @@ int main(int argc, char *argv[]) {
 
 		double totalIntra = intraHist.getTotalCount(), totalInter = interHist.getTotalCount(),
 			totalIntraVsWhole = intraVsWholeHist.getTotalCount(), totalInterVsWhole = interVsWholeHist.getTotalCount();
-		os << "Distance\tIntraLikelihood\tInterLikelihood\tIntraVsWholeLikelihood\tInterVsWholeLikelihood\n";
+		os << "Distance\twindow\twindow2\tIntraLikelihood\tInterLikelihood\tIntraVsWholeLikelihood\tInterVsWholeLikelihood\n";
 		for(int i = 0; i < numBins; i++) {
 			GH::Bin intraBin = intraHist.getBin(i), interBin = interHist.getBin(i),
 					intraVsWholeBin = intraVsWholeHist.getBin(i), interVsWholeBin = interVsWholeHist.getBin(i);
 			assert(intraBin.binStart == interBin.binStart);
-			os << intraBin.binStart << "\t" << intraBin.count/totalIntra << "\t" << interBin.count/totalInter << "\t"
+			os << intraBin.binStart << "\t" << window << "\t" << window2 << "\t" << intraBin.count/totalIntra << "\t" << interBin.count/totalInter << "\t"
 					<< intraVsWholeBin.count / totalIntraVsWhole << "\t" << interVsWholeBin.count / totalInterVsWhole << "\n";
 		}
 	}
