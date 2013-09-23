@@ -295,11 +295,9 @@ public:
 	static std::string toHeader() {
 		assert(stdSize > 0);
 		std::stringstream ss;
-		bool printTab = false;
+		ss << "Count\tLength";
 		for(KM::Iterator it = stdMap.begin(); it != stdMap.end(); it++) {
-			if (printTab) ss << "\t";
-			ss << it->key().toFasta();
-			printTab = true;
+			ss << "\t" << it->key().toFasta();
 		}
 		return ss.str();
 	}
@@ -386,6 +384,7 @@ public:
 	}
 	std::string toString() const {
 		std::stringstream ss;
+		ss << getCount() << "\t" << getLength();
 		for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
 			if (i != 0) ss << "\t";
 			ss << tnfValues[i] / length;
@@ -395,21 +394,21 @@ public:
 	bool isNormalized() const {
 		return normalize;
 	}
-	float getCount() const {
-		float count = 0.0;
+	double getCount() const {
+		double count = 0.0;
 		for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
 			count += tnfValues[i];
 		}
 		return count;
 	}
-	float getLength() const {
+	double getLength() const {
 		if (normalize)
 			return length;
 		else
 			return calcLength();
 	}
-	float calcLength() const {
-		float l = 0.0;
+	double calcLength() const {
+		double l = 0.0;
 		bool debug = Log::isDebug(2);
 		ostream *debugPtr = NULL;
 		if (debug) {
