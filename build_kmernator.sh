@@ -15,6 +15,8 @@ then
 fi
 buildType=$4
 
+SKIP_TEST=${SKIP_TEST:=0}
+
 logcmd()
 {
   logfile=$1
@@ -115,8 +117,11 @@ module list || /bin/true
 echo "Building executables (see `pwd`/make.log) `date`" | tee -a make.log
 logcmd make.log make VERBOSE=1 -j18
 
-echo "Testing (see `pwd`/make-test.log) `date`" | tee -a make-test.log
-logcmd make-test.log make test
+if [ $SKIP_TEST -eq 0 ]
+then
+  echo "Testing (see `pwd`/make-test.log) `date`" | tee -a make-test.log
+  logcmd make-test.log make test
+fi
 
 echo "Installing (see `pwd`/make-install.log) `date`" | tee -a make-install.log
 logcmd make-install.log make install
