@@ -740,6 +740,7 @@ int main(int argc, char *argv[]) {
 				if (window != window2) {
 					interTnfs2[fileIdx] = buildIntraTNFs(shrededReads2, true);
 					purgeShortTNFS(interTnfs2[fileIdx], window2*3/4);
+					LOG_VERBOSE(1, "Window2 TNFS: " << shrededReads2.getSize() << " shreded reads");
 				}
 				TNFS &intraTnfs = interTnfs[fileIdx];
 				long intraTnfsSize = intraTnfs.size();
@@ -822,6 +823,7 @@ int main(int argc, char *argv[]) {
 
 				}
 				shrededReads.clear();
+				shrededReads2.clear();
 				if (readIdx + 1 != reads.getSize()) {
 					fileIdx = reads.getReadFileNum(readIdx+1) - 1;
 				} else {
