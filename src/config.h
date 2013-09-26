@@ -134,7 +134,7 @@ static const boost::uint8_t REF_QUAL = 127;
 static const boost::uint8_t FASTQ_START_CHAR_ILLUMINA = 64;
 static const boost::uint8_t FASTQ_START_CHAR_STD = 33;
 static const boost::uint8_t FASTQ_START_CHAR_DEFAULT = FASTQ_START_CHAR_ILLUMINA;
-static const boost::uint8_t PRINT_REF_QUAL = REF_QUAL;
+static const boost::uint8_t PRINT_REF_QUAL = 104; // 64 + 40
 
 typedef boost::uint8_t  UI8;
 typedef boost::uint16_t UI16;

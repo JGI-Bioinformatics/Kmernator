@@ -82,7 +82,7 @@ public:
 		po::options_description opts("Fastq to Fasta Options");
 		opts.add_options()
 
-				("split-pairs", po::value<int>()->default_value(splitPairs), "if set, pairs will be directed into separate files")
+				("split-pairs", po::value<bool>()->default_value(splitPairs), "if set, pairs will be directed into separate files")
 
 				("split-size-mbase", po::value<int>()->default_value(splitSizeMbase), "maximum size of output fastas.  requires --output-file");
 
