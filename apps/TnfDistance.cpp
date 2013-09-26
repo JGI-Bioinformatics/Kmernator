@@ -305,22 +305,19 @@ private:
 	Vector tnfValues;
 	RVector *rvector;
 	float length;
-	bool normalize;
-
 public:
-	TNF(bool _normalize = false) : rvector(NULL), length(1.0), normalize(_normalize) {
+	TNF() : rvector(NULL), length(1.0) {
 		assert(stdSize > 0);
-		tnfValues.resize(stdSize);
+		tnfValues.resize(stdSize, 0);
 	}
-	TNF(const TNF &copy) : rvector(NULL), length(1.0), normalize(false) {
+	TNF(const TNF &copy) : rvector(NULL), length(1.0) {
 		assert(stdSize > 0);
 		*this = copy;
 	}
-	TNF(const KM &map, bool _normalize = false) :  rvector(NULL), length(1.0), normalize(_normalize) {
+	TNF(const KM &map) :  rvector(NULL), length(1.0) {
 		assert(stdSize > 0);
 		buildTnf(map);
-		if (normalize)
-			buildLength();
+		buildLength();
 		setRankVector();
 	}
 	TNF &operator=(const TNF &copy) {
@@ -328,16 +325,18 @@ public:
 			return *this;
 		length = copy.length;
 		tnfValues = copy.tnfValues;
-		normalize = copy.normalize;
 		setRankVector();
 		return *this;
 	}
 	virtual ~TNF() {
 		clear();
 	}
+	void reset() {
+		clear();
+		tnfValues.resize(stdSize, 0);
+	}
 	void clear() {
 		length = 1.0;
-		normalize = false;
 		tnfValues.clear();
 		clearRankVector();
 	}
@@ -360,25 +359,18 @@ public:
 		return *rvector;
 	}
 	TNF &operator*(float factor) {
-		bool wasNormalized = isNormalized();
 		for(unsigned int i = 0; i < tnfValues.size(); i++) {
 			tnfValues[i] *= factor;
 		}
-		if (wasNormalized) {
-			buildLength();
-		}
+		buildLength();
 		setRankVector();
 		return *this;
 	}
 	TNF &operator+(const TNF &rh) {
-		bool wasNormalized = isNormalized() | rh.isNormalized();
-
 		for(unsigned int i = 0; i < tnfValues.size(); i++) {
 			tnfValues[i] = tnfValues[i] + rh.tnfValues[i];
 		}
-		if (wasNormalized) {
-			buildLength();
-		}
+		buildLength();
 		setRankVector();
 		return *this;
 	}
@@ -386,14 +378,11 @@ public:
 		std::stringstream ss;
 		ss << getCount() << "\t" << getLength();
 		for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
-			if (i != 0) ss << "\t";
-			ss << tnfValues[i] / length;
+			ss << "\t" << tnfValues[i] / length;
 		}
 		return ss.str();
 	}
-	bool isNormalized() const {
-		return normalize;
-	}
+
 	double getCount() const {
 		double count = 0.0;
 		for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
@@ -402,10 +391,7 @@ public:
 		return count;
 	}
 	double getLength() const {
-		if (normalize)
-			return length;
-		else
-			return calcLength();
+		return length;
 	}
 	double calcLength() const {
 		double l = 0.0;
@@ -429,25 +415,27 @@ public:
 			length = 1.0;
 	}
 	void buildTnf(const KM & map) {
-		tnfValues.clear();
-		tnfValues.reserve(stdSize);
+		if ((long) tnfValues.size() != stdSize) {
+			tnfValues.clear();
+			tnfValues.resize(stdSize, 0);
+		}
+		int i = 0;
 		for(KM::Iterator it = stdMap.begin(); it != stdMap.end(); it++) {
 			KM::ElementType elem = map.getElementIfExists(it->key());
 			float t = 0.0;
 			if (elem.isValid()) {
 				t = elem.value();
 			}
-			tnfValues.push_back(t);
+			tnfValues[i++] = t;
 		}
+		buildLength();
 		setRankVector();
-		if(normalize)
-			buildLength();
 	}
 	float getDistance(const TNF &other) const {
 		float dist = 0.0;
 		if (distanceFormula == DistanceFormula::EUCLIDEAN) {
 			for(unsigned int i = 0 ; i < tnfValues.size(); i++) {
-				float d = tnfValues[i] / length - other.tnfValues[i] / other.length;
+				float d = tnfValues[i] / getLength() - other.tnfValues[i] / other.getLength();
 				dist += d*d;
 			}
 			dist = sqrt(dist);
@@ -457,11 +445,11 @@ public:
 		return dist;
 	}
 	float getDistance(const KM &query) const {
-		TNF other(query, isNormalized());
+		TNF other(query);
 		return getDistance(other);
 	}
-	static float getDistance(const KM &target, const KM &query, bool normalize = true) {
-		TNF tgt(target, normalize), qry(query, normalize);
+	static float getDistance(const KM &target, const KM &query) {
+		TNF tgt(target), qry(query);
 		return tgt.getDistance(qry);
 	}
 
@@ -471,7 +459,7 @@ long TNF::stdSize = 0;
 DistanceFormula::Enum TNF::distanceFormula;
 
 typedef std::vector<TNF> TNFS;
-TNFS buildTnfs(const ReadSet &reads, bool normalize = false) {
+TNFS buildTnfs(const ReadSet &reads) {
 	TNFS tnfs;
 	long size = reads.getSize();
 	tnfs.resize(size);
@@ -489,7 +477,7 @@ TNFS buildTnfs(const ReadSet &reads, bool normalize = false) {
 
 		ksReads.buildKmerSpectrum(singleRead, true);
 
-		TNF tnf(ksReads.solid, normalize);
+		TNF tnf(ksReads.solid);
 		tnfs[readIdx] = tnf;
 	}
 	return tnfs;
@@ -505,14 +493,14 @@ void shredReadByWindow(const Read &read, ReadSet &shrededReads, long window, lon
 	}
 }
 
-TNFS buildIntraTNFs(const ReadSet &reads, bool normalize = false) {
-	return buildTnfs(reads, normalize);
+TNFS buildIntraTNFs(const ReadSet &reads) {
+	return buildTnfs(reads);
 }
 
-TNFS buildIntraTNFs(const Read &read, long window, long step, bool normalize = false) {
+TNFS buildIntraTNFs(const Read &read, long window, long step) {
 	ReadSet reads;
 	shredReadByWindow(read, reads, window, step);
-	return buildIntraTNFs(reads, normalize);
+	return buildIntraTNFs(reads);
 }
 // use this to remove TNFs that are missing too much of the expected or required data.
 void purgeShortTNFS(TNFS &tnfs, int minimumCount) {
@@ -573,7 +561,7 @@ Results calculateDistances(const TNF &refTnf, const ReadSet &reads, const TNFS &
 			string fullFasta = read.getFasta();
 			long len = fullFasta.length();
 			int divs = 5;
-			TNFS intraTnfs = buildIntraTNFs(read,len/divs, len/divs, true);
+			TNFS intraTnfs = buildIntraTNFs(read,len/divs, len/divs);
 
 			stringstream ss;
 			ss.precision(3);
@@ -589,7 +577,7 @@ Results calculateDistances(const TNF &refTnf, const ReadSet &reads, const TNFS &
 	return results;
 }
 Results calculateDistances(const TNF &refTNF, const ReadSet &reads) {
-	return calculateDistances(refTNF, reads, buildTnfs(reads, true));
+	return calculateDistances(refTNF, reads, buildTnfs(reads));
 }
 
 
@@ -623,7 +611,7 @@ int main(int argc, char *argv[]) {
 	ksRef.setSolidOnly();
 
 	LOG_VERBOSE(1, "Calculating TNFs for " << reads.getSize() << " input reads");
-	TNFS readTnfs = buildTnfs(reads, true);
+	TNFS readTnfs = buildTnfs(reads);
 
 	ostream *out = &cout;
 	OfstreamMap om(Options::getOptions().getOutputFile(), "");
@@ -636,7 +624,7 @@ int main(int argc, char *argv[]) {
 		LOG_VERBOSE(1, "Loading reference input");
 		refs.appendAllFiles(referenceInputs);
 		ksRef.buildKmerSpectrum(refs, true);
-		TNF refTnf(ksRef.solid, true);
+		TNF refTnf(ksRef.solid);
 
 		LOG_VERBOSE(1, "Calculating distances from input to reference");
 		Results results = calculateDistances(refTnf, reads, readTnfs);
@@ -682,7 +670,7 @@ int main(int argc, char *argv[]) {
 		int numBins = TnfDistanceBaseOptions::getOptions().getLikelihoodBins();
 		bool dataFile = TnfDistanceBaseOptions::getOptions().getIncludeIntraInterDataFile();
 
-		float maxDistance = TNF::distanceFormula == DistanceFormula::EUCLIDEAN ? sqrt(2.0) : 1.0;
+		float maxDistance = (TNF::distanceFormula == DistanceFormula::EUCLIDEAN) ? sqrt(2.0) : 1.0;
 		GH intraHist(0.0, maxDistance, numBins, true),
 		   interHist(0.0, maxDistance, numBins, true),
 		   intraVsWholeHist(0.0, maxDistance, numBins, true),
@@ -717,39 +705,39 @@ int main(int argc, char *argv[]) {
 		}
 
 		ReadSet shrededReads, shrededReads2;
-		int fileIdx = 0;
+		int thisFileIdx = 0;
 		for(ReadSet::ReadSetSizeType readIdx = 0; readIdx < reads.getSize(); readIdx++) {
-			assert(fileIdx == reads.getReadFileNum(readIdx) - 1);
+			assert(thisFileIdx == reads.getReadFileNum(readIdx) - 1);
 			Read read = reads.getRead(readIdx);
 			shredReadByWindow(read, shrededReads, window, step);
 			if (window != window2)
 				shredReadByWindow(read, shrededReads2, window2, step2);
 
 			int nextFileIdx = reads.getReadFileNum(readIdx+1) - 1;
-			wholeTnfs[ fileIdx ] = wholeTnfs[ fileIdx ] + readTnfs[ readIdx ];
+			wholeTnfs[ thisFileIdx ] = wholeTnfs[ thisFileIdx ] + readTnfs[ readIdx ];
 			// if this was the last read or the next read is from a new file
 			// process the intra
-			if (readIdx+1 == reads.getSize() || fileIdx != nextFileIdx) {
+			if (readIdx+1 == reads.getSize() || thisFileIdx != nextFileIdx) {
 
-				LOG_VERBOSE(1, "Creating intra cluster TNFs for fileNum: " << fileIdx << " with " << shrededReads.getSize() << " shreded reads (readIdx: " << readIdx << ")");
+				LOG_VERBOSE(1, "Creating intra cluster TNFs for fileNum: " << thisFileIdx << " with " << shrededReads.getSize() << " shreded reads (readIdx: " << readIdx << ")");
 				LOG_DEBUG(1, MemoryUtils::getMemoryUsage());
 
-				assert(fileIdx < (int) interTnfs.size());
-				interTnfs[fileIdx] = buildIntraTNFs(shrededReads, true);
-				purgeShortTNFS(interTnfs[fileIdx], window*3/4);
+				assert(thisFileIdx < (int) interTnfs.size());
+				interTnfs[thisFileIdx] = buildIntraTNFs(shrededReads);
+				purgeShortTNFS(interTnfs[thisFileIdx], window*3/4);
 				if (window != window2) {
-					interTnfs2[fileIdx] = buildIntraTNFs(shrededReads2, true);
-					purgeShortTNFS(interTnfs2[fileIdx], window2*3/4);
+					interTnfs2[thisFileIdx] = buildIntraTNFs(shrededReads2);
+					purgeShortTNFS(interTnfs2[thisFileIdx], window2*3/4);
 					LOG_VERBOSE(1, "Window2 TNFS: " << shrededReads2.getSize() << " shreded reads");
 				}
-				TNFS &intraTnfs = interTnfs[fileIdx];
+				TNFS &intraTnfs = interTnfs[thisFileIdx];
 				long intraTnfsSize = intraTnfs.size();
 				if (intraTnfsSize > 1) {
 
 
 #pragma omp parallel for
 					for(long i = 0 ; i < (long) intraTnfsSize; i++) {
-						float dist = wholeTnfs[fileIdx].getDistance(intraTnfs[i]);
+						float dist = wholeTnfs[thisFileIdx].getDistance(intraTnfs[i]);
 						intraVsWholeHist.observe(dist);
 					}
 
@@ -786,7 +774,7 @@ int main(int argc, char *argv[]) {
 						}
 
 					} else { // different sized windows...
-						TNFS &intraTnfs2 = interTnfs2[fileIdx];
+						TNFS &intraTnfs2 = interTnfs2[thisFileIdx];
 						long intraTnfsSize2 = intraTnfs2.size();
 						numSamples = intraTnfsSize * intraTnfsSize2;
 
@@ -825,9 +813,9 @@ int main(int argc, char *argv[]) {
 				shrededReads.clear();
 				shrededReads2.clear();
 				if (readIdx + 1 != reads.getSize()) {
-					fileIdx = reads.getReadFileNum(readIdx+1) - 1;
+					thisFileIdx = reads.getReadFileNum(readIdx+1) - 1;
 				} else {
-					assert(fileIdx == (int) inputs.size() - 1);
+					assert(thisFileIdx == (int) inputs.size() - 1);
 				}
 			}
 		}
@@ -856,13 +844,13 @@ int main(int argc, char *argv[]) {
 			}
 
 			// if windows are the same size, just calc lower triangle
-			long maxJ = window == window2 ? fileIdxi : interTnfs2.size();
+			long maxJ = (window == window2) ? fileIdxi : interTnfs2.size();
 
 			for(long fileIdxj = 0 ; fileIdxj < maxJ; fileIdxj++) { // lower triangle only
 				if (fileIdxj == fileIdxi)
-					continue;
+					continue; // intra already calculated
 				// choose which version to use window or window2
-				TNFS &interj = (window == window2) ? interTnfs[fileIdxj] : interTnfs2[fileIdx];
+				TNFS &interj = (window == window2) ? interTnfs[fileIdxj] : interTnfs2[fileIdxj];
 
 				long isize = interi.size(), jsize = interj.size();
 				long numSamples = isize * jsize;
@@ -973,8 +961,8 @@ int main(int argc, char *argv[]) {
 			if (debug) {
 				ostream &debugOut = Log::Debug("MinValue");
 				for(unsigned long i2 = 0 ; i2 < minVec.size(); i2++) {
-					unsigned long j = i2 <= tgti ? i2 : tgti;
-					unsigned long i = i2 <= tgti ? tgti : i2;
+					unsigned long j = (i2 <= tgti) ? i2 : tgti;
+					unsigned long i = (i2 <= tgti) ? tgti : i2;
 
 					debugOut << distMatrix[i][j] << "\t";
 				}
