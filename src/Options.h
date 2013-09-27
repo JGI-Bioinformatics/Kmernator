@@ -324,7 +324,8 @@ class _GeneralOptions : public OptionsBaseInterface {
 public:
 	_GeneralOptions() : maxThreads(OMP_MAX_THREADS_DEFAULT), tmpDir("/tmp"), keepTempDir(),
 	formatOutput(0), keepReadComment(GlobalOptions::isCommentStored()), buildOutputInMemory(false),
-	minQuality(3),  fastqBaseQuality(Kmernator::FASTQ_START_CHAR_ILLUMINA), ignoreQual(false), mmapInput(false), gatheredLogs(true),
+	minQuality(3),  fastqBaseQuality(Kmernator::FASTQ_START_CHAR_DEFAULT), outputFastqBaseQuality(Kmernator::FASTQ_START_CHAR_DEFAULT),
+	ignoreQual(false), mmapInput(false), gatheredLogs(true),
 	batchSize(100000)
 	{
 		char *tmpPath;
@@ -352,7 +353,7 @@ private:
 	unsigned int formatOutput;
 	bool         keepReadComment;
 	bool         buildOutputInMemory;
-	unsigned int minQuality, fastqBaseQuality;
+	unsigned int minQuality, fastqBaseQuality, outputFastqBaseQuality;
 	bool ignoreQual;
 	bool mmapInput;
 	bool gatheredLogs;
@@ -398,7 +399,9 @@ public:
 
 				("mmap-input", po::value<bool>()->default_value(mmapInput), "If false, prevents input files from being mmaped, instead import reads into memory (somewhat faster if memory is abundant)")
 
-				("fastq-base-quality", po::value<unsigned int>()->default_value(fastqBaseQuality), "The base (Phred 64 or Phred 33) of the quality fields of fastq.  Illumina 1.3-1.5 is 64, the standard is 33")
+				("fastq-base-quality", po::value<unsigned int>()->default_value(fastqBaseQuality), "The expected base (Phred 64 or Phred 33) of the quality fields of any input fastq.  Illumina 1.3-1.5 is 64, the standard is 33. (it is autodetected)")
+
+				("fastq-output-base-quality", po::value<unsigned int>()->default_value(outputFastqBaseQuality), "The base (64 or 33) of all output fastq files")
 
 				("ignore-quality", po::value<bool>()->default_value(ignoreQual), "ignore the quality score, to save memory or if they are untrusted")
 
@@ -484,6 +487,12 @@ public:
 			setOpt("fastq-base-quality", getFastqBaseQuality(), print);
 			if (getFastqBaseQuality() != 64 && getFastqBaseQuality() != 33) {
 				setOptionsErrorMsg("Invalid fastq-base-quality.  It must be 64 or 33: " + boost::lexical_cast<std::string>(getFastqBaseQuality()));
+				ret = false;
+			}
+
+			setOpt("fastq-output-base-quality", getOutputFastqBaseQuality(), print);
+			if (getOutputFastqBaseQuality() != 64 && getOutputFastqBaseQuality() != 33) {
+				setOptionsErrorMsg("Invalid fastq-output-base-quality.  It must be 64 or 33: " + boost::lexical_cast<std::string>(getOutputFastqBaseQuality()));
 				ret = false;
 			}
 
@@ -616,6 +625,10 @@ public:
 	unsigned int &getFastqBaseQuality()
 	{
 		return fastqBaseQuality;
+	}
+
+	unsigned int &getOutputFastqBaseQuality() {
+		return outputFastqBaseQuality;
 	}
 
 	bool &getMmapInput()

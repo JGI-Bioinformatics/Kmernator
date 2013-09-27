@@ -599,7 +599,7 @@ public:
 	static bool parse(Kmernator::RecordPtr record, Kmernator::RecordPtr lastRecord,
 			std::string &name, std::string &bases, std::string &quals, std::string &comment,
 			Kmernator::RecordPtr qualRecord = NULL, Kmernator::RecordPtr lastQualRecord = NULL,
-			char fastqStartChar = Kmernator::FASTQ_START_CHAR_ILLUMINA) {
+			char fastqStartChar = GeneralOptions::getOptions().getOutputFastqBaseQuality()) {
 		std::string buf;
 		bool isGood = true;
 		if (*record == '@') {

@@ -130,11 +130,11 @@ const int OMP_MAX_THREADS_DEFAULT = omp_get_max_threads();
 
 namespace Kmernator {
 typedef const char * RecordPtr;
-static const boost::uint8_t REF_QUAL = 127;
 static const boost::uint8_t FASTQ_START_CHAR_ILLUMINA = 64;
 static const boost::uint8_t FASTQ_START_CHAR_STD = 33;
-static const boost::uint8_t FASTQ_START_CHAR_DEFAULT = FASTQ_START_CHAR_ILLUMINA;
-static const boost::uint8_t PRINT_REF_QUAL = 104; // 64 + 40
+static const boost::uint8_t FASTQ_START_CHAR_DEFAULT = FASTQ_START_CHAR_STD;
+static const boost::uint8_t PRINT_REF_QUAL = FASTQ_START_CHAR_STD + 70; // 64 + 39 or 33 + 70 == 103 == 'j' - high by any base level
+static const boost::uint8_t REF_QUAL = 127;
 
 typedef boost::uint8_t  UI8;
 typedef boost::uint16_t UI16;

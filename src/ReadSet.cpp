@@ -320,14 +320,12 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 		LOG_DEBUG(3, "Reading mmap file");
 		while (reader.nextRead(nextRecordPtr, name, bases, quals, comment, isMultiline)) {
 
-			if (isMultiline) {
-				// store the read in memory
-				Read read(name,bases,quals,comment);
-				addRead(read, bases.length(), rank);
-			} else {
-				Read read(recordPtr, qualPtr);
-				addRead(read, bases.length(), rank);
-			}
+			// store the read in memory
+			if (inputReadQualityBase != Read::FASTQ_START_CHAR)
+				Read::rescaleQuality(quals, Read::FASTQ_START_CHAR - inputReadQualityBase);
+			Read read(name,bases,quals,comment);
+			addRead(read, bases.length(), rank);
+
 			recordPtr = nextRecordPtr;
 			qualPtr = reader.getStreamQualRecordPtr();
 
@@ -335,6 +333,8 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFasta(ReadFileReader &reader, in
 	} else {
 		LOG_DEBUG(3, "Reading file stream");
 		while (reader.nextRead(name, bases, quals, comment)) {
+			if (inputReadQualityBase != Read::FASTQ_START_CHAR)
+				Read::rescaleQuality(quals, Read::FASTQ_START_CHAR - inputReadQualityBase);
 			Read read(name, bases, quals, comment);
 			addRead(read, bases.length(), rank);
 		}
@@ -371,12 +371,6 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastaData(string &fastaData, int
 ReadSet::SequenceStreamParserPtr ReadSet::appendFastq(ReadSet::MmapSource &mmap)
 {
 	return appendFasta(mmap);
-}
-
-ReadSet::ReadPtr ReadSet::parseMmapedRead(ReadSetSizeType index) const {
-	const Read &read = _reads[index];
-	ReadPtr readPtr = read.readMmaped();
-	return readPtr;
 }
 
 string ReadSet::_getReadFileNamePrefix(unsigned int filenum) const {

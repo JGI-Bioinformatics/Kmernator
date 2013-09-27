@@ -116,7 +116,10 @@ private:
 	static DataPtrListVector *preAllocatedDataPtrs;
 
 public:
-	static void clearCaches();
+	static void clearCaches() {
+		assert(!omp_in_parallel());
+		preAllocatedDataPtrs->reset();
+	}
 
 
 private:
@@ -125,13 +128,12 @@ private:
 	}
 
 protected:
-	// TODO if mmaped w/o markups, can this be a regular pointer with no allocation?
 	DataPtr _data;
 	// TODO can _flags be embedded into _data -- save in memory alignment padding
 	// -- move flags into ReadSet? as second parallel vector?
 	mutable char _flags; // let _flags be modified for discard() on a constant
 
-	static const char MMAPED       = 0x80;
+	static const char UNUSED       = 0x80;
 	static const char MARKUPS1     = 0x40;
 	static const char MARKUPS2     = 0x20;
 	static const char MARKUPS4     = MARKUPS1|MARKUPS2; // 0x60
@@ -140,21 +142,17 @@ protected:
 	static const char DISCARDED    = 0x04;
 	static const char PREALLOCATED = 0x02;
 	static const char HASFASTAQUAL = 0x01;
-	// 0x80 - mmaped data
+	// 0x80 -
 	// 0x40 - markups in unsigned char
 	// 0x20 - markups in unsigned short
 	//      - 0x40|0x20 (0x60) markups in unsigned int
 	// 0x10 - hasQuals
-	// 0x08 - mmaped quals
+	// 0x08 - paired
 	// 0x04 - isDiscarded
 	// 0x02 - isPreallocated
 	// 0x01 - hasFastaQual
 
-	// if mmaped, _data consists of:
-	//   +0 : char * = pointerToMmapedFileRecordStart
-	//   if mmaped && hasFastaQual
-	//     + sizeof(char*) : char * = pointerToMmapedQualRecordStart
-	//
+
 	//   if markups4
 	//     +sizeof(char*) : unsigned int = markupsCount
 	//     +sizeof(unsigned int) : = BaseLocationType[markupsCount]
@@ -217,8 +215,6 @@ protected:
 	void reset(char flags = 0);
 
 	void setSequence(std::string fasta, long extraBytes, bool usePreAllocation = false);
-	void setSequence(RecordPtr mmapRecordStart, const BaseLocationVectorType &markups, long extraBytes, RecordPtr mmapQualRecordStart = NULL);
-	void setSequence(RecordPtr mmapRecordStart, long extraBytes, RecordPtr mmapQualRecordStart = NULL);
 
 	void setMarkups(MarkupElementSizeType markupElementSize, const BaseLocationVectorType &markups);
 
@@ -231,7 +227,6 @@ public:
 	Sequence();
 	Sequence(const Sequence &copy);
 	Sequence(std::string fasta, bool usePreAllocation = false);
-	Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
 	Sequence &operator=(const Sequence &other);
 	Sequence clone(bool usePreAllocation = false) const;
 
@@ -239,7 +234,6 @@ public:
 
 
 public:
-	inline bool isMmaped()       const { return (_flags & MMAPED)        == MMAPED; }
 	inline bool isMarkups4()     const { return (_flags & MARKUPS4)      == MARKUPS4; }
 	inline bool isMarkups2()     const { return (_flags & MARKUPS4)      == MARKUPS2; }
 	inline bool isMarkups1()     const { return (_flags & MARKUPS4)      == MARKUPS1; }
@@ -256,8 +250,6 @@ public:
 	virtual void *restore(void *src, long size);
 
 	void setSequence(std::string fasta, bool usePreAllocation = false);
-	void setSequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
-	void setSequence(RecordPtr mmapRecordStart, const BaseLocationVectorType &markups, RecordPtr mmapQualRecordStart = NULL);
 
 	inline void discard() const  { _flags |= DISCARDED; } // This operation is permitted even on a constant
 	inline void unDiscard()      { unsetFlag(DISCARDED);}
@@ -295,9 +287,6 @@ public:
 	SequenceLengthType getTwoBitEncodingSequenceLength() const;
 	inline TwoBitEncoding *getTwoBitSequence() { return _getTwoBitSequence(); }
 	inline const TwoBitEncoding *getTwoBitSequence() const { return _getTwoBitSequence(); }
-
-	void readMmaped(std::string &name, std::string &bases, std::string &quals, std::string &comment) const;
-	SequencePtr readMmaped(bool usePreAllocation = false) const;
 
 };
 
@@ -384,7 +373,7 @@ private:
 	 _data is inherited and now contains a composite of 4 or 5 fields:
 	 +0                    : the sequence as NCBI 2NA (2 bits per base ACGT)
 	 += (length +3)/4      :  non-ACGT bases: count followed by array of markups
-	 += getMarkupLength()  : qualities as 1 byte per base, 0 = N 1..255 Phred Quality Score.
+	 += getMarkupLength()  : qualities as 1 byte per base, 0 = N 33..255 (Phred Quality Score + 33)
 	 += length             : null terminated name.
 	   if isCommentStored == true
 	   + strlen(getName()) : null terminated comment
@@ -400,9 +389,13 @@ private:
 
 	virtual const void *_getEnd() const;
 
-	static int qualityToProbabilityInitialized;
-	static int
-	initializeQualityToProbability(unsigned char minQualityScore = 0, unsigned int startChar = Kmernator::FASTQ_START_CHAR_DEFAULT);
+	static bool qualityToProbabilityInitialized;
+	static bool	initializeQualityToProbability(unsigned char minQualityScore = GeneralOptions::getOptions().getMinQuality(),
+			unsigned int startChar = GeneralOptions::getOptions().getOutputFastqBaseQuality());
+public:
+	static inline bool isQualityToProbabilityInitialized() {
+		return qualityToProbabilityInitialized;
+	}
 
 public:
 
@@ -411,8 +404,6 @@ public:
 		*this = copy;
 	}
 	Read(std::string name, std::string fasta, std::string qualBytes, std::string comment, bool usePreAllocation = false);
-	Read(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
-	Read(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart = NULL);
 	virtual ~Read() {}
 
 	Read &operator=(const Read &other);
@@ -422,10 +413,7 @@ public:
 	void setRead(std::string name, std::string fasta, std::string qualBytes, bool usePreAllocation = false) {
 		setRead(name, fasta, qualBytes, std::string(), usePreAllocation);
 	}
-	void setRead(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart = NULL);
-	void setRead(RecordPtr mmapRecordStart, std::string markupFasta, RecordPtr mmapQualRecordStart);
 
-	ReadPtr readMmaped(bool usePreAllocation = false) const;
 	bool recordHasQuals() const ;
 
 	std::string getName() const;
@@ -445,6 +433,27 @@ public:
 			return getName() + " " + comment;
 	}
 
+	void rescaleQuality(int delta) {
+		if (hasQuals() && delta != 0) {
+			char * quals = _getQual();
+			int len = _qualLength();
+			rescaleQuality(quals, len, delta);
+		}
+	}
+	static void rescaleQuality(char *quals, int len, int delta) {
+		for(int i = 0; i < len; i++) {
+			quals[i] += delta;
+		}
+	}
+	static void rescaleQuality(std::string &quals, int delta) {
+		STACK_ALLOC(char, tmpQuals, quals.length()+1);
+		memcpy(tmpQuals, quals.c_str(), quals.length());
+		rescaleQuality(tmpQuals, quals.length(), delta);
+		tmpQuals[quals.length()] = '\0';
+		quals = std::string(tmpQuals);
+		STACK_DEALLOC(tmpQuals);
+	}
+
 	std::string getQuals(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH,
 			bool forPrinting = false, bool unmasked = false) const;
 	void markupBases(SequenceLengthType offset, SequenceLengthType length, char mask = 'X');
@@ -461,7 +470,7 @@ public:
 	double scoreProbabilityBases(const ProbabilityBases &probs) const;
 
 	static double qualityToProbability[256];
-	static void setMinQualityScore(unsigned char minQualityScore, unsigned char startChar = GeneralOptions::getOptions().getFastqBaseQuality());
+	static void setMinQualityScore(unsigned char minQualityScore = GeneralOptions::getOptions().getMinQuality(), unsigned char startChar = GeneralOptions::getOptions().getOutputFastqBaseQuality());
 
 	// format == 0 fastq
 	// format == 1 fasta

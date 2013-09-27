@@ -71,6 +71,8 @@ private:
 public:
 	KmerReadUtils() {
 		LOG_DEBUG_OPTIONAL(2, true, "KmerReadUtils()" << &kmers);
+		if (! Read::isQualityToProbabilityInitialized() )
+			Read::setMinQualityScore();
 	}
 	~KmerReadUtils() {}
 

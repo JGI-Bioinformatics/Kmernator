@@ -226,21 +226,6 @@ target_link_libraries(        Fastq2FastaQual
 add_dependencies(Fastq2FastaQual REPLACE_VERSION_H)
 install(TARGETS Fastq2FastaQual DESTINATION bin)
 
-
-set_source_files_properties( FixPair
-                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
-                             )
-add_executable( FixPair FixPair )
-target_link_libraries(        FixPair
-                              Sequence
-                              ReadSet
-                              ${KMERNATOR_BOOST_LIBS}
-                              )
-add_dependencies(FixPair REPLACE_VERSION_H)
-install(TARGETS FixPair DESTINATION bin)
-
-
-
 if( MPI_FOUND )
 add_executable( SplitSequenceOnTheFly SplitSequenceOnTheFly )
 

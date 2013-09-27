@@ -53,6 +53,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "ReadFileReader.h"
 #include "Utils.h"
 #include "KmerReadUtils.h"
+#include "Options.h"
 
 #define BOOST_TEST_MODULE ReadSetTest
 #include <boost/test/unit_test.hpp>
@@ -318,6 +319,9 @@ void testKmerBuild() {
 
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
+	GeneralOptions::getOptions().getOutputFastqBaseQuality() = 33;
+	GeneralOptions::getOptions().getFastqBaseQuality() = 64;
+
 	testKmerBuild();
 
 	testParser();

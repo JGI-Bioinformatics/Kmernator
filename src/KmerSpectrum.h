@@ -424,7 +424,8 @@ public:
 		hasSolids(false), hasSingletons(separateSingletons), purgedSingletons(0), rawKmers(0), rawGoodKmers(0), uniqueKmers(0), singletonKmers(0), subtracted(0)
 	{
 		// apply the minimum quality automatically
-		Read::setMinQualityScore( Options::getOptions().getMinQuality(), Read::FASTQ_START_CHAR );
+		if (!Read::isQualityToProbabilityInitialized)
+			Read::setMinQualityScore( );
 	}
 	~KmerSpectrum() {}
 	KmerSpectrum(const KmerSpectrum &copy) {

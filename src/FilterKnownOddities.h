@@ -393,7 +393,7 @@ public:
 
 		// Validate quality scores
 		std::string quals = read.getQuals();
-		char minQual = Read::FASTQ_START_CHAR + Options::getOptions().getMinQuality();
+		char minQual = Read::FASTQ_START_CHAR + GeneralOptions::getOptions().getMinQuality();
 		for(unsigned int i = 0 ; i < quals.size() ; i++) {
 			if (quals[i] < minQual) {
 				minAffected = maxQualityPass = i;
@@ -484,7 +484,7 @@ public:
 		if (value < sequences.getSize()) {
 			return sequences.getRead(value).getName();
 		} else {
-			return std::string("MinQualityTrim" + boost::lexical_cast<std::string>(Options::getOptions().getMinQuality()));
+			return std::string("MinQualityTrim" + boost::lexical_cast<std::string>(GeneralOptions::getOptions().getMinQuality()));
 		}
 	}
 	void recordAffectedRead(ReadSet &reads, Recorder &recorder, FilterResults results1, ReadSet::ReadSetSizeType readIdx1, FilterResults results2 = FilterResults(), ReadSet::ReadSetSizeType readIdx2 = ReadSet::MAX_READ_IDX) {

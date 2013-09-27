@@ -64,30 +64,6 @@ boost::uint8_t Sequence::FASTQ_START_CHAR = Kmernator::FASTQ_START_CHAR_DEFAULT;
 
 // dangling pointer!!
 Sequence::DataPtrListVector *Sequence::preAllocatedDataPtrs = new Sequence::DataPtrListVector();
-
-// static methods of Sequence
-void Sequence::clearCaches() {
-	assert(!omp_in_parallel());
-	preAllocatedDataPtrs->reset();
-}
-
-
-// instance based cache methods
-Sequence::SequencePtr Sequence::getCache() const {
-	assert(isMmaped());
-	return setCache();
-}
-Sequence::SequencePtr Sequence::setCache() const {
-	SequencePtr ptr;
-	return setCache(ptr);
-}
-Sequence::SequencePtr &Sequence::setCache(Sequence::SequencePtr &expandedSequence) const {
-	assert(isMmaped());
-	expandedSequence = readMmaped(true);
-	return expandedSequence;
-}
-
-
 // Sequence::DataPtrListVector methods
 
 Sequence::DataPtr Sequence::DataPtrListVector::retrieveDataPtr() {
@@ -138,11 +114,6 @@ Sequence::Sequence(std::string fasta, bool usePreAllocation) :
 	setSequence(fasta, usePreAllocation);
 }
 
-Sequence::Sequence(RecordPtr mmapRecordStart, RecordPtr mmapQualRecordStart) :
-			_flags(0) {
-	setSequence(mmapRecordStart, mmapQualRecordStart);
-}
-
 Sequence &Sequence::operator=(const Sequence &other) {
 	if (this == &other)
 		return *this;
@@ -160,19 +131,12 @@ Sequence::~Sequence() {
 }
 
 long Sequence::getStoreSize() const {
-	if (isMmaped()) {
-		// need to build it first!
-		return clone(true).getStoreSize();
-	}
 	const char *start = (char*) this->_getData();
 	const char *end = (const char*) this->_getEnd();
 	return sizeof(char) + (end-start);
 }
 
 long Sequence::store(void *_dst) const {
-	if (isMmaped()) {
-		return clone(true).store(_dst);
-	}
 	char *dst = (char*) _dst;
 	*(dst++) = _flags;
 	const char *start = (const char*) this->_getData();
@@ -257,36 +221,6 @@ void Sequence::setSequence(std::string fasta, long extraBytes, bool usePreAlloca
 
 }
 
-void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, Sequence::RecordPtr mmapQualRecordStart) {
-	setSequence(mmapRecordStart, 0, mmapQualRecordStart);
-}
-void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, const BaseLocationVectorType &markups, long extraBytes, Sequence::RecordPtr mmapQualRecordStart) {
-	long markupBytes = 0;
-	MarkupElementSizeType markupElementSize = TwoBitSequence::getMarkupElementSize(markups, markupBytes);
-	extraBytes += markupBytes;
-	setSequence(mmapRecordStart, extraBytes, mmapQualRecordStart);
-	if (markupBytes > 0)
-		setMarkups(markupElementSize, markups);
-}
-void Sequence::setSequence(Sequence::RecordPtr mmapRecordStart, long extraBytes, Sequence::RecordPtr mmapQualRecordStart) {
-	reset(MMAPED);
-	long size = sizeof(Sequence::RecordPtr)+extraBytes;
-	if (mmapQualRecordStart != NULL)
-		setFlag(HASFASTAQUAL);
-	setFlag(HASQUALS);
-	size += sizeof(Sequence::RecordPtr);
-	try {
-		_data = DataPtr( TwoBitSequenceBase::_TwoBitEncodingPtr::allocate(size) );
-	} catch (...) {
-		LOG_THROW("RuntimeError: Can not allocate memory for Sequence::setSequence(mmap)");
-	}
-
-	*_getRecord() = mmapRecordStart;
-	if (hasFastaQual()) {
-		*_getQualRecord() = mmapQualRecordStart;
-	}
-
-}
 
 void Sequence::reset(char flags) {
 	if (isPreAllocated()) {
@@ -361,23 +295,13 @@ string Sequence::getFastaNoMarkup(SequenceLengthType trimOffset, SequenceLengthT
 		return string(1, 'N');
 	}
 
-	if (isMmaped()) {
-		string name, bases, quals, comment;
-		readMmaped(name, bases, quals, comment);
-		SequenceLengthType len = bases.length();
-		assert(trimOffset <= len);
-		if (trimLength < len - trimOffset)
-			return bases.substr(trimOffset, trimLength);
-		else
-			return bases.substr(trimOffset);
-	} else {
-		SequenceLengthType len = getLength();
-		assert(trimOffset <= len);
-		if (trimLength > len - trimOffset)
-			trimLength = len - trimOffset;
-		return TwoBitSequence::getFasta(getTwoBitSequence(), trimOffset, trimLength);
-	}
+	SequenceLengthType len = getLength();
+	assert(trimOffset <= len);
+	if (trimLength > len - trimOffset)
+		trimLength = len - trimOffset;
+	return TwoBitSequence::getFasta(getTwoBitSequence(), trimOffset, trimLength);
 }
+
 string Sequence::getFasta(SequenceLengthType trimOffset, SequenceLengthType trimLength) const {
 	if ( !isValid() )
 		return string("");
@@ -386,34 +310,23 @@ string Sequence::getFasta(SequenceLengthType trimOffset, SequenceLengthType trim
 		return string(1, 'N');
 	}
 	string fasta;
-	if (isMmaped()) {
-		SequencePtr sequencePtr = getCache();
-		fasta = sequencePtr->getFasta(trimOffset, trimLength);
-	} else {
-		SequenceLengthType len = getLength();
-		assert(trimOffset <= len);
-		if (trimLength > len - trimOffset)
-			trimLength = len - trimOffset;
-		if (trimLength <= 1) {
-			// to support printing paired reads where 1 read is trimmed to 0
-			return string(1, 'N');
-		}
-		fasta = TwoBitSequence::getFasta(getTwoBitSequence(), trimOffset, trimLength);
+
+	SequenceLengthType len = getLength();
+	assert(trimOffset <= len);
+	if (trimLength > len - trimOffset)
+		trimLength = len - trimOffset;
+	if (trimLength <= 1) {
+		// to support printing paired reads where 1 read is trimmed to 0
+		return string(1, 'N');
 	}
+	fasta = TwoBitSequence::getFasta(getTwoBitSequence(), trimOffset, trimLength);
+
 	BaseLocationVectorType markups = getMarkups();
 	TwoBitSequence::applyMarkup(fasta, markups);
 
 	return fasta;
 }
 
-const Sequence::RecordPtr Sequence::getRecord() const {
-	assert(isMmaped());
-	return *_getRecord();
-}
-const Sequence::RecordPtr Sequence::getQualRecord() const {
-	assert(isMmaped() && hasFastaQual());
-	return *_getQualRecord();
-}
 
 const void *Sequence::_getData() const {
 	return _data.get();
@@ -422,28 +335,9 @@ void *Sequence::_getData() {
 	return const_cast<void*>(constThis()._getData());
 }
 
-const Sequence::RecordPtr *Sequence::_getRecord() const {
-	assert(isValid() && isMmaped());
-	return (RecordPtr *) _getData();
-}
-Sequence::RecordPtr *Sequence::_getRecord() {
-	return const_cast<RecordPtr *> (constThis()._getRecord());
-}
-const Sequence::RecordPtr *Sequence::_getQualRecord() const {
-	assert(isMmaped() && hasFastaQual());
-	return (_getRecord() + 1);
-}
-Sequence::RecordPtr *Sequence::_getQualRecord() {
-	return const_cast<RecordPtr *> (constThis()._getQualRecord());
-}
 
 const SequenceLengthType *Sequence::_getLength() const {
-	if (isMmaped()) {
-		SequencePtr sequencePtr = getCache();
-		return sequencePtr->_getLength();
-	} else {
-		return (SequenceLengthType *) _getData();
-	}
+	return (SequenceLengthType *) _getData();
 }
 
 SequenceLengthType *Sequence::_getLength() {
@@ -451,29 +345,15 @@ SequenceLengthType *Sequence::_getLength() {
 }
 
 const TwoBitEncoding *Sequence::_getTwoBitSequence() const {
-	if (isMmaped()) {
-		SequencePtr sequencePtr = getCache();
-		return sequencePtr->_getTwoBitSequence();
-	} else {
-		return (TwoBitEncoding *) (_getLength() + 1);
-	}
+	return (TwoBitEncoding *) (_getLength() + 1);
 }
 TwoBitEncoding *Sequence::_getTwoBitSequence() {
 	return const_cast<TwoBitEncoding*> (constThis()._getTwoBitSequence());
 }
 
 const SequenceLengthType *Sequence::_getMarkupBasesCount() const {
-	if (isMmaped()) {
-		if (hasFastaQual()) {
-			return (SequenceLengthType *) (_getQualRecord() + 1);
-		} else {
-			return (SequenceLengthType *) (_getRecord() + 1);
-		}
-	} else {
-		return (SequenceLengthType *) (_getTwoBitSequence()
+	return (SequenceLengthType *) (_getTwoBitSequence()
 				+ getTwoBitEncodingSequenceLength());
-	}
-
 }
 SequenceLengthType *Sequence::_getMarkupBasesCount() {
 	return const_cast<SequenceLengthType*> (constThis()._getMarkupBasesCount());
@@ -530,12 +410,7 @@ const void *Sequence::_getEnd() const {
 SequenceLengthType Sequence::getLength() const {
 	if ( !isValid() )
 		return 0;
-	if (isMmaped()) {
-		assert(isValid());
-		return getFastaNoMarkup().length();
-	} else {
-		return *_getLength();
-	}
+	return *_getLength();
 }
 SequenceLengthType Sequence::getFirstMarkupLength() const {
 	BaseLocationVectorType markups = getMarkups();
@@ -595,10 +470,7 @@ SequenceLengthType Sequence::_getStoredMarkupBasesCount() const {
 }
 SequenceLengthType Sequence::getMarkupBasesCount() const {
 	assert(isValid());
-	if (isMmaped())
-		return getMarkups().size();
-	else
-		return _getStoredMarkupBasesCount();
+	return _getStoredMarkupBasesCount();
 }
 BaseLocationVectorType Sequence::_getMarkups() const {
 	assert(isValid());
@@ -638,44 +510,20 @@ BaseLocationVectorType Sequence::_getMarkups() const {
 }
 BaseLocationVectorType Sequence::getMarkups() const {
 	BaseLocationVectorType markups = _getMarkups();
-	if (isMmaped()) {
-		// we must find hidden markups (Ns) in the mmaped record
-		// TODO optimize this
-		std::string fasta = getFastaNoMarkup();
-		TwoBitSequence::applyMarkup(fasta, markups);
-		markups = TwoBitSequence::compressSequence(fasta, NULL);
-	}
 	return markups;
 }
 
-void Sequence::readMmaped(std::string &name, std::string &bases, std::string &quals, std::string &comment) const {
-	assert(isMmaped());
-	// TODO fix hack on NULL lastPtr.  Presently only works for single-lined fastas
-	RecordPtr record(getRecord()), lastRecord(NULL), qualRecord(NULL), lastQualRecord(NULL);
-	if (hasFastaQual()) {
-		qualRecord = getQualRecord();
-		lastQualRecord = NULL;
-	}
-	bool isGood = SequenceRecordParser::parse(record, lastRecord, name, bases, quals, comment, qualRecord, lastQualRecord, FASTQ_START_CHAR);
-	if (!isGood)
-		this->discard();
-}
-Sequence::SequencePtr Sequence::readMmaped(bool usePreAllocation) const {
-	std::string name, bases, quals, comment;
-	readMmaped(name, bases, quals, comment);
-	return SequencePtr(new Sequence(bases, usePreAllocation));
-}
 
 /*------------------------------------ READ ----------------------------------------*/
 
 double Read::qualityToProbability[256];
 const char * Read::LABEL_SEP = "\t";
 
-int Read::initializeQualityToProbability(unsigned char minQualityScore, unsigned int startChar) {
+bool Read::initializeQualityToProbability(unsigned char minQualityScore, unsigned int startChar) {
 #pragma omp critical (FastqStartChar)
 	{
 		if (startChar != FASTQ_START_CHAR) {
-			LOG_VERBOSE_OPTIONAL(1, true, "Switching quality scale for FASTQ (std vs Illumina) to " << (int) startChar);
+			LOG_VERBOSE_OPTIONAL(1, true, "Switching quality scale for FASTQ from " << (int) FASTQ_START_CHAR << " to " << (int) startChar);
 		}
 		FASTQ_START_CHAR = startChar;
 		for (int i = 0; i < 256; i++) {
@@ -687,14 +535,14 @@ int Read::initializeQualityToProbability(unsigned char minQualityScore, unsigned
 		for (int i = PRINT_REF_QUAL ; i < 256; i++)
 			qualityToProbability[i] = 1.0; // for reads with no quality data
 	}
-	return 1;
+	qualityToProbabilityInitialized = true;
+	return true;
 }
-int Read::qualityToProbabilityInitialized =
-		Read::initializeQualityToProbability(0, Kmernator::FASTQ_START_CHAR_DEFAULT);
+bool Read::qualityToProbabilityInitialized = false;
 
 void Read::setMinQualityScore(unsigned char minQualityScore, unsigned char startChar) {
-	if (GeneralOptions::getOptions().getFastqBaseQuality() != startChar)
-		GeneralOptions::getOptions().getFastqBaseQuality() = startChar;
+	if (GeneralOptions::getOptions().getOutputFastqBaseQuality() != startChar)
+		GeneralOptions::getOptions().getOutputFastqBaseQuality() = startChar;
 	Read::initializeQualityToProbability(minQualityScore, startChar);
 }
 
@@ -702,13 +550,6 @@ void Read::setMinQualityScore(unsigned char minQualityScore, unsigned char start
 
 Read::Read(std::string name, std::string fasta, std::string qualBytes, std::string comment, bool usePreAllocation) {
 	setRead(name, fasta, qualBytes, comment, usePreAllocation);
-}
-Read::Read(Sequence::RecordPtr mmapRecordStart, Sequence::RecordPtr mmapQualRecordStart) {
-	setRead(mmapRecordStart, mmapQualRecordStart);
-}
-
-Read::Read(Sequence::RecordPtr mmapRecordStart, std::string markupFasta, Sequence::RecordPtr mmapQualRecordStart) {
-	setRead(mmapRecordStart, markupFasta, mmapQualRecordStart);
 }
 Read &Read::operator=(const Read &other) {
 	Sequence::operator=(other);
@@ -719,25 +560,9 @@ Read Read::clone(bool usePreAllocation) const {
 	return Read(getName(), getFasta(), getQuals(), getComment(), usePreAllocation);
 }
 
-
-Read::ReadPtr Read::readMmaped(bool usePreAllocation) const {
-	BaseLocationVectorType markups = _getMarkups();
-	std::string name, bases, quals, comment;
-	Sequence::readMmaped(name, bases, quals, comment);
-	TwoBitSequence::applyMarkup(bases, markups);
-	return ReadPtr(new Read(name, bases, quals, comment, usePreAllocation));
-}
-
-bool Read::recordHasQuals() const {
-	assert(isMmaped());
-	if (hasQuals() || hasFastaQual())
-		return true;
-	else
-		// TODO make this more general
-		return *getRecord() == '@'; // FASTQ
-}
-
 ProbabilityBases Read::getProbabilityBases(unsigned char minQuality) const {
+	if (! qualityToProbabilityInitialized )
+		initializeQualityToProbability();
 	std::string fasta = getFasta();
 	std::string quals = getQuals();
 	ProbabilityBases probs(fasta.length());
@@ -762,7 +587,6 @@ double Read::scoreProbabilityBases(const ProbabilityBases &probs) const {
 }
 
 const char * Read::_getQual() const {
-	assert(!isMmaped());
 	if (isMarkups1()) {
 		return (char *) (_getMarkupBases1() + *_getMarkupBasesCount1());
 	} else if (isMarkups2()) {
@@ -779,7 +603,6 @@ char * Read::_getQual() {
 }
 
 SequenceLengthType Read::_qualLength() const {
-	assert(!isMmaped());
 	if (hasQuals()) {
 		SequenceLengthType len = getLength();
 		if (len == 0)
@@ -794,7 +617,6 @@ SequenceLengthType Read::_qualLength() const {
 }
 
 const char * Read::_getName() const {
-	assert(!isMmaped());
 	return (char *) (_getQual() + _qualLength());
 }
 char * Read::_getName() {
@@ -815,7 +637,6 @@ char * Read::_getComment() {
 }
 
 const void *Read::_getEnd() const {
-	assert(!isMmaped());
 	if (GlobalOptions::isCommentStored()) {
 		return (const void *) (_getComment() + strlen(_getComment())+1);
 	} else {
@@ -824,7 +645,6 @@ const void *Read::_getEnd() const {
 }
 
 void Read::setRead(std::string name, std::string fasta, std::string qualBytes, std::string comment, bool usePreAllocation) {
-	assert(!isMmaped());
 	if (fasta.length() != qualBytes.length())
 		LOG_THROW(
 				"InvalidFormat for setRead(): fasta length != qual length for name = " << name << " " << fasta << " " << qualBytes);
@@ -851,17 +671,6 @@ void Read::setRead(std::string name, std::string fasta, std::string qualBytes, s
 		strcpy(_getComment(), comment.c_str());
 
 }
-void Read::setRead(Sequence::RecordPtr mmapRecordStart, Sequence::RecordPtr mmapQualRecordStart) {
-	setSequence(mmapRecordStart, 0, mmapQualRecordStart);
-	if (recordHasQuals())
-		setFlag(HASQUALS);
-}
-void Read::setRead(Sequence::RecordPtr mmapRecordStart, std::string markupFasta, Sequence::RecordPtr mmapQualRecordStart) {
-	BaseLocationVectorType markups = TwoBitSequence::compressSequence(markupFasta.c_str(), NULL);
-	setSequence(mmapRecordStart, markups, 0, mmapQualRecordStart);
-	if (recordHasQuals())
-		setFlag(HASQUALS);
-}
 
 void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, char mask) {
 	if (isDiscarded())
@@ -885,33 +694,17 @@ void Read::markupBases(SequenceLengthType offset, SequenceLengthType length, cha
 	}
 	fasta.replace(offset, length, length, mask);
 
+	string name  = getName();
+	string qual  = getQuals();
+	string comment = getComment();
 
-	if (isMmaped()) {
-		RecordPtr record = getRecord();
-		RecordPtr qualRecord = NULL;
-		if (hasFastaQual())
-			qualRecord = getQualRecord();
-
-		reset();
-		setRead(record, fasta, qualRecord);
-
-	} else {
-		string name  = getName();
-		string qual  = getQuals();
-		string comment = getComment();
-
-		reset();
-		setRead(name, fasta, qual, comment);
-	}
+	reset();
+	setRead(name, fasta, qual, comment);
 }
 
 string Read::getName() const {
 	if ( !isValid() ) {
 		return string("");
-	} else if (isMmaped()) {
-		string name, bases, quals, comment;
-		Sequence::readMmaped(name, bases, quals, comment);
-		return name;
 	} else {
 		return string(_getName());
 	}
@@ -924,10 +717,6 @@ void Read::setName(const std::string name) { // inefficient!
 string Read::getComment() const {
 	if ( !isValid() ) {
 		return string("");
-	} else if (isMmaped()) {
-		string name, bases, quals, comment;
-		Sequence::readMmaped(name, bases, quals, comment);
-		return comment;
 	} else {
 		return string(_getComment());
 	}
@@ -942,52 +731,30 @@ string Read::getQuals(SequenceLengthType trimOffset, SequenceLengthType trimLeng
 		// to support printing paired reads where 1 read is trimmed to 0
 		return string(1, FASTQ_START_CHAR+1);
 	}
-	if (isMmaped()) {
-		string name, bases, quals, comment;
-		Sequence::readMmaped(name, bases, quals, comment);
-		SequenceLengthType len = bases.length();
-		assert(trimOffset <= len);
-		if (trimLength > len - trimOffset)
-			trimLength = len - trimOffset;
 
-		if (trimLength > 1) {
-			if ( (!hasQuals()) || ((uint8_t) quals[0]) == REF_QUAL) {
-				if (forPrinting)
-					return string(trimLength, PRINT_REF_QUAL);
-				else
-					return string(trimLength, REF_QUAL);
-			} else {
-				return quals.substr(trimOffset, trimLength);
-			}
+	SequenceLengthType len = getLength();
+	const char * qualPtr = NULL;
+	assert(trimOffset <= len);
+	if (trimLength > len - trimOffset)
+		trimLength = len - trimOffset;
+
+	if (trimLength > 1) {
+		qualPtr = _getQual() + trimOffset;
+
+		if ( (!hasQuals()) || *qualPtr == REF_QUAL) {
+			if (forPrinting)
+				return string(trimLength, PRINT_REF_QUAL);
+			else
+				return string(trimLength, REF_QUAL);
 		} else {
-			// to support printing paired reads where 1 read is trimmed to 0
-			return string(1, FASTQ_START_CHAR+1);
+			return string(qualPtr, trimLength);
 		}
+	} else if (_getData() == NULL) {
+		// This is an invalid / empty sequence...
+		return string("");
 	} else {
-		SequenceLengthType len = getLength();
-		const char * qualPtr = NULL;
-		assert(trimOffset <= len);
-		if (trimLength > len - trimOffset)
-			trimLength = len - trimOffset;
-
-		if (trimLength > 1) {
-			qualPtr = _getQual() + trimOffset;
-
-			if ( (!hasQuals()) || *qualPtr == REF_QUAL) {
-				if (forPrinting)
-					return string(trimLength, PRINT_REF_QUAL);
-				else
-					return string(trimLength, REF_QUAL);
-			} else {
-				return string(qualPtr, trimLength);
-			}
-		} else if (_getData() == NULL) {
-			// This is an invalid / empty sequence...
-			return string("");
-		} else {
-			// to support printing paired reads where 1 read is trimmed to 0
-			return string(1, FASTQ_START_CHAR+1);
-		}
+		// to support printing paired reads where 1 read is trimmed to 0
+		return string(1, FASTQ_START_CHAR+1);
 	}
 }
 
