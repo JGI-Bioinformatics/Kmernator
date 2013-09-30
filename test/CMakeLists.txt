@@ -70,7 +70,22 @@ target_link_libraries( ReadSetTest Sequence
                                    )
 add_dependencies(ReadSetTest REPLACE_VERSION_H)
 add_test( ReadSetTest ReadSetTest )
+  
+
+set_source_files_properties( ReadSetStdTest
+                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
+                             )
                             
+add_executable( ReadSetStdTest ReadSetStdTest )
+target_link_libraries( ReadSetStdTest Sequence
+                                   ReadSet 
+                                   Kmer
+                                   ${KMERNATOR_BOOST_LIBS}
+                                   ${KMERNATOR_BOOST_TEST_LIBS}
+                                   )
+add_dependencies(ReadSetStdTest REPLACE_VERSION_H)
+add_test( ReadSetStdTest ReadSetStdTest )
+                          
 set_source_files_properties( KmerTest
                             PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS}
                           )
@@ -218,6 +233,23 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/phix.mergraph.m21.D2 test
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runMeraculousTests.sh test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/runRandomlySampleTests.sh test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10k.bam test/ )
+
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10-cs18.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10-cs18.1.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10-cs18.2.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.fasta test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/10.qual test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus1.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus2.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus2-diff.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/consensus3.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered-0.85.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered-readlength.std.fastq test/ )
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered-readlength-both.std.fastq test/ )
+
 
 add_test(filter runFilterTests.sh)
 
