@@ -2,7 +2,7 @@
 
 FR=../apps/FilterReads
 FRP=../apps/FilterReads-P
-procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1))
+procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1) || echo 2)
 
 TMP=$(mktemp testXXXXXX)
 export TMPDIR=/tmp
@@ -18,7 +18,7 @@ clean()
 }
 trap clean 0 1 2 3 15
 
-IN=1000.fastq
+IN=
 GOOD=
 
 check()
@@ -27,11 +27,11 @@ check()
   echo "Executing: $@ $opts"
   if $@ $opts
   then
-    if ! diff -w -q $TMP-MinDepth2-1000.fastq $GOOD
+    if ! diff -w -q $TMP-MinDepth2-$IN $GOOD
     then
        echo "FAILED $@ --out $TMP 31 $IN"
-       wc $TMP-MinDepth2-1000.fastq $GOOD
-       diff -w $TMP-MinDepth2-1000.fastq $GOOD | head -50
+       wc $TMP-MinDepth2-$IN $GOOD
+       diff -w $TMP-MinDepth2-$IN $GOOD | head -50
        exit 1
     fi
   else
@@ -40,12 +40,25 @@ check()
   fi
 }
 
+// make sure base quality conversions work fine
+IN=1000.fastq
+GOOD=1000-Filtered-0.85.std.fastq
+check $FR --fastq-output-base-quality 33 --min-read-length 0.85
 GOOD=1000-Filtered-0.85.fastq
-check $FR --min-read-length 0.85
+check $FR --fastq-output-base-quality 64 --min-read-length 0.85
+IN=1000.std.fastq
+GOOD=1000-Filtered-0.85.std.fastq
+check $FR --fastq-output-base-quality 33 --min-read-length 0.85
+GOOD=1000-Filtered-0.85.fastq
+check $FR --fastq-output-base-quality 64 --min-read-length 0.85
+
+IN=1000.fastq
+GOOD=1000-Filtered-0.85.fastq
+check $FR --fastq-output-base-quality 64 --min-read-length 0.85
 GOOD=1000-Filtered-readlength.fastq
-check $FR --min-read-length 1 
+check $FR --fastq-output-base-quality 64 --min-read-length 1 
 GOOD=1000-Filtered-readlength-both.fastq
-check $FR --min-read-length 1 --min-passing-in-pair 2
+check $FR --fastq-output-base-quality 64 --min-read-length 1 --min-passing-in-pair 2
 rm -f $TMP*
 
 
@@ -54,11 +67,11 @@ GOOD=1000-Filtered.fastq
 
 for thread in {1..3}
 do
-  check $FR --min-read-length 25 --thread $thread
+  check $FR --fastq-output-base-quality 64 --min-read-length 25 --thread $thread
   rm -f $TMP*
-  check $FR --min-read-length 25 --thread $thread --save-kmer-mmap 1
+  check $FR --fastq-output-base-quality 64 --min-read-length 25 --thread $thread --save-kmer-mmap 1
   mv $TMP-mmap $TMP-mmap-saved
-  check $FR --min-read-length 25 --thread $thread --load-kmer-mmap $TMP-mmap-saved
+  check $FR --fastq-output-base-quality 64 --min-read-length 25 --thread $thread --load-kmer-mmap $TMP-mmap-saved
   rm -f $TMP*
 done
 
@@ -85,32 +98,32 @@ then
     fi
     export OMP_NUM_THREADS=$(((procs+mpi-1)/mpi))
     GOOD=1000-Filtered-0.85.fastq
-    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 0.85
+    check $MPI $MPI_OPTS $mpi $FRP --fastq-output-base-quality 64 --min-read-length 0.85
     rm -f $TMP*
  
     GOOD=1000-Filtered-readlength.fastq
-    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 1     
+    check $MPI $MPI_OPTS $mpi $FRP --fastq-output-base-quality 64 --min-read-length 1     
     rm -f $TMP*
  
     GOOD=1000-Filtered-readlength-both.fastq
-    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 1 --min-passing-in-pair 2
+    check $MPI $MPI_OPTS $mpi $FRP --fastq-output-base-quality 64 --min-read-length 1 --min-passing-in-pair 2
     rm -f $TMP*
  
     GOOD=1000-Filtered.fastq
-    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --thread 1
+    check $MPI $MPI_OPTS $mpi $FRP --fastq-output-base-quality 64 --min-read-length 25 --thread 1
     rm -f $TMP*
-    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25
+    check $MPI $MPI_OPTS $mpi $FRP --fastq-output-base-quality 64 --min-read-length 25
     rm -f $TMP*
     
     # TODO restore save/load kmer map in MPI version...
-    #check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --thread 1 --save-kmer-mmap 1
+    #check $MPI $MPI_OPTS $mpi $FRP --fastq-output-base-quality 64 --min-read-length 25 --thread 1 --save-kmer-mmap 1
     #mv $TMP-mmap $TMP-mmap-saved
-    #check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --thread 1 --load-kmer-mmap $TMP-mmap-saved
-    #check $FR --min-read-length 25 --load-kmer-mmap $TMP-mmap-saved
+    #check $MPI $MPI_OPTS $mpi $FRP --fastq-output-base-quality 64 --min-read-length 25 --thread 1 --load-kmer-mmap $TMP-mmap-saved
+    #check $FR --min-read-length 25 --fastq-output-base-quality 64 --load-kmer-mmap $TMP-mmap-saved
     #rm -f $TMP*
-    check $FR --min-read-length 25 --save-kmer-mmap 1 
+    check $FR --min-read-length 25 --fastq-output-base-quality 64 --save-kmer-mmap 1 
     mv $TMP-mmap $TMP-mmap-saved
-    check $MPI $MPI_OPTS $mpi $FRP --min-read-length 25 --load-kmer-mmap $TMP-mmap-saved
+    check $MPI $MPI_OPTS $mpi $FRP --fastq-output-base-quality 64 --min-read-length 25 --load-kmer-mmap $TMP-mmap-saved
     rm -f $TMP*
   done
 fi

@@ -65,7 +65,7 @@ class Sequence {
 public:
 	static const boost::uint8_t REF_QUAL = Kmernator::REF_QUAL;
 	static const boost::uint8_t PRINT_REF_QUAL = Kmernator::PRINT_REF_QUAL;
-	static boost::uint8_t FASTQ_START_CHAR;
+	static boost::uint8_t FASTQ_START_CHAR; // the base quality score that all Reads will be encoded in.
 
 public:
 	typedef TwoBitSequenceBase::SequenceLengthType SequenceLengthType;
@@ -452,6 +452,34 @@ public:
 		tmpQuals[quals.length()] = '\0';
 		quals = std::string(tmpQuals);
 		STACK_DEALLOC(tmpQuals);
+	}
+	static bool validateFastqStart(const Read &read) {
+		bool passed = true;
+		std::string _quals = read.getQuals();
+		if (_quals.empty())
+			return passed;
+		const uint8_t* quals = (const uint8_t*) _quals.c_str();
+		if (Read::FASTQ_START_CHAR == Kmernator::FASTQ_START_CHAR_STD) {
+			const uint8_t *min= std::min_element(quals, quals + _quals.length());
+			const uint8_t *max= std::min_element(quals, quals + _quals.length());
+			if (*min < Kmernator::FASTQ_START_CHAR_STD || *max > Kmernator::FASTQ_START_CHAR_STD + 40) {
+				passed = false;
+			}
+
+		} else if (Read::FASTQ_START_CHAR == Kmernator::FASTQ_START_CHAR_ILLUMINA) {
+			const uint8_t *min= std::min_element(quals, quals + _quals.length());
+			const uint8_t *max= std::min_element(quals, quals + _quals.length());
+			if (*min < Kmernator::FASTQ_START_CHAR_ILLUMINA || *max >  Kmernator::FASTQ_START_CHAR_ILLUMINA + 40) {
+				passed = false;
+			}
+
+		} else {
+			LOG_THROW("Read::FASTQ_START_CHAR is invalid (somehow): " << Read::FASTQ_START_CHAR);
+		}
+		return passed;
+	}
+	bool validateFastqStart() const {
+		return validateFastqStart(*this);
 	}
 
 	std::string getQuals(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH,

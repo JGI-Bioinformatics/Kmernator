@@ -2,7 +2,7 @@
 
 MPI=""
 MPI_OPTS=""
-procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1))
+procs=$(($(lscpu -p | tail -1 | awk -F, '{print $2}')+1) || echo 2)
 
 true=$(which true)
 
@@ -77,7 +77,7 @@ if ((ismpi==1))
 then
   for thread in {1..4}
   do
-    check $FRP --thread $thread
+    check $FRP --fastq-base-quality 64 --thread $thread
     rm -f $TMP*
   done
 fi
@@ -92,7 +92,7 @@ then
       break
     fi
     export OMP_NUM_THREADS=1
-     check $MPI $MPI_OPTS $mpi $FRP
+     check $MPI $MPI_OPTS $mpi $FRP --fastq-base-quality 64
   done
   
   if ((ismpi)) && $MPI -bysocket -bind-to-socket $true
@@ -121,7 +121,7 @@ then
     fi
 
     export OMP_NUM_THREADS=$threads
-    check $MPI $MPI_OPTS $mpi $socket $FRP
+    check $MPI $MPI_OPTS $mpi $socket $FRP --fastq-base-quality 64
   done
 
 fi

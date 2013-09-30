@@ -151,7 +151,7 @@ protected:
 	ReadIdxVector _globalOffsets;
 	PairedIndexType _pairs;
 	std::string previousReadName, previousReadComment; // for fast pairing
-	uint8_t inputReadQualityBase;
+	uint8_t inputReadQualityBase; // the scaling of the new reads into this ReadSet (for auto-scaling to Read::FASTQ_START_CHAR)
 	bool isReadQualityBaseValidated;
 
 private:
@@ -161,41 +161,31 @@ private:
 	inline bool _setMaxSequenceLength(SequenceLengthType len) {
 		if (len > _maxSequenceLength) {
 #pragma omp critical
+			if (len > _maxSequenceLength) {
 			_maxSequenceLength = len;
+			}
 			return true;
 		}
 		return false;
 	}
 	void validateFastqStart(const Read &read) {
 		if (getSize() < 20000 && read.hasQuals()) {
-			std::string _quals = read.getQuals();
-			if (_quals.empty())
-				return;
-			const uint8_t* quals = (const uint8_t*) _quals.c_str();
-			if (Read::FASTQ_START_CHAR == Kmernator::FASTQ_START_CHAR_STD) {
-				const uint8_t *min= std::min_element(quals, quals + _quals.length());
-				const uint8_t *max= std::min_element(quals, quals + _quals.length());
-				if (*min < Kmernator::FASTQ_START_CHAR_STD || *max > Kmernator::FASTQ_START_CHAR_STD + 40) {
-					LOG_DEBUG(1, "Detected base 64 quality: " << (int) *max << " (" << (char) *max << " in " << read.getName() << " pos " << (max - quals) << ")");
+			if (! read.validateFastqStart() ) {
+				if (Read::FASTQ_START_CHAR == Kmernator::FASTQ_START_CHAR_STD) {
+					LOG_DEBUG(1, "Detected base 64 quality in: " << read.getName());
 					if (getSize() > 10000) {
 						Log::Warn() << "expected STD (33) fastq but detected ILLUMINA (64) only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
 					}
 					__setFastqStart(Kmernator::FASTQ_START_CHAR_ILLUMINA);
-				}
-
-			} else if (Read::FASTQ_START_CHAR == Kmernator::FASTQ_START_CHAR_ILLUMINA) {
-				const uint8_t *min= std::min_element(quals, quals + _quals.length());
-				const uint8_t *max= std::min_element(quals, quals + _quals.length());
-				if (*min < Kmernator::FASTQ_START_CHAR_ILLUMINA || *max >  Kmernator::FASTQ_START_CHAR_ILLUMINA + 40) {
-					LOG_DEBUG(1, "Detected base 33 quality: " << (int) *min << " (" << (char) *min << " in " << read.getName() << " pos " << (min - quals) << ")");
+				} else if (Read::FASTQ_START_CHAR == Kmernator::FASTQ_START_CHAR_ILLUMINA) {
+					LOG_DEBUG(1, "Detected base 33 quality in: " <<  read.getName());
 					if (getSize() > 10000) {
 						Log::Warn() << "expected ILLLUMINA (64) fastq but detected STD (33) only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
 					}
 					__setFastqStart(Kmernator::FASTQ_START_CHAR_STD);
+				} else {
+					throw;
 				}
-
-			} else {
-				LOG_THROW("Request to process reads with an invalid fastq base quality: " << (int) inputReadQualityBase);
 			}
 		} else if (getSize() >= 20000)
 			isReadQualityBaseValidated = true;
@@ -208,10 +198,11 @@ private:
 				if (isReadQualityBaseValidated && getSize() > 0) {
 					LOG_WARN(1, "Re-scaling fastq quality again!! (from " << (int) inputReadQualityBase << " to " << (int) startChar << ")");
 				}
+				LOG_VERBOSE(1, "Setting input fastq base quality score to: " << startChar);
 				// re-scale any existing reads, if necessary
 				rescaleQuality(inputReadQualityBase - startChar);
 				inputReadQualityBase = startChar;
-				isReadQualityBaseValidated = true;
+				isReadQualityBaseValidated = (getSize() > 0);
 			}
 		}
 		}
@@ -676,13 +667,14 @@ public:
 		_files.push_back(filename);
 		setNextFile();
 	}
-	ReadSetStream(std::vector<std::string> &files, int rank = 0, int size = 1) : _files(files.begin(), files.end()), _rs(NULL), _rfr(NULL), _readIdx(0), _rank(rank), _size(size)  {
+	ReadSetStream(std::vector<std::string> &files, int rank = 0, int size = 1) : _files(files.begin(), files.end()), _rs(NULL), _rfr(NULL), _readIdx(0), _rank(rank), _size(size) {
 		init();
 		setNextFile();
 	}
 	void init() {
 		if (! Read::isQualityToProbabilityInitialized() )
 			Read::setMinQualityScore();
+		_inputReadQualityBase = GeneralOptions::getOptions().getOutputFastqBaseQuality();
 	}
 
 	bool isReadSet() {
@@ -699,7 +691,21 @@ public:
 		} else if (isReadFileReader()) {
 			_hasNext = _rfr->nextRead(_name, _bases, _quals, _comment);
 			if (_hasNext) {
+				if (_inputReadQualityBase != Read::FASTQ_START_CHAR)
+					Read::rescaleQuality(_quals, Read::FASTQ_START_CHAR - _inputReadQualityBase);
 				_nextRead = Read(_name, _bases, _quals, _comment);
+				if (!_nextRead.validateFastqStart()) {
+					if (_inputReadQualityBase == Kmernator::FASTQ_START_CHAR_STD) {
+						_inputReadQualityBase = Kmernator::FASTQ_START_CHAR_ILLUMINA;
+						Read::rescaleQuality(_quals, Read::FASTQ_START_CHAR - Kmernator::FASTQ_START_CHAR_ILLUMINA);
+					} else {
+						_inputReadQualityBase = Kmernator::FASTQ_START_CHAR_STD;
+						Read::rescaleQuality(_quals, Read::FASTQ_START_CHAR - Kmernator::FASTQ_START_CHAR_STD);
+					}
+					if (_readIdx > 0)
+						LOG_WARN(1, "Detected different FASTQ quality scaling than expected.  Some data was already processed.  You should re-run with --fastq-base-quality " << _inputReadQualityBase);
+					_nextRead = Read(_name, _bases, _quals, _comment);
+				}
 				_readIdx++;
 			} else if (setNextFile())
 				return hasNext();
@@ -738,6 +744,7 @@ private:
 	string _name, _bases, _quals, _comment;
 	bool _hasNext;
 	int _rank, _size;
+	uint8_t _inputReadQualityBase;
 };
 
 #endif
