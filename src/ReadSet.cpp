@@ -137,7 +137,7 @@ void ReadSet::addRead(const Read &read, SequenceLengthType readLength, int rank)
 	_reads.push_back(read);
 	_baseCount += readLength;
 	_setMaxSequenceLength(readLength);
-	_setFastqStart(read);
+	validateFastqStart(read);
 	long countReads = getSize();
 	LOG_DEBUG(5, "addRead(" << read.getName() << ", " << readLength << ", " << rank << ") len: " << read.getLength() << " size: " << countReads);
 	LOG_VERBOSE_OPTIONAL(2, ((countReads & 131071) == 0 && (rank & 15) == 0), "Just read " << countReads << " reads");

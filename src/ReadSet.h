@@ -152,6 +152,7 @@ protected:
 	PairedIndexType _pairs;
 	std::string previousReadName, previousReadComment; // for fast pairing
 	uint8_t inputReadQualityBase;
+	bool isReadQualityBaseValidated;
 
 private:
 	void addRead(const Read &read);
@@ -165,22 +166,28 @@ private:
 		}
 		return false;
 	}
-	void _setFastqStart(const Read &read) {
-		if (getSize() < 40000 && read.hasQuals()) {
+	void validateFastqStart(const Read &read) {
+		if (getSize() < 20000 && read.hasQuals()) {
 			std::string _quals = read.getQuals();
+			if (_quals.empty())
+				return;
 			const uint8_t* quals = (const uint8_t*) _quals.c_str();
-			if (inputReadQualityBase == Kmernator::FASTQ_START_CHAR_STD) {
-				const uint8_t *it = std::max_element(quals, quals + _quals.length());
-				if (it != (quals + _quals.length()) && *it > inputReadQualityBase + 40) {
+			if (Read::FASTQ_START_CHAR == Kmernator::FASTQ_START_CHAR_STD) {
+				const uint8_t *min= std::min_element(quals, quals + _quals.length());
+				const uint8_t *max= std::min_element(quals, quals + _quals.length());
+				if (*min < Kmernator::FASTQ_START_CHAR_STD || *max > Kmernator::FASTQ_START_CHAR_STD + 40) {
+					LOG_DEBUG(1, "Detected base 64 quality: " << (int) *max << " (" << (char) *max << " in " << read.getName() << " pos " << (max - quals) << ")");
 					if (getSize() > 10000) {
 						Log::Warn() << "expected STD (33) fastq but detected ILLUMINA (64) only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
 					}
 					__setFastqStart(Kmernator::FASTQ_START_CHAR_ILLUMINA);
 				}
 
-			} else if (inputReadQualityBase == Kmernator::FASTQ_START_CHAR_ILLUMINA) {
-				const uint8_t *it = std::min_element(quals, quals + _quals.length());
-				if (it != (quals + _quals.length()) && *it < inputReadQualityBase) {
+			} else if (Read::FASTQ_START_CHAR == Kmernator::FASTQ_START_CHAR_ILLUMINA) {
+				const uint8_t *min= std::min_element(quals, quals + _quals.length());
+				const uint8_t *max= std::min_element(quals, quals + _quals.length());
+				if (*min < Kmernator::FASTQ_START_CHAR_ILLUMINA || *max >  Kmernator::FASTQ_START_CHAR_ILLUMINA + 40) {
+					LOG_DEBUG(1, "Detected base 33 quality: " << (int) *min << " (" << (char) *min << " in " << read.getName() << " pos " << (min - quals) << ")");
 					if (getSize() > 10000) {
 						Log::Warn() << "expected ILLLUMINA (64) fastq but detected STD (33) only very far into the file, please make sure standard fastq and illumina fastq are not mixed" << endl;
 					}
@@ -190,23 +197,28 @@ private:
 			} else {
 				LOG_THROW("Request to process reads with an invalid fastq base quality: " << (int) inputReadQualityBase);
 			}
-		}
+		} else if (getSize() >= 20000)
+			isReadQualityBaseValidated = true;
 	}
 	void __setFastqStart(int startChar) {
 		if (startChar != inputReadQualityBase) {
 #pragma omp critical (_setFastqStart)
 		{
 			if (startChar != inputReadQualityBase) {
+				if (isReadQualityBaseValidated && getSize() > 0) {
+					LOG_WARN(1, "Re-scaling fastq quality again!! (from " << (int) inputReadQualityBase << " to " << (int) startChar << ")");
+				}
 				// re-scale any existing reads, if necessary
-				rescaleQuality( inputReadQualityBase - startChar );
+				rescaleQuality(inputReadQualityBase - startChar);
 				inputReadQualityBase = startChar;
+				isReadQualityBaseValidated = true;
 			}
 		}
 		}
 	}
 
 	void rescaleQuality(int delta) {
-		LOG_DEBUG(1, "Rescaling quality for " << _reads.size() << " reads by " << delta);
+		LOG_DEBUG_OPTIONAL(1, !_reads.empty(), "Rescaling quality for " << _reads.size() << " reads by " << delta);
 		for(ReadSetSizeType i = 0 ; i < _reads.size(); i++)
 			_reads[i].rescaleQuality(delta);
 	}
@@ -228,10 +240,11 @@ private:
 
 public:
 	ReadSet() :
-		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0), inputReadQualityBase(getDefaultInputQualityBase()) {
+		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0), inputReadQualityBase(getDefaultInputQualityBase()), isReadQualityBaseValidated(false) {
 		if (! Read::isQualityToProbabilityInitialized())
 			Read::setMinQualityScore();
 		setFastqStart();
+		isReadQualityBaseValidated = false;
 		// this is needed to fix over subscription of threads where the Sequence::threadCacheSequences is undersized
 		if (!omp_in_parallel() && !haveClearedCache()) {
 			Sequence::clearCaches();
@@ -239,7 +252,7 @@ public:
 		}
 	}
 	ReadSet(const ReadSet &copy)  :
-		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0), inputReadQualityBase(getDefaultInputQualityBase()) {
+		_baseCount(0), _maxSequenceLength(0), _globalSize(0), _myGlobalRank(0), inputReadQualityBase(getDefaultInputQualityBase()), isReadQualityBaseValidated(copy.isReadQualityBaseValidated) {
 		*this = copy;
 	}
 	~ReadSet() {
@@ -268,6 +281,8 @@ public:
 		_globalOffsets.swap(other._globalOffsets);
 		_pairs.swap(other._pairs);
 		previousReadName.swap(other.previousReadName);
+		std::swap(inputReadQualityBase,other.inputReadQualityBase);
+		std::swap(isReadQualityBaseValidated,other.isReadQualityBaseValidated);
 	}
 
 	void clear() {
@@ -291,6 +306,8 @@ public:
 		_globalSize = copy._globalSize;
 		_pairs.assign(copy._pairs.begin(), copy._pairs.end());
 		previousReadName = copy.previousReadName;
+		inputReadQualityBase = copy.inputReadQualityBase;
+		isReadQualityBaseValidated = copy.isReadQualityBaseValidated;
 		return *this;
 	}
 	void setFastqStart(char fastqStartChar = GeneralOptions::getOptions().getOutputFastqBaseQuality()) {

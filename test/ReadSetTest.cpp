@@ -319,8 +319,9 @@ void testKmerBuild() {
 
 BOOST_AUTO_TEST_CASE( ReadSetTest )
 {
-	GeneralOptions::getOptions().getOutputFastqBaseQuality() = 33;
+	GeneralOptions::getOptions().getOutputFastqBaseQuality() = 64;
 	GeneralOptions::getOptions().getFastqBaseQuality() = 64;
+	GeneralOptions::getOptions().getDebug() = 1;
 
 	testKmerBuild();
 
