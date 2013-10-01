@@ -508,26 +508,35 @@ public:
 			if (wasPhiX) {
 
 				ostream *os = NULL;
+				std::ostringstream *ss = NULL;
 				if (recorder.omPhiX != NULL) {
 					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix(readIdx1);
 					os = & (recorder.omPhiX->getOfstream( fileSuffix ) );
+					ss = new std::ostringstream();
 				}
-#pragma omp critical (writePhix)
+
+				// always discard the read, as it contains some PhiX even if not output to a discard file
+				if (isRead1) {
+					Read &read = reads.getRead(readIdx1);
+					recorder.recordDiscard(results1.value, read, ss);
+				}
+				if (isRead2) {
+					Read &read = reads.getRead(readIdx2);
+					recorder.recordDiscard(results2.value, read, ss);
+				}
+
+				if (os != NULL && ss->tellp() > 0)
 				{
-					// always discard the read, as it contains some PhiX even if not output to a discard file
-					if (isRead1) {
-						Read &read = reads.getRead(readIdx1);
-						recorder.recordDiscard(results1.value, read, os);
-					}
-					if (isRead2) {
-						Read &read = reads.getRead(readIdx2);
-						recorder.recordDiscard(results2.value, read, os);
-					}
+					std::string str = ss->str();
+#pragma omp critical (writePhix)
+					{ *os << str; }
+					delete ss;
 				}
 
 			} else {
 
 				ostream *os = NULL;
+				std::ostringstream *ss = NULL;
 				std::string label1, label2;
 				if (recorder.omArtifact != NULL) {
 					std::string fileSuffix = std::string("-") + reads.getReadFileNamePrefix( isRead1 ? readIdx1 : readIdx2);
@@ -537,29 +546,34 @@ public:
 					if (isRead2Affected)
 						label2 = getFilterName(results2.value);
 					os = & (recorder.omArtifact->getOfstream( fileSuffix ) );
+					ss = new std::ostringstream();
 				}
 
-#pragma omp critical (writeFilter)
-				{
-					if (isRead1 && results1.value != 0) {
-						Read &read = reads.getRead(readIdx1);
-						SequenceLengthType len = read.getLength();
-						if (wasReference || results1.minAffected == 0 || !ReadSelectorUtil::passesLength(results1.minAffected, len, recorder.minimumReadLength)) {
-							recorder.recordDiscard(results1.value, read, os, label1);
-						} else {
-							recorder.recordTrim(results1.value, len - results1.minAffected);
-						}
-					}
-					if (isRead2 && results2.value != 0) {
-						Read &read = reads.getRead(readIdx2);
-						SequenceLengthType len = read.getLength();
-						if (wasReference || results2.minAffected == 0 || !ReadSelectorUtil::passesLength(results2.minAffected, len, recorder.minimumReadLength)) {
-							recorder.recordDiscard(results2.value, read, os, label2);
-						} else {
-							recorder.recordTrim(results2.value, len - results2.minAffected);
-						}
+				if (isRead1 && results1.value != 0) {
+					Read &read = reads.getRead(readIdx1);
+					SequenceLengthType len = read.getLength();
+					if (wasReference || results1.minAffected == 0 || !ReadSelectorUtil::passesLength(results1.minAffected, len, recorder.minimumReadLength)) {
+						recorder.recordDiscard(results1.value, read, ss, label1);
+					} else {
+						recorder.recordTrim(results1.value, len - results1.minAffected);
 					}
 				}
+				if (isRead2 && results2.value != 0) {
+					Read &read = reads.getRead(readIdx2);
+					SequenceLengthType len = read.getLength();
+					if (wasReference || results2.minAffected == 0 || !ReadSelectorUtil::passesLength(results2.minAffected, len, recorder.minimumReadLength)) {
+						recorder.recordDiscard(results2.value, read, ss, label2);
+					} else {
+						recorder.recordTrim(results2.value, len - results2.minAffected);
+					}
+				}
+				if (os != NULL && ss->tellp() > 0) {
+					std::string str = ss->str();
+#pragma omp critical (writeFilter)
+					{ *os << str; }
+					delete ss;
+				}
+
 			}
 
 			if (Log::isDebug(5)){
