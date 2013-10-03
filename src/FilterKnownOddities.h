@@ -282,12 +282,11 @@ public:
 
 	class FilterResults {
 	public:
-		KM::ValueType value;
-		SequenceLengthType minAffected;
-		SequenceLengthType maxAffected;
-		SequenceLengthType maxQualityPass;
-		FilterResults() : value(0), minAffected(0), maxAffected(0), maxQualityPass(0) {}
-		FilterResults(KM::ValueType &_v, SequenceLengthType &_m, SequenceLengthType &_x, SequenceLengthType &_q) : value(_v), minAffected(_m), maxAffected(_x), maxQualityPass(_q) {}
+		KM::ValueType value; // the type of the artifact filter hit
+		SequenceLengthType minPass, maxPass; // the range of the read to keep
+		FilterResults() : value(0), minPass(0), maxPass(MAX_SEQUENCE_LENGTH) {}
+		FilterResults(KM::ValueType &_v, SequenceLengthType &_min, SequenceLengthType &_max) :
+			value(_v), minPass(_min), maxPass(_max) {}
 	};
 	class Recorder {
 	public:
@@ -314,11 +313,19 @@ public:
 				FilterKnownOddities::_writeFilterRead(*os, read, 0, len, label);
 			}
 		}
-		void recordTrim(int value, long length) {
-#pragma omp atomic
+		void recordTrim(int value, Read &read, SequenceLengthType minPass, SequenceLengthType maxPass) {
+			assert(maxPass > minPass);
+			assert(!read.isDiscarded());
+			SequenceLengthType seqLen = read.getLength();
+			assert(maxPass - minPass < seqLen);
+
+			LOG_DEBUG(3, "Trim read " << read.getName() << " " << minPass << "-" << maxPass);
+			read = read.getTrimRead(minPass, maxPass - minPass, "AFTrim:" + boost::lexical_cast<string>(minPass) + "+" + boost::lexical_cast<string>(maxPass-minPass));
+
+			#pragma omp atomic
 			readCounts[value]++;
 #pragma omp atomic
-			baseCounts[value] += length;
+			baseCounts[value] += (seqLen - (maxPass - minPass));
 		}
 		long getDiscardedReads() const {
 			long reads = 0;
@@ -354,7 +361,12 @@ public:
 		FilterResults results;
 		if (isRead1 && isRead2) {
 			recordAffectedRead(reads, recorder, results1, pair.read1, results2, pair.read2);
-			results.minAffected = std::min(results1.minAffected, results2.minAffected);
+			int len1 = results1.maxPass - results1.minPass, len2 = results2.maxPass - results2.minPass;
+			if (len1 > len2) {
+				results = results1;
+			} else {
+				results = results2;
+			}
 			results.value = (isPhiX(results1.value) || isPhiX(results2.value)) ? getPhiXReadIdx() : std::max(results1.value, results2.value);
 		} else {
 			if (isRead1) {
@@ -368,50 +380,72 @@ public:
 		return results;
 	}
 
+
 	FilterResults applyFilterToRead(ReadSet &reads, long readIdx, Recorder &recorder, bool recordEffects = false) {
 
 		Read &read = reads.getRead(readIdx);
 		FilterResults results;
 		KM::ValueType &value = results.value;
-		SequenceLengthType &minAffected = results.minAffected;
-		minAffected = MAX_SEQUENCE_LENGTH;
-		SequenceLengthType &maxAffected = results.maxAffected;
-		maxAffected = 0;
-		SequenceLengthType &maxQualityPass = results.maxQualityPass;
-		maxQualityPass = MAX_SEQUENCE_LENGTH;
+		SequenceLengthType &minPass = results.minPass;
+		SequenceLengthType &maxPass = results.maxPass;
 
-		LOG_DEBUG(5, "Checking" << read.getName() << "\t" << read.getFasta() );
+		LOG_DEBUG(5, "Checking: " << read.getName());
 
 		SequenceLengthType seqLen = read.getLength();
+		value = 0;
+		minPass = 0;
+		maxPass = seqLen;
+
 		TwoBitEncoding *ptr = read.getTwoBitSequence();
-		long bytes = read.getTwoBitEncodingSequenceLength();
-		STACK_ALLOC(TwoBitEncoding, revcomp, bytes+1);
 
-		TwoBitEncoding *revPtr = revcomp;
-		SequenceLengthType seqLenByteBoundary = seqLen & ~((SequenceLengthType) 0x03);
-		TwoBitSequence::reverseComplement(ptr, revPtr, seqLenByteBoundary);
-
-		// Validate quality scores
+		// Validate quality scores.  Find the two best ranges of data.
 		std::string quals = read.getQuals();
+		SequenceLengthType qualsize = quals.size();
+		assert(qualsize == seqLen);
+		std::pair<long, long> best(0, 0), secondBest(0,0), test(0,0);
+
 		char minQual = Read::FASTQ_START_CHAR + GeneralOptions::getOptions().getMinQuality();
-		for(unsigned int i = 0 ; i < quals.size() ; i++) {
+		for(SequenceLengthType i = 0 ; i < qualsize ; i++) {
+			test.second = i;
 			if (quals[i] < minQual) {
-				minAffected = maxQualityPass = i;
-				LOG_DEBUG(6, "QualityFilter(" << minQual << ") hit baseIdx:" << i << "(" << quals[i] << ")\t" << read.toString());
-				break;
+				if (test.second - test.first > best.second - best.first) {
+					std::swap(best, test);
+				}
+				if (test.second - test.first > secondBest.second - secondBest.first) {
+					std::swap(secondBest, test);
+				}
+				test.first = test.second = i + 1;
+
+				LOG_DEBUG(6, "QualityFilter(" << (int) minQual << ") hit baseIdx:" << i << "(" << quals[i] << ")\tmin: " << minPass <<  " max: " << maxPass << "\t" << read.toString());
 			}
 		}
+		test.second = qualsize;
+		if (test.second - test.first > best.second - best.first) {
+			std::swap(best, test);
+		}
+		if (test.second - test.first > secondBest.second - secondBest.first) {
+			std::swap(secondBest, test);
+		}
+		if (best.second > best.first) {
+			minPass = best.first;
+			maxPass = best.second;
+		} else {
+			minPass = 0;
+			maxPass = 0;
+		}
+		LOG_DEBUG(3, "applyFilterToRead(): Trim: " << read.getName() << " best: " << best.first << "," << best.second << " second: " << secondBest.first << "," << secondBest.second);
 
-		long byteHops = bytes - twoBitLength - ((seqLen & 0x03) == 0 ? 0 : 1);
-		if (byteHops < 0)
-			return results;
+		// Now find matches to known artifact reference
+
+		long byteHops = ((maxPass+3)/4) - twoBitLength - ((maxPass & 0x03) == 0 ? 0 : 1);
 
 		KM::ElementType elem;
 		bool wasPhiX = false;
 		KM::BucketType kmers;
 		TEMP_KMER(leastKmer);
 
-		for(long byteHop = 0; byteHop <= byteHops; byteHop++) {
+		SequenceLengthType minAffected = maxPass, maxAffected = minPass;
+		for(long byteHop = minPass/4; byteHop <= byteHops; byteHop++) {
 
 			const Kmer &fwd = (const Kmer&) *ptr;
 			fwd.buildLeastComplement(leastKmer);
@@ -444,37 +478,47 @@ public:
 			}
 
 			ptr++;
-			revPtr++;
 		}
-
-		STACK_DEALLOC(revcomp);
+		LOG_DEBUG(3, "After artifact match: " << minAffected << " " << maxAffected << " value: " << value);
 
 		if (wasPhiX) {
 			value = getPhiXReadIdx();
 		} else if (isSimpleRepeat(value)) {
 			// allow simple repeats in the middle of a read with good edges
-			long goodLength = std::min(maxQualityPass, seqLen);
-			if (minAffected >= length && (goodLength - maxAffected) >= (long) length) {
-				LOG_DEBUG(6, "Allowing simple repeat in middle:" << minAffected << "-" << maxAffected << "!" << maxQualityPass << "\t" << read.toString());
+			bool isGoodMargin = true;
+			if ((minAffected - minPass) < (long) 3*length/2)
+				isGoodMargin = false;
+			if ((maxPass - maxAffected) < (long) 3*length/2)
+				isGoodMargin = false;
+
+			if (isGoodMargin) {
+				LOG_DEBUG(2, "Allowing simple repeat in middle:" << minAffected << "-" << maxAffected << "!  minPass: " << minPass << ", maxPass: " << maxPass << "\t" << read.toString());
 				value = 0;
-				minAffected = 0;
-				maxAffected = 0;
+				minAffected = maxPass;
+				maxAffected = minPass;
 			}
 		}
-		if (value == 0 && maxQualityPass != MAX_SEQUENCE_LENGTH) {
+
+		if (value > 0 && minAffected <= maxAffected) {
+			// trim out matches to artifacts
+
+			if ((minAffected - minPass) >= (maxPass - maxAffected)) {
+				// keep left side
+				maxPass = minAffected;
+			} else {
+				// keep right side
+				minPass = maxAffected;
+			}
+		}
+
+		if (value == 0 && (maxPass - minPass) != seqLen) {
 			value = sequences.getSize();
-			if (minAffected == 0 || minAffected > maxQualityPass) {
-				minAffected = maxQualityPass;
-			}
-			if (maxAffected < seqLen) {
-				maxAffected = seqLen;
-			}
-			LOG_DEBUG(6, "Quality trim" << minAffected << "-" << maxAffected << "\n" << read.toFastq());
 		}
 		if (value > 0) {
-			read.markupBases(minAffected , maxAffected - minAffected, 'X');
-			if (recordEffects)
+			if (recordEffects) {
 				recordAffectedRead(reads, recorder, results, readIdx);
+				// trim the read now
+			}
 		}
 		return results;
 	}
@@ -552,19 +596,21 @@ public:
 				if (isRead1 && results1.value != 0) {
 					Read &read = reads.getRead(readIdx1);
 					SequenceLengthType len = read.getLength();
-					if (wasReference || results1.minAffected == 0 || !ReadSelectorUtil::passesLength(results1.minAffected, len, recorder.minimumReadLength)) {
+					int passLength = results1.maxPass - results1.minPass;
+					if (wasReference || passLength <= 0 || !ReadSelectorUtil::passesLength(passLength, len, recorder.minimumReadLength)) {
 						recorder.recordDiscard(results1.value, read, ss, label1);
 					} else {
-						recorder.recordTrim(results1.value, len - results1.minAffected);
+						recorder.recordTrim(results1.value, read, results1.minPass, results1.maxPass);
 					}
 				}
 				if (isRead2 && results2.value != 0) {
 					Read &read = reads.getRead(readIdx2);
 					SequenceLengthType len = read.getLength();
-					if (wasReference || results2.minAffected == 0 || !ReadSelectorUtil::passesLength(results2.minAffected, len, recorder.minimumReadLength)) {
+					int passLength = results2.maxPass - results2.minPass;
+					if (wasReference || passLength <= 0 || !ReadSelectorUtil::passesLength(passLength, len, recorder.minimumReadLength)) {
 						recorder.recordDiscard(results2.value, read, ss, label2);
 					} else {
-						recorder.recordTrim(results2.value, len - results2.minAffected);
+						recorder.recordTrim(results2.value, read, results2.minPass, results2.maxPass);
 					}
 				}
 				if (os != NULL && ss->tellp() > 0) {
@@ -582,14 +628,14 @@ public:
 					read = reads.getRead(readIdx1);
 					LOG_DEBUG(5, "FilterMatch1 to" << read.getName() << " "
 							<< read.getFastaNoMarkup() << "" << read.getFasta() << " "
-							<< wasPhiX << "" << results1.minAffected << "-" << results1.maxAffected
+							<< wasPhiX << "" << results1.minPass << "-" << results1.maxPass
 							<< ":" << getFilterName(results1.value));
 				}
 				if (isRead2Affected) {
 					read = reads.getRead(readIdx2);
 					LOG_DEBUG(5, "FilterMatch2 to" << read.getName() << " "
 							<< read.getFastaNoMarkup() << "" << read.getFasta() << " "
-							<< wasPhiX << " "  << results2.minAffected << "-" << results2.maxAffected
+							<< wasPhiX << " "  << results2.minPass << "-" << results2.maxPass
 							<< ":"<< getFilterName(results2.value));
 
 				}

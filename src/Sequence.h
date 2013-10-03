@@ -430,7 +430,7 @@ public:
 		if (comment.empty())
 			return getName();
 		else
-			return getName() + " " + comment;
+			return getName() + Read::LABEL_SEP + comment;
 	}
 
 	void rescaleQuality(int delta) {
@@ -480,6 +480,19 @@ public:
 	}
 	bool validateFastqStart() const {
 		return validateFastqStart(*this);
+	}
+
+	Read getTrimRead(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label = "", bool unmasked = false) {
+		std::string name, fasta, quals, comment;
+		name = getName();
+		comment = getComment();
+		if (comment.empty())
+			comment = label;
+		else if (! label.empty() )
+			comment += "\t" + label;
+		fasta = unmasked ? getFastaNoMarkup(trimOffset, trimLength) : getFasta(trimOffset, trimLength);
+		quals = getQuals(trimOffset, trimLength, false, unmasked);
+		return Read(name, fasta, quals, comment);
 	}
 
 	std::string getQuals(SequenceLengthType trimOffset = 0, SequenceLengthType trimLength = MAX_SEQUENCE_LENGTH,

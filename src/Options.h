@@ -67,7 +67,7 @@ namespace po = boost::program_options;
 class GlobalOptions {
 public:
 	static inline bool &isCommentStored() {
-		static bool _isCommentStored = false;
+		static bool _isCommentStored = true;
 		return _isCommentStored;
 	}
 };
