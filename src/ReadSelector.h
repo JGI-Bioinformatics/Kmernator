@@ -930,7 +930,8 @@ public:
 		}
 	}
 
-	void trimReadByMarkupLength(const Read &read, ReadTrimType &trim, SequenceLengthType markupLength) {
+	bool trimReadByMarkupLength(const Read &read, ReadTrimType &trim, SequenceLengthType markupLength) {
+		bool wasTrimmed = false;
 		if ( markupLength == 0 ) {
 			trim.trimLength = read.getLength();
 		} else {
@@ -938,16 +939,19 @@ public:
 			// trim at first N or X markup
 			trim.trimOffset = 0;
 			trim.trimLength = markupLength - 1;
+			wasTrimmed = true;
 		}
 		trim.score = trim.trimLength;
+		return wasTrimmed;
 	}
 
 	template<typename U>
-	void trimReadByMinimumKmerScore(double minimumKmerScore, ReadTrimType &trim, U buffBegin, U buffEnd) {
+	bool trimReadByMinimumKmerScore(double minimumKmerScore, ReadTrimType &trim, U buffBegin, U buffEnd) {
 
 		ReadTrimType test, best;
 		std::stringstream ss;
 		U it = buffBegin;
+		int len = buffEnd - buffBegin;
 
 		while (it != buffEnd) {
 			ScoreType score = *(it++);
@@ -1005,6 +1009,8 @@ public:
 		trim.trimOffset = best.trimOffset;
 		trim.trimLength = best.trimLength;
 
+		return (int) trim.trimLength < len;
+
 	};
 	void setTrimHeaders(ReadTrimType &trim, bool useKmers, bool wasTrimmed = true) {
 		if (trim.trimLength > 0) {
@@ -1039,17 +1045,20 @@ public:
 			}
 		}
 	}
-	void scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore, KA &kmers) {
+	bool scoreReadByKmers(const Read &read, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore, KA &kmers) {
+		bool wasTrimmed = false;
 		getKmersForRead(read, kmers);
 		setKmerValues(kmers, minimumKmerScore);
 		LOG_DEBUG_OPTIONAL(5, true, "Trim and Score: " << read.getName());
 
-		trimReadByKmers(kmers.beginValue(), kmers.endValue(), markupLength, trim, minimumKmerScore);
+		wasTrimmed = trimReadByKmers(kmers.beginValue(), kmers.endValue(), markupLength, trim, minimumKmerScore);
 
 		if (trim.trimLength > 0)
 			scoreReadByScoringType(kmers.beginValue() + trim.trimOffset, kmers.beginValue() + trim.trimOffset + trim.trimLength, trim, _defaultScoringType);
 		else
 			trim.score = -1;
+
+		return wasTrimmed;
 	}
 
 	void setKmerValues(KA &kmers, double minimumKmerScore) {
@@ -1067,13 +1076,13 @@ public:
 	}
 
 	template<typename IT>
-	void trimReadByKmers(IT begin, IT end, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore) {
+	bool trimReadByKmers(IT begin, IT end, SequenceLengthType markupLength, ReadTrimType &trim, double minimumKmerScore) {
 
 		SequenceLengthType numKmers = end-begin;
 
 		_setNumKmers(markupLength, numKmers);
 
-		trimReadByMinimumKmerScore(minimumKmerScore, trim, begin, begin + numKmers);
+		return trimReadByMinimumKmerScore(minimumKmerScore, trim, begin, begin + numKmers);
 	};
 
 	void scoreReadByScoringType(KA &kmers, ReadTrimType &trim, enum KmerScoringType scoringType) {
@@ -1183,19 +1192,19 @@ public:
 			KA &kmers = _kmers[omp_get_thread_num()];
 			ReadTrimType &trim = _trims[i];
 			const Read &read = _reads.getRead(i);
-			SequenceLengthType seqLen = read.getLength();
 			if (read.isDiscarded()) {
 				continue;
 			}
 			Sequence::BaseLocationVectorType markups = read.getMarkups();
 			SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 
+			bool wasTrimmed = false;
 			if (useKmers) {
-				scoreReadByKmers(read, markupLength, trim, minimumKmerScore, kmers);
+				wasTrimmed = scoreReadByKmers(read, markupLength, trim, minimumKmerScore, kmers);
 			} else { // !useKmers
-				trimReadByMarkupLength(read, trim, markupLength);
+				wasTrimmed = trimReadByMarkupLength(read, trim, markupLength);
 			}
-			setTrimHeaders(trim, useKmers, trim.trimLength < seqLen);
+			setTrimHeaders(trim, useKmers, wasTrimmed);
 		}
 	}
 

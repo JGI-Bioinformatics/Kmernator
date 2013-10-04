@@ -918,6 +918,9 @@ done when empty cycle is received
 		int maxKmers = std::max(1, (int) this->_reads.getMaxSequenceLength() - (int) KmerSizer::getSequenceLength());
 		int reserveBB = ((batchSize * maxKmers) / numThreads) + 1;
 		int reserveOffsets = (batchSize / numThreads) + 1;
+		std::vector<bool> markupTrim;
+		if (!useKmers)
+			markupTrim.resize(batchSize);
 
 		LOG_DEBUG_GATHER(1, "Starting scoreAndTrimReadsMPI - trimming: " << readsSize << " using " << numThreads << " threads");
 
@@ -986,7 +989,7 @@ done when empty cycle is received
 						if (useKmers) {
 							_batchKmerLookup(read, markupLength, offset, batchBuffer[threadId], *reqRespBuffer, threadId, numThreads, rank, worldSize, kmers);
 						} else {
-							this->trimReadByMarkupLength(read, this->_trims[readIdx], markupLength);
+							markupTrim[i] = this->trimReadByMarkupLength(read, this->_trims[readIdx], markupLength);
 						}
 					}
 					LOG_VERBOSE_OPTIONAL(1, _world.rank() == 0 && loopThreadId == 0, "trimming batch: " << batchReadIdx * _world.size());
@@ -1013,12 +1016,15 @@ done when empty cycle is received
 								*it = 0.0;
 						}
 
+						bool wasTrimmed = false;
 						if (useKmers) {
-							this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);
+							wasTrimmed = this->trimReadByMinimumKmerScore(minimumKmerScore, trim, buffBegin, buffEnd);
 							this->scoreReadByScoringType(buffBegin + trim.trimOffset, buffBegin + trim.trimOffset + trim.trimLength, trim, scoringType);
+						} else {
+							wasTrimmed = markupTrim[i];
 						}
 
-						this->setTrimHeaders(trim, useKmers, trim.trimLength < this->_reads.getRead(readIdx).getLength());
+						this->setTrimHeaders(trim, useKmers, wasTrimmed);
 					}
 
 				}
