@@ -119,8 +119,11 @@ logcmd make.log make VERBOSE=1 -j18
 
 if [ $SKIP_TEST -eq 0 ]
 then
+  OLD_TMP=$TMPDIR
+  export TMPDIR=$(mktemp)
   echo "Testing (see `pwd`/make-test.log) `date`" | tee -a make-test.log
   logcmd make-test.log make test
+  export TMPDIR=$OLD_TMP
 fi
 
 echo "Installing (see `pwd`/make-install.log) `date`" | tee -a make-install.log
