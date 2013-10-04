@@ -69,7 +69,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 class _ReadSelectorOptions : public OptionsBaseInterface {
 public:
-	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(0.45),
+	_ReadSelectorOptions() : maxKmerDepth(-1), partitionByDepth(-1), bothPairs(1), remainderTrim(-1), minReadLength(0.40),
 	    bimodalSigmas(-1.0), kmerScoringType("MAX"), normalizationMethod("RANDOM"), useLogscaleAboveMax(false), separateOutputs(true)  {
 	}
 	virtual ~_ReadSelectorOptions() {}
@@ -1006,7 +1006,7 @@ public:
 		trim.trimLength = best.trimLength;
 
 	};
-	void setTrimHeaders(ReadTrimType &trim, bool useKmers) {
+	void setTrimHeaders(ReadTrimType &trim, bool useKmers, bool wasTrimmed = true) {
 		if (trim.trimLength > 0) {
 			if (useKmers) {
 				trim.trimLength += KmerSizer::getSequenceLength() - 1;
@@ -1017,9 +1017,14 @@ public:
 			trim.score = -1.0;
 		}
 		std::stringstream ss;
-		if (!trim.label.empty())
-			ss << Read::LABEL_SEP;
-		ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength << Read::Read::LABEL_SEP << getKmerScoringTypeLabel(_defaultScoringType) << ":" << (int) (trim.score+0.5);
+		if (wasTrimmed) {
+			if (!trim.label.empty())
+				ss << Read::LABEL_SEP;
+			ss << "Trim:" << trim.trimOffset << "+" << trim.trimLength;
+		}
+		if (wasTrimmed || !trim.label.empty())
+			ss << Read::Read::LABEL_SEP;
+		ss << getKmerScoringTypeLabel(_defaultScoringType) << ":" << (int) (trim.score+0.5);
 		trim.label += ss.str();
 	}
 
@@ -1178,6 +1183,7 @@ public:
 			KA &kmers = _kmers[omp_get_thread_num()];
 			ReadTrimType &trim = _trims[i];
 			const Read &read = _reads.getRead(i);
+			SequenceLengthType seqLen = read.getLength();
 			if (read.isDiscarded()) {
 				continue;
 			}
@@ -1189,7 +1195,7 @@ public:
 			} else { // !useKmers
 				trimReadByMarkupLength(read, trim, markupLength);
 			}
-			setTrimHeaders(trim, useKmers);
+			setTrimHeaders(trim, useKmers, trim.trimLength < seqLen);
 		}
 	}
 

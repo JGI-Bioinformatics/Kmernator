@@ -517,7 +517,7 @@ BaseLocationVectorType Sequence::getMarkups() const {
 /*------------------------------------ READ ----------------------------------------*/
 
 double Read::qualityToProbability[256];
-const char * Read::LABEL_SEP = "\t";
+const char * Read::LABEL_SEP = " ";
 
 bool Read::initializeQualityToProbability(unsigned char minQualityScore, unsigned int startChar) {
 #pragma omp critical (FastqStartChar)

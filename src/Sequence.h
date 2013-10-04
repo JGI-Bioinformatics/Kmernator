@@ -482,9 +482,9 @@ public:
 		return validateFastqStart(*this);
 	}
 
-	Read getTrimRead(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label = "", bool unmasked = false) {
+	Read getTrimRead(SequenceLengthType trimOffset, SequenceLengthType trimLength, std::string label = "", std::string nameSuffix = "", bool unmasked = false) {
 		std::string name, fasta, quals, comment;
-		name = getName();
+		name = getName() + nameSuffix;
 		comment = getComment();
 		if (comment.empty())
 			comment = label;

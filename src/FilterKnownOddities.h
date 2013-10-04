@@ -175,6 +175,7 @@ public:
 	typedef ReadSet::ReadSetSizeType ReadSetSizeType;
 	typedef std::vector< ReadSetSizeType > SequenceCounts;
 	typedef std::vector< long > BaseCounts;
+	typedef std::vector< ReadSet > ReadSets;
 
 private:
 	ReadSet sequences;
@@ -183,6 +184,7 @@ private:
 	KM filter;
 	SequenceCounts counts;
 	int numErrors;
+	ReadSets remnantReads;
 
 public:
 	FilterKnownOddities(int _length = FilterKnownOdditiesOptions::getOptions().getArtifactFilterMatchLength(), int _numErrors = FilterKnownOdditiesOptions::getOptions().getArtifactFilterEditDistance()) :
@@ -221,6 +223,9 @@ public:
 		counts.resize( sequences.getSize()+1 );
 
 		prepareMaps();
+
+		remnantReads.resize( omp_get_max_threads(), ReadSet());
+
 	}
 	~FilterKnownOddities() {
 		clear();
@@ -513,6 +518,14 @@ public:
 
 		if (value == 0 && (maxPass - minPass) != seqLen) {
 			value = sequences.getSize();
+			if (ReadSelectorUtil::passesLength(secondBest.second - secondBest.first, seqLen, recorder.minimumReadLength)) {
+				// there was only quality trim artifacts.
+				// rescue the remaining read, if it is long enough
+				int len = secondBest.second - secondBest.first;
+				Read remnant = read.getTrimRead(secondBest.first, len, "AFTrim:" + boost::lexical_cast<string>(secondBest.first) + "+" + boost::lexical_cast<string>(len), "-qtrim");
+				remnantReads[ omp_get_thread_num() ].append(remnant);
+				LOG_DEBUG(1, "applyFilterToRead(): split read: " << read.getNameAndComment() << " to " << remnant.getNameAndComment());
+			}
 		}
 		if (value > 0) {
 			if (recordEffects) {
@@ -678,6 +691,16 @@ public:
 				applyFilterToRead(reads, idx, recorder, true);
 			}
 		}
+
+		long remnants = 0;
+		for(int i = 0; i < (int) remnantReads.size(); i++) {
+			long s = remnantReads[i].getSize();
+			remnants += s;
+			if (s > 0) {
+				reads.append(remnantReads[i]);
+			}
+		}
+		LOG_VERBOSE_OPTIONAL(1, remnants > 0, "Rescued " << remnants << " reads from poor quality scores in the middle");
 
 		for(ReadSetSizeType j = 0 ; j < recorder.readCounts.size() ; j++)
 			affectedCount += recorder.readCounts[j];

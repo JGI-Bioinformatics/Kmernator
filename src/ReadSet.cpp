@@ -375,7 +375,7 @@ ReadSet::SequenceStreamParserPtr ReadSet::appendFastq(ReadSet::MmapSource &mmap)
 
 string ReadSet::_getReadFileNamePrefix(unsigned int filenum) const {
 	if (filenum > Options::getOptions().getInputFiles().size()) {
-		return std::string("consensus-") + boost::lexical_cast<std::string>(filenum);
+		return std::string("transformed-") + boost::lexical_cast<std::string>(filenum);
 	} else {
 		return Options::getOptions().getInputFileSubstring(filenum-1);
 	}

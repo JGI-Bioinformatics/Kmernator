@@ -1018,7 +1018,7 @@ done when empty cycle is received
 							this->scoreReadByScoringType(buffBegin + trim.trimOffset, buffBegin + trim.trimOffset + trim.trimLength, trim, scoringType);
 						}
 
-						this->setTrimHeaders(trim, useKmers);
+						this->setTrimHeaders(trim, useKmers, trim.trimLength < this->_reads.getRead(readIdx).getLength());
 					}
 
 				}
