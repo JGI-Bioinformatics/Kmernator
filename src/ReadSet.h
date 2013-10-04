@@ -691,7 +691,7 @@ public:
 		} else if (isReadFileReader()) {
 			_hasNext = _rfr->nextRead(_name, _bases, _quals, _comment);
 			if (_hasNext) {
-				if (_inputReadQualityBase != Read::FASTQ_START_CHAR)
+				if (_inputReadQualityBase != Read::FASTQ_START_CHAR && !_quals.empty() && _quals[0] != Kmernator::REF_QUAL)
 					Read::rescaleQuality(_quals, Read::FASTQ_START_CHAR - _inputReadQualityBase);
 				_nextRead = Read(_name, _bases, _quals, _comment);
 				if (!_nextRead.validateFastqStart()) {
@@ -703,7 +703,7 @@ public:
 						Read::rescaleQuality(_quals, Read::FASTQ_START_CHAR - Kmernator::FASTQ_START_CHAR_STD);
 					}
 					if (_readIdx > 0)
-						LOG_WARN(1, "Detected different FASTQ quality scaling than expected.  Some data was already processed.  You should re-run with --fastq-base-quality " << _inputReadQualityBase);
+						LOG_WARN(1, "Detected different FASTQ quality scaling than expected.  Some data was already processed.  You should re-run with --fastq-base-quality " << (int) _inputReadQualityBase);
 					_nextRead = Read(_name, _bases, _quals, _comment);
 				}
 				_readIdx++;

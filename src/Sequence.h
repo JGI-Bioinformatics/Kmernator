@@ -456,7 +456,7 @@ public:
 	static bool validateFastqStart(const Read &read) {
 		bool passed = true;
 		std::string _quals = read.getQuals();
-		if (_quals.empty())
+		if (_quals.empty() || _quals[0] == Kmernator::REF_QUAL)
 			return passed;
 		const uint8_t* quals = (const uint8_t*) _quals.c_str();
 		if (Read::FASTQ_START_CHAR == Kmernator::FASTQ_START_CHAR_STD) {

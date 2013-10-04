@@ -68,13 +68,16 @@ public:
 		KmerSpectrumOptions::_resetDefaults();
 		GeneralOptions::_resetDefaults();
 		MatcherInterfaceOptions::_resetDefaults();
-GeneralOptions::getOptions().getDebug() = 1;
-		KmerBaseOptions::getOptions().getKmerSize() = 21;
+        GeneralOptions::getOptions().getDebug() = 0;
+        GeneralOptions::getOptions().getFastqBaseQuality() = 64;
+        GeneralOptions::getOptions().getOutputFastqBaseQuality() = 64;
+        KmerBaseOptions::getOptions().getKmerSize() = 21;
 		KmerSpectrumOptions::getOptions().getMinKmerQuality() = 0;
 		KmerSpectrumOptions::getOptions().getMinDepth() = 1;
 		GeneralOptions::getOptions().getMinQuality() = 2;
 		MatcherInterfaceOptions::getOptions().getMaxReadMatches() = 10000;
 		MatcherInterfaceOptions::getOptions().getMinOverlap() = KmerSizer::getSequenceLength();
+
 	}
 	void _setOptions(po::options_description &desc,
 			po::positional_options_description &p) {
