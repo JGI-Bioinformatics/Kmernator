@@ -397,6 +397,7 @@ public:
 		LOG_DEBUG(5, "Checking: " << read.getName());
 
 		SequenceLengthType seqLen = read.getLength();
+		long bytes = read.getTwoBitEncodingSequenceLength();
 		value = 0;
 		minPass = 0;
 		maxPass = seqLen;
@@ -442,13 +443,16 @@ public:
 
 		// Now find matches to known artifact reference
 
-		long byteHops = ((maxPass+3)/4) - twoBitLength - ((maxPass & 0x03) == 0 ? 0 : 1);
+		long byteHops = ((maxPass+3)/4) - twoBitLength - ((seqLen & 0x03) == 0 ? 0 : 1);
+		if (byteHops < 0 || byteHops > bytes)
+			byteHops = 0;
 
 		KM::ElementType elem;
 		bool wasPhiX = false;
 		KM::BucketType kmers;
 		TEMP_KMER(leastKmer);
 
+		LOG_DEBUG(3, "applyFilterToRad(): minPass: " << minPass << " maxPass: " << maxPass << " byteHops: " << byteHops << " twoBitLength: " << twoBitLength);
 		SequenceLengthType minAffected = maxPass, maxAffected = minPass;
 		for(long byteHop = minPass/4; byteHop <= byteHops; byteHop++) {
 
