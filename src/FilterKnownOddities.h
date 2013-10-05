@@ -528,7 +528,7 @@ public:
 				int len = secondBest.second - secondBest.first;
 				Read remnant = read.getTrimRead(secondBest.first, len, "AFTrim:" + boost::lexical_cast<string>(secondBest.first) + "+" + boost::lexical_cast<string>(len), "-qtrim");
 				remnantReads[ omp_get_thread_num() ].append(remnant);
-				LOG_DEBUG(1, "applyFilterToRead(): split read: " << read.getNameAndComment() << " to " << remnant.getNameAndComment());
+				LOG_DEBUG(2, "applyFilterToRead(): split read: " << read.getNameAndComment() << " to " << remnant.getNameAndComment());
 			}
 		}
 		if (value > 0) {
