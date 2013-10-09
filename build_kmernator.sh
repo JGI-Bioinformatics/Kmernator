@@ -17,6 +17,8 @@ buildType=$4
 
 SKIP_TEST=${SKIP_TEST:=0}
 
+procs=$(($(lscpu -p 2>/dev/null | tail -1 | awk -F, '{print $2}')+1))
+
 logcmd()
 {
   logfile=$1
@@ -115,7 +117,7 @@ done
 module list || /bin/true
 
 echo "Building executables (see `pwd`/make.log) `date`" | tee -a make.log
-logcmd make.log make VERBOSE=1 -j18
+logcmd make.log make VERBOSE=1 -j$procs
 
 if [ $SKIP_TEST -eq 0 ]
 then
