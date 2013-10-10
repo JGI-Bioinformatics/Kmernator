@@ -136,9 +136,12 @@ void BuildSpectrumAndFilter(ScopedMPIComm< MPIFilterReadsOptions > &world, ReadS
 			LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Collective Kmer Histogram\n" << hist);
 		}
 
-		if (world.rank() == 0 && !FilterReadsBaseOptions::getOptions().getHistogramFile().empty()) {
-			ofstream of(FilterReadsBaseOptions::getOptions().getHistogramFile().c_str());
-			spectrum.printHistograms(of);
+		if (!FilterReadsBaseOptions::getOptions().getHistogramFile().empty()) {
+			std::string hist = spectrum.getHistogram(false);
+			if (world.rank() == 0) {
+				ofstream of(FilterReadsBaseOptions::getOptions().getHistogramFile().c_str());
+				of << hist;
+			}
 		}
 
 	}
