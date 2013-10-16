@@ -61,6 +61,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 class _MeraculousCounterOptions : public OptionsBaseInterface {
 public:
+	virtual ~_MeraculousCounterOptions() {}
 	// use to set/overrided any defaults on options that are stored persistently
 	void _resetDefaults() {
 		MeraculousOptions::_resetDefaults();

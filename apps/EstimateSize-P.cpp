@@ -233,7 +233,7 @@ int main(int argc, char *argv[]) {
 				bool readValues = false;
 				while (ipipe.good() && !ipipe.eof()) {
 					std::string line;
-					getline(ipipe, line);
+					std::getline(ipipe, line);
 					LOG_DEBUG_OPTIONAL(2, true, "Read: " << line);
 					if (line.find("errorRate") != std::string::npos) {
 						LOG_DEBUG_OPTIONAL(2, true, "Found headers in: " << line);

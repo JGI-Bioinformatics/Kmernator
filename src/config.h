@@ -71,6 +71,7 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include <mpi.h>
 #include <boost/mpi.hpp>
 namespace mpi = boost::mpi;
+
 #endif
 
 #ifdef ENABLE_OPENMP

@@ -48,6 +48,8 @@ such enhancements or derivative works thereof, in binary and source code form.
 *****************/
 //
 
+#include <mpi.h>
+#include <boost/mpi.hpp>
 
 #include "FilterReads.h"
 #include "DistributedFunctions.h"

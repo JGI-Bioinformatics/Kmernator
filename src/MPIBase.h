@@ -57,6 +57,10 @@ such enhancements or derivative works thereof, in binary and source code form.
 #error "mpi is required for this library"
 #endif
 
+#include <mpi.h>
+#include <boost/mpi.hpp>
+namespace mpi = boost::mpi;
+
 #include "boost/optional.hpp"
 
 typedef boost::optional< mpi::request > MPIOptionalRequest;

@@ -48,9 +48,12 @@ such enhancements or derivative works thereof, in binary and source code form.
 
 *****************/
 
+#include <mpi.h>
+#include <boost/mpi.hpp>
+namespace mpi = boost::mpi;
+
 #include <string>
 
-#include "mpi.h"
 #include "SamUtils.h"
 #include "Log.h"
 #include "Options.h"

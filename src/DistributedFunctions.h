@@ -50,7 +50,9 @@ such enhancements or derivative works thereof, in binary and source code form.
 #ifndef DISTRIBUTED_FUNCTIONS_H_
 #define DISTRIBUTED_FUNCTIONS_H_
 
-#include "mpi.h"
+#include <mpi.h>
+#include <boost/mpi.hpp>
+namespace mpi = boost::mpi;
 
 #include "config.h"
 #include "Options.h"
@@ -63,10 +65,9 @@ such enhancements or derivative works thereof, in binary and source code form.
 #include "MPIUtils.h"
 #include "DistributedOfstreamMap.h"
 
-#include "boost/optional.hpp"
+#include <boost/optional.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <vector>
-
 
 // collective
 void setGlobalReadSetConstants(mpi::communicator &world, ReadSet &store) {
@@ -123,12 +124,12 @@ protected:
 
 public:
 	DistributedKmerSpectrum(mpi::communicator &_world, unsigned long estimatedRawKmers = 0, bool separateSingletons = true)
-	: KS(estimatedRawKmers, separateSingletons), world(_world, mpi::comm_duplicate) {
+	: KS(estimatedRawKmers, separateSingletons), world(_world, mpi::comm_duplicate), msgPurgeVariant(NULL), _purgedVariants(0) {
 		int numBuckets = this->weak.getNumBuckets();
 		assert(mpi::all_reduce(world, numBuckets, mpi::maximum<int>()) == numBuckets);
 		LOG_DEBUG(2, "DistributedKmerSpectrum() with " << numBuckets);
 	}
-	~DistributedKmerSpectrum() {
+	virtual ~DistributedKmerSpectrum() {
 	}
 	DistributedKmerSpectrum &operator=(const DistributedKmerSpectrum &other) {
 		*((KS*) this) = other;
@@ -151,7 +152,7 @@ public:
 		return estimatedKmers;
 	}
 	static unsigned long estimateRawKmers(mpi::communicator &world, const ReadSet &store ) {
-		unsigned long estimatedKmers = estimateRawKmers(store);
+		unsigned long estimatedKmers = KS::estimateRawKmers(store);
 		estimatedKmers /= world.size();
 
 		estimatedKmers = mpi::all_reduce(world, estimatedKmers, std::plus<unsigned long>());
@@ -626,7 +627,6 @@ public:
 		}
 
 	};
-	class PurgeVariantKmerMessageHeaderProcessor;
 
 	class PurgeVariantKmerMessageHeaderProcessor {
 	public:
@@ -671,16 +671,14 @@ public:
 	}
 	private:
 	PurgeVariantKmerMessageBuffer *msgPurgeVariant;
-
 	long _purgedVariants;
-	double variantSigmas;
-	double minDepth;
-	int _variantNumThreads;
 
 	void _preVariants(double variantSigmas, double minDepth) {
 		_purgedVariants = 0;
 		long messageSize = sizeof(PurgeVariantKmerMessageHeader) + KmerSizer::getByteSize();
 
+		if (msgPurgeVariant != NULL)
+			delete msgPurgeVariant;
 		msgPurgeVariant = new PurgeVariantKmerMessageBuffer(world, messageSize, PurgeVariantKmerMessageHeaderProcessor(*this, variantSigmas, minDepth));
 
 		LOG_DEBUG(2, "_preVariants(): barrier");
@@ -690,6 +688,7 @@ public:
 	long _postVariants(long purgedKmers) {
 		_purgedVariants += this->KS::_postVariants(purgedKmers);
 		delete msgPurgeVariant;
+		msgPurgeVariant = NULL;
 
 		return _purgedVariants;
 	}
@@ -983,7 +982,7 @@ done when empty cycle is received
 						readOffsetBuffer[threadId].push_back( offset );
 						readIndexBuffer[threadId].push_back(readIdx);
 
-						Sequence::BaseLocationVectorType markups = read.getMarkups();
+						TwoBitSequenceBase::BaseLocationVectorType markups = read.getMarkups();
 						SequenceLengthType markupLength = TwoBitSequence::firstMarkupNorX(markups);
 
 						if (useKmers) {

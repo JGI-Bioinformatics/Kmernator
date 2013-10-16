@@ -51,22 +51,23 @@ such enhancements or derivative works thereof, in binary and source code form.
 #ifndef MPI_UTILS_H_
 #define MPI_UTILS_H_
 
-#include <sys/types.h>
-#include <unistd.h>
-#include <sys/stat.h>
-
-#include "boost/thread.hpp"
-
 #ifndef ENABLE_MPI
 #error "mpi is required for this library"
 #endif
 
-#include "mpi.h"
+#include <mpi.h>
+#include <boost/mpi.hpp>
+namespace mpi = boost::mpi;
+
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/stat.h>
+
+#include <boost/thread.hpp>
+
 #include "Options.h"
 #include "Log.h"
 #include "Utils.h"
-
-
 
 class DistributedDirectoryManagement {
 public:
@@ -190,7 +191,8 @@ public:
 
 	}
 
-	static long concatenateOutput(const MPI_Comm &comm, MPI_File &ourFile, int64_t myLength, std::istream &data) {
+	template<typename IStream>
+	static long concatenateOutput(const MPI_Comm &comm, MPI_File &ourFile, int64_t myLength, IStream &data) {
 		LOG_VERBOSE_OPTIONAL(1, true, "concatenateOutput(): writing: " << myLength);
 		int rank,size;
 		MPI_Comm_rank(comm, &rank);
