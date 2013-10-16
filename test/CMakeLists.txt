@@ -250,7 +250,6 @@ execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered-0.85.std.fa
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered-readlength.std.fastq test/ )
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/1000-Filtered-readlength-both.std.fastq test/ )
 
-
 add_test(filter runFilterTests.sh)
 
 add_test(meraculous runMeraculousTests.sh)
