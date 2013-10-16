@@ -280,7 +280,7 @@ public:
 		return _impl->isBlocked();
 	}
 	void writeClose() {
-		return _impl->writeClose();
+		_impl->writeClose();
 	}
 	void concat(stream_impl_template &src) {
 		_impl->concat(*src._impl);

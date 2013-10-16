@@ -87,7 +87,6 @@ using namespace boost::accumulators;
 #include "Log.h"
 
 
-class _KmerSpectrumOptions;
 class _KmerSpectrumOptions : public OptionsBaseInterface {
 public:
 	_KmerSpectrumOptions() : minKmerQuality(0.10), minDepth(2), estimatedDepth(20.), estimatedErrorRate(0.35),
@@ -236,7 +235,7 @@ public:
 
 	// make this final, so preserving the singleton state
 private:
-	~_KmerSpectrumOptions() {
+	virtual ~_KmerSpectrumOptions() {
 	}
 	friend class OptionsBaseTemplate<_KmerSpectrumOptions> ;
 
@@ -427,7 +426,7 @@ public:
 		if (!Read::isQualityToProbabilityInitialized)
 			Read::setMinQualityScore( );
 	}
-	~KmerSpectrum() {}
+	virtual ~KmerSpectrum() {}
 	KmerSpectrum(const KmerSpectrum &copy) {
 		*this = copy;
 	}
@@ -708,7 +707,7 @@ public:
 					return 0.0;
 			}
 		}
-		double getCount() const {
+		double getCount() {
 			return getCount(TrackingData::useWeighted());
 		}
 	};
@@ -972,9 +971,10 @@ public:
 			maxIdx = (1<<maxLog2) + 1 + zoomMax;
 			buckets.resize(maxIdx+1);
 		}
-		Histogram operator+(const Histogram rh) {
+		Histogram &operator+(const Histogram rh) {
 			for(int i = 0 ; i < buckets.size(); i++)
 				buckets[i] += rh.buckets[i];
+			return *this;
 		}
 		inline unsigned long getCount() {return count;}
 		inline double getTotalCount() {return totalCount;}

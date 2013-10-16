@@ -103,6 +103,8 @@ private:
 
 class OptionsBaseInterface {
 public:
+	OptionsBaseInterface() {}
+	virtual ~OptionsBaseInterface() {}
 	typedef std::vector<std::string> StringListType;
 	typedef boost::shared_ptr< std::ofstream > OStreamPtr;
 	typedef StringListType FileListType;

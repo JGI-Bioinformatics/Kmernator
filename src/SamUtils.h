@@ -75,8 +75,8 @@ such enhancements or derivative works thereof, in binary and source code form.
 #ifndef SAMUTILS_H_
 #define SAMUTILS_H_
 
-#include "mpi.h"
-#include "zlib.h"
+#include <mpi.h>
+#include <zlib.h>
 #include "sam.h"
 #include "bam.h"
 
@@ -555,7 +555,7 @@ public:
 		// there are in total -- not every rank opens every bam
 
 		// optimization for when many SAM files are called by many ranks
-		std::vector<uint8_t> fileTypes;
+		std::vector<int16_t> fileTypes;
 		std::vector<uint64_t> fileSizes;
 		fileTypes.resize(filenames.size(), 0);
 		fileSizes.resize(filenames.size(), 0);
@@ -572,7 +572,7 @@ public:
 				}
 			}
 		}
-		MPI_Allreduce(MPI_IN_PLACE, &fileTypes[0], fileTypes.size(), MPI_BYTE, MPI_MAX, comm);
+		MPI_Allreduce(MPI_IN_PLACE, &fileTypes[0], fileTypes.size(), MPI_SHORT, MPI_MAX, comm);
 		MPI_Allreduce(MPI_IN_PLACE, &fileSizes[0], fileSizes.size(), MPI_LONG_LONG_INT, MPI_MAX, comm);
 		for(int i = 0; i < (int) filenames.size(); i++) {
 			totalFileSize += fileSizes[i];

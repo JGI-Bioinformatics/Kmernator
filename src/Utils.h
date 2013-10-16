@@ -136,7 +136,7 @@ public:
 		case 2: ret = std::string(".fastq"); break;
 		case 1:
 		case 3: ret = std::string(".fasta"); break;
-		default : ret = std::string(".txt");
+		default : ret = std::string(".txt"); break;
 		}
 		return ret;
 	}
@@ -173,7 +173,7 @@ private:
 		case(1) : _type = FASTA; break;
 		case(2) : _type = FASTQ_UNMASKED; break;
 		case(3) : _type = FASTA_UNMASKED; break;
-		default: LOG_THROW("Invalid format type: " << type);
+		default: LOG_THROW("Invalid format type: " << type); break;
 		}
 	}
 
@@ -316,8 +316,10 @@ public:
 				return *of;
 			else if (isStringStream())
 				return *ss;
-			else
+			else {
 				LOG_THROW("Invalid state for OfstreamMap - not file, not memory!");
+				return std::cerr; // will not get here. just to satisfy compiler warnings...
+			}
 		}
 		std::string getFilePath() const {
 			return filePath;
@@ -982,7 +984,7 @@ public:
 			boost::char_separator<char> sep(":");
 			boost::tokenizer< boost::char_separator<char> > tok(PATH, sep);
 			for(boost::tokenizer< boost::char_separator<char> >::iterator it = tok.begin(); it != tok.end() ; it++) {
-				if (fileExists( *it + "/" + name )) {
+				if (fileExists( (std::string) *it + "/" + name )) {
 					basePath = *it;
 					break;
 				}
@@ -1578,9 +1580,13 @@ public:
 			chmod(temp.c_str(), 0700);
 			if (setpgrp() != 0)
 				LOG_WARN(1, "Child could not set a new process group");
-			execv(temp.c_str(), NULL);
+			char *tmpargv[2];
+			tmpargv[0] = strdup(temp.c_str());
+			tmpargv[1] = NULL;
+			execv(temp.c_str(), tmpargv);
 			std::cerr << "ERROR, you should never get here!" << std::endl;
 			exit(1);
+			return -1; // To fix compiler warnings...
 		} else {
 			// parent
 			child = 0 - child;
