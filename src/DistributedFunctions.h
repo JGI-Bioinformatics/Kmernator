@@ -448,7 +448,7 @@ public:
 
 		} // omp parallel
 		LOG_DEBUG(1, "Done building kmers");
-		LOG_VERBOSE(1, "Processed " << numReads << " reads. " << this->solid.size()* world.size() << "/" << this->weak.size()* world.size() << "/" << this->singleton.size()* world.size() << " kmers");
+		LOG_VERBOSE(1, "Processed " << numReads << " reads. " << this->solid.size() << "/" << this->weak.size() << "/" << this->singleton.size() << " kmers");
 
 		delete msgBuffers;
 

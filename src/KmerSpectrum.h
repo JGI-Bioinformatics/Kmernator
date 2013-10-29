@@ -391,13 +391,6 @@ public:
 	typedef std::vector< KmerSpectrum > Vector;
 
 	typedef Kmer::NumberType NumberType;
-	/*
-	typedef accumulator_set<double,
-	stats< tag::variance(lazy),
-	tag::mean
-	>
-	> StdAccumulatorType;
-	 */
 
 public:
 	SolidMapType solid;
@@ -588,17 +581,6 @@ public:
 		unsigned long rawKmers = kmersPerRead * store.getSize();
 		LOG_DEBUG_OPTIONAL(1, true, "estimateRawKmers( " << store.getSize() << " reads): " << rawKmers);
 		return rawKmers;
-	}
-	// deprecated
-	static unsigned long _estimateWeakKmerBucketSize( const ReadSet &store, unsigned long targetKmersPerBucket = KmerBaseOptions::getOptions().getKmersPerBucket()) {
-
-		unsigned long rawKmers = estimateRawKmers(store);
-		unsigned long targetBuckets = rawKmers / targetKmersPerBucket;
-		unsigned long maxBuckets = 32*1024*1024;
-		unsigned long minBuckets = 128;
-		unsigned long buckets = std::max( std::min(targetBuckets,maxBuckets), minBuckets );
-		LOG_DEBUG_OPTIONAL(1, Logger::isMaster(), "estimateWeakKmerBucketSize(" << store.getBaseCount() << ", " << targetKmersPerBucket << "): " << buckets);
-		return buckets;
 	}
 
 	bool hasSolid( const Kmer &kmer ) const {
