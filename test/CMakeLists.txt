@@ -174,6 +174,23 @@ target_link_libraries (TestMPI
 add_dependencies(TestMPI REPLACE_VERSION_H)
 add_test(testmpi testMPI.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/testMPI.sh test/ )
+  
+  
+add_executable( TestForkDaemonMPI TestForkDaemonMPI )
+set_source_files_properties( TestForkDaemonMPI
+                             PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS} ${KMERNATOR_MPI_CXX_FLAGS}"
+                             )
+set_target_properties( TestForkDaemonMPI
+                       PROPERTIES LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KMERNATOR_MPI_LINK_FLAGS}"
+                       )
+target_link_libraries (TestForkDaemonMPI
+                              ${KMERNATOR_BOOST_LIBS}
+                              ${KMERNATOR_P_LIBS}
+                              )
+add_dependencies(TestForkDaemonMPI REPLACE_VERSION_H)
+add_test(TestForkDaemonMPI TestForkDaemonMPI.sh)
+execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/TestForkDaemonMPI.sh test/ )
+
     
 add_executable( TestKmerMatchMPI TestKmerMatchMPI)
 set_source_files_properties( TestKmerMatchMPI

@@ -1301,6 +1301,9 @@ public:
 		static Cleanup commonInstance;
 		return commonInstance;
 	}
+	static void reset() {
+		getInstance()._reset();
+	}
 	static void prepare() {
 		getInstance();
 	}
@@ -1312,8 +1315,8 @@ public:
 			isFatalInProgress() = true;
 			Logger::releaseBuffer();
 
-			std::cerr << "Cleanup::cleanup(): Caught signal: " << param << std::endl;
-			LOG_WARN(1, "Cleanup::cleanup(): Caught signal: " << param);
+			std::cerr << "Cleanup::cleanup(): " << getpid() << " Caught signal: " << param << std::endl;
+			LOG_WARN(1, "Cleanup::cleanup(): " << getpid() << " Caught signal: " << param);
 		}
 		LOG_DEBUG_OPTIONAL(4, true, "Entered Cleanup::cleanup()");
 		getInstance()._clean(param);
@@ -1445,10 +1448,10 @@ protected:
 		if (param != 0) {
 			// kill children with same signal
 			if (!children.empty())
-				ss << "\tTERMinating: ";
+				*ss << "\tTERMinating: ";
 			for(PidSet::iterator it = children.begin(); it != children.end(); it++) {
 				kill(*it, SIGTERM);
-				ss << *it << " , ";
+				*ss << *it << " , ";
 			}
 		}
 		children.clear();
@@ -1487,19 +1490,19 @@ protected:
 	void _removeTempdirs(int param) {
 		FileSet _copy;
 		if (!tempFiles.empty())
-			ss << "\tUnlinked: ";
+			*ss << "\tUnlinked: ";
 		_copy = tempFiles;
 		for(FileSet::iterator it = _copy.begin(); it != _copy.end(); it++) {
-			ss << *it << " , ";
+			*ss << *it << " , ";
 			removeTemp(*it);
 		}
 		tempFiles.clear();
 
 		if (!tempDirs.empty())
-			ss << "rm -rf : ";
+			*ss << "rm -rf : ";
 		_copy = tempDirs;
 		for(FileSet::iterator it = _copy.begin(); it != _copy.end(); it++) {
-			ss << *it << " , ";
+			*ss << *it << " , ";
 			removeTempDir(*it);
 		}
 		tempDirs.clear();
@@ -1517,7 +1520,7 @@ protected:
 		for(CleanupHandlers::iterator it = cleanupHandlers.begin(); it!= cleanupHandlers.end(); it++)
 			(*it)(param);
 
-		std::string mesg = ss.str();
+		std::string mesg = ss->str();
 		if (param != 0) {
 			LOG_ERROR(1, "Cleaned up after signal: " << param << "... " << mesg);
 			if ( oact.sa_handler != SIG_ERR && oact.sa_handler != SIG_IGN && oact.sa_handler != NULL ) {
@@ -1542,6 +1545,7 @@ protected:
 	}
 	Cleanup() : tempFiles(), tempDirs(), myPid(0), keepTempDir() {
 		myPid = getpid();
+		ss.reset( new std::stringstream );
 		_setSignals();
 		_addHandler( Cleanup::killChildren );
 		_addHandler( Cleanup::removeTempdirs );
@@ -1549,15 +1553,313 @@ protected:
 
 		setKeepTempDir(	GeneralOptions::getOptions().getKeepTempDir() );
 	}
-
+	Cleanup &operator=(const Cleanup& copy) {
+		cleanupHandlers = copy.cleanupHandlers;
+		ss = copy.ss;
+		tempFiles = copy.tempFiles;
+		tempDirs = copy.tempDirs;
+		myPid = copy.myPid;
+		children = copy.children;
+		keepTempDir = copy.keepTempDir;
+		return *this;
+	}
+	void _reset() {
+		tempFiles.clear();
+		tempDirs.clear();
+		myPid = getpid();
+		children.clear();
+	}
 private:
 	CleanupHandlers cleanupHandlers;
-	std::stringstream ss;
+	boost::shared_ptr< std::stringstream> ss;
 	FileSet tempFiles;
 	FileSet tempDirs;
 	pid_t myPid;
 	PidSet children;
 	std::string keepTempDir;
+};
+
+class ExecvPair {
+public:
+	typedef char * CharString;
+	ExecvPair(std::string cmd): path(NULL) {
+		size_t pos1 = 0, pos2 = 0;
+		while( true ) {
+			pos2 = cmd.find_first_of(' ', pos1);
+			arguments.push_back( cmd.substr(pos1, pos2) );
+			if (pos2 == std::string::npos)
+				break;
+			pos1 = pos2 + 1;
+		}
+		argv = new CharString[arguments.size()+1];
+		argv[arguments.size()] = NULL;
+		for(int i = 0; i < (int) arguments.size(); i++) {
+			argv[i] = const_cast<CharString>( arguments[i].c_str() );
+			LOG_DEBUG(2, "ExecvPair: " << i << " '" << argv[i] << "'");
+		}
+		path = const_cast<CharString>( arguments[0].c_str() );
+	}
+	~ExecvPair() {
+		delete [] argv;
+	}
+	char *path;
+	CharString *argv;
+private:
+	std::vector<std::string> arguments;
+};
+
+class ForkDaemon {
+public:
+	static const char COMMAND_END = '\n';
+	static const char WAIT_PID_START = '\0';
+
+	typedef std::pair<pid_t, int> ChildStatus;
+	typedef std::vector<pid_t> ChildrenVector;
+	ForkDaemon() : _child(0), _writer(-1), _reader(-1), _status(0) {
+		int pipefd[2], pipefd2[2];
+		pipefd[0] = pipefd[1] = 0;
+		if (pipe(pipefd) != 0 || pipe(pipefd2) != 0)
+			LOG_THROW("ForkDaemon(): Could not create the pipe file descriptors");
+		LOG_DEBUG(2, "ForkDaemon(): pipefds: " << pipefd[0] << "," << pipefd[1] << "," << pipefd2[0] << "," << pipefd2[1]);
+		_child = fork();
+		if (_child < 0) {
+			LOG_THROW("ForkDaemon(): Could not fork a child process");
+		} else if (_child == 0) {
+			// child daemon: read commands from pipefd[0], write pids to pipefd2[1]
+			LOG_DEBUG(2, "ForkDaemon(child): " << getpid() << " closing pipes");
+			// keep stdout & stderr open...
+			if (close(pipefd[1]) != 0 || close(pipefd2[0]) != 0 || close(STDIN_FILENO) != 0) {
+				LOG_WARN(1, "ForkDaemon(child (" << getpid() << ")): could not close parent pipes or STDIN!");
+			}
+
+			_reader = pipefd[0];
+			_writer = pipefd2[1];
+			Cleanup::reset();
+			LOG_DEBUG(2, "ForkDamon(child): starting run_child()");
+			run_child();
+			LOG_DEBUG(1, "ForkDamon(child): finished run_child()");
+			reset();
+			_exit(_status); // child daemon exits
+		} else {
+			// parent: write commands to pipefd[1], read pids from pipefd2[0]
+			if (close(pipefd[0]) != 0 || close(pipefd2[1]) != 0)
+				LOG_WARN(1, "ForkDaemon(main (" << getpid() << ")): could not close child pipes!");
+			_writer = pipefd[1];
+			_reader = pipefd2[0];
+			Cleanup::trackChild(_child);
+			LOG_VERBOSE(1, "ForkDaemon(main (" << getpid() << ")): child: " << _child);
+		}
+	}
+	// child never leaves constructor!!!
+	~ForkDaemon() {
+		if (!isChild())
+			waitChildren();
+		reset();
+	}
+
+	static bool fullRead(int fd, void *_buf, int size) {
+		int readSize = 0;
+		char *buf = (char*) _buf;
+		int bytesRead;
+		while( (bytesRead = read(fd, buf, size - readSize)) > 0) {
+			if (bytesRead > 0) {
+				buf += bytesRead;
+				readSize += bytesRead;
+			}
+			if (readSize >= size)
+				return true;
+		}
+		return false;
+	}
+	static bool fullWrite(int fd, const void *_buf, int size) {
+		int writeSize = 0;
+		char *buf = (char*) _buf;
+		int bytesWritten;
+		while( (bytesWritten = write(fd, buf, size - writeSize)) > 0) {
+			if (bytesWritten > 0) {
+				buf += bytesWritten;
+				writeSize += bytesWritten;
+			}
+			if (writeSize >= size)
+				return true;
+		}
+		return false;
+	}
+
+	pid_t startNewChild(std::string _cmd) {
+		std::string cmd = _cmd + COMMAND_END;
+		if (!fullWrite(_writer, cmd.c_str(), cmd.length()))
+			LOG_WARN(1, "ForkDaemon::startNewChild(main): could not write command: " << _cmd);
+		pid_t pid;
+		if (!fullRead(_reader, &pid, sizeof(pid)))
+			LOG_WARN(1, "ForkDaemon::startNewChild(main): could not read pid");
+		LOG_VERBOSE(1, "ForkDaemon::startNewChild(main " << _child << ": '" << _cmd << "'): pid: " << pid);
+		return pid;
+	}
+	int waitChild(pid_t pid, bool waitForResponse = true) {
+		char c = WAIT_PID_START, e = COMMAND_END;
+		if (!fullWrite(_writer, &c, 1)
+				|| !fullWrite(_writer, &pid, sizeof(pid))
+				|| !fullWrite(_writer, &e, 1)) {
+			LOG_WARN(1, "ForkDaemon::waitChild(main " << pid << "): could not send waitpid message ");
+		}
+		int status = -1;
+		if (waitForResponse) {
+			LOG_DEBUG(1, "ForkDaemon::waitChild(main " << pid << ")");
+			if (! fullRead(_reader, &status, sizeof(status)))
+				LOG_WARN(1, "ForkDaemon::waitChild(main " << pid << "): could not read wait-status message");
+			LOG_VERBOSE(1, "ForkDaemon::waitChild(main " << pid << "): status: " << status);
+		}
+		return status;
+	}
+	// wait for child to complete all its forks and then return
+	int waitChildren() {
+		assert(!isChild());
+		LOG_DEBUG(1, "ForkDaemon::waitChildren(main)");
+		waitChild(0, false);
+		reset();
+		if ( _child > 0 ) {
+			if (waitpid(_child, &_status, 0) != _child) {
+				LOG_WARN(1, "ForkDaemon::reset(main): waitpid on " << _child << " failed");
+			}
+			Cleanup::releaseChild(_child);
+		}
+		_child = 0;
+		LOG_VERBOSE(1, "ForkDaemon::waitChildren(main): " << _status);
+		return _status;
+	}
+	bool isChild() {
+		return _child == 0;
+	}
+	int getStatus() {
+		return _status;
+	}
+protected:
+	void run_child() {
+		char c;
+		std::string cmd;
+		ChildrenVector children;
+		while(fullRead(_reader, &c, 1)) {
+			if (c == WAIT_PID_START && cmd.empty()) {
+				pid_t p;
+				if (!fullRead(_reader, &p, sizeof(p))
+						|| !fullRead(_reader, &c, 1)) {
+					LOG_WARN(1, "ForkDaemon::run_child(child): could not read pid and COMMAND_END after '#' ");
+				}
+				if (p == 0)
+					break;
+				LOG_DEBUG(2, "ForkDaemon::run_child(child): Waiting for " << p);
+				int s = _waitChild(p, children);
+				LOG_VERBOSE(2, "ForkDaemon::run_child(child): Waited for " << p << " status " << s);
+				if (!fullWrite(_writer, &s, sizeof(s)))
+					LOG_WARN(1, "ForkDaemon::run_child(child): Could not write status");
+			} else if (c == COMMAND_END) {
+				// execute this command
+				pid_t x = fork();
+				if (x < 0) {
+					LOG_WARN(1, "ForkDaemon::run_child(child): Could not fork a child process");
+				} else if (x == 0) {
+					// child run the command
+					LOG_DEBUG(2, "ForkDaemon::run_child(child-fork): pid: " << getpid() << " Exec: " << cmd);;
+					ExecvPair ep(cmd);
+					if (close(_reader) != 0)
+						LOG_WARN(1, "ForkDaemon::run_child(child-fork): could not close child _reader!");
+					if (close(_writer) != 0)
+						LOG_WARN(1, "ForkDaemon::run_child(child-fork): could not close child _writer!");
+					int status = execv(ep.path, ep.argv);
+					LOG_WARN(1, "ForkDaemon::run_child(child-fork): Should not get past exec!!! '" << cmd << "' (" << status << ")");
+					_exit(1);
+				} else {
+					// parent, record pid and tell my parent
+					children.push_back(x);
+					Cleanup::trackChild(x);
+					if (!fullWrite(_writer, &x, sizeof(x)))
+						LOG_WARN(1, "ForkDaemon::run_child(child): could not write pid of child-fork! ");
+					LOG_DEBUG(1, "ForkDaemon::run_child(child): Running (" << x << ") '" << cmd << "'" );
+				}
+				cmd.clear();
+			} else {
+				cmd += c;
+				LOG_DEBUG(3, "ForkDaemon::run_child(child): building command: '" << cmd << "'");
+			}
+		}
+		while (!children.empty())
+			checkChildren(children, true);
+	}
+	int _waitChild(pid_t pid, ChildrenVector &children, int flag = 0) {
+		int status = 0;
+		ChildrenVector::iterator it;
+		for (it = children.begin(); it != children.end(); it++) {
+			if (*it == pid) {
+				LOG_DEBUG(2, "ForkDaemon::_waitChild(child " << pid << "): found pid in children");
+				break;
+			}
+		}
+		if (it != children.end()) {
+			int test = 0;
+			if ((flag & WNOHANG) == 0 && !children.empty()) {
+				*it = children.back();
+				children.pop_back();
+				test = pid;
+			}
+			LOG_DEBUG(2, "ForkDaemon::_waitChild(child " << pid << ", " << flag << ")");
+			if (waitpid(pid, &status, flag) == test) {
+				LOG_DEBUG(2, "ForkDaemon::_waitChild(child " << pid << "): status: " << status);
+				if (status != 0)
+					_status = status;
+				Cleanup::releaseChild(pid);
+				return status;
+			} else {
+				LOG_WARN(1, "ForkDaemon::_waitChild(child " << pid << "): waitpid FAILED!");
+				return -1;
+			}
+		} else {
+			LOG_WARN(1, "ForkDaemon::_waitChild(child " << pid << "): called on non-existant pid");
+			return -2;
+		}
+	}
+	ChildStatus checkChildren(ChildrenVector &children, bool wait = false) {
+		int status = 0, test = 0, flag = WNOHANG;
+		if (wait) {
+		   flag = 0;
+		}
+		for(int i = 0; i < (int) children.size(); i++) {
+			test = waitpid(children[i], &status, flag);
+			if ( (wait && test != children[i]) || (test != 0 && !wait)) {
+				LOG_WARN(1, "ForkDaemon::waitChildren(child): " << children[i] << " waitpid failed!");
+			} else {
+				if (status != 0)
+					_status = status;
+				Cleanup::releaseChild(children[i]);
+				ChildStatus s(children[i], status);
+				children[i] = children.back();
+				children.pop_back();
+				return s;
+			}
+		}
+		return ChildStatus(0, -1);
+	}
+	// just close pipes...
+	void reset() {
+		LOG_DEBUG(1, "ForkDaemon::reset(" << getpid() << ")");
+		if (_writer >= 0) {
+			if (close(_writer) != 0) {
+				LOG_WARN(1, "ForkDaemon(main (" << getpid() << ")): could not close writer pipe!");
+			}
+		}
+		_writer = -1;
+		if (_reader >= 0) {
+			if (close(_reader) != 0) {
+				LOG_WARN(1,  "ForkDaemon(main (" << getpid() << ")): could not close reader pipe!");
+			}
+		}
+		_reader = -1;
+	}
+
+private:
+	pid_t _child;
+	int _writer, _reader;
+	int _status;
 };
 
 class Fork {
