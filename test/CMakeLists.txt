@@ -174,7 +174,7 @@ target_link_libraries (TestMPI
 add_dependencies(TestMPI REPLACE_VERSION_H)
 add_test(testmpi testMPI.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/testMPI.sh test/ )
-  
+install(TARGETS TestMPI DESTINATION bin)
   
 add_executable( TestForkDaemonMPI TestForkDaemonMPI )
 set_source_files_properties( TestForkDaemonMPI
@@ -190,7 +190,7 @@ target_link_libraries (TestForkDaemonMPI
 add_dependencies(TestForkDaemonMPI REPLACE_VERSION_H)
 add_test(TestForkDaemonMPI TestForkDaemonMPI.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/TestForkDaemonMPI.sh test/ )
-
+install(TARGETS TestForkDaemonMPI DESTINATION bin)
     
 add_executable( TestKmerMatchMPI TestKmerMatchMPI)
 set_source_files_properties( TestKmerMatchMPI
@@ -209,6 +209,7 @@ target_link_libraries (TestKmerMatchMPI
 add_dependencies(TestKmerMatchMPI REPLACE_VERSION_H)
 add_test(testKmerMatchMPI testKmerMatchMPI.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/testKmerMatchMPI.sh test/ )
+install(TARGETS TestKmerMatchMPI DESTINATION bin)
 
 add_executable( SamUtilsTest SamUtilsTest)
 set_source_files_properties( SamUtilsTest
@@ -226,6 +227,7 @@ target_link_libraries (SamUtilsTest
 add_dependencies(SamUtilsTest REPLACE_VERSION_H)
 add_test(SamUtilsTest SamUtilsTest.sh)
 execute_process(COMMAND cp -p ${CMAKE_SOURCE_DIR}/test/SamUtilsTest.sh test/ )
+install(TARGETS SamUtilsTest DESTINATION bin)
 
 endif()
 

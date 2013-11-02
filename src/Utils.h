@@ -1323,6 +1323,7 @@ public:
 	}
 	~Cleanup() {
 		// only allow parent process that first called Cleanup() to cleanup (if fork() was ever called)
+		isDestruct = true;
 		_unsetSignals();
 		if (myPid == getpid()) {
 			_clean(0);
@@ -1422,7 +1423,6 @@ protected:
 		_setSignal(SIGTERM, Cleanup::cleanup);
 	}
 	static void _unsetSignals() {
-		LOG_DEBUG_OPTIONAL(2, true, "Unsetting cleanup signal handlers");
 		_setSignal(SIGHUP, getSigHandle(SIGHUP).sa_handler, false);
 		_setSignal(SIGINT, getSigHandle(SIGINT).sa_handler, false);
 		_setSignal(SIGUSR1, getSigHandle(SIGUSR1).sa_handler, false);
@@ -1511,7 +1511,7 @@ protected:
 		// save this signals next action, and reset the rest.
 		struct sigaction &oact = getSigHandle(param);
 		if (param != 0 && param != SIGTERM) {
-			LOG_VERBOSE_OPTIONAL(1, true, "Sending SIGTERM to master pid: " << getpid());
+			LOG_VERBOSE_OPTIONAL(1, !isDestruct, "Sending SIGTERM to master pid: " << getpid());
 			kill(getpid(), SIGTERM);
 		}
 		sleep(2);
@@ -1522,13 +1522,17 @@ protected:
 
 		std::string mesg = ss->str();
 		if (param != 0) {
-			LOG_ERROR(1, "Cleaned up after signal: " << param << "... " << mesg);
+			if (isDestruct) {
+				std::cerr <<  "Cleaned up after signal: " << param << "... " << mesg << std::endl;
+			} else {
+				LOG_ERROR(1, "Cleaned up after signal: " << param << "... " << mesg);
+			}
 			if ( oact.sa_handler != SIG_ERR && oact.sa_handler != SIG_IGN && oact.sa_handler != NULL ) {
-				LOG_DEBUG_OPTIONAL(2, true, "Now running default signal handler" );
+				LOG_DEBUG_OPTIONAL(2, !isDestruct, "Now running default signal handler" );
 				(oact.sa_handler)( param );
 			}
 		} else {
-			LOG_DEBUG_OPTIONAL(2, true, "Cleanup: " << mesg);
+			LOG_DEBUG_OPTIONAL(2, !isDestruct, "Cleanup: " << mesg);
 		}
 
 		if (param != 0) {
@@ -1543,7 +1547,7 @@ protected:
 	void _addHandler(Handler handler) {
 		cleanupHandlers.push_back( handler );
 	}
-	Cleanup() : tempFiles(), tempDirs(), myPid(0), keepTempDir() {
+	Cleanup() : tempFiles(), tempDirs(), myPid(0), keepTempDir(), isDestruct(false) {
 		myPid = getpid();
 		ss.reset( new std::stringstream );
 		_setSignals();
@@ -1577,6 +1581,7 @@ private:
 	pid_t myPid;
 	PidSet children;
 	std::string keepTempDir;
+	bool isDestruct; // make sure logging is off, so no race conditions happen
 };
 
 class ExecvPair {
