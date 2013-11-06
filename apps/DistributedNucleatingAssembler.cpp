@@ -338,6 +338,8 @@ std::string runPartialBatch(mpi::communicator world, boost::shared_ptr< MatcherI
 }
 int main(int argc, char *argv[]) {
 
+	ForkDaemon::initialize();
+
 	ScopedMPIComm< DistributedNucleatingAssemblerOptions > world(argc, argv);
 
 	Cleanup::prepare();
@@ -530,6 +532,8 @@ int main(int argc, char *argv[]) {
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Final contigs are in: " << finalContigFile);
 
 		LOG_VERBOSE_OPTIONAL(1, world.rank() == 0, "Finished");
+
+		ForkDaemon::finalize();
 
 	} catch (std::exception &e) {
 		LOG_ERROR(1, "DistributedNucleatingAssembler threw an exception! Aborting..." << e.what());

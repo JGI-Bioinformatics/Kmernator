@@ -154,7 +154,7 @@ public:
 		std::string log = outputName + ".log";
 		std::string cmd = Cap3Options::getOptions().getCap3Path() + " " + outputName + " > " + log + " 2>&1";
 		LOG_DEBUG_OPTIONAL(1, true, "Executing: " << cmd);
-		status = system(cmd.c_str());
+		status = ForkDaemon::system(cmd);
 		if (status == 0) {
 			std::string newContigFile = outputName + ".cap.contigs";
 			long fileSize = FileUtils::getFileSize(newContigFile);
@@ -174,7 +174,7 @@ public:
 	static void clean(std::string fileDir) {
 		std::string cmd;
 		cmd = "/bin/rm -rf " + fileDir;
-		int status = system(cmd.c_str());
+		int status = ForkDaemon::system(cmd);
 		if (status != 0)
 			LOG_WARN(1, "Could not clean up directory: " + fileDir);
 	}

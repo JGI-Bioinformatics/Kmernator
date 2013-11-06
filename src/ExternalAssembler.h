@@ -135,7 +135,8 @@ public:
 
 	Read executeAssembly(std::string cmd, std::string newContigFile, const Read &oldContig) {
 		int status;
-		status = system(cmd.c_str());
+		status = ForkDaemon::system(cmd);
+
 		if (status == 0) {
 
 			long fileSize = FileUtils::getFileSize(newContigFile);

@@ -433,7 +433,7 @@ public:
 	ForkCommandThread(ForkCommandThread &move) : _command(move._command), _status(move._status), _thread(boost::move(move._thread)) {}
 	void operator()() {
 		LOG_DEBUG_OPTIONAL(1, true, "ForkCommandThread(" << _command << ")::() Starting");
-		_status = system(_command.c_str());
+		_status = ForkDaemon::system(_command);
 		LOG_DEBUG_OPTIONAL(1, true, "ForkCommandThread(" << _command << ")::() Finished: " << _status);
 	}
 	std::string toString() {
@@ -479,6 +479,7 @@ ForkCommandThread::Vector forkCommand() {
 	return forks;
 }
 
+/*
 std::vector< int > _forkCommand() {
 	LOG_DEBUG_OPTIONAL(1, true, "forkCommand()");
 	std::vector< int > forks;
@@ -495,8 +496,11 @@ std::vector< int > _forkCommand() {
 	}
 	return forks;
 }
+*/
 
 int main(int argc, char *argv[]) {
+
+	ForkDaemon::initialize();
 
 	int exitStatus = 0;
 
@@ -625,6 +629,8 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		}
+
+		ForkDaemon::finalize();
 
 	} catch (...) {
 		LOG_WARN(1, "Cleaning up after exception");

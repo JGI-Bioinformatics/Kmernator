@@ -1617,10 +1617,28 @@ class ForkDaemon {
 public:
 	static const char COMMAND_END = '\n';
 	static const char WAIT_PID_START = '\0';
+	typedef ForkDaemon * ForkDaemonPtr;
 
+	static int initialize() {
+		getInstance() = new ForkDaemon();
+		return getInstance()->getStatus();
+	}
+	static void finalize() {
+		if (getInstance() != NULL) {
+			delete getInstance();
+			getInstance() = NULL;
+		}
+	}
+	static ForkDaemonPtr &getInstance() {
+		static ForkDaemonPtr fdPtr = NULL;
+		return fdPtr;
+	}
 	typedef std::pair<pid_t, int> ChildStatus;
 	typedef std::vector<pid_t> ChildrenVector;
+
+private:
 	ForkDaemon() : _child(0), _writer(-1), _reader(-1), _status(0) {
+
 		int pipefd[2], pipefd2[2];
 		pipefd[0] = pipefd[1] = 0;
 		if (pipe(pipefd) != 0 || pipe(pipefd2) != 0)
@@ -1639,7 +1657,7 @@ public:
 
 			_reader = pipefd[0];
 			_writer = pipefd2[1];
-			Cleanup::reset();
+			Cleanup::reset(); // Cleanup does something different for this child and its children...
 			LOG_DEBUG(2, "ForkDamon(child): starting run_child()");
 			run_child();
 			LOG_DEBUG(1, "ForkDamon(child): finished run_child()");
@@ -1657,10 +1675,16 @@ public:
 	}
 	// child never leaves constructor!!!
 	~ForkDaemon() {
+		_finalize();
+	}
+	void _finalize() {
 		if (!isChild())
 			waitChildren();
 		reset();
 	}
+
+public:
+
 
 	static bool fullRead(int fd, void *_buf, int size) {
 		int readSize = 0;
@@ -1691,6 +1715,18 @@ public:
 		return false;
 	}
 
+	static int system(std::string cmd) {
+		if (getInstance() != NULL) {
+			return getInstance()->runCommand(cmd);
+		} else {
+			return system(cmd.c_str());
+		}
+	}
+
+	int runCommand(std::string cmd) {
+		return waitChild( startNewChild(cmd), true );
+	}
+
 	pid_t startNewChild(std::string _cmd) {
 		std::string cmd = _cmd + COMMAND_END;
 		if (!fullWrite(_writer, cmd.c_str(), cmd.length()))
@@ -1701,7 +1737,50 @@ public:
 		LOG_VERBOSE(1, "ForkDaemon::startNewChild(main " << _child << ": '" << _cmd << "'): pid: " << pid);
 		return pid;
 	}
-	int waitChild(pid_t pid, bool waitForResponse = true) {
+	int waitChild(pid_t pid) {
+		assert(pid > 0);
+		return waitChild(pid, true);
+	}
+	void completeChildren() {
+		assert(!isChild());
+		waitChild(0, false);
+		reset();
+	}
+	void terminateChildren() {
+		assert(!isChild());
+		waitChild(-1, false);
+		reset();
+	}
+	// wait for child to complete all its forks and then return
+	int waitChildren() {
+		if (isChild())
+			return _status;
+		LOG_DEBUG(1, "ForkDaemon::waitChildren(main)");
+		completeChildren();
+		if ( _child > 0 ) {
+			if (waitpid(_child, &_status, 0) == _child) {
+				Cleanup::releaseChild(_child);
+			} else {
+				LOG_WARN(1, "ForkDaemon::reset(main): waitpid on " << _child << " failed");
+			}
+		}
+		_child = 0;
+		LOG_VERBOSE(1, "ForkDaemon::waitChildren(main): " << _status);
+		return _status;
+	}
+	bool isChild() {
+		return _child == 0;
+	}
+	int getStatus() {
+		return _status;
+	}
+protected:
+	// if pid is 0, then _child is concluded and waits for its children to complete.  there will be no response
+	// if pid is -1, then _child is concluded and sends each running child a SIGTERM  there will be no response
+	int waitChild(pid_t pid, bool waitForResponse) {
+		if (_writer < 0 || _reader < 0)
+			return -1;
+		assert (pid > 0 || waitForResponse == false);
 		char c = WAIT_PID_START, e = COMMAND_END;
 		if (!fullWrite(_writer, &c, 1)
 				|| !fullWrite(_writer, &pid, sizeof(pid))
@@ -1717,29 +1796,7 @@ public:
 		}
 		return status;
 	}
-	// wait for child to complete all its forks and then return
-	int waitChildren() {
-		assert(!isChild());
-		LOG_DEBUG(1, "ForkDaemon::waitChildren(main)");
-		waitChild(0, false);
-		reset();
-		if ( _child > 0 ) {
-			if (waitpid(_child, &_status, 0) != _child) {
-				LOG_WARN(1, "ForkDaemon::reset(main): waitpid on " << _child << " failed");
-			}
-			Cleanup::releaseChild(_child);
-		}
-		_child = 0;
-		LOG_VERBOSE(1, "ForkDaemon::waitChildren(main): " << _status);
-		return _status;
-	}
-	bool isChild() {
-		return _child == 0;
-	}
-	int getStatus() {
-		return _status;
-	}
-protected:
+
 	void run_child() {
 		char c;
 		std::string cmd;
@@ -1751,7 +1808,14 @@ protected:
 						|| !fullRead(_reader, &c, 1)) {
 					LOG_WARN(1, "ForkDaemon::run_child(child): could not read pid and COMMAND_END after '#' ");
 				}
-				if (p == 0)
+				if (p < 0) {
+					// Filicide!!
+					ChildrenVector::iterator it;
+					for (it = children.begin(); it != children.end(); it++) {
+						kill(*it, SIGTERM);
+					}
+				}
+				if (p <= 0)
 					break;
 				LOG_DEBUG(2, "ForkDaemon::run_child(child): Waiting for " << p);
 				int s = _waitChild(p, children);
@@ -1867,6 +1931,7 @@ private:
 	int _status;
 };
 
+/*
 class Fork {
 public:
 	static pid_t forkCommand(std::string command) {
@@ -1929,6 +1994,7 @@ public:
 		return exitStatus;
 	}
 };
+*/
 
 template<typename T>
 class Partition {

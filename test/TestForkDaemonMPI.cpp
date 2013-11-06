@@ -34,14 +34,15 @@ typedef OptionsBaseTemplate< _MPITestForkDaemonOptions > MPITestForkDaemonOption
 int main(int argc, char **argv) {
 
 	{
-		ForkDaemon forkDaemon;
+		ForkDaemon::initialize();
+		ForkDaemon &forkDaemon = *ForkDaemon::getInstance();
 
 		{
 			ScopedMPIComm<MPITestForkDaemonOptions> world(argc, argv);
 
 			pid_t pid1 = forkDaemon.startNewChild("/bin/uname -a");
 			pid_t pid2 = forkDaemon.startNewChild("/bin/sleep 2");
-			forkDaemon.startNewChild("/bin/sleep 3");
+			forkDaemon.startNewChild("/bin/sleep 7");
 
 			int status = 0;
 			status = forkDaemon.waitChild(pid1);
@@ -55,7 +56,7 @@ int main(int argc, char **argv) {
 
 		pid_t pid1 = forkDaemon.startNewChild("/bin/uname -a");
 		pid_t pid2 = forkDaemon.startNewChild("/bin/sleep 1");
-		forkDaemon.startNewChild("/bin/sleep 2");
+		forkDaemon.startNewChild("/bin/sleep 3");
 
 		int status = 0;
 		status = forkDaemon.waitChild(pid1);
@@ -65,5 +66,6 @@ int main(int argc, char **argv) {
 
 	}
 
+	ForkDaemon::finalize();
 	LOG_DEBUG(1, "forkDaemon now out of scope");
 }

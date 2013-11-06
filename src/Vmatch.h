@@ -177,7 +177,7 @@ public:
 		std::string cmd(_binaryPath + "mkvtree -dna -allout -pl -indexname " + _indexName
 				+ " -db " + inputFasta + " >" + logFile + " 2>&1");
 		LOG_DEBUG(1, "Building vmatch index " << _indexName << " : " << cmd);
-		int ret = system(cmd.c_str());
+		int ret = ForkDaemon::system(cmd);
 		if (ret != 0)
 			LOG_THROW("mkvtree failed to build(" << ret << "): " << cmd << " Log:\n" << FileUtils::dumpFile(logFile));
 	}
