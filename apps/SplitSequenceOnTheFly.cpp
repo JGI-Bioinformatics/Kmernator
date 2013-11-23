@@ -344,9 +344,9 @@ private:
 	T &output;
 	int first, secondDim, numFiles;
 	unsigned long &numReads;
-	OutputSplitFiles() { throw; }
-	OutputSplitFiles(const OutputSplitFiles& copy) { throw; }
-	OutputSplitFiles &operator=(const OutputSplitFiles &copy) { throw; }
+//	OutputSplitFiles() { throw; }
+//	OutputSplitFiles(const OutputSplitFiles& copy) { throw; }
+//	OutputSplitFiles &operator=(const OutputSplitFiles &copy) { throw; }
 public:
 	typedef boost::shared_ptr< Kmernator::MmapSource > MmapPtr;
 	typedef boost::shared_ptr< ReadFileReader > RFRPtr;
@@ -430,7 +430,7 @@ public:
 	}
 	~ForkCommandThread() {
 	}
-	ForkCommandThread(ForkCommandThread &move) : _command(move._command), _status(move._status), _thread(boost::move(move._thread)) {}
+	ForkCommandThread(ForkCommandThread &_move) : _command(_move._command), _status(_move._status), _thread(boost::move<boost::thread>(_move._thread)) {}
 	void operator()() {
 		LOG_DEBUG_OPTIONAL(1, true, "ForkCommandThread(" << _command << ")::() Starting");
 		_status = ForkDaemon::system(_command);
