@@ -60,7 +60,7 @@ cmake_minimum_required(VERSION 2.8)
 enable_testing()
 
 set(Kmernator_VERSION_MAJOR "1")
-set(Kmernator_VERSION_MINOR "2")
+set(Kmernator_VERSION_MINOR "3")
 set(Kmernator_VERSION_TAG "0")
 
 set(Kmernator_VERSION_FILE_TEMPLATE ${CMAKE_SOURCE_DIR}/src/version.h.in)
