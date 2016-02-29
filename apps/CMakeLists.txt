@@ -165,7 +165,7 @@ set_target_properties( BamSort-P
                        )
 target_link_libraries( BamSort-P 
                               libbam
-                              ${ZLIB_LIBRARIES} 
+                              z
                               ${KMERNATOR_BOOST_LIBS}
                               ${KMERNATOR_P_LIBS}
                               )

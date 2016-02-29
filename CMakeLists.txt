@@ -114,6 +114,17 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(BIT_CXX_FLAGS "-DIS_64_BIT")
 endif()
 
+# force static link libgcc and libstdc++, if possible
+include( CheckCXXCompilerFlag )
+check_cxx_compiler_flag(-static-libgcc CXX_HAS_STATIC_LIBGCC)
+if (CXX_HAS_STATIC_LIBGCC)
+   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc" )
+endif()
+check_cxx_compiler_flag(-static-libstdc++ CXX_HAS_STATIC_LIBSTDCXX)
+if (CXX_HAS_STATIC_LIBSTDCXX)
+   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++" )
+endif()
+
 #
 # zlib
 #
