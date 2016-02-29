@@ -51,19 +51,18 @@ execute_modules=""
 build_modules=""
 cmakeOptions=""
 
-if [ "$NERSC_HOST" == "edison" ]
+if [ "$NERSC_HOST" == "edison" ] || [ "${NERSC_HOST}" == "cori" ]
 then
   # edison is Cray XC30
 
   execute_modules="PrgEnv-gnu"
-  build_modules="cray-mpich cmake zlib bzip2 samtools"
+  build_modules="cmake zlib bzip2 samtools"
 
   module rm PrgEnv-intel
   module rm boost
   module rm cmake
   module rm bzip2
   module rm zlib
-  module rm cray-mpich
 
   module load $execute_modules $build_modules
 
@@ -87,7 +86,7 @@ then
 
   module purge
   export GP_INFINIBAND=0
-  execute_modules="PrgEnv-gnu openmpi boost/1.53.0"
+  execute_modules="PrgEnv-gnu openmpi boost"
   build_modules="cmake git samtools"
 
   module load $execute_modules $build_modules
