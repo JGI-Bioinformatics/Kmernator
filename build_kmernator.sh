@@ -56,15 +56,17 @@ then
   # edison is Cray XC30
 
   execute_modules="PrgEnv-gnu"
-  build_modules="cmake zlib bzip2 samtools"
+  build_modules="cmake boost zlib bzip2"
 
   module rm PrgEnv-intel
+  module rm PrgEnv-gnu
   module rm boost
   module rm cmake
   module rm bzip2
   module rm zlib
 
   module load $execute_modules $build_modules
+  module list
 
   mpilib=$(basename $MPICH_DIR/lib/libmpich_gnu*.a); mpilib=${mpilib%.a} ; mpilib2=${mpilib#lib}
   export KMERNATOR_C_FLAGS="-Wno-unused-local-typedefs"
