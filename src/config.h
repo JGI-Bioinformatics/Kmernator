@@ -64,6 +64,9 @@ such enhancements or derivative works thereof, in binary and source code form.
 #ifdef ENABLE_MPI
 
 #define _USE_MPI
+#include <boost/serialization/serialization.hpp>
+#include <boost/serialization/base_object.hpp>
+#include <boost/serialization/utility.hpp>
 #include <boost/serialization/string.hpp>
 #include <boost/serialization/set.hpp>
 #include <boost/serialization/vector.hpp>
